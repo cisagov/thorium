@@ -1,0 +1,117 @@
+.accordion-button::-webkit-scrollbar {
+  display: none !important;
+}
+
+.image-create {
+  max-width: 900px !important;
+}
+
+.image-fields {
+  max-width: 700px;
+}
+
+.image-tag {
+  text-wrap: pretty;
+  white-space: break-spaces;
+  max-width: 100%;
+}
+
+.image-subcategory-title {
+  max-width: 100px !important;
+}
+
+.key-col-1 {
+  flex: 0.1 !important;
+  max-width: 50px;
+}
+
+.key-col-2 {
+  flex: 1 !important;
+}
+
+.key-col-2-ext {
+  flex: 1.25 !important;
+}
+
+.key-col-3 {
+  flex: 8 !important;
+}
+
+.key-col-4 {
+  flex: 7.5 !important;
+}
+
+.inner-key-col-1 {
+  flex: 1 !important;
+}
+
+.inner-key-col-2 {
+  flex: 2 !important;
+}
+
+.inner-key-col-3 {
+  flex: 20 !important;
+}
+
+.title-col {
+  flex: 1.5 !important;
+}
+
+.field-col {
+  flex: 5 !important;
+}
+
+.collect-log-col {
+  max-width: 150px !important;
+}
+
+.image-card {
+  flex: 6 !important;
+}
+
+.field-name-col {
+  flex: 2.5 !important;
+}
+
+.field-name-col-ext {
+  flex: 3 !important;
+}
+
+.field-value-col {
+  flex: 12.5 !important;
+}
+
+.selectable-img-col {
+  max-width: 140px !important;
+}
+
+.remove-volume-btn-col {
+  max-width: 60px !important;
+  align-items: center !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+
+.privlg-col {
+  max-width: 250px !important;
+}
+
+.resource-type-col {
+  flex: 4 !important;
+  padding-right: 0.1em !important;
+}
+
+.resource-unit-col {
+  flex: 1 !important;
+  padding-right: 0.75em !important;
+  padding-left: 0.1em !important;
+}
+
+.output-col {
+  max-width: 100px !important;
+}
+
+.advanced-hidden {
+  visibility: hidden;
+  display: none;
+}

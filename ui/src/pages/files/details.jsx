@@ -1,22 +1,25 @@
 import React, { Fragment, useEffect, useState, Suspense } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
-import { Alert, Badge, Button, Card, Col, Form, Modal, Nav, Row, Tab } from 'react-bootstrap';
+import { Badge, Button, Card, Col, Form, Modal, Nav, Row, Tab } from 'react-bootstrap';
 import Select from 'react-select';
 import { FaFileAlt, FaTrash } from 'react-icons/fa';
 
 // project imports
 import {
+  AssociationGraph,
+  AssociationTree,
+  AlertBanner,
   Comments,
   Download,
   EditableTags,
   OverlayTipTop,
   ReactionStatus,
-  Related,
   Results,
   RunPipelines,
   Subtitle,
   Page,
   Time,
+  LoadingSpinner,
 } from '@components';
 import { fetchGroups, isGroupAdmin, useAuth, updateURLSection, scrollToSection } from '@utilities';
 import { deleteSubmission, getFileDetails } from '@thorpi';
@@ -30,9 +33,10 @@ const FileDetailsContainer = () => {
   const [results, setResults] = useState({});
   const [details, setDetails] = useState({});
   const [groupDetails, setGroupDetails] = useState({});
+  const [viewGraph, setViewGraph] = useState(false);
   const [reactionsTabSelected, setReactionsTabSelected] = useState(false);
   const [getFileError, setGetFileError] = useState('');
-  const [listGroupsError, setListGroupsError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [deletionStatus, setDeletionStatus] = useState('');
   const [width, setWindowWidth] = useState(0);
   const location = useLocation();
@@ -55,6 +59,9 @@ const FileDetailsContainer = () => {
             // for some reason tags aren't fully loaded when its supposed to be?
             setTimeout(() => scrollToSection(`${section[0]}-tab-${tool}`), 1500);
           }
+          break;
+        case 'related':
+          setViewGraph(true);
           break;
         case 'reactionstatus':
           setReactionsTabSelected(true);
@@ -83,12 +90,14 @@ const FileDetailsContainer = () => {
   useEffect(() => {
     const fetchFileDetails = async () => {
       const reqDetails = await getFileDetails(sha256, setGetFileError);
+      setLoading(true);
       if (reqDetails) {
         setDetails(reqDetails);
       }
+      setLoading(false);
     };
     fetchFileDetails();
-    fetchGroups(setGroupDetails, setListGroupsError, true);
+    fetchGroups(setGroupDetails, () => {}, true);
 
     // removing sha256 will cause details header not to update when you follow links to other files
   }, [sha256, deletionStatus]);
@@ -123,113 +132,121 @@ const FileDetailsContainer = () => {
         // for reaction statuses for each group and so early hydration should be avoided
         setReactionsTabSelected(true);
         updateURLSection(key, null);
+        setViewGraph(false);
         break;
       case 'results':
         updateURLSection(key, '');
         setReactionsTabSelected(false);
+        setViewGraph(false);
+        break;
+      case 'related':
+        updateURLSection(key, '');
+        setReactionsTabSelected(false);
+        setViewGraph(true);
         break;
       default:
         // tabs other than results should disable hash updating
         updateURLSection(key, null);
         setReactionsTabSelected(false);
+        setViewGraph(false);
         break;
     }
   };
 
   return (
     <Page id="file-info" className="full-min-width" title={`File · ${sha256}`}>
-      {getFileError && deletionStatus == 'Success' ? (
-        <Alert variant="success" className="d-flex justify-content-center">
-          Submission deleted successfully!
-        </Alert>
-      ) : getFileError || listGroupsError ? (
-        <Alert variant="warning" className="d-flex justify-content-center">
-          {getFileError + listGroupsError}
-        </Alert>
-      ) : (
-        <>
-          {deletionStatus == 'Success' && (
-            <Alert variant="success" className="d-flex justify-content-center">
-              Submission deleted successfully!
-            </Alert>
-          )}
-          {deletionStatus && deletionStatus != 'Success' && (
-            <Alert variant="danger" className="d-flex justify-content-center">
-              {deletionStatus}
-            </Alert>
-          )}
-          <Suspense fallback={<h1>loading...</h1>}>
-            <FileInfo
-              details={details}
-              setDetails={setDetails}
-              groupDetails={groupDetails}
-              screenWidth={width}
-              setDeletionStatus={setDeletionStatus}
+      {loading && <LoadingSpinner />}
+      {!loading &&
+        deletionStatus &&
+        (deletionStatus == 'Success' ? (
+          <AlertBanner variant="success" errorStatus="Submission deleted successfully!" />
+        ) : (
+          <AlertBanner variant="danger" errorStatus={deletionStatus} />
+        ))}
+      {!loading &&
+        deletionStatus &&
+        (deletionStatus == 'Success' ? (
+          <AlertBanner variant="success" errorStatus="Submission deleted successfully!" />
+        ) : (
+          <AlertBanner variant="danger" errorStatus={deletionStatus} />
+        ))}
+      {!loading && getFileError && getFileError != '' && <AlertBanner variant="danger" errorStatus={getFileError} />}
+      <FileInfo
+        details={details}
+        setDetails={setDetails}
+        groupDetails={groupDetails}
+        screenWidth={width}
+        setDeletionStatus={setDeletionStatus}
+      />
+      <hr />
+      <Tab.Container defaultActiveKey={Array.isArray(section) && section.length ? section[0] : 'results'} onSelect={handleTabChange}>
+        <Nav variant="pills">
+          <Nav.Item className="details-navitem">
+            <Nav.Link className="details-navlink" eventKey="results">
+              Results
+            </Nav.Link>
+          </Nav.Item>
+          <Nav.Item className="details-navitem">
+            <Nav.Link className="details-navlink" eventKey="related">
+              Related
+            </Nav.Link>
+          </Nav.Item>
+          <Nav.Item className="details-navitem">
+            <Nav.Link className="details-navlink" eventKey="tree">
+              File Tree
+            </Nav.Link>
+          </Nav.Item>
+          <Nav.Item className="details-navitem">
+            <Nav.Link className="details-navlink" eventKey="runpipelines">
+              Create Reactions
+            </Nav.Link>
+          </Nav.Item>
+          <Nav.Item className="details-navitem">
+            <Nav.Link className="details-navlink" eventKey="comments">
+              Comments
+            </Nav.Link>
+          </Nav.Item>
+          <Nav.Item className="details-navitem">
+            <Nav.Link className="details-navlink" eventKey="reactionstatus">
+              Reaction Status
+            </Nav.Link>
+          </Nav.Item>
+          <Nav.Link className="details-navlink" eventKey="download">
+            Download
+          </Nav.Link>
+        </Nav>
+        <Nav.Item className="details-navitem"></Nav.Item>
+        <Tab.Content>
+          <Tab.Pane eventKey="results" className="mt-4">
+            <Results
+              sha256={sha256}
+              results={results}
+              setResults={setResults}
+              numResults={numResults}
+              allowHashUpdate={allowResultsHashUpdate}
+              setNumResults={(num) => setNumResults(num)}
             />
-          </Suspense>
-          <hr />
-          <Tab.Container defaultActiveKey={Array.isArray(section) && section.length ? section[0] : 'results'} onSelect={handleTabChange}>
-            <Nav variant="pills">
-              <Nav.Item className="details-navitem">
-                <Nav.Link className="details-navlink" eventKey="results">
-                  Results
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Item className="details-navitem">
-                <Nav.Link className="details-navlink" eventKey="related">
-                  Related
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Item className="details-navitem">
-                <Nav.Link className="details-navlink" eventKey="runpipelines">
-                  Create Reactions
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Item className="details-navitem">
-                <Nav.Link className="details-navlink" eventKey="comments">
-                  Comments
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Item className="details-navitem">
-                <Nav.Link className="details-navlink" eventKey="reactionstatus">
-                  Reaction Status
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Link className="details-navlink" eventKey="download">
-                Download
-              </Nav.Link>
-            </Nav>
-            <Nav.Item className="details-navitem"></Nav.Item>
-            <Tab.Content>
-              <Tab.Pane eventKey="results" className="mt-4">
-                <Results
-                  sha256={sha256}
-                  results={results}
-                  setResults={setResults}
-                  numResults={numResults}
-                  allowHashUpdate={allowResultsHashUpdate}
-                  setNumResults={(num) => setNumResults(num)}
-                />
-              </Tab.Pane>
-              <Tab.Pane eventKey="related" className="mt-4">
-                <Related sha256={sha256} results={results} submissions={details.submissions} />
-              </Tab.Pane>
-              <Tab.Pane eventKey="comments" className="mt-4">
-                <Comments sha256={sha256} />
-              </Tab.Pane>
-              <Tab.Pane eventKey="reactionstatus" className="mt-4">
-                <ReactionStatus sha256={sha256} autoRefresh={reactionsTabSelected} />
-              </Tab.Pane>
-              <Tab.Pane eventKey="runpipelines" className="mt-4">
-                <RunPipelines sha256={sha256} />
-              </Tab.Pane>
-              <Tab.Pane eventKey="download" className="mt-4">
-                <Download sha256={sha256} />
-              </Tab.Pane>
-            </Tab.Content>
-          </Tab.Container>
-        </>
-      )}
+          </Tab.Pane>
+          <Tab.Pane eventKey="related" className="mt-4">
+            <AssociationGraph inView={viewGraph} initial={{ samples: [sha256] }} />
+          </Tab.Pane>
+          <Tab.Pane eventKey="tree" className="mt-4">
+            <AssociationTree initial={{ samples: [sha256] }} />
+          </Tab.Pane>
+          <Tab.Pane eventKey="comments" className="mt-4">
+            <Comments sha256={sha256} />
+          </Tab.Pane>
+          <Tab.Pane eventKey="reactionstatus" className="mt-4">
+            <ReactionStatus sha256={sha256} autoRefresh={reactionsTabSelected} />
+          </Tab.Pane>
+          <Tab.Pane eventKey="runpipelines" className="mt-4">
+            <RunPipelines sha256={sha256} />
+          </Tab.Pane>
+          <Tab.Pane eventKey="download" className="mt-4">
+            <Download sha256={sha256} />
+          </Tab.Pane>
+        </Tab.Content>
+      </Tab.Container>
     </Page>
   );
 };

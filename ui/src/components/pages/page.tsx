@@ -4,6 +4,7 @@ import styled from 'styled-components';
 
 // project imports
 import { RequireAdmin, RequireAuth, useAuth } from '@utilities';
+import { scaling } from '@styles';
 
 interface PageProps {
   auth?: boolean; // whether page requires validated user auth
@@ -57,6 +58,12 @@ interface ThoriumPageProps {
 const PageContainer = styled(Container)`
   padding: 4rem 0rem 0.5rem 6rem;
   width: 100%;
+  @media (max-width: ${scaling.xxxl}) {
+    max-width: 90%;
+  }
+  @media (min-width: ${scaling.xxxl}) {
+    max-width: 2000px;
+  }
 `;
 
 export const Page: React.FC<ThoriumPageProps> = ({ children, className, title, id }) => {

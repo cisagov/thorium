@@ -1,0 +1,48 @@
+@use '../colors';
+
+.title {
+  color: var(--thorium-text);
+  text-transform: uppercase;
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.simple-title {
+  color: var(--thorium-text);
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.small-title {
+  color: var(--thorium-text);
+  text-transform: uppercase;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.subtitle {
+  color: var(--thorium-text);
+  text-transform: uppercase;
+  font-size: 0.87rem;
+  width: auto;
+}
+
+.simple-subtitle {
+  color: var(--thorium-text);
+  font-size: 0.87rem;
+}
+
+.title-link {
+  color: var(--thorium-text);
+  text-decoration: underline;
+  text-decoration-color: var(--thorium-text);
+  cursor: pointer;
+}
+
+.title-link-no-color {
+  color: var(--thorium-text);
+  text-decoration: underline;
+  cursor: pointer;
+}

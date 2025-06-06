@@ -1,7 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { CreateTags, Filters, FilterTags } from '@models';
+import { CreateTags, Filters } from '@models';
 
 // Debugging errors randomly inserted.
 // Valid values 0-100 (percentage chance of error)

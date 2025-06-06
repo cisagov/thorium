@@ -42,16 +42,21 @@ export const RenderErrorAlert: React.FC<RenderErrorProps> = ({ message = '', pag
 interface AlertBannerProps {
   prefix: string; // prefix to add to api error message
   errorStatus: string; // error status message from api request response
+  variant: string; // type of alert banner
 }
 
-export const AlertBanner: React.FC<AlertBannerProps> = ({ prefix, errorStatus }) => {
+const AlertBox = styled(Alert)`
+  word-break: break-all;
+`;
+
+export const AlertBanner: React.FC<AlertBannerProps> = ({ prefix = '', errorStatus, variant = 'danger' }) => {
   const [show, setShow] = useState(true);
   return (
     <>
       {show && (
-        <Alert className="d-flex justify-content-center" onClose={() => setShow(false)} variant="danger">
-          {prefix}: {errorStatus}
-        </Alert>
+        <AlertBox className="d-flex justify-content-center" onClose={() => setShow(false)} variant={`${variant}`}>
+          {prefix != '' ? `${prefix}: ${errorStatus}` : `${errorStatus}`}
+        </AlertBox>
       )}
     </>
   );

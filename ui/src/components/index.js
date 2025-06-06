@@ -15,18 +15,29 @@ export { default as SelectableDictionary } from './shared/selectable/selectable_
 export { default as SelectableArray } from './shared/selectable/selectable_array';
 export { default as SelectInputArray } from './shared/selectable/select_input_array';
 export { default as SelectInput } from './shared/selectable/select_input';
+export * from './associations/graph/nodes';
+export { default as AssociationTree } from './associations/tree';
+export { default as AssociationGraph } from './associations/graph/graph';
+export * from './search/search';
+export * from './search/index_select';
+
+// ------------------------- Tags --------------------------
 export * from './tags/badges';
 export { default as CondensedFileTags } from './tags/condensed_file_tags';
 export { default as CondensedEntityTags } from './tags/condensed_entity_tags';
 export { default as EditableTags } from './tags/editable_tags';
 export * from './tags/tags';
 export * from './tags/utilities';
-export * from './entities/filters';
+// ---------------------------------------------------------
+
+// ----------------------- Entities ------------------------
+export * from './entities/filters/filters';
 export * from './entities/browsing';
-export * from './search/search';
-export * from './search/index_select';
+export * from './entities/create';
+export * from './entities/details';
 export * from './entities/shared';
 export * from './entities/upload';
+// ---------------------------------------------------------
 
 // ------------------------ Images -------------------------
 export { default as FieldBadge } from './shared/field_badge';
@@ -40,9 +51,6 @@ export { default as ImageEnvironmentVariables } from './images/image_env_variabl
 export { default as ImageVolumes } from './images/image_volumes';
 export { default as ImageSecurityContext } from './images/image_security_context';
 // ---------------------------------------------------------
-
-// relational graph
-export { default as Related } from './associations/related';
 
 // ------------------------ Tools --------------------------
 export { default as Tool } from './tools/tool';

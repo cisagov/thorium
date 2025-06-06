@@ -127,6 +127,9 @@ const updateCreateRequest = (resources, setRequestResources, setErrors, setHasEr
     errors['cpu'] = `cpu can't be empty when memory is specified`;
     delete requestResources.cpu;
   } else if (requestResources.cpu && requestResources.cpu_units == 'mCPU') {
+    if (requestResources.cpu < 250) {
+      errors['cpu'] = `cpu can't be less than 250mCPU`;
+    }
     requestResources.cpu = String(`${requestResources.cpu}m`);
   } else if (requestResources.cpu) {
     requestResources.cpu = String(requestResources.cpu);
@@ -137,6 +140,9 @@ const updateCreateRequest = (resources, setRequestResources, setErrors, setHasEr
     errors['memory'] = `memory can't be empty when cpu is specified`;
     delete requestResources.memory;
   } else if (requestResources.memory) {
+    if (requestResources.memory_units == 'Mi' && requestResources.memory < 500) {
+      errors['memory'] = `memory can't be less than 500Mi`;
+    }
     requestResources.memory = String(`${requestResources.memory}${requestResources.memory_units}`);
   }
   delete requestResources.memory_units;
@@ -181,6 +187,9 @@ const updateEditRequest = (initialResources, resources, setRequestResources, set
     errors['cpu'] = `cpu can't be empty when memory is specified`;
     delete requestResources.cpu;
   } else if (requestResources.cpu && requestResources.cpu_units == 'mCPU') {
+    if (requestResources.cpu < 250) {
+      errors['cpu'] = `cpu can't be less than 250mCPU`;
+    }
     requestResources.cpu = String(`${requestResources.cpu}m`);
   } else if (requestResources.cpu) {
     requestResources.cpu = String(requestResources.cpu);
@@ -193,6 +202,9 @@ const updateEditRequest = (initialResources, resources, setRequestResources, set
     delete requestResources.memory;
     // if both CPU and memory are blank, don't submit in request
   } else if (requestResources.memory) {
+    if (requestResources.memory_units == 'Mi' && requestResources.memory < 500) {
+      errors['memory'] = `memory can't be less than 500Mi`;
+    }
     requestResources.memory = String(`${requestResources.memory}${requestResources.memory_units}`);
   }
   delete requestResources.memory_units;

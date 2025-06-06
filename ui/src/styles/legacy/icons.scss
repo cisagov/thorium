@@ -1,0 +1,40 @@
+@use '../scaling';
+/*
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  xxl: 1400px
+);
+*/
+
+.circle {
+  box-shadow: 2px 2px 5px gray;
+  border-radius: 50%;
+  border-color: #2b2d42;
+  border-style: solid;
+  border-width: 3px;
+  width: 60px;
+  height: 60px;
+  padding: 10px;
+  background: lightgray;
+  color: black;
+  text-align: center;
+  font-size: 25px;
+  margin: auto;
+}
+
+.fa-icon {
+  color: var(--thorium-text);
+}
+
+.count-badge {
+  background-color: var(--thorium-nav-panel-bg);
+  color: var(--thorium-nav-text);
+}
+
+.icon-separator-end {
+  border-right: 2px solid;
+}

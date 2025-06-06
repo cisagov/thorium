@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ToastContainer } from 'react-toastify';
@@ -14,10 +14,17 @@ import styled from 'styled-components';
 const Home = lazy(() => import('./pages/home'));
 const NotFound = lazy(async () => import('./pages/not_found'));
 const FileDetails = lazy(async () => import('./pages/files/details'));
+const DeviceDetails = lazy(async () => await import('./pages/entities/devices/details'));
+const VendorDetails = lazy(async () => await import('./pages/entities/vendors/details'));
 const RepoDetails = lazy(() => import('./pages/repos/details'));
 const FilesBrowsing = lazy(() => import('./pages/files/browsing'));
 const RepoBrowsing = lazy(() => import('./pages/repos/browsing'));
+const DeviceBrowsing = lazy(async () => await import('./pages/entities/devices/browsing'));
+const VendorBrowsing = lazy(async () => await import('./pages/entities/vendors/browsing'));
+const CreateDevice = lazy(async () => await import('./pages/entities/devices/create'));
+const CreateVendor = lazy(async () => await import('./pages/entities/vendors/create'));
 const CreateImage = lazy(() => import('./pages/images/create'));
+const GraphBuilder = lazy(async () => await import('./pages/graph'));
 const UploadFiles = lazy(() => import('./pages/files/upload'));
 const Pipelines = lazy(() => import('./pages/pipelines'));
 const Images = lazy(() => import('./pages/images/browsing'));
@@ -40,7 +47,17 @@ const Resources = () => {
       <Route path="/file" element={<PageWrapper Contents={FileDetails} />} />
       <Route path="/file/:sha256" element={<PageWrapper Contents={FileDetails} />} />
       <Route path="/files/:sha256" element={<PageWrapper Contents={FileDetails} />} />
+      <Route path="/devices" element={<PageWrapper Contents={DeviceBrowsing} />} />
+      <Route path="/devices/" element={<PageWrapper Contents={DeviceBrowsing} />} />
+      <Route path="/device" element={<PageWrapper Contents={DeviceDetails} />} />
+      <Route path="/device/:entityID" element={<PageWrapper Contents={DeviceDetails} />} />
+      <Route path="/vendors" element={<PageWrapper Contents={VendorBrowsing} />} />
+      <Route path="/vendor" element={<PageWrapper Contents={VendorBrowsing} />} />
+      <Route path="/vendor/:entityID" element={<PageWrapper Contents={VendorDetails} />} />
+      <Route path="/create/vendor" element={<PageWrapper Contents={CreateVendor} />} />
+      <Route path="/create/device" element={<PageWrapper Contents={CreateDevice} />} />
       <Route path="/create/image" element={<PageWrapper Contents={CreateImage} />} />
+      <Route path="/graph" element={<PageWrapper Contents={GraphBuilder} />} />
       <Route path="/upload" element={<PageWrapper Contents={UploadFiles} />} />
       <Route path="/repos" element={<PageWrapper Contents={RepoBrowsing} />} />
       <Route path="/repo/*" element={<PageWrapper Contents={RepoDetails} />} />

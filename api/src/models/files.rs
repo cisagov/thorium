@@ -660,7 +660,7 @@ pub enum OriginTypes {
     Transformed,
     /// This sample comes from a sniffer/the wire
     Wire,
-    /// This sample cames from an incident or engagement
+    /// This sample comes from an incident or engagement
     Incident,
     /// This sample comes from dumping memory while running a parent sample
     MemoryDump,

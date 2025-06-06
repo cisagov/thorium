@@ -12,6 +12,10 @@ export type FilterTags = {
   [key: string]: string[];
 };
 
+export type TreeTags = {
+  tags: { [key: string]: string[] };
+};
+
 // create tags structure, same as Filter Tags for browsing
 export type CreateTags = FilterTags;
 

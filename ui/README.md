@@ -1,7 +1,6 @@
 # Thorium Frontend
 
-Built using React and served with Vite.
-
+This Readme will help Thorium UI developers get started contributing to Thorium. Thorium's web application is written in Typescript and Javascript using React and Vite.
 
 ## Installation
 

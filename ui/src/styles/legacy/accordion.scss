@@ -1,0 +1,29 @@
+.accordion-list {
+  display: flex;
+  justify-content: space-between;
+  flex-direction: row;
+}
+
+.accordion-list-buttons {
+  display: flex;
+  justify-content: flex-end;
+  flex-direction: row;
+}
+
+.accordion-item-ownership {
+  display: flex;
+  flex: 3;
+}
+
+.accordion-item-name {
+  flex: 3;
+}
+
+// relation gap, for groups this is the role field
+.accordion-item-relation {
+  flex: 5;
+}
+
+.accordion-item {
+  --bs-accordion-btn-padding-y: 0.25rem !important;
+}

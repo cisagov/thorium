@@ -1,4 +1,4 @@
-import { Entities } from './entities';
+import { Entities } from './entities/entities';
 import { FilterTags } from './tags';
 
 export enum FilterTypes {
@@ -14,9 +14,10 @@ export interface Filters {
   limit?: number;
   groups?: Array<string>;
   tags?: FilterTags;
-  start?: string;
-  end?: string;
+  start?: string | null;
+  end?: string | null;
   tags_case_insensitive?: boolean;
+  hideTags?: string[];
   kinds?: Entities[];
   cursor?: string;
 }

@@ -1,15 +1,17 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Alert, Card, Col, Form, Row, Stack, Dropdown, DropdownButton } from 'react-bootstrap';
+import { Alert, Card, Col, Form, Row, Stack } from 'react-bootstrap';
 import DOMPurify from 'dompurify';
 import parse from 'html-react-parser';
+import styled from 'styled-components';
 
 // project imports
 import { BrowsingFilters, EntityList, IndexSelect } from '@components';
 import { useAuth } from '@utilities';
 import { search } from '@thorpi';
 import { SearchFilters, ElasticIndex, Filters, FilterTypes } from '@models';
+import { scaling } from '@styles';
 
 // get hash of a file from result ID
 const getSha256 = (id: string) => {
@@ -66,14 +68,43 @@ const highlightResult = (result: string) => {
   return parse(`${clean}`);
 };
 
+const Name = styled(Col)`
+  white-space: pre-wrap;
+  text-align: center;
+  flex-wrap: wrap;
+  word-break: break-all;
+  min-width: 650px;
+  color: var(--thorium-text);
+`;
+
+const Groups = styled(Col)`
+  flex-wrap: wrap;
+  text-align: center;
+  min-width: 150px;
+  color: var(--thorium-text);
+  @media (max-width: ${scaling.lg}) {
+    display: none !important;
+  }
+`;
+
+const Index = styled(Col)`
+  flex-wrap: wrap;
+  text-align: center;
+  min-width: 100px;
+  color: var(--thorium-text);
+  @media (max-width: ${scaling.xl}) {
+    display: none !important;
+  }
+`;
+
 const SearchResultsHeaders = () => {
   return (
-    <Card className="basic-card panel">
-      <Card.Body className="search-header">
+    <Card className="panel">
+      <Card.Body className="px-0">
         <Row>
-          <Col className="d-flex justify-content-center sha256-col">SHA256</Col>
-          <Col className="d-flex justify-content-center group-col hide-element">Group</Col>
-          <Col className="d-flex justify-content-center index-col hide-element">Index</Col>
+          <Name>SHA256</Name>
+          <Groups>Group</Groups>
+          <Index>Index</Index>
         </Row>
       </Card.Body>
     </Card>
@@ -90,16 +121,11 @@ const SearchResultItem: React.FC<SearchResultItemProps> = ({ result, idx }) => {
     <Card className="panel">
       <Row>
         {/* add common relative spacing for sha, group, and index*/}
-        <Col className="d-flex justify-content-center sha256-col">
-          <Link className="hide-element-sha" to={`/file/${getSha256(result.id)}`}>
-            {getSha256(result.id)}
-          </Link>
-          <Link className="hide-small-element-sha" to={`/file/${getSha256(result.id)}`}>
-            {getSha256(result.id).substring(0, 10)}
-          </Link>
-        </Col>
-        <Col className="d-flex justify-content-center group-col hide-element">{getGroup(result.id)}</Col>
-        <Col className="d-flex justify-content-center index-col hide-element">{mapFullIndexName(result.index)}</Col>
+        <Name>
+          <Link to={`/file/${getSha256(result.id)}`}>{getSha256(result.id)}</Link>
+        </Name>
+        <Groups>{getGroup(result.id)}</Groups>
+        <Index>{mapFullIndexName(result.index)}</Index>
         <hr />
       </Row>
       {result.highlight &&
@@ -150,10 +176,26 @@ const getSearchResults = async (
   };
 };
 
+const SearchForm = styled(Form)`
+  max-width: 800px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  position: relative;
+`;
+
+const SearchInput = styled(Form.Control)`
+  display: flex
+  justify-content-center
+  padding-right: 50px;
+  white-space: nowrap;
+  overflow: hidden;
+`;
+
 // component containing search bar and related functionality
 export const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searching, setSearching] = useState<boolean>(false);
+  const [searching, setSearching] = useState<boolean>(true);
   const [filters, setFilters] = useState<SearchFilters>({ query: '' });
   const { userInfo } = useAuth();
   // the id of the cursor for paging search results;
@@ -230,6 +272,7 @@ export const Search = () => {
       // update query in url params
       setSearchError('');
       if (query != '') {
+        // update query in url params
         searchParams.set('query', query);
       } else {
         searchParams.delete('query');
@@ -244,14 +287,14 @@ export const Search = () => {
 
   useEffect(() => {
     readURLSearchParams();
+    setSearching(false);
   }, []);
 
   return (
     <Stack>
       <div className="d-flex flex-row justify-content-center">
-        <Form className="d-flex search-bar justify-content-center position-relative">
-          <Form.Control
-            className="d-flex justify-content-center search-input"
+        <SearchForm>
+          <SearchInput
             type="text"
             value={query}
             placeholder="Search data in Thorium"
@@ -264,7 +307,7 @@ export const Search = () => {
             }}
           />
           <IndexSelect index={selectedIndex} onChange={updateSelectedIndex} />
-        </Form>
+        </SearchForm>
       </div>
       <BrowsingFilters
         title=""

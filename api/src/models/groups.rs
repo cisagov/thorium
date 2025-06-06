@@ -80,7 +80,7 @@ const fn default_true() -> bool {
     true
 }
 
-/// The data that is allowed to be added/uploaded to a groupi
+/// The data that is allowed to be added/uploaded to a group
 ///
 /// These permission are not retroactive.
 #[derive(Serialize, Deserialize, Clone, Debug)]

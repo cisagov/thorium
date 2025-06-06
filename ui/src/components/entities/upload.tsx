@@ -20,6 +20,8 @@ import {
 } from '@components';
 import { useAuth } from '@utilities';
 import { uploadFile } from '@thorpi';
+import { AssociationCreate, AssociationKind, BlankAssociationCreate, Entity } from '@models';
+import { createAssociation } from '@thorpi';
 
 const PARALLELUPLOADLIMIT = 5;
 
@@ -49,6 +51,42 @@ const ProgressBarContainer: React.FC<ProgressBarProps> = ({ name, value, error }
   );
 };
 
+function handleAssociationUpdate(
+  associationKeys: string[],
+  entity: Entity | undefined,
+  groups: string[],
+  updatePendingAssociations: (associations: AssociationCreate[]) => void,
+) {
+  const newAssociationList: AssociationCreate[] = [];
+  if (entity) {
+    console.log('entity exists, create associations');
+    associationKeys.map((type) => {
+      const newAssociation = structuredClone(BlankAssociationCreate);
+      newAssociation.kind = type.replaceAll(' ', '') as unknown as AssociationKind;
+      newAssociation.source = { Entity: { id: entity.id, name: entity.name } };
+      newAssociation.groups = groups;
+      newAssociationList.push(newAssociation);
+    });
+    console.log(newAssociationList);
+    updatePendingAssociations(newAssociationList);
+  }
+}
+
+async function createFileAssociations(sha256: string, groups: string[], associations: AssociationCreate[]): Promise<void> {
+  console.log('creating associations');
+  for (let i = 0; i < associations.length; i++) {
+    // groups not set, now set them
+    associations[i].groups = groups;
+    associations[i].targets = [
+      {
+        File: sha256,
+      },
+    ];
+    console.log(associations[i]);
+    await createAssociation(associations[i], console.log);
+  }
+}
+
 type UploadProps = {
   entity: Entity | undefined;
 };
@@ -57,6 +95,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
   const { userInfo } = useAuth();
   const [filesArray, setFilesArray] = useState([]);
   const [description, setDescription] = useState('');
+  const [associations, setAssociations] = useState<AssociationCreate[]>([]);
   const [originType, setOriginType] = useState('Downloaded');
   const [carvedType, setCarvedType] = useState('Pcap');
   const [originUrl, setOriginUrl] = useState('');
@@ -105,6 +144,11 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
     Green: false,
   });
   const [controller, setController] = useState(new AbortController());
+
+  // create default associations on page load
+  useEffect(() => {
+    handleAssociationUpdate([AssociationKind.AssociatedWith], entity, selectedGroups, setAssociations);
+  }, []);
 
   // Make selected tlp tags
   const tlpTags = () => {
@@ -491,6 +535,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
               reactionFail: false,
             },
           }));
+          createFileAssociations(response.sha256, selectedGroups, associations);
           // Track reaction failure count. This is easier than counting the length
           // of another data structure. Assume they will fail before submitting them.
           // Also only doing this after file is uploaded properly since we don't
@@ -506,6 +551,8 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
             });
           }
         } else {
+          // handle adding associations to the uploaded files
+          //createFileAssociations(response.sha256, selectedGroups, associations);
           // Track files that were not submitted successfully. Keep the form for reuse.
           setUploadFailures((uploadFailures) => ({
             ...uploadFailures,
@@ -1423,7 +1470,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
           <Row className="mt-1">
             {Object.entries(uploadStatus).map(([key, value]) => (
               <Fragment key={key}>
-                <Card className="highlight-card">
+                <Card>
                   <Row>
                     <Col className="status-dropdown" md={1}>
                       <Button
@@ -1490,7 +1537,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
                       {uploadReactionRes
                         .filter((result) => result.sha256 === value.sha256)
                         .map((val) => (
-                          <Card className="highlight-card panel" key={val.result.id}>
+                          <Card className="panel" key={val.result.id}>
                             <Row className="reaction-row">
                               <Col md={2}>{val.result.pipeline}</Col>
                               <Col md={2}>{val.result.group}</Col>
@@ -1590,6 +1637,30 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
               />
             </Col>
           </Row>
+          <Row className="mb-2 alt-label">
+            <Col className="upload-field-name"></Col>
+            <Col className="upload-field-name-alt">
+              <Subtitle>Associations</Subtitle>
+            </Col>
+          </Row>
+          {/*<Row className="mb-2">
+            <Col className="upload-field-name">
+              <Subtitle>Associations</Subtitle>
+            </Col>
+            <Col className={(uploadInProgress ? 'disabled ' : '') + 'upload-field'}>
+              <SelectInput
+                disabled={entity === undefined}
+                value={entity ? AssociationKind.AssociatedWith : ''}
+                options={[
+                  AssociationKind.AssociatedWith,
+                  AssociationKind.DocumentationFor,
+                  AssociationKind.FirmwareFor,
+                  AssociationKind.FileFor,
+                ]}
+                onChange={(value) => handleAssociationUpdate([value], entity, selectedGroups, setAssociations)}
+              />
+            </Col>
+          </Row>*/}
           <Row className="mb-4 alt-label">
             <Col className="upload-field-name"></Col>
             <Col className="upload-field-name-alt">

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router';
-import { Card, Col, Row } from 'react-bootstrap';
+import { Col, Row } from 'react-bootstrap';
 
 // project imports
-import { BrowsingFilters, EntityList, Page } from '@components';
+import { BrowsingCard, BrowsingContents, BrowsingFilters, EntityList, LinkFields, Page } from '@components';
 import { useAuth } from '@utilities';
 import { listRepos } from '@thorpi';
 import { Filters } from '@models';
+import styled from 'styled-components';
 
 // get repos using filters and and an optional cursor
 const getRepos = async (filters: Filters, cursor: string | null) => {
@@ -23,17 +24,39 @@ const getRepos = async (filters: Filters, cursor: string | null) => {
   };
 };
 
+const Name = styled(Col)`
+  white-space: pre-wrap;
+  text-align: center;
+  flex-wrap: wrap;
+  word-break: break-all;
+  min-width: 650px;
+  color: var(--thorium-text);
+`;
+
+const Submissions = styled(Col)`
+  min-width: 100px;
+  text-align: center;
+  color: var(--thorium-text);
+`;
+
+const Providers = styled(Col)`
+  flex-wrap: wrap;
+  text-align: center;
+  min-width: 150px;
+  color: var(--thorium-text);
+`;
+
 const RepoListHeaders = () => {
   return (
-    <Card className="basic-card panel">
-      <Card.Body>
+    <BrowsingCard>
+      <BrowsingContents>
         <Row>
-          <Col className="d-flex justify-content-center">Repo</Col>
-          <Col className="d-flex justify-content-center">Submission(s)</Col>
-          <Col className="d-flex justify-content-center">Provider(s)</Col>
+          <Name>Repo</Name>
+          <Submissions>Submission(s)</Submissions>
+          <Providers>Provider(s)</Providers>
         </Row>
-      </Card.Body>
-    </Card>
+      </BrowsingContents>
+    </BrowsingCard>
   );
 };
 
@@ -43,17 +66,17 @@ interface RepoItemProp {
 
 const RepoItem: React.FC<RepoItemProp> = ({ repo }) => {
   return (
-    <Card className="basic-card panel">
-      <Card.Body>
+    <BrowsingCard>
+      <BrowsingContents>
         <Link to={`/repo/${repo.url}`} state={{ repo: repo }} className="no-decoration">
-          <Row className="highlight-card">
-            <Col>{repo.name}</Col>
-            <Col>{JSON.stringify(repo.submissions.length)}</Col>
-            <Col>{JSON.stringify(repo.provider)}</Col>
-          </Row>
+          <LinkFields>
+            <Name>{repo.name}</Name>
+            <Submissions>{JSON.stringify(repo.submissions.length)}</Submissions>
+            <Providers>{JSON.stringify(repo.provider)}</Providers>
+          </LinkFields>
         </Link>
-      </Card.Body>
-    </Card>
+      </BrowsingContents>
+    </BrowsingCard>
   );
 };
 

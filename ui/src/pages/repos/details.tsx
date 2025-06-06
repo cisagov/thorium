@@ -2,10 +2,10 @@ import { createContext, useContext } from 'react';
 import { Card } from 'react-bootstrap';
 import { useParams } from 'react-router';
 import { FaServer } from 'react-icons/fa';
+import styled from 'styled-components';
 
 // project imports
-import { Page, Subtitle, Title } from '@components';
-import styled from 'styled-components';
+import { AssociationGraph, AssociationTree, Page, Subtitle, Title } from '@components';
 
 interface RepoDetailsContextType {
   repo: string | undefined; // full url for repo page is displaying
@@ -52,7 +52,16 @@ const RepoDetailsContainer = () => {
       <Page className="full-min-width" title={`Repo · ${repo}`}>
         <RepoHeader />
         <Card className="panel">
-          <Card.Body>Coming Soon...</Card.Body>
+          <Card.Body>
+            <Subtitle className="text-center">Association Graph</Subtitle>
+            <AssociationGraph inView initial={{ repos: [repo ? repo : ''] }} />
+          </Card.Body>
+        </Card>
+        <Card className="panel">
+          <Card.Body>
+            <Subtitle className="text-center">Association Tree</Subtitle>
+            <AssociationTree initial={{ repos: [repo ? repo : ''] }} />
+          </Card.Body>
         </Card>
       </Page>
     </RepoContext.Provider>

@@ -8,6 +8,7 @@
     "paths": {
       "@components": ["components/index.js"],
       "@thorpi": ["thorpi/index.js"],
+      "@styles": ["styles/index.ts"],
       "@utilities": ["utilities/index.js"],
     }
   },

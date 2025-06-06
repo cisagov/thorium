@@ -1,0 +1,107 @@
+@use '../scaling';
+/*
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  xxl: 1400px
+);
+*/
+
+.navbar-banner {
+  background-color: var(--thorium-nav-panel-bg);
+  border-bottom: 0.05px groove var(--thorium-panel-border);
+  right: 0;
+  position: fixed;
+  width: 100%;
+  z-index: 1000;
+  padding: 0.1rem;
+  margin: 0;
+}
+
+// This class is needed to enable scroll to when the horizontal nav bar is present.
+// Without it, the horizontal nav bar would cover the top of the scrolled element.
+.navbar-scroll-offset {
+  scroll-margin-top: 60px;
+}
+
+.home-item {
+  margin-right: auto;
+  border-radius: 10px;
+  padding: 0.5rem;
+}
+
+.home-item:hover {
+  // !important is needed for the hover
+  background-color: var(--thorium-highlight-panel-bg) !important;
+  padding: 0.5rem;
+}
+
+.navbanner-item {
+  color: var(--thorium-nav-text);
+  background-color: var(--thorium-nav-panel-bg);
+  padding: 0 0.5rem 0 0.5rem;
+  border-radius: 10px;
+}
+
+.navbanner-item:hover {
+  color: var(--thorium-highlight-text);
+  border-radius: 10px;
+}
+
+.navLink {
+  color: var(--thorium-nav-text) !important;
+  width: 100%;
+  max-width: 100%;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--thorium-highlight-text) !important;
+  }
+}
+
+.activeNavLink {
+  color: var(--thorium-highlight-text) !important;
+  text-decoration: none;
+}
+
+.short {
+  margin-bottom: 2rem;
+}
+
+// do not show smaller side bar items by default
+.reduce-sidebar {
+  display: none;
+}
+
+// 1400px
+//@media (max-width: scaling.$xxl) { ... }
+
+// 1200px
+@media (max-width: scaling.$xl) {
+  .expand-sidebar {
+    display: none;
+  }
+  .reduce-sidebar {
+    display: block;
+  }
+  .sidebar-column {
+    flex-basis: 70px !important;
+  }
+}
+
+// 992px
+//@media (max-width: scaling.$lg) { ... }
+
+// 768px
+//@media (max-width: scaling.$md) { ... }
+
+// 576px
+@media (max-width: scaling.$sm) {
+  .sidebar-column {
+    flex: 0 !important;
+    display: none;
+  }
+}

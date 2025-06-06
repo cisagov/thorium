@@ -1,0 +1,57 @@
+@use '../colors';
+
+.collapsed {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.display-linebreak {
+  white-space: pre-line;
+}
+
+.tool-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  word-wrap: break-word;
+  background-color: var(--thorium-panel-bg);
+  background-clip: border-box;
+  border: 1px solid var(--thorium-panel-border);
+  border-radius: 0.25rem;
+}
+
+.tool-result {
+  padding: 0.5rem !important;
+  width: 95% !important;
+  border: none !important;
+  background-color: var(--thorium-panel-bg);
+  color: var(--thorium-text);
+  overflow: scroll;
+}
+
+.tool-results-text {
+  scroll-margin-top: 8rem;
+}
+
+.none-border {
+  border: none !important;
+}
+
+.btn-align {
+  text-align: right;
+}
+
+.tables-entry-med {
+  text-align: center !important;
+  border: none !important;
+  width: 40% !important;
+  color: var(--thorium-text) !important;
+}
+
+.tables-entry-lrg {
+  text-align: center !important;
+  border: none !important;
+  width: 60% !important;
+  color: var(--thorium-text) !important;
+}

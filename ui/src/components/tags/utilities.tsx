@@ -61,5 +61,7 @@ export const DangerTagKeys = [
   'CVEBINTOOLCVE',
 ];
 
+export const MitreTagKeys = ['ATT&CK', 'MBC'];
+
 // need capitalized file info keys for value checks (all keys cast to uppercase)
 export const FormattedFileInfoTagKeys = FileInfoTagKeys.map((tag) => tag.toUpperCase());

@@ -1,0 +1,227 @@
+@use '../scaling';
+/*
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  xxl: 1400px
+);
+*/
+
+.upload_alerts {
+  padding-left: calc(var(--bs-gutter-x) * 0.5);
+  padding-right: calc(var(--bs-gutter-x) * 0.5);
+}
+
+.link-text {
+  // this is setup to override other styling
+  color: var(--thorium-link-text) !important;
+}
+
+.link-text-alt {
+  // this is setup to override other styling
+  color: var(--thorium-link-text-alt) !important;
+}
+
+.disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.upload-field-name {
+  flex: 1;
+}
+
+.upload-field-name-alt {
+  flex: 1;
+  align-content: left;
+  display: none;
+}
+
+.upload-field {
+  flex: 10;
+}
+
+.description-field {
+  height: 100px;
+}
+
+.status-file {
+  width: 19%;
+}
+
+.status-msg {
+  width: 19%;
+}
+
+.status-error {
+  color: red;
+}
+
+.status-percent {
+  width: 9%;
+}
+
+.status-sha-head {
+  width: 49%;
+}
+
+.status-sha-link {
+  width: 49%;
+}
+
+.status-sha {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-wrap: nowrap;
+}
+
+.status-dropdown {
+  width: 4%;
+}
+
+.btn-no-outline-secondary {
+  --bs-btn-color: var(--thorium-bs-btn-color);
+  --bs-btn-border-color: transparent;
+  --bs-btn-hover-color: var(--thorium-bs-btn-hover-color);
+  --bs-btn-hover-bg: transparent;
+  --bs-btn-hover-border-color: transparent;
+  --bs-btn-focus-shadow-rgb: var(--thorium-bs-btn-hover-color);
+  --bs-btn-active-color: var(--thorium-bs-btn-hover-color);
+  --bs-btn-active-bg: transparent;
+  --bs-btn-active-border-color: transparent;
+  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+  --bs-btn-disabled-color: var(--thorium-bs-btn-hover-color);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: transparent;
+  --bs-gradient: none;
+}
+
+.btn-xsm,
+.btn-group-xsm > .btn {
+  --bs-btn-padding-y: 0.1rem;
+  --bs-btn-padding-x: 0.1rem;
+  --bs-btn-font-size: 0.875rem;
+  --bs-btn-border-radius: var(--bs-border-radius-sm);
+}
+
+.upload-content {
+  text-align: center;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.upload-bar {
+  padding-bottom: 1rem;
+}
+
+.danger-bar {
+  --bs-progress-bg: var(--thorium-bar-bg) !important;
+  --bs-progress-bar-bg: var(--thorium-danger-bar-bg) !important;
+}
+
+.warning-bar {
+  --bs-progress-bg: var(--thorium-bar-bg) !important;
+  --bs-progress-bar-bg: var(--thorium-warning-bar-bg) !important;
+}
+
+.info-bar {
+  --bs-progress-bg: var(--thorium-bar-bg) !important;
+  --bs-progress-bar-bg: var(--thorium-info-bar-bg) !important;
+}
+
+.success-bar {
+  --bs-progress-bg: var(--thorium-bar-bg) !important;
+  --bs-progress-bar-bg: var(--thorium-ok-bar-bg) !important;
+}
+
+.card-title {
+  margin-left: 0.5rem;
+}
+
+.stats-container {
+  border: none;
+  flex-wrap: wrap;
+  align-content: center;
+}
+
+.stat-card {
+  margin-left: 1rem;
+  margin-right: 1rem;
+  width: 15rem;
+}
+
+.reaction-uploads-card {
+  width: 97%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-block: 0.25rem;
+  border: none;
+}
+
+.reaction-row {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.close-button {
+  padding-top: 1rem;
+}
+
+.retry-button {
+  padding-left: 0.5rem;
+}
+
+.redo-btn {
+  float: right;
+}
+
+.upload-btn {
+  padding-top: 0.5rem;
+}
+
+// 1400px
+//@media (max-width: scaling.$xxl) {
+//    .upload-field-name {
+//        display: none;
+//    }
+// }
+
+// 1200x
+///@media (max-width: scaling.$xl) { ... }
+
+// 992px
+@media (max-width: scaling.$lg) {
+  .name-width {
+    width: 100px;
+  }
+
+  .upload-field-name-alt {
+    display: flex;
+  }
+
+  .upload-field-name {
+    display: none;
+  }
+
+  .alt-label {
+    margin-top: 1rem;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .col-1 {
+    max-width: 10%;
+  }
+
+  .col-md {
+    max-width: 90%;
+  }
+}
+
+// 768px
+//@media (max-width: scaling.$md) { ... }
+
+// 576px
+//@@media (max-width: scaling.$sm) { ... }

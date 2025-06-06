@@ -1,0 +1,18 @@
+export enum CriticalSector {
+  Chemical = 'Chemical',
+  CommercialFacilities = 'Commercial Facilities',
+  Communications = 'Communications',
+  CriticalManufacturing = 'Critical Manufacturing',
+  Dams = 'Dams',
+  DefenseIndustrialBase = 'Defense Industrial Base',
+  EmergencyServices = 'Emergency Services',
+  Energy = 'Energy',
+  FinancialServices = 'Financial Services',
+  FoodAgriculture = 'Food and Agriculture',
+  GovernmentServicesFacilities = 'Government Services and Facilities',
+  HealthcarePublicHealth = 'Healthcare and Public Health',
+  InformationTechnology = 'Information Technology',
+  NuclearReactorsMaterialsWaste = 'Nuclear Reactors, Materials, and Waste',
+  TransportSystems = 'Transport Systems',
+  WaterWasteWater = 'Water and Wastewater',
+}

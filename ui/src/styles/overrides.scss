@@ -15,21 +15,6 @@ td {
   color: var(--thorium-text) !important;
 }
 
-// 1400px
-//@media (max-width: scaling.$xxl) { ... }
-
-// 1200px
-//@media (max-width: scaling.$xl) { ... }
-
-// 992px
-//@media (max-width: scaling.$lg) { ... }
-
-// 768px
-//@media (max-width: scaling.$md) { ... }
-
-// 576px
-//@media (max-width: scaling.$sm) { ... }
-
 body,
 html {
   font-family: 'Product Sans';
@@ -100,10 +85,6 @@ p {
 a {
   color: var(--thorium-text);
 
-  /*&:hover {
-    color: var(--thorium-highlight-text);
-  }*/
-
   &:active {
     color: var(--thorium-selected-text);
   }
@@ -132,7 +113,6 @@ hr.tagshr {
   --bs-table-border-color: var(--thorium-panel-border);
 }
 
-// <Badge>
 .badge {
   --bs-badge-color: var(--thorium-button-text);
 }
