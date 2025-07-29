@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use bytesize::ByteSize;
 use chrono::prelude::*;
 use futures::StreamExt;
 use scylla::client::session::Session;
@@ -14,6 +15,7 @@ use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::DataSource;
+use super::utils::proportional_truncate;
 use crate::events::CompactResultEvent;
 use crate::index::{IndexMapping, IndexTyped};
 use crate::stores::{Elastic, StoreIdentifiable, StoreLookup};
@@ -70,30 +72,38 @@ impl DataSource for Results {
         err(Debug)
     )]
     fn to_values(
-        data: &[ResultBundle],
+        data: Vec<ResultBundle>,
         data_type: &OutputKind,
         now: DateTime<Utc>,
+        max_document_size: ByteSize,
     ) -> Result<Vec<Value>, Error> {
         let item_label = match data_type {
             OutputKind::Files => "sha256",
             OutputKind::Repos => "url",
         };
-        let values =
-            data.iter()
-                .try_fold(Vec::new(), |mut values, bundle| -> Result<_, Error> {
-                    // get a store id from the bundle
-                    values.push(json!({"index": {"_id": bundle.as_store_id().to_string() }}));
-                    // build the final document to add and add it to our vec of docs
-                    values.push(json!({
-                        item_label: &bundle.item,
-                        "streamed": &now,
-                        "group": bundle.group,
-                        "results": bundle.results,
-                        "files": bundle.files,
-                        "children": bundle.children
-                    }));
-                    Ok(values)
-                })?;
+        let values = data.into_iter().try_fold(
+            Vec::new(),
+            |mut values, mut bundle| -> Result<_, Error> {
+                // truncate results if needed to the max data length with some buffer for the other fields
+                // TODO: truncate other fields along with the results
+                proportional_truncate(
+                    &mut bundle.results,
+                    (max_document_size - ByteSize::kib(8)).as_u64(),
+                );
+                // get a store id from the bundle
+                values.push(json!({"index": {"_id": bundle.as_store_id().to_string() }}));
+                // build the final document to add and add it to our vec of docs
+                values.push(json!({
+                    item_label: &bundle.item,
+                    "streamed": &now,
+                    "group": bundle.group,
+                    "results": bundle.results,
+                    "files": bundle.files,
+                    "children": bundle.children
+                }));
+                Ok(values)
+            },
+        )?;
         Ok(values)
     }
 
@@ -188,6 +198,9 @@ impl ResultsData {
 
 /// Bundle together results from the data map and results map
 ///
+/// Truncates results in a single bundle if their combined size is greater than
+/// the maximum document size (see [`thorium::conf::SearchStreamer::max_document_size`])
+///
 /// # Arguments
 ///
 /// * `results_data` - The data on the results
@@ -196,7 +209,7 @@ impl ResultsData {
 fn bundle_results(results_data: ResultsDataMap, results_map: &ResultsMap) -> Vec<ResultBundle> {
     let mut bundles = Vec::new();
     for (item, data) in results_data {
-        let (mut results, files, children) = data.keys().fold(
+        let (results, files, children) = data.keys().fold(
             (Vec::new(), Vec::new(), Vec::new()),
             |(mut results, mut files, mut children), id| {
                 if let Some((r, f, c)) = results_map.get(id) {

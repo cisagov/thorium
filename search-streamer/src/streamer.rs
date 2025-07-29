@@ -9,9 +9,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;
-use thorium::{client::SearchEventsClient, models::SearchEventPopOpts, Conf, Error, Thorium};
+use thorium::{Conf, Error, Thorium, client::SearchEventsClient, models::SearchEventPopOpts};
 use tokio::task::JoinHandle;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use crate::events::{CompactEvent, EventCompactable};
 use crate::init::{InitSession, InitSessionInfo, InitSessionKeys};
@@ -165,6 +165,7 @@ where
                 self.progress_tx.clone(),
                 source.clone(),
                 store.clone(),
+                self.conf.thorium.search_streamer.clone(),
             );
             // spawn this worker
             futures.push(tokio::spawn(worker.start()));
@@ -176,6 +177,7 @@ where
             self.progress_tx.clone(),
             source,
             store.clone(),
+            self.conf.thorium.search_streamer.clone(),
         );
         // spawn this worker
         futures.push(tokio::spawn(worker.start()));

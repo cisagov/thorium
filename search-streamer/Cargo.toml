@@ -27,6 +27,11 @@ openssl = "*"
 scylla = { version = "1.2" }
 itertools = "0.14"
 redis = { version = "0.23", default-features = false, features = ["tokio-comp"] }
+unicode-segmentation = "1.12"
+bytesize = "2.1"
+
+[dev-dependencies]
+rand = "0.9"
 
 [features]
 # Force openssl-sys to staticly link in the openssl library. Necessary when

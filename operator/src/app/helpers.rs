@@ -51,10 +51,16 @@ pub async fn create_bucket(config: &S3, client: &Client, bucket_name: &str) -> R
         return Ok(());
     }
     // build out the bucket creation config
-    let constraint = BucketLocationConstraint::from(config.region.clone().as_str());
-    let bucket_config = CreateBucketConfiguration::builder()
-        .location_constraint(constraint)
-        .build();
+    let mut bucket_config = CreateBucketConfiguration::builder();
+    // if we have a region set then set the location con
+    if let Some(region) = &config.region {
+        // build our constraint
+        let constraint = BucketLocationConstraint::from(region.as_str());
+        // set our constraint
+        bucket_config = bucket_config.location_constraint(constraint);
+    }
+    // build our bucket config
+    let bucket_config = bucket_config.build();
     // attempt to create the bucket
     let response = client
         .create_bucket()
@@ -105,12 +111,18 @@ pub async fn create_all_buckets(meta: &ClusterMeta) -> Result<(), Error> {
     // get our s3 credentials
     let creds = Credentials::new(&s3.access_key, &s3.secret_token, None, None, "Thorium");
     // build our s3 config
-    let s3_config = aws_sdk_s3::config::Builder::new()
+    let mut s3_config_builder = aws_sdk_s3::config::Builder::new()
         .endpoint_url(&s3.endpoint)
-        .region(aws_types::region::Region::new(s3.region.clone()))
         .credentials_provider(SharedCredentialsProvider::new(creds))
-        .force_path_style(true)
-        .build();
+        .force_path_style(s3.use_path_style);
+    // if we have a region set then add that to our config
+    if let Some(region) = &s3.region {
+        // set our region
+        s3_config_builder =
+            s3_config_builder.region(aws_types::region::Region::new(region.clone()));
+    }
+    // build our s3 config
+    let s3_config = s3_config_builder.build();
     // build our s3 client from the s3 config
     let client = Client::from_conf(s3_config);
     // create all Thorium buckets
@@ -118,7 +130,7 @@ pub async fn create_all_buckets(meta: &ClusterMeta) -> Result<(), Error> {
     create_bucket(s3, &client, &config.repos.bucket).await?;
     create_bucket(s3, &client, &config.attachments.bucket).await?;
     create_bucket(s3, &client, &config.results.bucket).await?;
-    create_bucket(&s3, &client, &config.ephemeral.bucket).await?;
-    create_bucket(&s3, &client, &config.graphics.bucket).await?;
+    create_bucket(s3, &client, &config.ephemeral.bucket).await?;
+    create_bucket(s3, &client, &config.graphics.bucket).await?;
     Ok(())
 }

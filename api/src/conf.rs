@@ -1,8 +1,43 @@
 //! The shared config for Thorium
+use bytesize::ByteSize;
 use schemars::JsonSchema;
+use schemars::schema::{InstanceType, Schema, SchemaObject};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
+
+/// A newtype wrapper for [`ByteSize`] implementing [`JsonSchema`]
+///
+/// This allows for easy parsing of byte sizes ("1 MB", "100 GiB", etc.)
+/// in the Thorium config/CRD
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ByteSizeNewType(ByteSize);
+
+impl JsonSchema for ByteSizeNewType {
+    fn schema_name() -> String {
+        "ByteSize".to_string()
+    }
+
+    fn json_schema(_generator: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        // define the field's type as a string
+        Schema::Object(SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            ..Default::default()
+        })
+    }
+}
+
+impl From<ByteSize> for ByteSizeNewType {
+    fn from(value: ByteSize) -> Self {
+        Self(value)
+    }
+}
+
+impl From<ByteSizeNewType> for ByteSize {
+    fn from(value: ByteSizeNewType) -> Self {
+        value.0
+    }
+}
 
 #[cfg(feature = "api")]
 use base64::Engine as _;
@@ -1224,6 +1259,16 @@ impl Default for SearchStreamerInit {
     }
 }
 
+/// Returns the default maximum document size for the search-streamer
+fn default_search_streamer_max_document_size() -> ByteSizeNewType {
+    ByteSize::mb(100).into()
+}
+
+/// Returns the default maximum request size for the search-streamer
+fn default_search_streamer_max_request_size() -> ByteSizeNewType {
+    ByteSize::mb(100).into()
+}
+
 /// The settings for the search-streamer
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct SearchStreamer {
@@ -1237,6 +1282,17 @@ pub struct SearchStreamer {
     /// The settings for the search-streamer init phase
     #[serde(default)]
     pub init: SearchStreamerInit,
+    /// The maximum size an individual document/value can be for indexing
+    /// in the search store; accepts M, MB, MiB, or equivalents for KB and GB
+    ///
+    /// In Elastic, this is equivalent to `http.max_content_len`
+    /// (see <https://www.elastic.co/docs/reference/elasticsearch/configuration-reference/networking-settings>).
+    #[serde(default = "default_search_streamer_max_document_size")]
+    pub max_document_size: ByteSizeNewType,
+    /// The maximum size a single create request to the search store;
+    /// accepts M, MB, MiB, or equivalents for KB and GB
+    #[serde(default = "default_search_streamer_max_request_size")]
+    pub max_request_size: ByteSizeNewType,
 }
 
 impl Default for SearchStreamer {
@@ -1244,6 +1300,8 @@ impl Default for SearchStreamer {
         Self {
             workers: default_search_streamer_workers(),
             init: SearchStreamerInit::default(),
+            max_document_size: default_search_streamer_max_document_size(),
+            max_request_size: default_search_streamer_max_request_size(),
         }
     }
 }
@@ -1733,12 +1791,10 @@ pub struct S3 {
     /// The endpoint S3c should talk to
     pub endpoint: String,
     /// The region our s3 client should use
-    pub region: String,
-    /// Specify the location constraint
-    pub location_constraint: Option<String>,
+    pub region: Option<String>,
     /// Force path style bucket adressing
     #[serde(default)]
-    pub force_path_style: bool,
+    pub use_path_style: bool,
     /// Whether the operator should skip bucket creation or not
     #[serde(default)]
     pub skip_bucket_auto_create: bool,

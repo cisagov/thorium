@@ -1,5 +1,6 @@
 //! Support streaming data into elastic
 
+use bytesize::ByteSize;
 use elasticsearch::auth::Credentials;
 use elasticsearch::cert::CertificateValidation;
 use elasticsearch::http::request::JsonBody;
@@ -23,6 +24,8 @@ pub struct Elastic {
     elastic: Elasticsearch,
     /// The elastic config set in the Thorium config
     elastic_conf: thorium::conf::Elastic,
+    /// The maximum size of a single request to Elastic as defined in the Thorium config
+    max_request_size: ByteSize,
 }
 
 impl Elastic {
@@ -54,6 +57,7 @@ impl Elastic {
         Ok(Elastic {
             elastic,
             elastic_conf: conf.elastic.clone(),
+            max_request_size: conf.thorium.search_streamer.max_request_size.into(),
         })
     }
 
@@ -272,7 +276,7 @@ impl SearchStore for Elastic {
             return Ok(());
         }
         // chunk the docs into request bodies of reasonable size
-        let chunks = chunk_docs(values)?;
+        let chunks = chunk_docs(values, self.max_request_size)?;
         for chunk in chunks {
             // convert our values to json bodies
             let body = chunk
@@ -416,15 +420,13 @@ impl ElasticBulkFilteredResponse {
 /// # Arguments
 ///
 /// * `values` - The values to chunk
+/// * `max_body_size` - The maximum size all the docs can be together for a single request to elastic
 #[instrument(name = "elastic::chunk_docs", skip_all, err(Debug))]
-fn chunk_docs(values: Vec<Value>) -> Result<Vec<Vec<Value>>, Error> {
-    // define the maximum size of the request body in bytes
-    // (1020 MB, leaving 4 MB in case of overhead)
-    // TODO: maybe make this configurable?
-    const MAX_BODY_SIZE: usize = 1024 * 1024 * 1000;
+fn chunk_docs(values: Vec<Value>, max_request_size: ByteSize) -> Result<Vec<Vec<Value>>, Error> {
     let mut chunks = Vec::new();
     let mut current_chunk = Vec::new();
     let mut current_chunk_size = 0;
+    let max_request_size_raw = max_request_size.as_u64();
     // TODO: replace with 'array_chunks' when that is stabilized
     for mut chunk in values
         .into_iter()
@@ -438,15 +440,15 @@ fn chunk_docs(values: Vec<Value>) -> Result<Vec<Vec<Value>>, Error> {
         // estimate the size of these values
         let size = sizeof_val(&val) + sizeof_val(&index_val);
         // make sure the size of this pair isn't bigger than our maximum by itself
-        if size > MAX_BODY_SIZE {
+        if size > max_request_size_raw {
             // TODO: if we hit this error, we either need to increase MAX_BODY_SIZE (maximum of 2GB because
-            // elastic's doc size maximum is 2GB) or truncate the data
+            // elastic's doc size maximum is 2GB) or we're not truncating data properly
             return Err(Error::new(format!(
-                "Document larger than the maximum request size of {MAX_BODY_SIZE} bytes!"
+                "Document larger than the maximum request size of {max_request_size}!"
             )));
         }
         // check if adding this value would exceed the maximum size
-        if current_chunk_size + size > MAX_BODY_SIZE {
+        if current_chunk_size + size > max_request_size_raw {
             // Push the current chunk to the list of chunks
             chunks.push(current_chunk);
             // start a new chunk
@@ -472,21 +474,22 @@ fn chunk_docs(values: Vec<Value>) -> Result<Vec<Vec<Value>>, Error> {
 /// # Arguments
 ///
 /// * `val` - The JSON value to estimate the size of
-pub fn sizeof_val(v: &serde_json::Value) -> usize {
-    std::mem::size_of::<serde_json::Value>()
+pub fn sizeof_val(v: &serde_json::Value) -> u64 {
+    std::mem::size_of::<serde_json::Value>() as u64
         + match v {
             serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {
                 0
             }
-            serde_json::Value::String(s) => s.len(),
+            serde_json::Value::String(s) => s.len() as u64,
             serde_json::Value::Array(a) => a.iter().map(sizeof_val).sum(),
             serde_json::Value::Object(o) => o
                 .iter()
                 .map(|(k, v)| {
-                    std::mem::size_of::<String>()
-                        + k.len()
+                    std::mem::size_of::<String>() as u64
+                        + k.len() as u64
                         + sizeof_val(v)
-                        + std::mem::size_of::<usize>() * 3 // crude approximation of overhead
+                        // crude approximation of overhead
+                        + (std::mem::size_of::<usize>() * 3) as u64
                 })
                 .sum(),
         }

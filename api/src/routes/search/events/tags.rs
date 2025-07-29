@@ -1,9 +1,9 @@
 //! Routes for tag search events
 
+use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::patch;
-use axum::Router;
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use tracing::instrument;
 use utoipa::OpenApi;
 
@@ -122,10 +122,7 @@ pub struct TagSearchEventApiDocs;
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     let url = TagSearchEvent::url();
     router
-        .route(&format!("/api/search/events/{url}/pop/"), patch(pop))
-        .route(&format!("/api/search/events/{url}/status/"), patch(status))
-        .route(
-            &format!("/api/search/events/{url}/reset/"),
-            patch(reset_all),
-        )
+        .route(&format!("/search/events/{url}/pop/"), patch(pop))
+        .route(&format!("/search/events/{url}/status/"), patch(status))
+        .route(&format!("/search/events/{url}/reset/"), patch(reset_all))
 }

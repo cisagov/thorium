@@ -166,6 +166,7 @@ impl S3Client {
     /// # Arguments
     ///
     /// * `config` - Thorium config options
+    #[must_use]
     pub fn new(bucket: &str, password: &str, conf: &crate::conf::S3) -> Self {
         // build our generic array
         let gen_array: GenericArray<u8, U16> =
@@ -173,12 +174,18 @@ impl S3Client {
         // get our s3 credentials
         let creds = Credentials::new(&conf.access_key, &conf.secret_token, None, None, "Thorium");
         // build our s3 config
-        let s3_config = aws_sdk_s3::config::Builder::new()
+        let mut s3_config_builder = aws_sdk_s3::config::Builder::new()
             .endpoint_url(&conf.endpoint)
-            .region(aws_types::region::Region::new(conf.region.clone()))
             .credentials_provider(SharedCredentialsProvider::new(creds))
-            .force_path_style(conf.force_path_style)
-            .build();
+            .force_path_style(conf.use_path_style);
+        // if we have a region set then add that to our config
+        if let Some(region) = &conf.region {
+            // set our region
+            s3_config_builder =
+                s3_config_builder.region(aws_types::region::Region::new(region.clone()));
+        }
+        // build our s3 config
+        let s3_config = s3_config_builder.build();
         // build our s3 client
         let client = Client::from_conf(s3_config);
         S3Client {

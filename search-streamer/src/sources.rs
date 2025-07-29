@@ -1,5 +1,6 @@
 //! The different sources of data to stream into a search store
 
+use bytesize::ByteSize;
 use chrono::prelude::*;
 use scylla::client::session::Session;
 use scylla::deserialize::row::DeserializeRow;
@@ -11,6 +12,7 @@ use thorium::{Error, Thorium};
 
 mod results;
 mod tags;
+mod utils;
 
 pub use results::Results;
 pub use tags::Tags;
@@ -88,10 +90,12 @@ pub trait DataSource: Send + Clone {
     /// * `bundles` - The data bundles to serialize
     /// * `index_type` - The data's type to map to a specific index
     /// * `now` - The time this data was serialized/streamed
+    /// * `max_document_size` - The maximum size for a single value/document
     fn to_values(
-        bundles: &[Self::DataBundle],
+        bundles: Vec<Self::DataBundle>,
         index_type: &Self::IndexType,
         now: DateTime<Utc>,
+        max_document_size: ByteSize,
     ) -> Result<Vec<Value>, Error>;
 
     /// From a list of init info on items, pull bundles for each item and return

@@ -211,12 +211,18 @@ impl<S: S3Backup> S3BackupWorker<S> {
             "Thorium",
         );
         // build our s3 s3_config
-        let s3_config = aws_sdk_s3::config::Builder::new()
+        let mut s3_config_builder = aws_sdk_s3::config::Builder::new()
             .endpoint_url(&s3_conf.endpoint)
-            .region(aws_types::region::Region::new(s3_conf.region.clone()))
             .credentials_provider(SharedCredentialsProvider::new(creds))
-            .force_path_style(s3_conf.force_path_style)
-            .build();
+            .force_path_style(s3_conf.use_path_style);
+        // if we have a region set then add that to our config
+        if let Some(region) = &s3_conf.region {
+            // set our region
+            s3_config_builder =
+                s3_config_builder.region(aws_types::region::Region::new(region.clone()));
+        }
+        // build our s3 config
+        let s3_config = s3_config_builder.build();
         // build our s3 client
         let s3 = Client::from_conf(s3_config);
         // build our worker
@@ -599,22 +605,27 @@ impl<R: S3Restore> S3RestoreWorker<R> {
             "Thorium",
         );
         // build our s3 s3_config
-        let s3_config = aws_sdk_s3::config::Builder::new()
+        let mut s3_config_builder = aws_sdk_s3::config::Builder::new()
             .endpoint_url(&s3_conf.endpoint)
-            .region(aws_types::region::Region::new(s3_conf.region.clone()))
             .credentials_provider(SharedCredentialsProvider::new(creds))
-            .force_path_style(true)
-            .build();
+            .force_path_style(true);
+        // if we have a region set then add that to our config
+        if let Some(region) = &s3_conf.region {
+            // set our region
+            s3_config_builder =
+                s3_config_builder.region(aws_types::region::Region::new(region.clone()));
+        }
+        // build our s3 config
+        let s3_config = s3_config_builder.build();
         // build our s3 client
         let s3 = Client::from_conf(s3_config);
         // create a sub worker
         let workers = (0..10)
-            .into_iter()
             .map(|_| UploadSubWorker::new(conf, &s3, &progress, updates))
             .collect();
         // build our worker
         S3RestoreWorker {
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
             conf: conf.clone(),
             updates: updates.clone(),
             progress,

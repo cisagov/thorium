@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use bytesize::ByteSize;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use scylla::client::session::Session;
@@ -13,6 +14,7 @@ use thorium::{Error, Thorium};
 use tracing::instrument;
 
 use super::DataSource;
+use super::utils::proportional_truncate;
 use crate::events::CompactTagEvent;
 use crate::index::{IndexMapping, IndexTyped};
 use crate::stores::{Elastic, StoreIdentifiable, StoreLookup};
@@ -64,9 +66,10 @@ impl DataSource for Tags {
         err(Debug)
     )]
     fn to_values(
-        bundles: &[TagBundle],
+        bundles: Vec<TagBundle>,
         data_type: &TagType,
         now: DateTime<Utc>,
+        max_document_size: ByteSize,
     ) -> Result<Vec<Value>, Error> {
         let item_label = match data_type {
             TagType::Files => "sha256",
@@ -78,7 +81,7 @@ impl DataSource for Tags {
             }
         };
         Ok(bundles.iter().fold(Vec::new(), |mut values, bundle| {
-            let tag_pairs: Vec<String> =
+            let mut tag_pairs: Vec<String> =
                 bundle
                     .tags
                     .iter()
@@ -86,6 +89,12 @@ impl DataSource for Tags {
                         tags.extend(values.iter().map(|value| format!("{key}={value}")));
                         tags
                     });
+            // truncate the tags if needed to the maximum size of one doc, leaving some buffer
+            // for the other fields
+            proportional_truncate(
+                &mut tag_pairs,
+                (max_document_size - ByteSize::kib(2)).as_u64(),
+            );
             // convert the bundle into a store id, then
             values.push(json!({"index": {"_id": bundle.as_store_id().to_string() }}));
             values.push(json!({

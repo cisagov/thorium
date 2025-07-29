@@ -27,6 +27,8 @@ pub struct StreamWorker<D: DataSource, S: SearchStore> {
     source: D,
     /// The store for data
     store: S,
+    /// The config for the search-streamer
+    conf: thorium::conf::SearchStreamer,
 }
 
 impl<D: DataSource, S: SearchStore> StreamWorker<D, S>
@@ -49,6 +51,7 @@ where
         progress_tx: AsyncSender<JobStatus>,
         source: D,
         store: S,
+        conf: thorium::conf::SearchStreamer,
     ) -> Self {
         Self {
             scylla,
@@ -56,6 +59,7 @@ where
             progress_tx,
             source,
             store,
+            conf,
         }
     }
 
@@ -162,7 +166,12 @@ where
         let now = Utc::now();
         let index = index_type.map_index()?;
         // serialize the bundles to JSON values to stream
-        let values = D::to_values(&bundles, &index_type, now)?;
+        let values = D::to_values(
+            bundles,
+            &index_type,
+            now,
+            self.conf.max_document_size.into(),
+        )?;
         // send this data to our search store
         self.store.create(index, values).await?;
         Ok(())
