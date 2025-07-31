@@ -31,7 +31,7 @@ To deploy Traefik as an ingress proxy, follow these [installation steps](./insta
 > This step is only required if your K8s cluster has attached storage that you wish to use to host
 > S3-compatible and block device storage in a hyperconverged manner.
 
-To deploy Rook, follow these [installation steps](./install-rook-ceph.md).
+To deploy Rook, follow these [installation steps](./install-rook.md).
 
 #### Redis
 
