@@ -22,6 +22,8 @@ easily orchestrate arbitrary docker/vm/shell tools at scale.
 - Full-text search of analysis results
 - Key/Value tags for labeling data
 
+### [Documentation](./api/docs/src/SUMMARY.md)
+
 ### Funded by
 ---
 <p align="center">
