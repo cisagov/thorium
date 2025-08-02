@@ -3,7 +3,7 @@
 use chrono::prelude::*;
 use std::collections::BTreeMap;
 use std::path::Path;
-use sysinfo::{DiskExt, System, SystemExt};
+use sysinfo::{Disks, System};
 use thorium::models::{NodeHealth, NodeUpdate, Resources};
 use thorium::{Error, Thorium};
 use tracing::{event, span, Level, Span};
@@ -67,8 +67,10 @@ fn get_resources(system: &mut System, span: &Span) -> Result<Resources, Error> {
     // convert our memory into kibibytes
     let memory = (system.total_memory() * 1000) / 1048576;
     let mut ephemeral_storage = 0;
+    // get our disk info
+    let disks = Disks::new_with_refreshed_list();
     // We display all disks' information:
-    for disk in system.disks() {
+    for disk in disks.list() {
         // get this disks mount point
         let mount = disk.mount_point();
         // only count disks that are mounted to /

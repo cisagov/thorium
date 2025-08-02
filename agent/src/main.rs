@@ -13,7 +13,7 @@ async fn main() {
     // build our agent name by what scaler we are claiming jobs for
     let trace_name = format!("Thorium{}Agent", args.env.kind());
     // setup our tracers/subscribers
-    thorium::utils::trace::from_file(&trace_name, &args.trace);
+    let trace_provider = thorium::utils::trace::from_file(&trace_name, &args.trace);
     // start our worker launch span
     let span = span!(Level::INFO, "Worker Launch");
     // build and execute worker
@@ -40,6 +40,6 @@ async fn main() {
             );
         }
     }
-    // export any remaining traces
-    opentelemetry::global::shutdown_tracer_provider();
+    // export any remaining traces and shutdown this provider
+    thorium::utils::trace::shutdown(trace_provider);
 }

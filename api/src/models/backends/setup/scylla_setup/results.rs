@@ -1,7 +1,7 @@
 //! Setup the results tables/prepared statements in Scylla
 
-use scylla::prepared_statement::PreparedStatement;
-use scylla::Session;
+use scylla::client::session::Session;
+use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
@@ -21,8 +21,6 @@ pub struct ResultsPreparedStatements {
     pub get_with_key_and_tool: PreparedStatement,
     /// Get the uploaded timestamps for results
     pub get_uploaded: PreparedStatement,
-    /// Get the result info needed for the result stream
-    pub get_stream: PreparedStatement,
     /// Get the ids for results by kind, key, and id (used for counting)
     pub count: PreparedStatement,
     /// Delete a result
@@ -33,10 +31,6 @@ pub struct ResultsPreparedStatements {
     pub insert_stream: PreparedStatement,
     /// Delete data from the results stream
     pub delete_stream: PreparedStatement,
-    /// Get the ties for a results stream cursor
-    pub list_ties_stream: PreparedStatement,
-    /// Get the data for a page of the results stream cursor
-    pub list_pull_stream: PreparedStatement,
 }
 
 impl ResultsPreparedStatements {
@@ -61,14 +55,11 @@ impl ResultsPreparedStatements {
         let get_with_key = get_with_key(session, config).await;
         let get_with_key_and_tool = get_with_key_and_tool(session, config).await;
         let get_uploaded = get_uploaded(session, config).await;
-        let get_stream = get_stream(session, config).await;
         let count = count(session, config).await;
         let delete = delete(session, config).await;
         let update_children = update_children(session, config).await;
         let insert_stream = insert_stream(session, config).await;
         let delete_stream = delete_stream(session, config).await;
-        let list_ties_stream = list_ties_stream(session, config).await;
-        let list_pull_stream = list_pull_stream(session, config).await;
         // setup our prepared statement object
         ResultsPreparedStatements {
             insert,
@@ -78,14 +69,11 @@ impl ResultsPreparedStatements {
             get_with_key,
             get_with_key_and_tool,
             get_uploaded,
-            get_stream,
             count,
             delete,
             update_children,
             insert_stream,
             delete_stream,
-            list_ties_stream,
-            list_pull_stream,
         }
     }
 }
@@ -339,25 +327,6 @@ async fn get_uploaded(session: &Session, config: &Conf) -> PreparedStatement {
         .expect("Failed to prepare scylla results auth latest statement")
 }
 
-/// build the results auth latest stream rows statement
-///
-/// # Arguments
-///
-/// * `session` - The scylla session to use
-/// * `config` - The Thorium config
-async fn get_stream(session: &Session, config: &Conf) -> PreparedStatement {
-    // build results auth latest stream rows prepared statement
-    session
-        .prepare(format!(
-            "SELECT group, key, tool, tool_version, uploaded, id \
-                FROM {}.results_auth
-                WHERE kind = ? AND group = ? AND key in ?",
-            &config.thorium.namespace
-        ))
-        .await
-        .expect("Failed to prepare scylla results auth get stream statement")
-}
-
 /// build the result count prepared statement
 ///
 /// # Arguments
@@ -448,54 +417,4 @@ async fn delete_stream(session: &Session, config: &Conf) -> PreparedStatement {
             ))
             .await
             .expect("Failed to prepare scylla result stream delete statement")
-}
-
-/// Gets any remaining rows from past ties in listing results
-///
-/// # Arguments
-///
-/// * `sessions` - The scylla session to use
-/// * `conf` - The Thorium config
-async fn list_ties_stream(session: &Session, config: &Conf) -> PreparedStatement {
-    // build results list ties prepared statement
-    session
-        .prepare(format!(
-            "SELECT group, key, tool, tool_version, uploaded, id \
-                FROM {}.results_stream \
-                WHERE kind = ? \
-                AND group = ? \
-                AND year = ? \
-                AND bucket = ? \
-                AND uploaded = ? \
-                AND id <= ? \
-                LIMIT ?",
-            &config.thorium.namespace
-        ))
-        .await
-        .expect("Failed to prepare scylla result list ties statement")
-}
-
-/// Pull the data needed to list results
-///
-/// # Arguments
-///
-/// * `sessions` - The scylla session to use
-/// * `conf` - The Thorium config
-async fn list_pull_stream(session: &Session, config: &Conf) -> PreparedStatement {
-    // build results list ties prepared statement
-    session
-        .prepare(format!(
-            "SELECT group, key, tool, tool_version, uploaded, id \
-                FROM {}.results_stream \
-                WHERE kind = ? \
-                AND group = ? \
-                AND year = ? \
-                AND bucket in ? \
-                AND uploaded < ? \
-                AND uploaded > ? \
-                PER PARTITION LIMIT ?",
-            &config.thorium.namespace
-        ))
-        .await
-        .expect("Failed to prepare scylla result list pull statement")
 }

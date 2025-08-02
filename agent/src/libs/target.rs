@@ -1,5 +1,3 @@
-use chrono::prelude::*;
-use std::fmt;
 use thorium::models::{Image, Pools, ScrubbedUser, WorkerDeleteMap, WorkerStatus, WorkerUpdate};
 use thorium::{Error, Thorium};
 use tokio::task::JoinHandle;
@@ -11,14 +9,10 @@ use crate::args::Args;
 /// The current Reaction and Job id for a target
 #[derive(Debug)]
 pub struct CurrentTarget {
-    /// The currently active Reaction id
-    pub reaction: Uuid,
     /// The currently active job id
     pub job: Uuid,
     /// The handle for this active job
     pub handle: JoinHandle<()>,
-    /// When this job was started
-    pub started: DateTime<Utc>,
 }
 
 impl CurrentTarget {
@@ -26,15 +20,10 @@ impl CurrentTarget {
     ///
     /// # Arguments
     ///
-    /// * `reaction` - The currently active reaction id
     /// * `job` - The currently active job id
-    pub fn new(reaction: Uuid, job: Uuid, handle: JoinHandle<()>) -> Self {
-        CurrentTarget {
-            reaction,
-            job,
-            handle,
-            started: Utc::now(),
-        }
+    /// * `handle` - A handle to this jobs tokio task
+    pub fn new(job: Uuid, handle: JoinHandle<()>) -> Self {
+        CurrentTarget { job, handle }
     }
 }
 
@@ -95,9 +84,9 @@ impl Target {
     }
 }
 
-impl fmt::Display for Target {
+impl std::fmt::Display for Target {
     // This trait requires `fmt` with this exact signature.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         //write this target to the formatter
         write!(
             f,

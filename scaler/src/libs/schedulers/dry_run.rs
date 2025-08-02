@@ -1,10 +1,11 @@
 //! The dry run scheduler for Thorium
 
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
+use hashbrown::HashMap;
 use thorium::models::{NodeHealth, SystemSettings};
 use thorium::{Conf, Error, Thorium};
-use tracing::{instrument, Span};
+use tracing::{instrument};
 
 use super::{
     Allocatable, AllocatableUpdate, NodeAllocatableUpdate, NodeResources, Scheduler, Spawned,

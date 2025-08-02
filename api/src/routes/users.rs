@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum::routing::{delete, get, post};
 use axum::Router;
+use axum_extra::TypedHeader;
 use tracing::instrument;
 use utoipa::OpenApi;
 
@@ -38,11 +39,14 @@ use crate::{is_admin, unauthorized, unavailable};
     )
 )]
 #[instrument(name = "routes::users::create", skip_all, fields(key_set = key.is_some()), err(Debug))]
+#[axum_macros::debug_handler]
 async fn create(
-    key: Option<Key>,
+    key: Option<TypedHeader<Key>>,
     State(state): State<AppState>,
     Json(user_create): Json<UserCreate>,
 ) -> Result<Json<AuthResponse>, ApiError> {
+    // get our secret key if it exists
+    let key = key.map(|header| header.0);
     // create a user
     let user = User::create(user_create, key, &state.shared).await?;
     // build our auth response
@@ -481,22 +485,22 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/api/users/", get(list).post(create).patch(update))
         .route(
-            "/api/users/resend/verify/email/:username",
+            "/api/users/resend/verify/email/{username}",
             get(resend_email_verification),
         )
         .route(
-            "/api/users/verify/:username/email/:verification_token",
+            "/api/users/verify/{username}/email/{verification_token}",
             get(verify_email),
         )
         .route("/api/users/details/", get(list_details))
         .route("/api/users/auth", post(auth))
         .route(
-            "/api/users/user/:username",
+            "/api/users/user/{username}",
             get(get_user).patch(update_user),
         )
         .route("/api/users/whoami", get(info))
         .route("/api/users/logout", post(logout))
-        .route("/api/users/logout/:target", get(logout_user))
-        .route("/api/users/delete/:target", delete(delete_user))
+        .route("/api/users/logout/{target}", get(logout_user))
+        .route("/api/users/delete/{target}", delete(delete_user))
         .route("/api/users/sync/ldap", post(sync_ldap))
 }

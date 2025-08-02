@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ButtonToolbar, Button, Card, Col, Modal, Row } from 'react-bootstrap';
-import { FaBackspace, FaRegEdit, FaTags, FaSave } from 'react-icons/fa';
+import { FaBackspace, FaRegEdit, FaSave } from 'react-icons/fa';
 import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 
 // project imports
-import { OverlayTipBottom, OverlayTipRight, Subtitle } from '@components';
+import { AlertBanner, OverlayTipBottom, OverlayTipRight, Subtitle } from '@components';
 import { createReactSelectStyles } from '@utilities';
-import { AlertBanner, FormattedFileInfoTagKeys, TagBadge, TLPLevels } from './tags';
+import { FormattedFileInfoTagKeys, TLPLevels } from './utilities';
+import { TagBadge } from './tags';
 import { deleteTags, getFileDetails, uploadTags } from '@thorpi';
 import rawAttackTagDefaults from '../../../mitre_tags/attackTagsList.tags?raw';
 import rawMbcTagDefaults from '../../../mitre_tags/MBCTagsList.tags?raw';
@@ -17,7 +18,6 @@ const tlpTagStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)');
 const generalTagStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)');
 const fileInfoTagStyles = createReactSelectStyles('White', '#7ba8ec');
 const mitreTagStyles = createReactSelectStyles('White', 'rgb(227, 135, 81)');
-const resultsTagStyles = createReactSelectStyles('White', '#81b4c2');
 
 const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth }) => {
   const [editing, setEditing] = useState(false);
@@ -31,8 +31,6 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
   const [selectedTlpTags, setSelectedTlpTags] = useState([]);
   const [selectedMBCTags, setSelectedMBCTags] = useState([]);
   const [selectedAttackTags, setSelectedAttackTags] = useState([]);
-  const [resultsTagOptions, setResultsTagOptions] = useState([]);
-  const [selectedResultsTags, setSelectedResultsTags] = useState([]);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [deleteErrorStatus, setDeleteErrorStatus] = useState('');
   const [createErrorStatus, setCreateErrorStatus] = useState('');
@@ -180,22 +178,6 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
       };
     });
 
-  // get Result tags and React Select formatted options
-  const resultsTags = !(tags && tags.Results)
-    ? []
-    : Object.keys(tags['Results'])
-        .map((tool) => {
-          return tool;
-        })
-        .sort();
-  const initialResultTagOptions = resultsTags.map((tool) => {
-    return {
-      value: tool,
-      label: tool,
-      thoriumTag: { key: 'Results', value: tool },
-    };
-  });
-
   // clear out any pending tag deletions or additions
   const resetTags = () => {
     setDeleteErrorStatus('');
@@ -222,10 +204,6 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
     // reset Mitre Att&ck tags
     const resetAttackTags = structuredClone(initialAttackTags);
     setSelectedAttackTags(resetAttackTags);
-    // reset Results tags
-    const resetResultTagOptions = structuredClone(initialResultTagOptions);
-    setResultsTagOptions(resetResultTagOptions);
-    setSelectedResultsTags(resetResultTagOptions);
   };
 
   // Commit tag changes to APIs
@@ -423,33 +401,10 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
   }, [tags]);
 
   return (
-    <Card className="panel">
+    <Card className="panel ps-4">
       <Card.Body>
-        <Row>
-          <Col xs={2} className="mr-3 edit-icon">
-            <Row className="info-icon">
-              <FaTags size="72" className="mt-4" />
-            </Row>
-            <Row className="edit-icon left-edit-tag-btn">
-              <EditTagButton
-                editing={editing}
-                setEditing={setEditing}
-                numberOfChanges={numberOfChanges}
-                setShowUpdateModal={setShowUpdateModal}
-                resetTags={resetTags}
-              />
-            </Row>
-          </Col>
+        <Row className="align-items-center">
           <Col className="tags-col">
-            <Row className="edit-icon top-edit-tag-btn">
-              <EditTagButton
-                editing={editing}
-                setEditing={setEditing}
-                numberOfChanges={numberOfChanges}
-                setShowUpdateModal={setShowUpdateModal}
-                resetTags={resetTags}
-              />
-            </Row>
             <Row>
               <Col>
                 <Subtitle>TLP</Subtitle>
@@ -469,7 +424,9 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                     options={tlpTagOptions}
                   />
                 ) : (
-                  tlpTags.map((level) => <TagBadge key={level} tag={'TLP'} value={level} condensed={false} action={'link'} />)
+                  tlpTags.map((level) => (
+                    <TagBadge resource="file" key={level} tag={'TLP'} value={level} condensed={false} action={'link'} />
+                  ))
                 )}
               </Col>
             </Row>
@@ -504,7 +461,9 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                     .map((tagKey) =>
                       Object.keys(generalTags[tagKey])
                         .sort()
-                        .map((tagValue, idx) => <TagBadge key={idx} tag={tagKey} value={tagValue} condensed={false} action={'link'} />),
+                        .map((tagValue, idx) => (
+                          <TagBadge resource="file" key={idx} tag={tagKey} value={tagValue} condensed={false} action={'link'} />
+                        )),
                     )
                 )}
               </Col>
@@ -538,11 +497,15 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                     options={fileInfoTagOptions}
                   />
                 ) : (
-                  Object.keys(fileInfoTags).map((tagKey) =>
-                    Object.keys(fileInfoTags[tagKey]).map((tagValue, idx) => (
-                      <TagBadge key={idx} tag={tagKey} value={tagValue} condensed={false} action={'link'} />
-                    )),
-                  )
+                  Object.keys(fileInfoTags)
+                    .sort()
+                    .map((tagKey) =>
+                      Object.keys(fileInfoTags[tagKey])
+                        .sort()
+                        .map((tagValue, idx) => (
+                          <TagBadge resource="file" key={idx} tag={tagKey} value={tagValue} condensed={false} action={'link'} />
+                        )),
+                    )
                 )}
               </Col>
             </Row>
@@ -567,7 +530,7 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                   />
                 ) : (
                   attackTags.map((tagValue, idx) => (
-                    <TagBadge key={tagValue} tag={'ATT&CK'} value={tagValue} condensed={false} action={'docs'} />
+                    <TagBadge resource="file" key={tagValue} tag={'ATT&CK'} value={tagValue} condensed={false} action={'docs'} />
                   ))
                 )}
               </Col>
@@ -592,43 +555,24 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                     options={mbcTagOptions}
                   />
                 ) : (
-                  mbcTags.map((tagValue, idx) => <TagBadge key={tagValue} tag={'MBC'} value={tagValue} condensed={false} action={'docs'} />)
-                )}
-              </Col>
-            </Row>
-            <Row>
-              <hr className="tagshr" />
-              <Col>
-                <Subtitle>Results</Subtitle>
-              </Col>
-              <Col className="details-tags-name">
-                {editing && resultsTags && resultsTags.length > 0 ? (
-                  <Select
-                    isMulti
-                    isSearchable
-                    isClearable
-                    value={selectedResultsTags}
-                    styles={resultsTagStyles}
-                    onChange={(selected, newValue) => {
-                      setSelectedResultsTags(selected);
-                      updateSelectedTags(newValue);
-                    }}
-                    options={resultsTagOptions}
-                  />
-                ) : (
-                  resultsTags.map((tool) => <TagBadge key={tool} tag={'Results'} value={tool} condensed={false} action={'scroll'} />)
+                  mbcTags.map((tagValue, idx) => (
+                    <TagBadge resource="file" key={tagValue} tag={'MBC'} value={tagValue} condensed={false} action={'docs'} />
+                  ))
                 )}
               </Col>
             </Row>
           </Col>
-          {!editing && (
-            <Col xs={screenWidth < 1700 ? 0 : 1} className="details-circle">
-              <div className="d-flex justify-content-center">
-                <Subtitle>Tags</Subtitle>
-              </div>
-              <div className="circle">{tagsCount}</div>
-            </Col>
-          )}
+          <Col xs={1} className="edit-icon">
+            <div className="edit-icon left-edit-tag-btn d-flex justify-content-center">
+              <EditTagButton
+                editing={editing}
+                setEditing={setEditing}
+                numberOfChanges={numberOfChanges}
+                setShowUpdateModal={setShowUpdateModal}
+                resetTags={resetTags}
+              />
+            </div>
+          </Col>
         </Row>
         <Modal show={showUpdateModal} onHide={() => setShowUpdateModal(false)} backdrop="static" keyboard={false}>
           <Modal.Header closeButton>
@@ -642,6 +586,7 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                   {Object.keys(pendingTags).map((tag) =>
                     pendingTags[tag].map((value) => (
                       <TagBadge
+                        resource="file"
                         key={tag + '_' + value}
                         tag={tag}
                         value={tag.toUpperCase() == 'TLP' ? value.toUpperCase() : value}
@@ -665,6 +610,7 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                   {Object.keys(deletedTags).map((tag) =>
                     deletedTags[tag].map((value) => (
                       <TagBadge
+                        resource="file"
                         key={tag + '_' + value}
                         tag={tag}
                         value={tag.toUpperCase() == 'TLP' ? value.toUpperCase() : value}
@@ -686,7 +632,7 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
                 <Col>
                   <b>Invalid tags: </b>
                   {invalidPendingTags.map((tag) => (
-                    <TagBadge key={tag} tag={tag} value={''} condensed={true} action={'none'} />
+                    <TagBadge resource="file" key={tag} tag={tag} value={''} condensed={true} action={'none'} />
                   ))}
                   <i>
                     (Custom tags must have a key and value that are separated by a colon delimiter. Invalid tags will be ignored when saving
@@ -731,39 +677,32 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
 
 const EditTagButton = ({ editing, setEditing, numberOfChanges, setShowUpdateModal, resetTags }) => {
   return (
-    <Col className="d-flex justify-content-center">
-      <ButtonToolbar>
-        <OverlayTipRight tip={!editing ? 'Click to add or remove tags.' : 'Click to cancel editing tags'}>
-          <Button
-            className="icon-btn edit-button-margin"
-            variant=""
-            onClick={() => {
-              setEditing(!editing);
-              if (editing) {
-                resetTags();
-              }
-            }}
-          >
-            {editing ? <FaBackspace size="24" /> : <FaRegEdit size="24" />}
+    <ButtonToolbar>
+      <OverlayTipRight tip={!editing ? 'Click to add or remove tags.' : 'Click to cancel editing tags'}>
+        <Button
+          className="icon-btn"
+          variant=""
+          onClick={() => {
+            setEditing(!editing);
+            if (editing) {
+              resetTags();
+            }
+          }}
+        >
+          {editing ? <FaBackspace size="24" /> : <FaRegEdit size="24" />}
+        </Button>
+      </OverlayTipRight>
+      {(editing || numberOfChanges > 0) && (
+        <OverlayTipRight
+          tip={`There are ${numberOfChanges} pending tag changes.
+                  Click to review and submit or cancel pending changes.`}
+        >
+          <Button className="icon-btn" variant="" disabled={numberOfChanges == 0} onClick={() => setShowUpdateModal(true)}>
+            <FaSave size="20" /> {numberOfChanges > 0 && `${numberOfChanges}`}
           </Button>
         </OverlayTipRight>
-        {(editing || numberOfChanges > 0) && (
-          <OverlayTipRight
-            tip={`There are ${numberOfChanges} pending tag changes.
-                                Click to review and submit or cancel pending changes.`}
-          >
-            <Button
-              className="icon-btn edit-button-margin"
-              variant=""
-              disabled={numberOfChanges == 0}
-              onClick={() => setShowUpdateModal(true)}
-            >
-              <FaSave size="20" /> {numberOfChanges > 0 && `${numberOfChanges}`}
-            </Button>
-          </OverlayTipRight>
-        )}
-      </ButtonToolbar>
-    </Col>
+      )}
+    </ButtonToolbar>
   );
 };
 

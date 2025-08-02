@@ -9,7 +9,8 @@ use thorium::client::ResultsClient;
 use thorium::test_utilities::{self, generators};
 use thorium::utils::s3::S3;
 use thorium::{
-    fail, has_tag, is, is_desc, is_empty, is_in, is_not, is_not_in, no_tag, starts_with, vec_in_vec,
+    contains, fail, has_tag, is, is_desc, is_empty, is_in, is_not, is_not_in, no_tag, starts_with,
+    vec_in_vec,
 };
 use uuid::Uuid;
 
@@ -446,6 +447,54 @@ async fn list_tag_details() -> Result<(), thorium::Error> {
     }
     // make sure our file reqs are in the samples returned
     vec_in_vec!(reqs, cursor.data);
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_tag_case_insensitive() -> Result<(), thorium::Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    let key = "KEY_CASE_TEST";
+    let value = "VALUE_CASE_TEST";
+    let key_lower = key.to_lowercase();
+    let value_lower = value.to_lowercase();
+    // create 20 files with the upper key and 20 with the lower key
+    let reqs = generators::samples_with_tag(&group, 20, key, value, &client).await?;
+    let reqs_lower =
+        generators::samples_with_tag(&group, 20, &key_lower, &value_lower, &client).await?;
+    // build the a list of hashes for the files we created
+    let (_, mut sha256s, _) = get_hashes(&reqs);
+    let (_, sha256s_lower, _) = get_hashes(&reqs_lower);
+    // first list just the regular tags as a sanity check
+    let opts = FileListOpts::default()
+        .groups(vec![&group])
+        .tag(key, value)
+        .page_size(50)
+        .limit(50);
+    let cursor = client.files.list(&opts).await?;
+    // make sure we listed the right ones
+    for item in &cursor.data {
+        contains!(sha256s, &item.sha256);
+    }
+    // make sure we didn't get the lowercase ones
+    for item in cursor.data {
+        is_not_in!(sha256s_lower, item.sha256);
+    }
+    // do a case insensitive search
+    let opts = FileListOpts::default()
+        .groups(vec![&group])
+        .tag(key.to_lowercase(), value.to_lowercase())
+        .tags_case_insensitive()
+        .page_size(50)
+        .limit(50);
+    let cursor = client.files.list(&opts).await?;
+    sha256s.extend(sha256s_lower);
+    // make sure we listed our all of them
+    for item in cursor.data {
+        is_in!(sha256s, item.sha256);
+    }
     Ok(())
 }
 

@@ -226,9 +226,11 @@ impl SystemSettingsUpdateParams {
 pub struct HostPathWhitelistUpdate {
     /// The set of paths to add to the whitelist
     #[serde(default)]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub add_paths: HashSet<PathBuf>,
     /// The set of paths to remove from the whitelist
     #[serde(default)]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub remove_paths: HashSet<PathBuf>,
 }
 
@@ -445,6 +447,7 @@ pub struct SystemSettings {
     /// Users can mount to any of the paths in the whitelist or to a path whose parent is
     /// in the whitelist.
     #[serde(default)]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub host_path_whitelist: HashSet<PathBuf>,
     /// Allow users to create any host path, ignoring the whitelist; defaults to false
     #[serde(default)]

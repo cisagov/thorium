@@ -28,6 +28,14 @@ pub enum Pipelines {
     /// Manage/list pipeline bans
     #[clap(subcommand)]
     Bans(PipelineBans),
+    /// Import pipelines
+    #[clap(version, author)]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    Import(ImportPipelines),
+    /// Export pipelines
+    #[clap(version, author)]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    Export(ExportPipelines),
 }
 
 /// A command to get info on some pipelines
@@ -89,6 +97,7 @@ impl SearchSealed for DescribePipelines {
         SearchParams {
             groups: &self.groups,
             tags: &[],
+            tags_case_insensitive: false,
             delimiter: '=',
             start: &None,
             end: &None,
@@ -296,4 +305,44 @@ pub struct DeletePipelineNotification {
     pub pipeline: String,
     /// The notification's unique ID
     pub id: Uuid,
+}
+
+/// A command to export pipeliness
+#[derive(Parser, Debug, Clone)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct ExportPipelines {
+    /// The pipelines to export
+    pub pipelines: Vec<String>,
+    /// The group to export pipelines from
+    #[clap(short, long, required = true)]
+    pub group: String,
+    /// The directory to export our pipelines too
+    #[clap(short, long, default_value = "exports")]
+    pub output: PathBuf,
+}
+
+/// A command to import pipeliness
+#[derive(Parser, Debug, Clone)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct ImportPipelines {
+    /// The pipelines to import
+    pub pipelines: Vec<String>,
+    /// The group to import pipelines to
+    #[clap(short, long, required = true)]
+    pub group: String,
+    /// The directory to import our pipelines from
+    #[clap(short, long, required = true)]
+    pub import: PathBuf,
+    /// The registry to upload these images too
+    #[clap(short, long)]
+    pub registry: Option<String>,
+    /// The registry url to override our domain in thorium with
+    #[clap(short, long)]
+    pub registry_override: Option<String>,
+    /// Skip pushing images to docker
+    #[clap(long)]
+    pub skip_push: bool,
+    /// Just update the registry
+    #[clap(long)]
+    pub migrate_registry: bool,
 }

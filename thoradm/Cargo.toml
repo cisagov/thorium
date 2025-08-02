@@ -12,37 +12,37 @@ vendored-openssl = ["openssl/vendored"]
 
 
 [dependencies]
-thorium = { version= "1.0.0", path="../api", default-features = false, features = ["scylla-utils", "rkyv-support", "client"] }
-tokio = { version = "1.26", features = ["full"] }
+thorium = { version= "1.1.0", path="../api", default-features = false, features = ["scylla-utils", "rkyv-support", "client"] }
+tokio = { version = "1.45", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
-scylla = { version = "0.15", features = ["chrono-04"] }
-futures = { version = "0.3.28" }
+scylla = { version = "1.2", features = ["chrono-04"] }
+futures = { version = "0.3.31" }
 async-trait = "0.1"
-itertools = { version = "0.10" }
+itertools = { version = "0.14" }
 chrono = { version = "0.4", features = ["serde", "rkyv", "rkyv-validation"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 ahash = "0.8"
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"]}
-bytes = "1.4"
-kanal = "0.1.0-pre8"
+bytes = "1.10"
+kanal = "0.1.1"
 indicatif = { version = "0.17", features = ["tokio"] }
 num-format = "0.4"
 bytecheck = "=0.6.11"
 clap = { version = "4", features = ["derive", "wrap_help", "string"] }
-config = { version = "0.14", features = ["yaml"] }
-dialoguer = "0.10"
+config = { version = "0.15", features = ["yaml"] }
+dialoguer = "0.11"
 sha2 = "0.10"
-data-encoding = "2.4"
+data-encoding = "2.9"
 openssl = "*"
 serde = "1.0"
 serde_json = "1.0"
-aws-types = "1.1"
-aws-sdk-s3 = { version = "1.14", features = ["rt-tokio", "behavior-version-latest"] }
-aws-smithy-http = "0.60"
-aws-credential-types = "1.1"
-async-walkdir = "0.2"
-dirs = "5"
-strum = { version = "0.26", features = ["derive"] }
+aws-types = "1.3"
+aws-sdk-s3 = { version = "1.90", features = ["rt-tokio", "behavior-version-latest"] }
+aws-smithy-http = "0.62"
+aws-credential-types = "1.2"
+async-walkdir = "2.1"
+dirs = "6"
+strum = { version = "0.27", features = ["derive"] }
 serde_yaml = "0.9"
-bb8-redis = "0.13"
-redis = { version = "0.23", default-features = false, features = ["tokio-comp", "script"] }
+bb8-redis = "0.24"
+redis = { version = "0.32.1", default-features = false, features = ["tokio-comp", "script"] }

@@ -21,6 +21,7 @@ use crate::{setup, Conf};
 pub async fn elastic(config: &Conf) -> Elasticsearch {
     // Until https://github.com/elastic/elasticsearch-rs/pull/189 is merged
     // we can only support a single node connection pool
+    // TODO: the above issue has been merged; need to support multi-node pools
     setup!(
         config.thorium.tracing.local.level,
         format!("Connecting to Elastic at {}", config.elastic.node)

@@ -76,6 +76,9 @@ pub struct AddTags {
     /// Any tags to filter by when searching for samples/repos to add tags to
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on sample/repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The most recent datetime to start searching at in UTC
     #[clap(short, long)]
     pub start: Option<String>,
@@ -118,6 +121,7 @@ impl SearchSealed for AddTags {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,
@@ -170,6 +174,9 @@ pub struct DeleteTags {
     /// Any tags to filter by when searching for samples/repos to delete tags from
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on sample/repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The most recent datetime to start searching at in UTC
     #[clap(short, long)]
     pub start: Option<String>,
@@ -212,6 +219,7 @@ impl SearchSealed for DeleteTags {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,

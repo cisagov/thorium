@@ -11,7 +11,7 @@ path = "src/lib.rs"
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0.72", features = ["full"] }
-quote = "1.0.37"
-proc-macro2 = "1.0.92"
-darling = "0.20.10"
+syn = { version = "2.0.101", features = ["full"] }
+quote = "1.0.40"
+proc-macro2 = "1.0.95"
+darling = "0.20.11"

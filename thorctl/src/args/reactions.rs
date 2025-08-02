@@ -121,6 +121,8 @@ impl SearchSealed for DescribeReactions {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            // tags for reactions are always case sensitive
+            tags_case_insensitive: false,
             delimiter: '=',
             start: &None,
             end: &None,
@@ -354,6 +356,8 @@ impl SearchSealed for LogsReactions {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            // tags for reactions are always case sensitive
+            tags_case_insensitive: false,
             delimiter: '=',
             start: &None,
             end: &None,
@@ -528,6 +532,9 @@ pub struct CreateReactions {
     /// Any tags to filter by when searching for samples/repos to execute on
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on sample/repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags/kwargs into key/values
     /// (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=")]
@@ -723,6 +730,7 @@ impl SearchSealed for CreateReactions {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,

@@ -107,24 +107,6 @@ pub struct OutputId {
 /// A row from scylla containing a single result for a tool
 #[derive(Serialize, Deserialize, Debug, DeserializeRow)]
 #[scylla(flavor = "enforce_order", skip_name_checks)]
-pub struct OutputStreamRow {
-    /// The group this result is for
-    pub group: String,
-    /// The key this result is for
-    pub key: String,
-    /// The tool this result was for
-    pub tool: String,
-    /// The version of the tool or image this result came from
-    pub tool_version: Option<ImageVersion>,
-    /// When this result was uploaded
-    pub uploaded: DateTime<Utc>,
-    /// The uuid for this results
-    pub id: Uuid,
-}
-
-/// A row from scylla containing a single result for a tool
-#[derive(Serialize, Deserialize, Debug, DeserializeRow)]
-#[scylla(flavor = "enforce_order", skip_name_checks)]
 pub struct OutputRow {
     /// The unique id for this result
     pub id: Uuid,

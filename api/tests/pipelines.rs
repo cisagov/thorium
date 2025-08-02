@@ -1,6 +1,6 @@
 //! Tests the Pipelines routes in Thorium
 
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rng, seq::SliceRandom};
 use thorium::models::{
     ImageBan, ImageBanKind, ImageBanUpdate, ImageUpdate, NotificationLevel, NotificationParams,
     NotificationRequest, PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineRequest,
@@ -129,7 +129,7 @@ async fn update() -> Result<(), Error> {
     client.pipelines.create(&pipe_req).await?;
     // create an update request with a shuffled order
     let mut order: Vec<Vec<String>> = serde_json::from_value(pipe_req.order)?;
-    order[0].shuffle(&mut thread_rng());
+    order[0].shuffle(&mut rng());
     let pipe_update = PipelineUpdate::default()
         .order(order)
         .sla(86401)

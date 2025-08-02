@@ -13,11 +13,11 @@ api = [
   "scylla", "ldap3", "itertools", "sha-1", "sha2", "md-5", "data-encoding", "anyhow", "elasticsearch", "zip", "async-trait",
   "axum", "http", "tower", "axum-macros", "tower-http", "tokio-stream", "generic-array", "futures-util", "tokio-util", "serde_qs",
   "aws-sdk-s3", "aws-types", "aws-smithy-http", "aws-credential-types", "scylla-utils", "http-body", "axum-extra", "once_cell", "utoipa",
-  "utoipa-swagger-ui", "lettre"
+  "utoipa-swagger-ui", "lettre", "headers"
   ]
 
 # include scylla utility functions
-scylla-utils = ["scylla", "thorium-derive"]
+scylla-utils = ["scylla", "thorium-derive", "utoipa"]
 
 # include rkyv support for some structs
 rkyv-support = ["rkyv", "bytecheck"]
@@ -25,7 +25,7 @@ rkyv-support = ["rkyv", "bytecheck"]
 # include async client dependencies
 client = [
   "syncwrap", "reqwest", "tokio", "tokio-util", "futures", "git2", "shellexpand", "elasticsearch",
-  "tokio-tar", "http", "gix"
+  "tokio-tar", "http", "gix", "gix-date", "async-trait"
   ]
 
 # include sync client dependencies
@@ -49,8 +49,11 @@ kanal-err = ["kanal"]
 # include the rustix errors
 rustix-err = ["rustix"]
 
+# include the dialoguer errors
+dialoguer-err = ["dialoguer"]
+
 # include tracing support
-trace = ["tracing-opentelemetry", "opentelemetry", "opentelemetry-jaeger", "opentelemetry-otlp", "opentelemetry-semantic-conventions", "tracing", "tracing-subscriber", "tracing-core", "valuable"]
+trace = ["tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-jaeger", "opentelemetry-otlp", "opentelemetry-semantic-conventions", "tracing", "tracing-subscriber", "tracing-core", "valuable"]
 
 # include test utilities for the Thorium api
 test-utilities = ["once_cell", "async_once", "lazy_static", "api"]
@@ -58,6 +61,9 @@ test-utilities = ["once_cell", "async_once", "lazy_static", "api"]
 # Force openssl-sys to staticly link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
 vendored-openssl = ["openssl/vendored"]
+
+# exposes code/implementations used only by the search-streamer
+search-streamer = []
 
 [dependencies]
 serde = "1.0"
@@ -67,66 +73,68 @@ serde_derive = "1.0"
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "=0.4.38", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
-config = { version = "0.14", features = ["yaml"] }
+config = { version = "0.15", features = ["yaml"] }
 hex = "^0.4"
 regex = "1"
 cfg-if = "1"
 bytes = { version = "1", features = ["serde"] }
-cart-rs = { version = "*", path = "../../cart-rs"}
-base64 = { version = "0.21" }
+cart-rs = { version = "*", path = "../cart-rs"}
+base64 = { version = "0.22" }
 enum-utils = "0.1"
 url = "2"
 schemars = "0.8"
 semver = { version = "1", features = ["serde"] }
 openssl = "*"
-strum = { version = "0.26", features = ["derive"] }
+strum = { version = "0.27", features = ["derive"] }
 indicatif = { version = "0.17", features = ["tokio"] }
-cidr = { version = "0.2", features = ["serde"] }
-
+cidr = { version = "0.3", features = ["serde"] }
+ahash = "0.8"
+gxhash = { version = "3.5", features = ["deterministic"] }
 
 # api dependencies
-bb8-redis = { version = "0.13", optional = true }
-redis = { version = "0.23", default-features = false, features = ["tokio-comp", "script"], optional = true }
+bb8-redis = { version = "0.24", optional = true }
+redis = { version = "0.32.1", default-features = false, features = ["tokio-comp", "script"], optional = true }
 argon2 = { version = "0.5", optional = true }
 #argonautica = { version = "0.2.0", optional = true, features = ["serde"] }
 crossbeam = { version = "0.8", optional = true }
-futures = { version = "0.3.5", optional = true }
+futures = { version = "0.3.31", optional = true }
 futures-cpupool = { version = "0.1.8", optional = true }
-tokio = { version = "1.26", features = ["full"], optional = true }
+tokio = { version = "1.45", features = ["full"], optional = true }
 tokio-stream = { version = "0.1", optional = true }
-axum = { version = "0.7", features = ["multipart"], optional = true}
-axum-macros = { version = "0.4", optional = true }
-axum-extra = { version = "0.9", features = ["async-read-body"], optional = true }
-http = { version = "0.2", optional = true }
+axum = { version = "0.8", features = ["multipart"], optional = true}
+axum-macros = { version = "0.5", optional = true }
+axum-extra = { version = "0.10", features = ["async-read-body", "typed-header"], optional = true }
+http = { version = "1.3", optional = true }
 http-body = { version = "1", optional = true }
-tower = { version = "0.4", optional = true }
-tower-http = { version = "0.5", features = ["full"], optional = true }
+headers = { version = "0.4", optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["full"], optional = true }
 async-recursion = { version = "1", optional = true }
-rand = { version = "0.8.4", features = ["alloc"], optional = true }
-colored = { version = "2", optional = true }
-scylla = { version = "0.15", features = ["chrono-04"], optional = true }
+rand = { version = "0.9.1", features = ["alloc"], optional = true }
+colored = { version = "3", optional = true }
+scylla = { version = "1.2", features = ["chrono-04"], optional = true }
 ldap3 = { version = "0.11", optional = true, default-features = false, features = ["tls-rustls"] }
-itertools = { version = "0.10", optional = true }
+itertools = { version = "0.14", optional = true }
 sha-1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
 md-5 = { version = "0.10", optional = true }
-data-encoding = { version = "2.4", optional = true }
+data-encoding = { version = "2.9", optional = true }
 aws-types = {version = "1.3", optional = true }
-aws-sdk-s3 = { version = "1.83", features = ["rt-tokio", "behavior-version-latest"], optional = true }
+aws-sdk-s3 = { version = "1.90", features = ["rt-tokio", "behavior-version-latest"], optional = true }
 aws-smithy-http = { version = "0.62", featues = ["rt-tokio", "event-stream"], optional = true }
 aws-credential-types = { version = "1.2", optional = true }
 anyhow = { version = "1", optional = true }
-elasticsearch = { version = "8.5.0-alpha.1", optional = true }
+elasticsearch = { version = "9.0.0-alpha.1", optional = true }
 async-trait = { version = "0.1", optional = true }
 generic-array = { version = "0.14", optional = true }
 futures-util = { version = "0.3", optional = true }
-serde_qs = { version = "0.12", optional = true }
-zip = { version = "0.6.6", optional = true }
-once_cell = { version = "1.2.0", optional = true }
-utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid", "time"], optional = true }
-utoipa-swagger-ui = { version = "7", features = ["axum"], optional = true }
+serde_qs = { version = "0.15", optional = true }
+zip = { version = "4.0.0", optional = true }
+once_cell = { version = "1.21.3", optional = true }
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "time", "url"], optional = true }
+utoipa-swagger-ui = { version = "9", features = ["axum"], optional = true }
 lettre = { version = "0.11", features = ["tokio1", "tokio1-rustls-tls", "builder", "smtp-transport"], default-features = false, optional = true }
-thorium-derive = { path = "../thorium-derive", version = "1.0.0", optional = true}
+thorium-derive = { path = "../thorium-derive", version = "1.1.0", optional = true}
 
 # rkyv dependencies
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"], optional = true }
@@ -134,42 +142,46 @@ bytecheck = { version = "=0.6.11", optional = true }
 
 # client dependencies
 syncwrap = { version = "0.4", optional = true }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "multipart", "stream", "blocking"], optional = true}
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart", "stream", "blocking"], optional = true}
 tokio-util = { version = "0.7", default-features = false, features = ["codec", "io", "compat"], optional = true }
-git2 = { version = "0.18", optional = true }
-gix = { version = "0.63", optional = true }
+git2 = { version = "0.20", optional = true }
+gix = { version = "0.72", optional = true }
+gix-date = { version = "0.10", optional = true }
 shellexpand = { version = "3", optional = true }
 tokio-tar = { version = "0.3", optional = true }
 
 # tracing dependencies
 tracing = { version = "0.1", optional = true }
-tracing-opentelemetry = { version = "0.20", optional = true }
+tracing-opentelemetry = { version = "0.31", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 tracing-core = { version = "0.1", optional = true }
-opentelemetry = { version = "0.20", features = ["rt-tokio", "trace"], optional = true }
-opentelemetry-jaeger = { version = "0.19", features = ["collector_client", "hyper_collector_client", "rt-tokio"], optional = true }
-opentelemetry-otlp = { version = "0.13", optional = true }
-opentelemetry-semantic-conventions = { version = "0.12", optional = true }
+opentelemetry = { version = "0.30", features = ["trace"], optional = true }
+opentelemetry_sdk = { version = "0.30", features = ["tokio"], optional = true }
+opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "hyper_collector_client"], optional = true }
+opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"], optional = true }
+opentelemetry-semantic-conventions = { version = "0.30", optional = true }
 valuable =  { version = "0.1", features = ["derive"], optional = true }
 
 # extended error dependencies
-kube = { version = "0.92", default-features = false, features = ["config", "rustls-tls"], optional = true }
-k8s-openapi = { version = "0.22", default-features = false, features = ["v1_24"], optional = true }
-rustix = { version = "0.37", optional = true }
-kanal = { version = "0.1.0-pre8", optional = true }
+kube = { version = "1.1", default-features = false, features = ["config", "rustls-tls"], optional = true }
+k8s-openapi = { version = "0.25", default-features = false, features = ["v1_30"], optional = true }
+rustix = { version = "1.0", optional = true }
+kanal = { version = "0.1.1", optional = true }
+dialoguer = { version = "0.11", optional = true }
+
 
 # test utilities dependencies
 async_once = { version = "0.2", optional = true }
-lazy_static = { version = "1.4", optional = true }
+lazy_static = { version = "1.5", optional = true }
 
 # add cgroups for linux systems
 [target.'cfg(target_os = "linux")'.dependencies]
 cgroups-rs = {version = "0.3", optional = true }
 
 [dev-dependencies]
-rand = { version = "0.8.4", features = ["alloc"] }
-lazy_static = "1.4"
+rand = { version = "0.9.1", features = ["alloc", "small_rng"] }
+lazy_static = "1.5"
 async_once = "0.2"
 # udeps might think this is unused but its used by our doc tests
 tokio-test = "0.4"
-serial_test = "2"
+serial_test = "3"

@@ -8,8 +8,8 @@ mod backends_reexport {
     pub mod comments;
     pub mod db;
     pub mod deadlines;
+    pub mod elastic;
     pub mod events;
-    pub mod exports;
     pub mod files;
     pub mod groups;
     pub mod helpers;
@@ -22,9 +22,11 @@ mod backends_reexport {
     pub mod repos;
     pub mod results;
     pub mod s3;
+    pub mod search;
     pub mod setup;
     pub mod streams;
     pub mod system;
+    pub mod trees;
     pub mod users;
     pub mod version;
     pub mod volumes;

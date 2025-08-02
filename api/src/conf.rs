@@ -1,6 +1,7 @@
 //! The shared config for Thorium
 use schemars::JsonSchema;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "api")]
@@ -1140,6 +1141,64 @@ impl Scaler {
     }
 }
 
+/// Returns the default number of workers for the search-streamer
+fn default_search_streamer_workers() -> NonZeroUsize {
+    NonZeroUsize::new(5).unwrap()
+}
+
+/// Returns the default number of chunks per worker in the search-streamer
+fn default_search_streamer_chunks_per_worker() -> NonZeroUsize {
+    NonZeroUsize::new(10_000).unwrap()
+}
+
+/// The settings for the search-streamer init phase
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct SearchStreamerInit {
+    /// The number of chunks per worker to split the Scylla into when
+    /// running the init phase
+    ///
+    /// In general, the more data is in Scylla, the greater the number of chunks
+    /// it should be split up into. Having more chunks means if the search-streamer
+    /// is interrupted while initiating indexes, it can resume the process at a more
+    /// specific point and repeat less work; however for very small databases,
+    /// having too many chunks will lead to many very sparse or empty chunks and
+    /// impact performance.
+    #[serde(default = "default_search_streamer_chunks_per_worker")]
+    pub chunks_per_worker: NonZeroUsize,
+}
+
+impl Default for SearchStreamerInit {
+    fn default() -> Self {
+        Self {
+            chunks_per_worker: default_search_streamer_chunks_per_worker(),
+        }
+    }
+}
+
+/// The settings for the search-streamer
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct SearchStreamer {
+    /// The number of workers each streamer in the search-streamer has
+    ///
+    /// The more workers, the more data can potentially be held in memory
+    /// and sent to Elasticsearch at once. Decrease the number of workers
+    /// if the search-streamer runs out of memory or Elasticsearch complains.
+    #[serde(default = "default_search_streamer_workers")]
+    pub workers: NonZeroUsize,
+    /// The settings for the search-streamer init phase
+    #[serde(default)]
+    pub init: SearchStreamerInit,
+}
+
+impl Default for SearchStreamer {
+    fn default() -> Self {
+        Self {
+            workers: default_search_streamer_workers(),
+            init: SearchStreamerInit::default(),
+        }
+    }
+}
+
 /// The settings for sending traces to stdout/stderr
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct TracingLocal {
@@ -1150,9 +1209,6 @@ pub struct TracingLocal {
 /// The different settings for external tracing services
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub enum TracingServices {
-    /// Send traces to jaeger
-    #[serde(alias = "jaeger")]
-    Jaeger { collector: String, level: LogLevel },
     /// send traces to a gRPC based service
     #[serde(alias = "grpc")]
     Grpc { endpoint: String, level: LogLevel },
@@ -1254,9 +1310,14 @@ impl std::fmt::Display for LogLevel {
     }
 }
 
-/// Helps serde default the files chunk size to 3 minutes
+/// Helps serde default the tags partition size to 3 minutes
 fn default_tags_partition_size() -> u16 {
     180
+}
+
+/// Helps serde default the tags earliest to 01/01/2021
+const fn default_tags_earliest() -> i64 {
+    1_609_459_201
 }
 
 /// The settings for saving/listing tags in scylla
@@ -1265,12 +1326,16 @@ pub struct Tags {
     /// The number of seconds each partition in the database should cover
     #[serde(default = "default_tags_partition_size")]
     pub partition_size: u16,
+    /// The earliest date a tag will exist as a unix epoch
+    #[serde(default = "default_tags_earliest")]
+    pub earliest: i64,
 }
 
 impl Default for Tags {
     fn default() -> Self {
         Tags {
             partition_size: default_tags_partition_size(),
+            earliest: default_tags_earliest(),
         }
     }
 }
@@ -1787,6 +1852,9 @@ pub struct Thorium {
     /// The settings for the scaler
     #[serde(default)]
     pub scaler: Scaler,
+    /// The settings for the search-streamer
+    #[serde(default)]
+    pub search_streamer: SearchStreamer,
     /// The request size limits to use in the API
     #[serde(default)]
     pub request_size_limits: RequestSizeLimits,
@@ -1852,9 +1920,37 @@ pub struct Scylla {
     pub auth: Option<ScyllaAuth>,
 }
 
+/// Adds a "thorium_" namespace to given elastic index
+fn elastic_namespace(index: &str) -> String {
+    format!("thorium_{index}")
+}
+
 /// Helps serde default the index to query for results in Elastic
-fn default_elastic_results_index() -> String {
-    "results".to_string()
+fn default_elastic_sample_results_index() -> String {
+    elastic_namespace("sample_results")
+}
+
+/// Helps serde default the index to query for results in Elastic
+fn default_elastic_repo_results_index() -> String {
+    elastic_namespace("repo_results")
+}
+
+/// Helps serde default the index to query for sample tags in Elastic
+fn default_elastic_sample_tags_index() -> String {
+    elastic_namespace("sample_tags")
+}
+
+/// Helps serde default the index to query for repo tags in Elastic
+fn default_elastic_repo_tags_index() -> String {
+    elastic_namespace("repo_tags")
+}
+
+/// Helps serde default Elastic indexes' max analyzed offset
+///
+/// Default to 1,000,000 characters according to the
+/// [Elastic docs](https://www.elastic.co/docs/reference/elasticsearch/index-settings/index-modules)
+fn default_max_analyzed_offset() -> u32 {
+    1_000_000
 }
 
 /// Scylla settings
@@ -1866,9 +1962,57 @@ pub struct Elastic {
     pub username: String,
     /// The password to use when authenticating
     pub password: String,
-    /// The name of the results index
-    #[serde(default = "default_elastic_results_index")]
-    pub results: String,
+    /// The options for results in elastic
+    #[serde(default)]
+    pub results: ElasticResults,
+    /// The options for tags in elastic
+    #[serde(default)]
+    pub tags: ElasticTags,
+    /// The max analyzed offset for highlighting configure in the index
+    /// and for every query
+    ///
+    /// This avoids errors when fields are larger than the configured maximum
+    /// and truncates highlighting instead
+    #[serde(default = "default_max_analyzed_offset")]
+    pub max_analyzed_offset: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct ElasticResults {
+    /// The name of the sample results index in elastic
+    #[serde(default = "default_elastic_sample_results_index")]
+    pub samples: String,
+    /// The name of the repo results index in elastic
+    #[serde(default = "default_elastic_repo_results_index")]
+    pub repos: String,
+}
+
+impl Default for ElasticResults {
+    fn default() -> Self {
+        Self {
+            samples: default_elastic_sample_results_index(),
+            repos: default_elastic_repo_results_index(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct ElasticTags {
+    /// The name of the sample tags index in elastic
+    #[serde(default = "default_elastic_sample_tags_index")]
+    pub samples: String,
+    /// The name of the repo tags index in elastic
+    #[serde(default = "default_elastic_repo_tags_index")]
+    pub repos: String,
+}
+
+impl Default for ElasticTags {
+    fn default() -> Self {
+        Self {
+            samples: default_elastic_sample_tags_index(),
+            repos: default_elastic_repo_tags_index(),
+        }
+    }
 }
 
 /// configs for Thorium

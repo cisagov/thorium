@@ -131,8 +131,8 @@ impl From<Image> for EditableImage {
             timeout: image.timeout,
             resources: ResourcesUpdate {
                 cpu: Some(format!("{}m", image.resources.cpu)),
-                memory: Some(format!("{}M", image.resources.memory)),
-                ephemeral_storage: Some(format!("{}M", image.resources.ephemeral_storage)),
+                memory: Some(format!("{}Mi", image.resources.memory)),
+                ephemeral_storage: Some(format!("{}Mi", image.resources.ephemeral_storage)),
                 nvidia_gpu: Some(image.resources.nvidia_gpu),
                 amd_gpu: Some(image.resources.amd_gpu),
             },

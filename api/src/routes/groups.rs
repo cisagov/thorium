@@ -305,9 +305,9 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/api/groups/", post(create).get(list))
-        .route("/api/groups/:group/details", get(get_group))
+        .route("/api/groups/{group}/details", get(get_group))
         .route("/api/groups/details/", get(list_details))
-        .route("/api/groups/:group", patch(update).delete(delete_group))
+        .route("/api/groups/{group}", patch(update).delete(delete_group))
         .route("/api/groups/sync/ldap", post(sync_ldap))
-        .route("/api/groups/:group/stats", get(get_stats))
+        .route("/api/groups/{group}/stats", get(get_stats))
 }

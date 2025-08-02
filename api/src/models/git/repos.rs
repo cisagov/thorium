@@ -1085,6 +1085,8 @@ pub struct RepoListOpts {
     pub groups: Vec<String>,
     /// The tags to filter on
     pub tags: HashMap<String, Vec<String>>,
+    /// Whether matching on tags should be case-insensitive
+    pub tags_case_insensitive: bool,
 }
 
 impl Default for RepoListOpts {
@@ -1098,6 +1100,7 @@ impl Default for RepoListOpts {
             limit: None,
             groups: Vec::default(),
             tags: HashMap::default(),
+            tags_case_insensitive: false,
         }
     }
 }
@@ -1184,6 +1187,13 @@ impl RepoListOpts {
         entry.push(value.into());
         self
     }
+
+    /// Set for matching on tags to be case-insensitive
+    #[must_use]
+    pub fn tags_case_insensitive(mut self) -> Self {
+        self.tags_case_insensitive = true;
+        self
+    }
 }
 
 /// The query params for listing results
@@ -1206,6 +1216,9 @@ pub struct RepoListParams {
     /// The max number of items to return in this response
     #[serde(default = "default_list_limit")]
     pub limit: usize,
+    #[serde(default)]
+    /// Whether matching on tags should be case-insensitive
+    pub tags_case_insensitive: bool,
 }
 
 impl Default for RepoListParams {
@@ -1218,6 +1231,7 @@ impl Default for RepoListParams {
             tags: HashMap::default(),
             cursor: None,
             limit: default_list_limit(),
+            tags_case_insensitive: false,
         }
     }
 }
@@ -1292,5 +1306,73 @@ impl RepoDownloadOpts {
     pub fn progress(mut self, progress: ProgressBar) -> Self {
         self.progress = Some(progress);
         self
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "scylla-utils", derive(scylla::DeserializeRow))]
+#[cfg_attr(
+    feature = "scylla-utils",
+    scylla(flavor = "enforce_order", skip_name_checks)
+)]
+pub struct RepoCensusRow {
+    pub group: String,
+    pub year: i32,
+    pub bucket: i32,
+    pub count: i64,
+}
+
+#[cfg(feature = "scylla-utils")]
+impl crate::models::CensusSupport for Repo {
+    /// The type returned by our prepared statement
+    type Row = RepoCensusRow;
+
+    /// Build the prepared statement for getting partition count info
+    async fn scan_prepared_statement(
+        scylla: &scylla::client::session::Session,
+        ns: &str,
+    ) -> Result<scylla::statement::prepared::PreparedStatement, scylla::errors::PrepareError> {
+        // build tags get partition count prepared statement
+        scylla
+            .prepare(format!(
+                "SELECT group, year, bucket, count(*) \
+                FROM {}.repos_list \
+                WHERE token(group, year, bucket) >= ? AND token(group, year, bucket) <= ? \
+                GROUP BY group, year, bucket",
+                ns,
+            ))
+            .await
+    }
+
+    /// Get the count for this partition
+    fn get_count(row: &RepoCensusRow) -> i64 {
+        row.count
+    }
+
+    /// Get the bucket for this partition
+    fn get_bucket(row: &RepoCensusRow) -> i32 {
+        row.bucket
+    }
+
+    /// Build the count key for this partition
+    fn count_key_from_row(namespace: &str, row: &Self::Row, grouping: i32) -> String {
+        // build the key for this row
+        format!(
+            "{namespace}:census:repos:counts:{group}:{year}:{grouping}",
+            namespace = namespace,
+            group = row.group,
+            year = row.year,
+            grouping = grouping,
+        )
+    }
+
+    /// Build the sorted set key for this census operation
+    fn stream_key_from_row(namespace: &str, row: &Self::Row) -> String {
+        format!(
+            "{namespace}:census:repos:stream:{group}:{year}",
+            namespace = namespace,
+            group = row.group,
+            year = row.year,
+        )
     }
 }

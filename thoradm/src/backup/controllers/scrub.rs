@@ -194,10 +194,27 @@ impl<S: Scrub> TableScrub<S> {
     /// Scrub this tables backed up data
     pub async fn scrub(&mut self, path: PathBuf) -> Result<(), Error> {
         // get the name of the table to scrub without any '_'
-        let pretty_name = S::name().replace('_', " ");
+        let pretty_name = S::pretty_name();
+        // get the path to this specific scrub
+        let table_path = path.join(S::name());
+        // check if the subdir for this table exists
+        if !tokio::fs::try_exists(&table_path).await.map_err(|err| {
+            Error::new(format!(
+                "Failed to check if path '{}' exists: {}",
+                table_path.to_string_lossy(),
+                err
+            ))
+        })? {
+            // the path is missing, so skip this restore
+            self.progress.println(format!(
+                "Path '{}' missing. Skipping {} scrub...",
+                table_path.to_string_lossy(),
+                pretty_name
+            ))?;
+            return Ok(());
+        }
         // log the table we are backing up
-        self.progress
-            .println(format!("Scrubbing {}", pretty_name))?;
+        self.progress.println(format!("Scrubbing {pretty_name}"))?;
         // start our global tracker
         let handle = self.start_global_tracker().await;
         // build our workers

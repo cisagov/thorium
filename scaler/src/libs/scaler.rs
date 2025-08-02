@@ -3,7 +3,8 @@
 use chrono::prelude::*;
 use futures::stream::{self, StreamExt};
 use futures::{poll, task::Poll};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use hashbrown::HashMap;
+use std::collections::{BTreeMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thorium::models::system::WorkerRegistrationList;
@@ -407,7 +408,7 @@ impl Scaler {
         }
         // get any tasks we want to spawn and build a list of completed blocking tasks to rerun again
         let mut completed = Vec::default();
-        for (_, task) in self.tasks.extract_if(|time, _| time < &now) {
+        for (_, task) in self.tasks.extract_if(.., |time, _| time < &now) {
             // log that we are spawning a task
             event!(Level::INFO, task = task.as_str());
             // spawn or execute this task

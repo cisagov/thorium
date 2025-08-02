@@ -336,7 +336,7 @@ pub async fn delete_all(
                     .cmd("srem").arg(&PipelineKeys::set(&data.group, shared))
                         .arg(&data.name)
             })
-            .query_async::<_, ()>(conn!(shared))
+            .exec_async(conn!(shared))
             .await?;
 
         // check if we have iterated over all pipelines

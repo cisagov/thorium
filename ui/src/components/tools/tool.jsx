@@ -10,7 +10,7 @@ import { Disassembly, Image, Json, OverlayTipRight, String, Tables, Title, SafeH
 import Tc2 from './custom/tc2';
 import VBA from './custom/vba';
 import AvMulti from './custom/avmulti';
-import { StateAlerts, RenderErrorAlert } from '@components';
+import { RenderErrorAlert } from '@components';
 
 const Tool = ({ result, type, header, sha256, tool, updateInView, updateURLSection }) => {
   const [isOpen, setOpened] = useState(false);

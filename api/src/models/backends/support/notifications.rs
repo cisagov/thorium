@@ -181,7 +181,6 @@ pub trait NotificationSupport: KeySupport + Sized {
 }
 
 #[cfg(feature = "api")]
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for NotificationParams
 where
     S: Send + Sync,

@@ -169,6 +169,7 @@ impl NotificationParams {
 /// A request to create a notification for an entity in Thorium
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "api", schema(example = json!({"msg": "Banned due to invalid volume mount", "level": "Error"})))]
 pub struct NotificationRequest<N: NotificationSupport> {
     /// The message this notification will contain
     pub msg: String,
@@ -176,8 +177,34 @@ pub struct NotificationRequest<N: NotificationSupport> {
     pub level: NotificationLevel,
     /// The type this notification is for
     #[serde(default)]
+    // utoipa seems to want a valid type even if you ignore things
+    #[cfg_attr(feature = "api", schema(ignore, value_type = bool))]
     phantom: PhantomData<N>,
 }
+
+//impl<N: NotificationSupport> utoipa::ToSchema for NotificationRequest<N> {
+//    /// Return the name of the noficiation request
+//    fn name() -> std::borrow::Cow<'static, str> {
+//        std::borrow::Cow::Borrowed("NotificationRequest")
+//    }
+//}
+//
+//impl<N: NotificationSupport> utoipa::PartialSchema for NotificationRequest<N> {
+//    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+//        utoipa::openapi::ObjectBuilder::new()
+//            .property(
+//                "msg",
+//                utoipa::openapi::ObjectBuilder::new()
+//                    .schema_type(utoipa::openapi::schema::Type::String),
+//            )
+//            .property(
+//                "level",
+//                utoipa::openapi::ObjectBuilder::new()
+//                    .schema_type(utoipa::openapi::schema::Type::String),
+//            )
+//            .into()
+//    }
+//}
 
 impl<N: NotificationSupport> NotificationRequest<N> {
     /// Create a notification request

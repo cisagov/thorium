@@ -1,10 +1,10 @@
 //! The repos related routes for Thorium
 
+use axum::Router;
 use axum::extract::{Json, Multipart, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
-use axum::Router;
 use axum_extra::body::AsyncReadBody;
 use tracing::instrument;
 use utoipa::OpenApi;
@@ -31,13 +31,12 @@ use crate::models::backends::TagSupport;
 use crate::models::{
     ApiCursor, Branch, BranchDetails, BranchRequest, Commit, CommitDetails, CommitRequest,
     Commitish, CommitishDetails, CommitishKinds, CommitishListParams, CommitishMapRequest,
-    CommitishRequest, GitTag, GitTagDetails, GitTagRequest, Output, OutputBundle,
-    OutputFormBuilder, OutputKind, OutputListLine, OutputMap, OutputResponse, Repo, RepoCheckout,
-    RepoCreateResponse, RepoDataUploadResponse, RepoDownloadOpts, RepoListLine, RepoListParams,
-    RepoRequest, RepoScheme, RepoSubmissionChunk, ResultFileDownloadParams, ResultGetParams,
-    ResultListParams, TagDeleteRequest, TagRequest, User,
+    CommitishRequest, GitTag, GitTagDetails, GitTagRequest, Output, OutputFormBuilder, OutputKind,
+    OutputMap, OutputResponse, Repo, RepoCheckout, RepoCreateResponse, RepoDataUploadResponse,
+    RepoDownloadOpts, RepoListLine, RepoListParams, RepoRequest, RepoScheme, RepoSubmissionChunk,
+    ResultFileDownloadParams, ResultGetParams, TagDeleteRequest, TagRequest, User,
 };
-use crate::utils::{bounder, ApiError, AppState};
+use crate::utils::{ApiError, AppState, bounder};
 
 /// Allow users to add a repo to Thorium
 ///
@@ -591,82 +590,13 @@ async fn download_result_file(
     Err(ApiError::new(StatusCode::NOT_FOUND, None))
 }
 
-/// Get a portion of repo results streamed backwards through time
-///
-/// # Arguments
-///
-/// * `user` - The user that is listing repo results
-/// * `params` - The query params to use with this request
-/// * `state` - Shared Thorium objects
-#[utoipa::path(
-    get,
-    path = "/api/repos/results/",
-    params(
-        ("params" = ResultListParams, description = "The query params to use with this request"),
-    ),
-    responses(
-        (status = 200, description = "Result file bytestream", body = ApiCursor<OutputListLine>),
-        (status = 401, description = "This user is not authorized to access this route"),
-    ),
-    security(
-        ("basic" = []),
-    )
-)]
-#[instrument(name = "routes::repos::list_results", skip_all, err(Debug))]
-async fn list_results(
-    user: User,
-    params: ResultListParams,
-    State(state): State<AppState>,
-) -> Result<Json<ApiCursor<OutputListLine>>, ApiError> {
-    // set our result kind
-    let kind = OutputKind::Repos;
-    // get a section of the results list
-    let cursor = Output::list(&user, kind, params, &state.shared).await?;
-    Ok(Json(cursor))
-}
-
-/// Get a portion of results streamed backwards through time
-///
-/// # Arguments
-///
-///
-/// * `user` - The user that is listing submissions
-/// * `params` - The query params to use with this request
-/// * `state` - Shared Thorium objects
-/// * `req_id` - This requests ID
-#[utoipa::path(
-    get,
-    path = "/api/repos/results/bundle/",
-    params(
-        ("params" = ResultListParams, description = "The query params to use with this request"),
-    ),
-    responses(
-        (status = 200, description = "Bundled results ordered backward through time", body = ApiCursor<OutputBundle>),
-        (status = 401, description = "This user is not authorized to access this route"),
-    ),
-    security(
-        ("basic" = []),
-    )
-)]
-#[instrument(name = "routes::repos::bundle", skip_all, err(Debug))]
-#[axum_macros::debug_handler]
-async fn bundle_results(
-    user: User,
-    params: ResultListParams,
-    State(state): State<AppState>,
-) -> Result<Json<ApiCursor<OutputBundle>>, ApiError> {
-    // get a section of the results stream
-    let cursor = Output::bundle(&user, OutputKind::Repos, params, &state.shared).await?;
-    Ok(Json(cursor))
-}
-
 /// The struct containing our openapi docs
 #[derive(OpenApi)]
 #[openapi(
     // TODO_UTOIPA: WILDCARD add these back in once all the wildcard issues are resolved
     // paths(list, create, list_details, get_repo, upload, commitshes, update_commitishes, commitsh_details, download, tag, delete_tags, get_results, upload_results, download_result_file, bundle_results),
-    paths(list, create, list_details, list_results, bundle_results),
-    components(schemas(ApiCursor<OutputBundle>, ApiCursor<Repo>, ApiCursor<RepoListLine>, Branch, BranchDetails, BranchRequest, Commit, CommitDetails, Commitish, CommitishDetails, CommitishKinds, CommitishMapRequest, CommitishRequest, CommitRequest, GitTag, GitTagDetails, GitTagRequest, OutputBundle, OutputListLine, OutputMap, OutputResponse, Repo, RepoCheckout, RepoCreateResponse, RepoDownloadOpts, RepoListParams, RepoDataUploadResponse, RepoRequest, RepoScheme, RepoSubmissionChunk, ResultGetParams, ResultListParams, TagDeleteRequest<Repo>, TagRequest<Repo>)),
+    paths(list, create, list_details),
+    components(schemas(ApiCursor<Repo>, ApiCursor<RepoListLine>, Branch, BranchDetails, BranchRequest, Commit, CommitDetails, Commitish, CommitishDetails, CommitishKinds, CommitishMapRequest, CommitishRequest, CommitRequest, GitTag, GitTagDetails, GitTagRequest, OutputMap, OutputResponse, Repo, RepoCheckout, RepoCreateResponse, RepoDownloadOpts, RepoListParams, RepoDataUploadResponse, RepoRequest, RepoScheme, RepoSubmissionChunk, ResultGetParams, TagDeleteRequest<Repo>, TagRequest<Repo>)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct RepoApiDocs;
@@ -686,25 +616,26 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/api/repos/", get(list).post(create))
         .route("/api/repos/details/", get(list_details))
-        .route("/api/repos/data/*repo_path", get(get_repo).post(upload))
+        .route("/api/repos/data/{*repo_path}", get(get_repo).post(upload))
         .route(
-            "/api/repos/commitishes/:data/*repo_path",
+            "/api/repos/commitishes/{data}/{*repo_path}",
             get(commitishes).post(update_commitishes),
         )
         .route(
-            "/api/repos/commitish-details/*repo_path",
+            "/api/repos/commitish-details/{*repo_path}",
             get(commitish_details),
         )
-        .route("/api/repos/download/*repo_path", get(download))
-        .route("/api/repos/tags/*repo_path", post(tag).delete(delete_tags))
+        .route("/api/repos/download/{*repo_path}", get(download))
         .route(
-            "/api/repos/results/*repo_path",
+            "/api/repos/tags/{*repo_path}",
+            post(tag).delete(delete_tags),
+        )
+        .route(
+            "/api/repos/results/{*repo_path}",
             get(get_results).post(upload_results),
         )
         .route(
-            "/api/repos/result-files/*repo_path",
+            "/api/repos/result-files/{*repo_path}",
             get(download_result_file),
         )
-        .route("/api/repos/results/", get(list_results))
-        .route("/api/repos/results/bundle/", get(bundle_results))
 }

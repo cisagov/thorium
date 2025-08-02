@@ -4,12 +4,11 @@ use uuid::Uuid;
 
 use super::GenericClient;
 use crate::{
-    add_date, add_query, add_query_bool, add_query_list,
+    add_query_bool, add_query_list,
     client::Error,
-    models::backends::OutputSupport,
     models::{
-        Attachment, Cursor, KeySupport, OutputBundle, OutputListLine, OutputMap, OutputRequest,
-        OutputResponse, ResultGetParams, ResultListOpts,
+        backends::OutputSupport, Attachment, KeySupport, OutputMap, OutputRequest, OutputResponse,
+        ResultGetParams,
     },
     send_build, send_bytes,
 };
@@ -116,74 +115,6 @@ pub trait ResultsClientHelper: GenericClient {
         // build our attachment object from the bytes
         Ok(Attachment { data })
     }
-
-    /// Lists results
-    ///
-    /// # Arguments
-    ///
-    /// * `opts` - The options for listing results
-    async fn list_results_generic(
-        &self,
-        opts: ResultListOpts,
-    ) -> Result<Cursor<OutputListLine>, Error> {
-        // build the url for listing repo results
-        let url = format!("{base}/results/", base = self.base_url());
-        // get the correct page size if our limit is smaller then our page_size
-        let page_size = opts.limit.map_or_else(
-            || opts.page_size,
-            |limit| std::cmp::min(opts.page_size, limit),
-        );
-        // build our query params
-        let mut query = vec![("limit", page_size.to_string())];
-        add_query_list!(query, "groups[]", opts.groups);
-        add_date!(query, "start", opts.start);
-        add_date!(query, "end", opts.end);
-        add_query!(query, "cursor", opts.cursor);
-        // get the data for this request and create our cursor
-        Cursor::new(
-            &url,
-            opts.page_size,
-            opts.limit,
-            self.token(),
-            &query,
-            self.client(),
-        )
-        .await
-    }
-
-    /// Lists bundled results that meet some search criteria
-    ///
-    /// # Arguments
-    ///
-    /// * `opts` - The options for listing result bundles
-    async fn list_results_bundle_generic(
-        &self,
-        opts: ResultListOpts,
-    ) -> Result<Cursor<OutputBundle>, Error> {
-        // build the url for listing repo results
-        let url = format!("{base}/results/bundle/", base = self.base_url());
-        // get the correct page size if our limit is smaller then our page_size
-        let page_size = opts.limit.map_or_else(
-            || opts.page_size,
-            |limit| std::cmp::min(opts.page_size, limit),
-        );
-        // build our query params
-        let mut query = vec![("limit", page_size.to_string())];
-        add_query_list!(query, "groups[]", opts.groups);
-        add_date!(query, "start", opts.start);
-        add_date!(query, "end", opts.end);
-        add_query!(query, "cursor", opts.cursor);
-        // get the data for this request and create our cursor
-        Cursor::new(
-            &url,
-            opts.page_size,
-            opts.limit,
-            self.token(),
-            &query,
-            self.client(),
-        )
-        .await
-    }
 }
 
 /// Describes a client that is capable of creating and retrieving results for a
@@ -216,11 +147,4 @@ pub trait ResultsClient {
     where
         T: AsRef<str>,
         P: AsRef<Path>;
-
-    async fn list_results(&self, opts: ResultListOpts) -> Result<Cursor<OutputListLine>, Error>;
-
-    async fn list_results_bundle(
-        &self,
-        opts: ResultListOpts,
-    ) -> Result<Cursor<OutputBundle>, Error>;
 }

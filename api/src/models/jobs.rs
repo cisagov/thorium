@@ -442,6 +442,7 @@ impl PartialEq<GenericJobArgsUpdate> for GenericJobArgs {
 ///     .opts(GenericJobOpts::new(true, false, None));
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct GenericJobArgsUpdate {
     /// The positional arguments to replace the original args with
     #[serde(default)]

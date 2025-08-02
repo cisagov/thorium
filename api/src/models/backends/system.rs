@@ -3,8 +3,8 @@ use axum::http::request::Parts;
 use futures::stream::{self, StreamExt};
 use futures::TryStreamExt;
 use itertools::Itertools;
-use scylla::transport::errors::QueryError;
-use scylla::QueryResult;
+use scylla::errors::ExecutionError;
+use scylla::response::query_result::QueryResult;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tracing::{instrument, span, Level, Span};
@@ -716,7 +716,7 @@ impl SimpleCursorExt for NodeListLine {
         tie: &Option<String>,
         limit: usize,
         shared: &Shared,
-    ) -> Result<QueryResult, QueryError> {
+    ) -> Result<QueryResult, ExecutionError> {
         // if we have a node tie then query for the next page of data from our tie
         match tie {
             // we have a node name to skip too
@@ -762,7 +762,7 @@ impl SimpleCursorExt for NodeRow {
         tie: &Option<String>,
         limit: usize,
         shared: &Shared,
-    ) -> Result<QueryResult, QueryError> {
+    ) -> Result<QueryResult, ExecutionError> {
         // if we have a node tie then query for the next page of data from our tie
         match tie {
             // we have a node name to skip too
@@ -796,7 +796,6 @@ impl SimpleCursorExt for NodeRow {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for NodeGetParams
 where
     S: Send + Sync,
@@ -814,7 +813,6 @@ where
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for NodeListParams
 where
     S: Send + Sync,

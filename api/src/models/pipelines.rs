@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use serde_json::value::Value;
 use uuid::Uuid;
 
-use super::bans::Ban;
 use super::EventTrigger;
+use super::bans::Ban;
 use crate::{
     matches_adds_map, matches_clear, matches_clear_opt, matches_removes_map, matches_update,
     matches_update_opt, same,
@@ -166,6 +166,27 @@ impl PipelineRequest {
     pub fn description<T: Into<String>>(mut self, description: T) -> Self {
         self.description = Some(description.into());
         self
+    }
+}
+
+impl From<Pipeline> for PipelineRequest {
+    /// Convert a pipeline into a pipeline request
+    ///
+    /// # Arguments
+    ///
+    /// * `pipeline` - The pipeline to convert into a pipeline request
+    fn from(pipeline: Pipeline) -> Self {
+        // convert our pipeline order into a value
+        let order = serde_json::Value::from(pipeline.order);
+        // build the request to recreate this pipeline
+        PipelineRequest {
+            group: pipeline.group,
+            name: pipeline.name,
+            order,
+            sla: Some(pipeline.sla),
+            triggers: pipeline.triggers,
+            description: pipeline.description,
+        }
     }
 }
 
@@ -522,7 +543,7 @@ impl Ban<Pipeline> for PipelineBan {
 }
 
 /// A Pipeline that Thorium will build reactions around
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct Pipeline {
     /// The group this pipeline is tied to

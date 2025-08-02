@@ -421,7 +421,7 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
       // now update the list every X seconds where x is the interval passed in below
       const intervalId = setInterval(() => {
         getReactionsList();
-      }, 10000);
+      }, 30000);
       return () => {
         clearInterval(intervalId);
       };

@@ -309,7 +309,7 @@ async fn create_notification(
         ("pipeline" = String, Path, description = "The name of the pipeline whose notifications are being requested"),
     ),
     responses(
-        (status = 200, description = "Pipeline notifications", body = Vec<Notification<Pipeline>>),
+        //(status = 200, description = "Pipeline notifications", body = Vec<Notification<Pipeline>>),
         (status = 401, description = "This user is not authorized to access this route"),
     ),
     security(
@@ -394,19 +394,19 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/api/pipelines/", post(create))
-        .route("/api/pipelines/data/:group/:pipeline", get(get_pipeline))
-        .route("/api/pipelines/list/:group/", get(list))
-        .route("/api/pipelines/list/:group/details/", get(list_details))
+        .route("/api/pipelines/data/{group}/{pipeline}", get(get_pipeline))
+        .route("/api/pipelines/list/{group}/", get(list))
+        .route("/api/pipelines/list/{group}/details/", get(list_details))
         .route(
-            "/api/pipelines/:group/:pipeline",
+            "/api/pipelines/{group}/{pipeline}",
             patch(update).delete(delete_pipeline),
         )
         .route(
-            "/api/pipelines/notifications/:group/:pipeline",
+            "/api/pipelines/notifications/{group}/{pipeline}",
             get(get_notifications).post(create_notification),
         )
         .route(
-            "/api/pipelines/notifications/:group/:pipeline/:id",
+            "/api/pipelines/notifications/{group}/{pipeline}/{id}",
             delete(delete_notification),
         )
 }

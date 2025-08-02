@@ -67,28 +67,6 @@ $grid-breakpoints: (
   text-decoration: none;
 }
 
-.sidebar {
-  z-index: 0;
-  left: 0;
-  top: 47px;
-  padding: 0.5rem 1rem;
-  position: fixed;
-  height: 100%;
-  border-right: 0.05px groove var(--thorium-panel-border);
-}
-
-.sidebar-items {
-  margin-top: 10px; // 70px when top of .sidebar is 0
-  width: 100%;
-}
-
-.sidebar-column {
-  flex: 1 !important;
-  flex-basis: 170px !important;
-  flex-shrink: 0 !important;
-  flex-grow: 0 !important;
-}
-
 .short {
   margin-bottom: 2rem;
 }
@@ -126,8 +104,8 @@ $grid-breakpoints: (
     flex: 0 !important;
     display: none;
   }
-  .page {
+  /*.page {
     flex: 12 !important;
     padding-left: 10px;
-  }
+  }*/
 }

@@ -4,7 +4,8 @@
 //! happens on a single thread. It is likely that actions my not always complete on schedule.
 
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
+use hashbrown::HashMap;
 use std::sync::Arc;
 use thorium::models::{
     ImageScaler, JobResets, NodeListParams, RunningJob, SystemComponents,

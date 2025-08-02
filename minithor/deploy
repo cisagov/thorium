@@ -93,7 +93,7 @@ curl -k -X POST -u elastic:$ESPASS "https://localhost:9200/_security/role/thoriu
 {
   "indices": [
     {
-      "names": ["results"],
+      "names": ["thorium*"],
       "privileges": ["all"]
     }
   ]

@@ -6,8 +6,10 @@ use indicatif::ProgressBar;
 use kanal::{AsyncReceiver, AsyncSender};
 use rkyv::ser::serializers::AllocSerializer;
 use rkyv::{AlignedVec, Archive, Serialize};
-use scylla::deserialize::DeserializeRow;
-use scylla::{prepared_statement::PreparedStatement, transport::errors::QueryError, Session};
+use scylla::client::session::Session;
+use scylla::deserialize::row::DeserializeRow;
+use scylla::errors::PrepareError;
+use scylla::statement::prepared::PreparedStatement;
 use sha2::{Digest, Sha256};
 use std::io::IoSlice;
 use std::path::PathBuf;
@@ -17,6 +19,7 @@ use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use super::{MonitorUpdate, PartitionArchive, Utils};
+use crate::args::BackupComponents;
 use crate::Error;
 
 /// An archived partition that is ready to be written to disk
@@ -450,11 +453,14 @@ pub trait Backup:
     + Serialize<AllocSerializer<1024>>
     + for<'frame, 'metadata> DeserializeRow<'frame, 'metadata>
 {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents;
+
     /// The prepared statement to use when retrieving data from Scylla
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError>;
+    ) -> Result<PreparedStatement, PrepareError>;
 
     /// Hash this rows partitions key to see if we have changed partitions
     fn hash_partition(&self) -> u64;

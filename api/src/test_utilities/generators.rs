@@ -1,7 +1,7 @@
 use cidr::{Ipv4Cidr, Ipv6Cidr};
 use futures::{stream, StreamExt, TryStreamExt};
-use rand::seq::SliceRandom;
-use rand::{seq::IteratorRandom, Rng};
+use rand::seq::IndexedRandom;
+use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
@@ -39,14 +39,14 @@ static UTF8_CHARS: LazyLock<Vec<char>> = LazyLock::new(|| {
 
 macro_rules! gen_int {
     ($min:expr, $max:expr) => {
-        rand::thread_rng().gen_range($min..$max)
+        rand::rngs::SmallRng::from_os_rng().random_range($min..$max)
     };
 }
 
 /// Generate an option with the given probability that it's `Some`
 macro_rules! gen_opt {
     ($prob:literal, $build:expr) => {
-        if rand::thread_rng().gen_bool($prob) {
+        if rand::rngs::SmallRng::from_os_rng().random_bool($prob) {
             Some($build)
         } else {
             None
@@ -58,11 +58,11 @@ macro_rules! gen_opt {
 fn gen_string(len: usize) -> String {
     // build the possible values we can generate
     const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::SmallRng::from_os_rng();
     // generate the correct number of values
     (0..len)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect()
@@ -70,7 +70,7 @@ fn gen_string(len: usize) -> String {
 
 /// generate a random string with UTF-8 "characters"
 fn gen_utf8_string(num_chars: usize) -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::SmallRng::from_os_rng();
     // Generate a random string from the selected chars
     (0..num_chars)
         .map(|_| *UTF8_CHARS.choose(&mut rng).unwrap())
@@ -447,7 +447,7 @@ pub async fn gen_all(
     let mut images: Vec<ImageRequest> = vec![];
     let mut pipes: Vec<PipelineRequest> = vec![];
     // create random images and pipelines
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::SmallRng::from_os_rng();
     for group in groups.iter() {
         let mut group_images: Vec<ImageRequest> = vec![];
         // get cnt internal and external images
@@ -663,18 +663,50 @@ pub async fn samples_tagged(
         .map(|_| gen_sample(group))
         .collect::<Vec<SampleRequest>>();
     // build a shared tag for all these requests
-    let key = gen_string(16);
-    let value = gen_string(16);
+    let key = gen_utf8_string(16);
+    let value = gen_utf8_string(16);
     // add the same tag to all of our sample requests
     let reqs = reqs
         .into_iter()
         .map(|req| req.tag(&key, &value))
         .collect::<Vec<SampleRequest>>();
     // upload these files
-    for req in reqs.iter() {
+    for req in &reqs {
         client.files.create(req.clone()).await?;
     }
     Ok((key, value, reqs))
+}
+
+/// Setup a number of random samples in a group with the given tag
+///
+/// # Arguments
+///
+/// * `group` - The group these samples should be in
+/// * `cnt` - The number of samples to create
+/// * `name` - The name of the test that called this
+/// * `client` - The client to use when creating these samples
+#[allow(dead_code)]
+pub async fn samples_with_tag(
+    group: &str,
+    cnt: usize,
+    key: &str,
+    value: &str,
+    client: &Thorium,
+) -> Result<Vec<SampleRequest>, Error> {
+    // build a sample request
+    let reqs = (0..cnt)
+        .map(|_| gen_sample(group))
+        .collect::<Vec<SampleRequest>>();
+    // add the same tag to all of our sample requests
+    let reqs = reqs
+        .into_iter()
+        .map(|req| req.tag(key, value))
+        .collect::<Vec<SampleRequest>>();
+    // upload these files
+    for req in &reqs {
+        client.files.create(req.clone()).await?;
+    }
+    Ok(reqs)
 }
 
 /// Generate a random repo request
@@ -925,7 +957,7 @@ fn gen_ipv6_cidr() -> Ipv6Cidr {
 /// Generate a random [`IpBlock`]
 #[must_use]
 fn gen_ip_block() -> IpBlock {
-    if rand::thread_rng().gen_bool(0.5) {
+    if rand::rngs::SmallRng::from_os_rng().random_bool(0.5) {
         let block = Ipv4Block {
             cidr: gen_ipv4_cidr(),
             // leave "except" as None to avoid issues when checking
@@ -1006,7 +1038,7 @@ pub fn gen_network_policy_rule(groups: &[String]) -> NetworkPolicyRuleRaw {
             port: gen_int!(1, 65535),
             end_port: gen_opt!(0.5, gen_int!(1, 65535)),
             protocol: gen_opt!(0.5, {
-                if rand::thread_rng().gen_bool(0.5) {
+                if rand::rngs::SmallRng::from_os_rng().random_bool(0.5) {
                     NetworkProtocol::TCP
                 } else {
                     NetworkProtocol::UDP
@@ -1020,14 +1052,17 @@ pub fn gen_network_policy_rule(groups: &[String]) -> NetworkPolicyRuleRaw {
     NetworkPolicyRuleRaw {
         allowed_ips,
         allowed_groups: groups
-            .choose_multiple(&mut rand::thread_rng(), gen_int!(0, groups.len()))
+            .choose_multiple(
+                &mut rand::rngs::SmallRng::from_os_rng(),
+                gen_int!(0, groups.len()),
+            )
             .cloned()
             .collect(),
         // refrain from adding allowed tools to avoid failing tools existing check
         allowed_tools: Vec::new(),
-        allowed_local: rand::thread_rng().gen_bool(0.5),
-        allowed_internet: rand::thread_rng().gen_bool(0.5),
-        allowed_all: rand::thread_rng().gen_bool(0.5),
+        allowed_local: rand::rngs::SmallRng::from_os_rng().random_bool(0.5),
+        allowed_internet: rand::rngs::SmallRng::from_os_rng().random_bool(0.5),
+        allowed_all: rand::rngs::SmallRng::from_os_rng().random_bool(0.5),
         ports,
         allowed_custom,
     }

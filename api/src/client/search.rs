@@ -1,10 +1,12 @@
 //! The search support for the Thorium client
 
-use super::Error;
+use super::{Error, SearchEvents};
 use crate::models::{Cursor, ElasticDoc, ElasticSearchOpts};
 use crate::{add_date, add_query, add_query_list};
 
-/// A handler for the results routes in Thorium
+pub mod events;
+
+/// A handler for the search routes in Thorium
 #[derive(Clone)]
 pub struct Search {
     /// The host/url that Thorium can be reached at
@@ -13,10 +15,12 @@ pub struct Search {
     token: String,
     /// A reqwest client for reqwests
     client: reqwest::Client,
+    /// The search events handler
+    pub events: events::SearchEvents,
 }
 
 impl Search {
-    /// Creates a new results handler
+    /// Creates a new search handler
     ///
     /// Instead of directly creating this handler you likely want to simply create a
     /// `thorium::Thorium` and use the handler within that instead.
@@ -42,6 +46,7 @@ impl Search {
             host: host.to_owned(),
             token: token.to_owned(),
             client: client.clone(),
+            events: SearchEvents::new(host, token, client),
         }
     }
 }
@@ -62,7 +67,7 @@ cfg_if::cfg_if! {
         }
 
         impl SearchBlocking {
-            /// creates a new blocking results handler
+            /// Creates a new blocking search handler
             ///
             /// Instead of directly creating this handler you likely want to simply create a
             /// `thorium::ThoriumBlocking` and use the handler within that instead.
@@ -132,10 +137,10 @@ impl Search {
         );
         // build our query params
         let mut query = vec![
-            ("index", opts.index.to_string()),
             ("query", opts.query.clone()),
             ("limit", page_size.to_string()),
         ];
+        add_query_list!(query, "indexes[]", &opts.indexes);
         add_query_list!(query, "groups[]", &opts.groups);
         add_date!(query, "start", opts.start);
         add_date!(query, "end", opts.end);

@@ -8,7 +8,9 @@ use uuid::Uuid;
 use super::keys::EventKeys;
 use crate::models::{Event, EventCacheStatus, EventType};
 use crate::utils::{ApiError, Shared};
-use crate::{conn, deserialize, query, serialize};
+use crate::{conn, query, serialize};
+
+pub mod shared;
 
 /// Save new events to scylla
 ///
@@ -55,80 +57,6 @@ pub async fn clear(kind: EventType, ids: &[Uuid], shared: &Shared) -> Result<(),
     Ok(())
 }
 
-/// Try to reset popped events in the case of an error or other failure
-///
-/// If this reset fails then these events will simply be lost.
-///
-/// # Arguments
-///
-/// * `key` - The sorted set to restore these popped events too
-/// * `pops` - The popped events to restore
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::events::reset_pops", skip_all, fields(pops = pops.len()), err(Debug))]
-async fn reset_pops(
-    key: &String,
-    pops: Vec<(String, f64)>,
-    shared: &Shared,
-) -> Result<(), ApiError> {
-    // build a pipe to reset any immature events
-    let mut pipe = redis::pipe();
-    // add all of our immature event reset commands to this pipeline
-    for (serial, timestamp) in pops {
-        pipe.cmd("zadd").arg(key).arg(timestamp).arg(serial);
-    }
-    // execute this redis pipeline
-    let _: () = pipe.query_async(conn!(shared)).await?;
-    Ok(())
-}
-
-/// Filter and reset any events that are younger then 3 seconds
-///
-/// We are filting events younger then 3 seconds to ensure the DB has a chance
-/// to reach consistency.
-///
-/// # Arguments
-///
-/// * `key` - The sorted set we are filtering immature events from
-/// * `now` - A timestamp from before we pulled events
-/// * `serialized` - The serialized events to check for maturity
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::events::filter_immature", skip_all, fields(pre_filter = serialized.len()), err(Debug))]
-async fn filter_immature(
-    key: &String,
-    now: DateTime<Utc>,
-    serialized: Vec<(String, f64)>,
-    shared: &Shared,
-) -> Result<(Vec<Event>, Vec<(String, f64)>), ApiError> {
-    // convert our datetime to a timestamp 3 seconds in the past
-    let now_ts = (now.timestamp() - 3) as f64;
-    // keep track of the events to reset and our deserialized events
-    let mut resets = Vec::default();
-    let mut events = Vec::with_capacity(serialized.len());
-    let mut filtered_serial = Vec::with_capacity(serialized.len());
-    // find first mature event that we retrieved
-    for (serial, timestamp) in serialized.into_iter().rev() {
-        // check if this timestamp is mature or not yet
-        if timestamp < now_ts {
-            // try to deserialize this mature event
-            let event: Event = deserialize!(&serial);
-            // add our deserialized event
-            events.push(event);
-            // add our still serialized but filtered info
-            filtered_serial.push((serial, timestamp));
-        } else {
-            // this event is not yet mature so add it to the reste list
-            resets.push((serial, timestamp));
-        }
-    }
-    if !resets.is_empty() {
-        // log the number of immature events that we found
-        event!(Level::INFO, immature = resets.len());
-        // try to reset these immature events
-        reset_pops(key, resets, shared).await?;
-    }
-    Ok((events, filtered_serial))
-}
-
 /// Get some number of events to evaluate
 ///
 /// # Arguments
@@ -146,7 +74,7 @@ pub async fn pop(kind: EventType, count: usize, shared: &Shared) -> Result<Vec<E
     // try to pop some events from the right event queue
     let serialized: Vec<(String, f64)> = query!(cmd("zpopmin").arg(&key).arg(count), shared).await?;
     // filter out and reset any events that are not yet mature
-    let (events, filtered) = filter_immature(&key, now, serialized, shared).await?;
+    let (events, filtered) = shared::filter_immature::<Event>(&key, now, serialized, shared).await?;
     // build the key to the in flight map and the in flight queue
     let map_key = EventKeys::in_flight_map(kind, shared);
     let queue_key = EventKeys::in_flight_queue(kind, shared);
@@ -197,7 +125,7 @@ pub async fn reset_all(kind: EventType, shared: &Shared) -> Result<(), ApiError>
                 // log this error
                 event!(Level::ERROR, error = error.to_string());
                 // try to reset our popped events
-                reset_pops(&queue_key, popped, shared).await?;
+                shared::reset_pops(&queue_key, popped, shared).await?;
                 // return our original error if our reset didn't also fail
                 return Err(ApiError::from(error));
             }

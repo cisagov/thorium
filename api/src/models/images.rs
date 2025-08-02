@@ -407,6 +407,19 @@ impl PartialEq<Resources> for ResourcesRequest {
     }
 }
 
+impl From<Resources> for ResourcesRequest {
+    /// Convert a resources object to a resources request object
+    fn from(resources: Resources) -> Self {
+        ResourcesRequest {
+            cpu: format!("{}m", resources.cpu),
+            memory: format!("{}Mi", resources.memory),
+            ephemeral_storage: Some(format!("{}Mi", resources.ephemeral_storage)),
+            nvidia_gpu: resources.nvidia_gpu,
+            amd_gpu: resources.amd_gpu,
+        }
+    }
+}
+
 /// The requested resources to spawn spawn the container with
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -3936,6 +3949,7 @@ impl CleanupUpdate {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreJson))]
 pub enum ImageVersion {
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     SemVer(semver::Version),
     Custom(String),
 }
@@ -4392,6 +4406,40 @@ where {
         self.network_policies
             .extend(network_policies.into_iter().map(Into::into));
         self
+    }
+}
+
+impl From<Image> for ImageRequest {
+    fn from(image: Image) -> Self {
+        // convert our resources to a resources request
+        let resources = ResourcesRequest::from(image.resources);
+        // convert our image into an image request
+        ImageRequest {
+            group: image.group,
+            name: image.name,
+            version: image.version,
+            scaler: image.scaler,
+            image: image.image,
+            lifetime: image.lifetime,
+            timeout: image.timeout,
+            resources,
+            spawn_limit: image.spawn_limit,
+            volumes: image.volumes,
+            env: image.env,
+            args: image.args,
+            modifiers: image.modifiers,
+            description: image.description,
+            security_context: Some(image.security_context),
+            collect_logs: image.collect_logs,
+            generator: image.generator,
+            dependencies: image.dependencies,
+            display_type: image.display_type,
+            output_collection: image.output_collection,
+            child_filters: image.child_filters,
+            clean_up: image.clean_up,
+            kvm: image.kvm,
+            network_policies: image.network_policies,
+        }
     }
 }
 
@@ -5112,6 +5160,7 @@ pub struct InvalidHostPathBan {
     /// The name of the volume that caused the ban
     pub volume_name: String,
     /// The host path that caused the ban
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub host_path: PathBuf,
 }
 

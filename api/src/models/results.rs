@@ -23,8 +23,9 @@ use crate::{multipart_file, multipart_list, multipart_text};
 use crate::client::Error;
 
 /// The kind of results we are saving to the db
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum OutputKind {
     /// We are saving file results
     Files,
@@ -478,8 +479,10 @@ impl ResultGetParams {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct OnDiskFile {
     /// The path to this file to upload
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub path: PathBuf,
     /// The prefix to optionally trim from our file
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub trim_prefix: Option<PathBuf>,
 }
 
@@ -580,43 +583,6 @@ impl<O: OutputSupport> PartialEq<OutputRequest<O>> for Output {
     }
 }
 
-/// Default the Result list limit to 50
-fn default_list_limit() -> usize {
-    50
-}
-
-/// The query params for listing results
-#[derive(Deserialize, Debug)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct ResultListParams {
-    /// The groups to list data from
-    #[serde(default)]
-    pub groups: Vec<String>,
-    /// When to start listing data at
-    #[serde(default = "Utc::now")]
-    pub start: DateTime<Utc>,
-    /// When to stop listing data at
-    pub end: Option<DateTime<Utc>>,
-    /// The cursor id to use if one exists
-    pub cursor: Option<Uuid>,
-    /// The max number of items to return in this response
-    #[serde(default = "default_list_limit")]
-    pub limit: usize,
-}
-
-impl Default for ResultListParams {
-    /// Build a default result list params object
-    fn default() -> Self {
-        ResultListParams {
-            groups: Vec::default(),
-            start: Utc::now(),
-            end: None,
-            cursor: None,
-            limit: 50,
-        }
-    }
-}
-
 /// A map of results for tools
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -643,22 +609,6 @@ impl<O: OutputSupport> PartialEq<OutputRequest<O>> for OutputMap {
     }
 }
 
-/// A map of the latest result for each group
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct OutputListLine {
-    /// The group this result was for
-    pub groups: Vec<String>,
-    /// The key these results are for
-    pub key: String,
-    /// The uuid of this result in the result stream
-    pub id: Uuid,
-    /// The tool that had this result
-    pub tool: String,
-    /// When this result was added
-    pub uploaded: DateTime<Utc>,
-}
-
 /// A single result for a single run of a tool with a specific command
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -683,20 +633,6 @@ pub struct OutputChunk {
     /// The children that were found when generating this result
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub children: HashMap<String, Uuid>,
-}
-
-/// A map of the latest result for each group
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct OutputBundle {
-    /// The sample these results are for
-    pub sha256: String,
-    /// The latest result in this bundle
-    pub latest: DateTime<Utc>,
-    /// A map of results by id
-    pub results: HashMap<Uuid, OutputChunk>,
-    /// A map of the result for each group and then tool
-    pub map: HashMap<String, HashMap<String, Uuid>>,
 }
 
 /// The type of display class to use in the UI for this output
@@ -1499,111 +1435,5 @@ impl PartialEq<OutputCollection> for OutputCollectionUpdate {
             }
         }
         true
-    }
-}
-
-/// The options that you can set when listing results in Thorium
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct ResultListOpts {
-    /// The cursor to use to continue this search
-    pub cursor: Option<Uuid>,
-    /// The latest date to start listing samples from
-    pub start: Option<DateTime<Utc>>,
-    /// The oldest date to stop listing samples from
-    pub end: Option<DateTime<Utc>>,
-    /// The max number of objects to retrieve on a single page
-    pub page_size: usize,
-    /// The limit to use when requesting data
-    pub limit: Option<usize>,
-    /// The groups limit our search to
-    pub groups: Vec<String>,
-}
-
-impl Default for ResultListOpts {
-    /// Build a default search
-    fn default() -> Self {
-        ResultListOpts {
-            start: None,
-            cursor: None,
-            end: None,
-            page_size: 50,
-            limit: None,
-            groups: Vec::default(),
-        }
-    }
-}
-
-impl ResultListOpts {
-    /// Restrict the file search to start at a specific date
-    ///
-    /// # Arguments
-    ///
-    /// * `start` - The date to start listing samples from
-    #[must_use]
-    pub fn start(mut self, start: DateTime<Utc>) -> Self {
-        // set the date to start listing files at
-        self.start = Some(start);
-        self
-    }
-
-    /// Set the cursor to use when continuing this search
-    ///
-    /// # Arguments
-    ///
-    /// * `cursor` - The cursor id to use for this search
-    #[must_use]
-    pub fn cursor(mut self, cursor: Uuid) -> Self {
-        // set cursor for this search
-        self.cursor = Some(cursor);
-        self
-    }
-
-    /// Restrict the file search to stop at a specific date
-    ///
-    /// # Arguments
-    ///
-    /// * `end` - The date to stop listing samples at
-    #[must_use]
-    pub fn end(mut self, end: DateTime<Utc>) -> Self {
-        // set the date to end listing files at
-        self.end = Some(end);
-        self
-    }
-
-    /// The max number of objects to retrieve in a single page
-    ///
-    /// # Arguments
-    ///
-    /// * `page_size` - The max number of documents to return in a single request
-    #[must_use]
-    pub fn page_size(mut self, page_size: usize) -> Self {
-        // set the date to end listing files at
-        self.page_size = page_size;
-        self
-    }
-
-    /// Limit how many samples this search can return at once
-    ///
-    /// # Arguments
-    ///
-    /// * `limit` - The number of documents to return at once
-    #[must_use]
-    pub fn limit(mut self, limit: usize) -> Self {
-        // set the date to end listing files at
-        self.limit = Some(limit);
-        self
-    }
-
-    /// Limit what groups we search in
-    ///
-    /// # Arguments
-    ///
-    /// * `groups` - The groups to restrict our search to
-    #[must_use]
-    pub fn groups<T: Into<String>>(mut self, groups: Vec<T>) -> Self {
-        // set the date to end listing files at
-        self.groups.extend(groups.into_iter().map(Into::into));
-        self
     }
 }

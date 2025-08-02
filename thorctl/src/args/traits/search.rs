@@ -14,6 +14,8 @@ pub struct SearchParams<'a> {
     pub groups: &'a [String],
     /// The tags to filter by
     pub tags: &'a [String],
+    /// Whether matching on tags should be case-insensitive
+    pub tags_case_insensitive: bool,
     /// The delimiter for tags
     pub delimiter: char,
     /// The datetime to start searching
@@ -120,6 +122,10 @@ pub trait SearchParameterized: SearchSealed {
                 }
             }
         }
+        // set whether the search on tags is case insensitive
+        if params.tags_case_insensitive {
+            search = search.tags_case_insensitive();
+        }
         Ok(search)
     }
 
@@ -162,6 +168,10 @@ pub trait SearchParameterized: SearchSealed {
                     return Err(Error::new(msg));
                 }
             }
+        }
+        // set whether the search on tags is case insensitive
+        if params.tags_case_insensitive {
+            search = search.tags_case_insensitive();
         }
         Ok(search)
     }

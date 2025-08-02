@@ -6,14 +6,16 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
-use scylla::prepared_statement::PreparedStatement;
-use scylla::transport::errors::QueryError;
-use scylla::{DeserializeRow, Session};
+use scylla::client::session::Session;
+use scylla::errors::{ExecutionError, PrepareError};
+use scylla::statement::prepared::PreparedStatement;
+use scylla::DeserializeRow;
 use std::hash::Hasher;
 use std::sync::Arc;
 use thorium::models::{NodeHealth, Resources};
 use thorium::Conf;
 
+use crate::args::BackupComponents;
 use crate::backup::{Backup, Restore, Scrub, Utils};
 use crate::Error;
 
@@ -43,6 +45,11 @@ impl Utils for Node {
 
 #[async_trait::async_trait]
 impl Backup for Node {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::Nodes
+    }
+
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -52,7 +59,7 @@ impl Backup for Node {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         // build logs get prepared statement
         scylla
             .prepare(format!(
@@ -83,7 +90,7 @@ impl Scrub for Node {}
 #[async_trait::async_trait]
 impl Restore for Node {
     /// The steps to once run before restoring data
-    async fn prep(_scylla: &Session, _ns: &str) -> Result<(), QueryError> {
+    async fn prep(_scylla: &Session, _ns: &str) -> Result<(), ExecutionError> {
         Ok(())
     }
 
@@ -96,7 +103,7 @@ impl Restore for Node {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         scylla
             .prepare(format!(
                 "INSERT INTO {}.{} \

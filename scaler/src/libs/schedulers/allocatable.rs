@@ -4,7 +4,8 @@
 
 use chrono::prelude::*;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
+use hashbrown::HashMap;
 use thorium::conf::{FairShareWeights, IsRestricted, WorkerRestrictions};
 use thorium::models::{
     Deadline, Image, ImageScaler, NodeListParams, Pools, Requisition, Resources, SpawnLimits,

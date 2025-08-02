@@ -6,7 +6,6 @@ use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 
 use super::events::EventApiDocs;
-use super::exports::ExportApiDocs;
 use super::files::FileApiDocs;
 use super::groups::GroupApiDocs;
 use super::images::ImageApiDocs;
@@ -15,11 +14,14 @@ use super::network_policies::NetworkPolicyDocs;
 use super::pipelines::PipelineApiDocs;
 use super::reactions::ReactionApiDocs;
 use super::repos::RepoApiDocs;
+use super::search::events::{ResultSearchEventApiDocs, TagSearchEventApiDocs};
 use super::search::SearchApiDocs;
 use super::streams::StreamApiDocs;
 use super::system::SystemApiDocs;
 use super::users::UserApiDocs;
 use super::BasicApiDocs;
+
+use crate::models::{ResultSearchEvent, SearchEvent, TagSearchEvent};
 use crate::{utils::AppState, Conf};
 
 /// The struct containing our OpenAPI security info
@@ -77,7 +79,6 @@ pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
             SwaggerUi::new("/api/docs/swagger-ui")
                 .url("/api/openapi.json", BasicApiDocs::openapi())
                 .url("/api/events/openapi.json", EventApiDocs::openapi())
-                .url("/api/exports/openapi.json", ExportApiDocs::openapi())
                 .url("/api/files/openapi.json", FileApiDocs::openapi())
                 .url("/api/groups/openapi.json", GroupApiDocs::openapi())
                 .url("/api/images/openapi.json", ImageApiDocs::openapi())
@@ -90,6 +91,14 @@ pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
                 .url("/api/reactions/openapi.json", ReactionApiDocs::openapi())
                 .url("/api/repos/openapi.json", RepoApiDocs::openapi())
                 .url("/api/search/openapi.json", SearchApiDocs::openapi())
+                .url(
+                    format!("/api/search/events/{}", ResultSearchEvent::url()),
+                    ResultSearchEventApiDocs::openapi(),
+                )
+                .url(
+                    format!("/api/search/events/{}", TagSearchEvent::url()),
+                    TagSearchEventApiDocs::openapi(),
+                )
                 .url("/api/stream/openapi.json", StreamApiDocs::openapi())
                 .url("/api/system/openapi.json", SystemApiDocs::openapi())
                 .url("/api/users/openapi.json", UserApiDocs::openapi()),

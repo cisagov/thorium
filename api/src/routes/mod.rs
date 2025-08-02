@@ -5,7 +5,6 @@ mod routes_reexport {
     pub mod binaries;
     pub mod docs;
     pub mod events;
-    pub mod exports;
     pub mod files;
     pub mod groups;
     pub mod images;
@@ -18,6 +17,7 @@ mod routes_reexport {
     mod shared;
     pub mod streams;
     pub mod system;
+    pub mod trees;
     pub mod ui;
     pub mod users;
 

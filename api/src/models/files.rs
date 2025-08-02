@@ -11,10 +11,14 @@ use indicatif::ProgressBar;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
+use std::hash::Hasher;
 use std::net::IpAddr;
 use std::path::Path;
 use std::path::PathBuf;
 use uuid::Uuid;
+
+use super::{OnDiskFile, TreeSupport};
+use crate::{matches_adds, matches_removes, matches_update_opt, same};
 
 // api only imports
 cfg_if::cfg_if! {
@@ -43,10 +47,6 @@ cfg_if::cfg_if! {
         use super::{OutputKind, TagRequest, TagType};
     }
 }
-
-use crate::{matches_adds, matches_removes, matches_update_opt, same};
-
-use super::OnDiskFile;
 
 // only support scylla and other api side only structs if the api features is enabled
 cfg_if::cfg_if! {
@@ -341,6 +341,7 @@ pub struct SampleRequest {
     /// The origin of this sample if one exists
     pub origin: Option<OriginRequest>,
     /// The path to the file to upload if this sample is on disk
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub path: Option<PathBuf>,
     /// The data to upload directly
     pub data: Option<Buffer>,
@@ -739,9 +740,11 @@ pub struct OriginRequest {
     pub supporting: Option<bool>,
     /// The source IP this sample was sent from
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub src_ip: Option<IpAddr>,
     /// The destination IP this sample was going to
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub dest_ip: Option<IpAddr>,
     /// The source port this sample was sent from
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1333,8 +1336,10 @@ pub enum CarvedOrigin {
     /// The sample was carved from a packet capture
     Pcap {
         /// The source IP this sample was sent from
+        #[cfg_attr(feature = "api", schema(value_type = String))]
         src_ip: Option<IpAddr>,
         /// The destination IP this sample was going to
+        #[cfg_attr(feature = "api", schema(value_type = String))]
         dest_ip: Option<IpAddr>,
         /// The source port this sample was sent from
         src_port: Option<u16>,
@@ -1614,6 +1619,25 @@ impl Origin {
                     }
                 }
             }
+        }
+    }
+
+    /// Determine if this origins parent is a specific sha256
+    ///
+    /// # Arguments
+    ///
+    /// * `sha256` - The sha256 of the parent to check
+    pub fn is_child_of(&self, sha256: &str) -> bool {
+        match self {
+            Origin::Downloaded { .. } => false,
+            Origin::Unpacked { parent, .. } => parent == sha256,
+            Origin::Transformed { parent, .. } => parent == sha256,
+            Origin::Wire { .. } => false,
+            Origin::Incident { .. } => false,
+            Origin::MemoryDump { parent, .. } => parent == sha256,
+            Origin::Source { .. } => false,
+            Origin::Carved { parent, .. } => parent == sha256,
+            Origin::None => false,
         }
     }
 }
@@ -2367,6 +2391,79 @@ impl PartialEq<SampleRequest> for Sample {
     }
 }
 
+impl TreeSupport for Sample {
+    /// Hash this child object
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - The seed to set the hasher to use
+    fn tree_hash(&self, seed: i64) -> u64 {
+        // build a hasher
+        let mut hasher = gxhash::GxHasher::with_seed(seed);
+        // hash this samples sha
+        hasher.write(self.sha256.as_bytes());
+        // finalize our hasher
+        let hash = hasher.finish();
+        hash
+    }
+
+    /// Gather any initial nodes for a tree
+    #[cfg(feature = "api")]
+    async fn gather_initial(
+        user: &User,
+        query: &crate::models::TreeQuery,
+        shared: &crate::utils::Shared,
+    ) -> Result<Vec<super::TreeNodeData>, crate::utils::ApiError> {
+        // build a list of initial data
+        let mut initial = Vec::with_capacity(query.samples.len());
+        // get all our intial sample data
+        // TODO do this in parallel
+        for sha256 in &query.samples {
+            // get this samples data
+            let sample = Sample::get(user, sha256, shared).await?;
+            // wrap this node in a tree node data object
+            let node_data = super::TreeNodeData::Sample(sample);
+            // add this tree node data object to our list
+            initial.push(node_data);
+        }
+        Ok(initial)
+    }
+
+    /// Gather any children for this child node
+    #[cfg(feature = "api")]
+    async fn gather_children(
+        &self,
+        user: &User,
+        shared: &crate::utils::Shared,
+    ) -> Result<Vec<super::TreeNode>, crate::utils::ApiError> {
+        // build the opts to get everything tagged with this parent hash
+        let opts = FileListOpts::default().tag("Parent", &self.sha256);
+        // gather the children for this sample
+        let sha256s = Sample::list(user, opts, true, shared).await?;
+        // convert this to a details list
+        let mut cursor = sha256s.details(user, shared).await?;
+        // build a list of related children
+        let mut children = Vec::with_capacity(cursor.data.len());
+        // wrap these samples in a tree node
+        for sample in cursor.data.drain(..) {
+            // get the origins that are related to our parent
+            let relationships = sample
+                .submissions
+                .iter()
+                .filter(|sub| sub.origin.is_child_of(&self.sha256))
+                .map(|sub| super::TreeRelationships::Origin(sub.origin.clone()))
+                .collect();
+            // wrap this sample in a node data object
+            let data = super::TreeNodeData::Sample(sample);
+            // build the tree node for this child sample
+            let node = super::TreeNode::new(relationships, data);
+            // add this to our list of children nodes
+            children.push(node);
+        }
+        Ok(children)
+    }
+}
+
 #[derive(Deserialize, Debug, Default)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct DeleteSampleParams {
@@ -2556,6 +2653,9 @@ pub struct FileListParams {
     /// The max number of items to return in this response
     #[serde(default = "default_list_limit")]
     pub limit: usize,
+    #[serde(default)]
+    /// Whether matching on tags should be case-insensitive
+    pub tags_case_insensitive: bool,
 }
 
 impl Default for FileListParams {
@@ -2568,6 +2668,22 @@ impl Default for FileListParams {
             tags: HashMap::default(),
             cursor: None,
             limit: default_list_limit(),
+            tags_case_insensitive: false,
+        }
+    }
+}
+
+impl From<FileListOpts> for FileListParams {
+    /// Convert `FileListOpts` into `FileListParams`
+    fn from(opts: FileListOpts) -> Self {
+        FileListParams {
+            groups: opts.groups,
+            start: opts.start.unwrap_or_else(|| Utc::now()),
+            end: opts.end,
+            tags: opts.tags,
+            cursor: opts.cursor,
+            limit: opts.limit.unwrap_or_else(|| default_list_limit()),
+            tags_case_insensitive: opts.tags_case_insensitive,
         }
     }
 }
@@ -2879,6 +2995,8 @@ pub struct FileListOpts {
     pub groups: Vec<String>,
     /// The tags to filter on
     pub tags: HashMap<String, Vec<String>>,
+    /// Whether matching on tags should be case-insensitive
+    pub tags_case_insensitive: bool,
 }
 
 impl Default for FileListOpts {
@@ -2892,6 +3010,7 @@ impl Default for FileListOpts {
             limit: None,
             groups: Vec::default(),
             tags: HashMap::default(),
+            tags_case_insensitive: false,
         }
     }
 }
@@ -2984,6 +3103,26 @@ impl FileListOpts {
         entry.push(value.into());
         self
     }
+
+    /// List files that match a specific tag by ref
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The tag key to match against
+    /// * `value` - The tag value to match against
+    pub fn tag_ref<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+        // get an entry into this tags value list
+        let entry = self.tags.entry(key.into()).or_default();
+        // add this tags value
+        entry.push(value.into());
+    }
+
+    /// Set for matching on tags to be case-insensitive
+    #[must_use]
+    pub fn tags_case_insensitive(mut self) -> Self {
+        self.tags_case_insensitive = true;
+        self
+    }
 }
 
 /// Options for file deletion
@@ -3013,4 +3152,73 @@ impl FileDeleteOpts {
 pub struct ZipDownloadParams {
     /// The password to use to encrypt this zip
     pub password: Option<String>,
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "scylla-utils", derive(scylla::DeserializeRow))]
+#[cfg_attr(
+    feature = "scylla-utils",
+    scylla(flavor = "enforce_order", skip_name_checks)
+)]
+pub struct SampleCensusRow {
+    pub group: String,
+    pub year: i32,
+    pub bucket: i32,
+    pub count: i64,
+}
+
+#[cfg(feature = "scylla-utils")]
+impl super::CensusSupport for Sample {
+    /// The type returned by our prepared statement
+    type Row = SampleCensusRow;
+
+    /// Build the prepared statement for getting partition count info
+    async fn scan_prepared_statement(
+        scylla: &scylla::client::session::Session,
+        ns: &str,
+    ) -> Result<scylla::statement::prepared::PreparedStatement, scylla::errors::PrepareError> {
+        // build tags get partition count prepared statement
+        scylla
+            .prepare(format!(
+                "SELECT group, year, bucket, count(*) \
+                FROM {}.samples_list \
+                WHERE token(group, year, bucket) >= ? AND token(group, year, bucket) <= ? \
+                GROUP BY group, year, bucket",
+                ns,
+            ))
+            .await
+    }
+
+    /// Get the count for this partition
+    fn get_count(row: &SampleCensusRow) -> i64 {
+        row.count
+    }
+
+    /// Get the bucket for this partition
+    fn get_bucket(row: &SampleCensusRow) -> i32 {
+        row.bucket
+    }
+
+    /// Build the count key for this partition
+    fn count_key_from_row(namespace: &str, row: &Self::Row, grouping: i32) -> String {
+        // build the key for this row
+        format!(
+            "{namespace}:census:samples:counts:{group}:{year}:{grouping}",
+            namespace = namespace,
+            group = row.group,
+            year = row.year,
+            grouping = grouping,
+        )
+    }
+
+    /// Build the sorted set key for this census operation
+    fn stream_key_from_row(namespace: &str, row: &Self::Row) -> String {
+        // build the stream key for this row
+        format!(
+            "{namespace}:census:samples:stream:{group}:{year}",
+            namespace = namespace,
+            group = row.group,
+            year = row.year,
+        )
+    }
 }

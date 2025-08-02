@@ -8,22 +8,25 @@ edition.workspace = true
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-tokio = { version = "1.12", features = ["full"] }
-thorium = { version = "1.0.0", path = "../api", default-features=false, features = ["client", "kanal-err", "trace"]}
-chrono = { version = "~0.4.27", features = ["serde"] }
+tokio = { version = "1.45", features = ["full"] }
+thorium = { version = "1.1.0", path = "../api", default-features=false, features = ["client", "kanal-err", "trace", "scylla-utils"]}
+chrono = { version = "=0.4.38", features = ["serde"] }
 serde = "1.0"
 serde_json = "1.0"
 serde_yaml = "0.9"
 serde_derive = "1.0"
-kanal = "0.1.0-pre8"
+kanal = "0.1.1"
 async-trait = "0.1"
 url = "2"
-elasticsearch = "8.5.0-alpha.1"
+elasticsearch = "9.0.0-alpha.1"
 uuid = { version = "1", features = ["serde", "v4"] }
 futures = "0.3"
 tracing = { version = "0.1" }
-opentelemetry = { version = "0.19", features = ["rt-tokio", "trace"] }
+opentelemetry = { version = "0.30", features = ["trace"] }
 openssl = "*"
+scylla = { version = "1.2" }
+itertools = "0.14"
+redis = { version = "0.23", default-features = false, features = ["tokio-comp"] }
 
 [features]
 # Force openssl-sys to staticly link in the openssl library. Necessary when

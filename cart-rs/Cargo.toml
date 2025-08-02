@@ -1,0 +1,21 @@
+[package]
+name = "cart-rs"
+version = "1.2.3"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rust-crypto = "^0.2"
+tokio = { version = "1.45", features = ["full", "fs", "io-util"] }
+bincode = "2.0"
+flate2 = "1"
+miniz_oxide = "0.8"
+rc4 = "0.1"
+generic-array = "0.14"
+bytes = "1.10"
+futures-core = "0.3"
+pin-project = "1.1"
+
+[dev-dependencies]
+tokio-test = "0.4"

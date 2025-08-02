@@ -4,13 +4,13 @@
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Version};
-//use argonautica::Verifier;
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use chrono::prelude::*;
+use headers::{Header, HeaderName, HeaderValue};
 use ldap3::{Scope, SearchEntry};
 use rand::prelude::*;
 use std::collections::HashSet;
@@ -27,6 +27,10 @@ use crate::utils::shared::EmailClient;
 use crate::utils::{bounder, ApiError, AppState, Shared};
 use crate::{bad, conflict, is_admin, ldap, unauthorized, unavailable};
 
+/// The header name for our secret key
+static SECRET_KEY_HEADER: HeaderName = HeaderName::from_static("secret-key");
+static SECRET_KEY_HEADER_REF: &'static HeaderName = &SECRET_KEY_HEADER;
+
 /// Return unauthorized if a function return an error
 macro_rules! check_unauth {
     ($func:expr) => {
@@ -37,27 +41,30 @@ macro_rules! check_unauth {
     };
 }
 
-#[axum::async_trait]
-impl<S: Send + Sync> FromRequestParts<S> for Key {
-    type Rejection = AuthReject;
-    /// Gets a secret key from a request
-    ///
-    /// # Arguments
-    ///
-    /// * `parts` - The request parts to extract our secret key from
-    /// * `_state` - Shared Thorium objects
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // extract the secret key headers for this user
-        if let Some(header_val) = parts.headers.get("secret-key") {
-            // try to cast our secret key header value to a str
-            if let Ok(header_str) = header_val.to_str() {
-                return Ok(Key {
-                    key: header_str.to_owned(),
-                });
-            }
-        }
-        // we failed to get our secret key
-        Err(AuthReject)
+impl Header for Key {
+    fn name() -> &'static HeaderName {
+        SECRET_KEY_HEADER_REF
+    }
+
+    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
+    where
+        Self: Sized,
+        I: Iterator<Item = &'i HeaderValue>,
+    {
+        // get our header value
+        let value = values.next().ok_or_else(headers::Error::invalid)?;
+        // cast this header into a secret key
+        let key = Key {
+            key: value.to_str().unwrap().to_owned(),
+        };
+        Ok(key)
+    }
+
+    fn encode<E: Extend<HeaderValue>>(&self, values: &mut E) {
+        // wrap our secret key
+        let value = HeaderValue::from_str(&self.key);
+        // add this to the header
+        values.extend(value);
     }
 }
 
@@ -80,8 +87,8 @@ macro_rules! hash_pw {
 /// generate a token
 macro_rules! token {
     () => {{
-        let mut rng = rand::thread_rng();
-        let token: [u8; 32] = rng.gen();
+        let mut rng = rand::rng();
+        let token: [u8; 32] = rng.random();
         hex::encode(token)
     }};
 }
@@ -1019,7 +1026,6 @@ impl IntoResponse for AuthReject {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for User
 where
     AppState: FromRef<S>,

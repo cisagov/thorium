@@ -2,7 +2,8 @@
 use async_once::AsyncOnce;
 use bb8_redis::{bb8::Pool, RedisConnectionManager};
 use once_cell::sync::Lazy;
-use scylla::{Session, SessionBuilder};
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
 use std::time::Duration;
 
 use crate::{client::ClientSettings, Conf, Error, Thorium};

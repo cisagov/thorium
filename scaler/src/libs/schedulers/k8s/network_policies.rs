@@ -1,10 +1,11 @@
 use futures::stream::{self, StreamExt};
+use hashbrown::HashMap;
 use k8s_openapi::api::networking::v1::{
     NetworkPolicy, NetworkPolicyEgressRule, NetworkPolicyIngressRule, NetworkPolicySpec,
 };
 use kube::api::{Api, DeleteParams, ListParams, ObjectList, PostParams};
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use thorium::{conf::BaseNetworkPolicy, models::NetworkPolicyRule};
 use uuid::Uuid;
 

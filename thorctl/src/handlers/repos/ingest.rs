@@ -3,6 +3,8 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use git2::build::RepoBuilder;
 use git2::{Cred, FetchOptions, ProxyOptions, RemoteCallbacks};
+use gix::bstr::ByteSlice;
+use gix::remote::Direction;
 use gix::Id;
 use kanal::{AsyncSender, Receiver, Sender};
 use owo_colors::OwoColorize;
@@ -263,7 +265,7 @@ fn crawl_all(
     for refer in refs.all().unwrap() {
         if let Ok(refer_ok) = refer {
             // detect if this is a branch that peels to a commit
-            if let gix::refs::TargetRef::Peeled(_) = refer_ok.target() {
+            if let gix::refs::TargetRef::Object(_) = refer_ok.target() {
                 // get this commitish request
                 if let Some((name, commitish_req)) = CommitishRequest::new_gix(&refer_ok)? {
                     // send this commitish to our ingestor
@@ -562,14 +564,12 @@ pub struct IngestWorker {
 }
 
 impl IngestWorker {
-    /// Clone a repo
-    async fn clone(
-        &mut self,
-        thorium_url: &str,
-        clone_url: String,
-        path: PathBuf,
-        name: &str,
-    ) -> Result<PathBuf, thorium::Error> {
+    /// Clone a repo from a remote url
+    async fn remote_clone(&self, remote_url: &str, path: &PathBuf) -> Result<PathBuf, Error> {
+        // update our bars message
+        self.bar.set_message("Parsing URL");
+        // try to parse our repos url
+        let (clone_url, thorium_url, name) = parse_url(&remote_url, &self.conf)?;
         // set that we are trying to clone from Thorium
         self.bar.refresh("Cloning From Thorium", BarKind::Unbound);
         let dl_req = if self.no_cache {
@@ -581,7 +581,7 @@ impl IngestWorker {
             // try to start downloading this repo
             self.thorium
                 .repos
-                .download_unpack(thorium_url, &RepoDownloadOpts::default(), &path)
+                .download_unpack(&thorium_url, &RepoDownloadOpts::default(), &path)
                 .await
         };
         // nest our repo with the right name to the target path
@@ -616,6 +616,15 @@ impl IngestWorker {
                 // return the path to our repo
                 Ok(nested)
             }
+        }
+    }
+
+    /// Clone a remote repo if it doesn't already exist
+    async fn clone(&self, job: &IngestJob, root: &PathBuf) -> Result<PathBuf, Error> {
+        // if this is a remote repo then clone it
+        match job {
+            IngestJob::Remote(remote_url) => self.remote_clone(remote_url, root).await,
+            IngestJob::Local(path) => Ok(path.clone()),
         }
     }
 
@@ -722,13 +731,41 @@ impl IngestWorker {
     }
 }
 
+/// Whether is a local or remote repo to ingest
+#[derive(Clone, Debug)]
+pub enum IngestJob {
+    /// Ingest a remote repo by url
+    Remote(String),
+    /// Ingest an already cloned repo from disk
+    Local(PathBuf),
+}
+
+impl IngestJob {
+    /// Get if this is a remote job
+    pub fn is_remote(&self) -> bool {
+        match self {
+            IngestJob::Remote(_) => true,
+            IngestJob::Local(_) => false,
+        }
+    }
+}
+
+impl std::fmt::Display for IngestJob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IngestJob::Remote(remote) => write!(f, "{remote}"),
+            IngestJob::Local(remote) => write!(f, "{remote:?}"),
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl Worker for IngestWorker {
     /// The command part of our args for this specific worker
     type Cmd = IngestRepos;
 
     /// The type of jobs to recieve
-    type Job = String;
+    type Job = IngestJob;
 
     /// An update for the repo ingest monitor
     type Monitor = RepoIngestMonitor;
@@ -766,31 +803,24 @@ impl Worker for IngestWorker {
     /// * `worker` - The worker to start
     async fn execute(&mut self, job: Self::Job) {
         // set this progress bars name
-        self.bar.rename(job.clone());
-        // update our bars message
-        self.bar.set_message("Parsing URL");
-        // try to parse our repos url
-        let (clone_url, thorium_url, name) = check!(self, parse_url(&job, &self.conf));
+        self.bar.rename(job.to_string());
         // build a unique root target path for this repo
-        let mut root = self.cmd.temp.clone();
-        root.push(Uuid::new_v4().to_string());
-        // clone our repo from Thorium or from an external source
-        let nested = check!(
-            self,
-            self.clone(&thorium_url, clone_url, root.clone(), &name)
-                .await,
-            &root
-        );
+        let root = self.cmd.temp.join(Uuid::new_v4().to_string());
+        // Clone or parse the target repo
+        let nested = check!(self, self.clone(&job, &root).await, &root);
         // get a list of references to crawl if any were passed
         let refs = self.cmd.references();
         // create a path to tar the repo
         let tarred = nested.with_extension("tar");
         // ingest this repo into Thorium
         check!(self, self.upload(nested, &tarred, refs).await, &root);
-        // clean up this repos dir
-        if let Err(error) = tokio::fs::remove_dir_all(root).await {
-            // log this io error
-            self.bar.error(error.to_string());
+        // only clean up local clone data if this is a remote clone
+        if job.is_remote() {
+            // clean up this repos dir if this is a remote
+            if let Err(error) = tokio::fs::remove_dir_all(root).await {
+                // log this io error
+                self.bar.error(error.to_string());
+            }
         }
         // send an update to our monitor
         if let Err(error) = self.monitor_tx.send(MonitorMsg::Update(())).await {

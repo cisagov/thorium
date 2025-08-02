@@ -2,7 +2,8 @@
 //!
 //! Currently we only support Kubernetes but that will likely change in the futrue.
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use hashbrown::HashMap;
+use std::collections::{BTreeMap, HashSet};
 use thorium::models::{ImageScaler, SystemSettings};
 use thorium::{Conf, Error, Thorium};
 

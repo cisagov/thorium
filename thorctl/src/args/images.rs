@@ -35,6 +35,14 @@ pub enum Images {
     /// Manage/list image bans
     #[clap(subcommand)]
     Bans(ImageBans),
+    /// Import images
+    #[clap(version, author)]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    Import(ImportImages),
+    /// Export images
+    #[clap(version, author)]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    Export(ExportImages),
 }
 
 /// A command to get info on some images
@@ -100,6 +108,7 @@ impl SearchSealed for DescribeImages {
         SearchParams {
             groups: &self.groups,
             tags: &[],
+            tags_case_insensitive: false,
             delimiter: '=',
             start: &None,
             end: &None,
@@ -327,4 +336,44 @@ pub struct DeleteImageNotification {
     pub image: String,
     /// The notification's unique ID
     pub id: Uuid,
+}
+
+/// A command to import images
+#[derive(Parser, Debug, Clone)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct ImportImages {
+    /// The images to import
+    pub images: Vec<String>,
+    /// The group to import images too
+    #[clap(short, long, required = true)]
+    pub group: String,
+    /// The directory to import our images from
+    #[clap(short, long, required = true)]
+    pub import: PathBuf,
+    /// The registry to upload these images too
+    #[clap(short, long)]
+    pub registry: Option<String>,
+    /// The registry url to override our domain in thorium with
+    #[clap(long)]
+    pub registry_override: Option<String>,
+    /// Skip pushing images to docker
+    #[clap(long)]
+    pub skip_push: bool,
+    /// Just update the registry
+    #[clap(long)]
+    pub migrate_registry: bool,
+}
+
+/// A command to export images
+#[derive(Parser, Debug, Clone)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub struct ExportImages {
+    /// The images to export
+    pub images: Vec<String>,
+    /// The group to export images from
+    #[clap(short, long, required = true)]
+    pub group: String,
+    /// The directory to export our images too
+    #[clap(short, long, default_value = "exports")]
+    pub output: PathBuf,
 }

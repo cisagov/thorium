@@ -2,7 +2,7 @@ book
 keys.yml
 *.txt
 target
-thorium.yml
+**/thorium*.yml
 *.bak
 binaries
 built

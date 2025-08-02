@@ -1,7 +1,8 @@
 //! Some utilities to help thoradm do what it needs to do
 
-use scylla::transport::errors::QueryError;
-use scylla::{QueryResult, Session};
+use scylla::client::session::Session;
+use scylla::errors::ExecutionError;
+use scylla::response::query_result::QueryResult;
 
 /// Drop a materialized view in scylla
 ///
@@ -14,7 +15,7 @@ pub async fn drop_materialized_view(
     ns: &str,
     name: &str,
     scylla: &Session,
-) -> Result<QueryResult, QueryError> {
+) -> Result<QueryResult, ExecutionError> {
     // Drop the target table
     let table_drop = format!(
         "drop materialized view if exists {ns}.{name}",
@@ -29,4 +30,9 @@ pub async fn drop_materialized_view(
 pub trait Utils {
     /// The name of the table we are operating on
     fn name() -> &'static str;
+
+    /// Get the pretty name of the table
+    fn pretty_name() -> String {
+        Self::name().replace('_', " ")
+    }
 }

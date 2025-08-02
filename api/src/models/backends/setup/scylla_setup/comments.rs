@@ -1,7 +1,7 @@
 //! Setup the coments tables/prepared statements in Scylla
 
-use scylla::prepared_statement::PreparedStatement;
-use scylla::Session;
+use scylla::client::session::Session;
+use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 

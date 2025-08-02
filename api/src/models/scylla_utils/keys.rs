@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 pub trait KeySupport {
     // require scylla bounds only if scylla-utils is enabled
     cfg_if::cfg_if! {
-        if #[cfg(feature = "scylla-utils")] {
+        // do not enable the utoipa requirements if the api feature is not enabled
+        if #[cfg(all(feature = "scylla-utils", not(feature = "api")))] {
             /// The unique key used to identify the thing in scylla
             type Key: Clone
                 + Serialize
@@ -20,7 +21,17 @@ pub trait KeySupport {
                 + PartialEq
                 + std::fmt::Debug
                 + scylla::serialize::value::SerializeValue
-                + for<'frame, 'metadata> scylla::deserialize::DeserializeValue<'frame, 'metadata>;
+                + for<'frame, 'metadata> scylla::deserialize::value::DeserializeValue<'frame, 'metadata>;
+        } else if #[cfg(all(feature = "api", feature = "scylla-utils"))] {
+            /// The unique key used to identify the thing in scylla
+            type Key: Clone
+                + Serialize
+                + for<'d> Deserialize<'d>
+                + PartialEq
+                + std::fmt::Debug
+                + utoipa::ToSchema
+                + scylla::serialize::value::SerializeValue
+                + for<'frame, 'metadata> scylla::deserialize::value::DeserializeValue<'frame, 'metadata>;
         } else {
             /// The unique key used to identify the thing in scylla
             type Key: Clone

@@ -6,9 +6,10 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
-use scylla::prepared_statement::PreparedStatement;
-use scylla::transport::errors::QueryError;
-use scylla::{DeserializeRow, Session};
+use scylla::client::session::Session;
+use scylla::errors::{ExecutionError, PrepareError};
+use scylla::statement::prepared::PreparedStatement;
+use scylla::DeserializeRow;
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ use std::sync::Arc;
 use thorium::Conf;
 use uuid::Uuid;
 
+use crate::args::BackupComponents;
 use crate::backup::{utils, Backup, Restore, S3Backup, S3Restore, Scrub, Utils};
 use crate::Error;
 
@@ -49,6 +51,11 @@ impl Utils for Comment {
 
 #[async_trait::async_trait]
 impl Backup for Comment {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::Comments
+    }
+
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -58,7 +65,7 @@ impl Backup for Comment {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         // build logs get prepared statement
         scylla
             .prepare(format!(
@@ -90,7 +97,7 @@ impl Scrub for Comment {}
 #[async_trait::async_trait]
 impl Restore for Comment {
     /// The steps to once run before restoring data
-    async fn prep(scylla: &Session, ns: &str) -> Result<(), QueryError> {
+    async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
         utils::drop_materialized_view(ns, "comments_by_id", scylla).await?;
         Ok(())
@@ -105,7 +112,7 @@ impl Restore for Comment {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         scylla
             .prepare(format!(
                 "INSERT INTO {}.{} \
@@ -199,6 +206,11 @@ impl Restore for Comment {
 
 #[async_trait::async_trait]
 impl S3Backup for Comment {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::CommentAttachments
+    }
+
     /// Get the comment attachments and where to write them off to disk at
     ///
     /// # Arguments

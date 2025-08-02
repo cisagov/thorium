@@ -7,6 +7,7 @@ use thorium_derive::ScyllaStoreJson;
 /// The components forming a unique key to access a pipeline's data in Scylla;
 /// these components may make up only part of a partition key
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(ScyllaStoreJson))]
 pub struct PipelineKey {
     /// The group the pipeline is in

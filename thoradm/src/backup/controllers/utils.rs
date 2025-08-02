@@ -2,7 +2,8 @@
 
 use std::time::Duration;
 
-use scylla::{Session, SessionBuilder};
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
 use thorium::Conf;
 
 use crate::Error;

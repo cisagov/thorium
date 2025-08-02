@@ -7,43 +7,43 @@ edition = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
-tokio = { version = "1.3", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1.45", features = ["full"] }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 clap = { version = "4", features = ["derive"] }
-dirs = "5"
-config = { version = "0.14", features = ["yaml"] }
+dirs = "6"
+config = { version = "0.15", features = ["yaml"] }
 chrono = { version = "0.4", features = ["serde"] }
-gethostname = "0.4"
+gethostname = "1.0"
 futures = "0.3"
 uuid = { version = "1", features = ["serde", "v4"]}
-cart-rs = { version = "*", path = "../../cart-rs"}
+cart-rs = { version = "*", path = "../cart-rs"}
 walkdir = "2"
 async-trait = "0.1"
 crossbeam = "0.8"
-bincode = "1.3.3"
-sysinfo = "0.28"
+bincode = "2.0.1"
+sysinfo = "0.35"
 openssl = "*"
 tracing = { version = "0.1" }
-opentelemetry = { version = "0.19", features = ["rt-tokio", "trace"] }
+opentelemetry = { version = "0.30", features = ["trace"] }
 semver = { version = "1", features = ["serde"] }
 path-clean = { version = "1" }
-itertools = "0.13"
+itertools = "0.14"
 regex = "1.11"
-infer = { version = "0.16.0", default-features = false, features = ["std"] }
+infer = { version = "0.19.0", default-features = false, features = ["std"] }
 
 # enable cgroups support for linux
 [target.'cfg(target_os = "linux")'.dependencies]
-thorium = { version = "1.0.0", path="../api", default-features = false, features = ["client", "cgroups", "crossbeam-err", "trace"]}
+thorium = { version = "1.1.0", path="../api", default-features = false, features = ["client", "cgroups", "crossbeam-err", "trace"]}
 cgroups-rs = "0.3"
 controlgroup = "0.3"
 
 
 # disable cgroups support when on windows
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
-thorium = { version = "1.0.0", path="../api", default-features = false, features = ["client", "crossbeam-err", "trace"]}
+thorium = { version = "1.1.0", path="../api", default-features = false, features = ["client", "crossbeam-err", "trace"]}
 
 
 [features]

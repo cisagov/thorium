@@ -51,15 +51,14 @@ $grid-breakpoints: (
 
 .tag-item {
   display: inline-flex;
-  border-radius: 12px;
+  border-radius: 6px;
   font-size: 12px;
-  border-radius: 20px;
   padding: 0.1rem 0.4rem 0.1rem 0.4rem;
 }
 
 .tag-item.clickable {
   display: inline-flex;
-  border-radius: 12px;
+  border-radius: 6px;
   font-size: 12px;
   padding: 0.1rem 0.4rem 0.1rem 0.4rem;
   cursor: pointer;

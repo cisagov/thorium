@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use chrono::prelude::*;
 use futures::stream::{self, StreamExt};
 use itertools::Itertools;
-use scylla::QueryResult;
+use scylla::response::query_result::QueryResult;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use tracing::{event, instrument, Level};
@@ -254,6 +254,12 @@ pub async fn create(user: &User, req: RepoRequest, shared: &Shared) -> Result<St
                     )
                     .await?;
             }
+            // create a list to store our keys
+            let mut keys = Vec::with_capacity(req.groups.len());
+            // build the keys to update
+            super::keys::repos::census_keys(&mut keys, &req.groups, year, bucket, shared);
+            // update our census info for these commitishes
+            super::census::incr_cache(keys, shared).await?;
             // create a submission chunk based on what we just submitted
             let submission = RepoSubmissionChunk {
                 groups: req.groups.clone(),
@@ -739,6 +745,8 @@ pub async fn add_commitishes(
     event!(Level::INFO, commitishes=&req.commitishes.len(), end = req.end);
     // make sure this repo data blob exists for this repo
     repo_data_exists(&repo.url, repo_data, shared).await?;
+    // instance a list to store our census keys to update
+    let mut keys = Vec::with_capacity(req.groups.len() * req.commitishes.len());
     // save the commit data into scylla
     for (key, commitish) in req.commitishes {
         // get this commitishes timestamp
@@ -764,7 +772,11 @@ pub async fn add_commitishes(
                 (kind, group, year, bucket, &repo.url, timestamp, &key, &repo_data)
             ).await?;
         }
+        // build the keys to update
+        super::keys::commitishes::census_keys(&mut keys, &repo.url, kind, &req.groups, year, bucket, shared);
     }
+    // update our census info for these commitishes
+    super::census::incr_cache(keys, shared).await?;
     // prune any orphaned repo data blobs if this the final commit batch
     if req.end {
         // if we have an earliest set then try to update it

@@ -7,8 +7,7 @@ use crate::models::{KeySupport, TagType};
 // dependencies required for api
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
-        use crate::models::User;
-        use crate::models::{TagDeleteRequest, TagRequest};
+        use crate::models::{TagDeleteRequest, TagRequest, User};
         use crate::utils::{ApiError, Shared};
     }
 }

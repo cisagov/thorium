@@ -5,7 +5,7 @@ import { Alert, Button, Card, Col, Form, Pagination, Row } from 'react-bootstrap
 import { UploadDropzone } from '@components/shared/uploaddropzone';
 import { downloadAttachment, getFileDetails, postFileComments } from '@thorpi';
 
-const Comments = ({ sha256 }) => {
+export const Comments = ({ sha256 }) => {
   const [newComment, setNewComment] = useState('');
   const [filesArray, setFilesArray] = useState([]);
   const [comments, setComments] = useState([]);
@@ -201,5 +201,3 @@ const Comments = ({ sha256 }) => {
     </div>
   );
 };
-
-export default Comments;

@@ -337,7 +337,7 @@ async fn create_notification(
         ("image" = String, Path, description = "The name of the image whose notifications are being requested"),
     ),
     responses(
-        (status = 200, description = "Notifications returned for image", body = Vec<Notification<Image>>),
+        //(status = 200, description = "Notifications returned for image", body = Vec<Notification<Image>>),
         (status = 401, description = "This user is not authorized to access this route"),
     ),
     security(
@@ -423,20 +423,20 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/api/images/", post(create))
-        .route("/api/images/data/:group/:image", get(get_image))
-        .route("/api/images/:group/", get(list))
-        .route("/api/images/:group/details/", get(list_details))
+        .route("/api/images/data/{group}/{image}", get(get_image))
+        .route("/api/images/{group}/", get(list))
+        .route("/api/images/{group}/details/", get(list_details))
         .route(
-            "/api/images/:group/:image",
+            "/api/images/{group}/{image}",
             patch(update).delete(delete_image),
         )
         .route("/api/images/runtimes/update", post(runtimes_update))
         .route(
-            "/api/images/notifications/:group/:image",
+            "/api/images/notifications/{group}/{image}",
             get(get_notifications).post(create_notification),
         )
         .route(
-            "/api/images/notifications/:group/:image/:id",
+            "/api/images/notifications/{group}/{image}/{id}",
             delete(delete_notification),
         )
 }

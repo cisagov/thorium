@@ -1,6 +1,6 @@
 //! The arguments for the backups and data restorations in Thorium
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 use thorium::models::{
     HostPathWhitelistUpdate, SystemSettingsResetParams, SystemSettingsUpdate,
@@ -70,9 +70,41 @@ pub enum BackupSubCommands {
     Restore(RestoreBackup),
 }
 
+/// Define the default backup components
+fn default_backup_components() -> Vec<BackupComponents> {
+    // return all by default
+    vec![BackupComponents::All]
+}
+
+/// The tables that can be backed up
+// JEHAMZA_TODO: wish this was dynamic...
+#[derive(Debug, Clone, Copy, strum::Display, ValueEnum, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "kebab-case")]
+pub enum BackupComponents {
+    All,
+    CommentAttachments,
+    Comments,
+    Commitish,
+    CommitishList,
+    Nodes,
+    Redis,
+    RepoData,
+    RepoList,
+    ResultFiles,
+    Results,
+    ResultsStream,
+    S3Ids,
+    S3IdsObjects,
+    SamplesList,
+    Tags,
+}
+
 /// Backup a Thorium cluster
 #[derive(Parser, Debug, Clone)]
 pub struct NewBackup {
+    /// The components to backup
+    #[clap(value_enum, default_values_t = default_backup_components(), value_delimiter = ',')]
+    pub components: Vec<BackupComponents>,
     /// Where to store our backups
     #[clap(short, long, default_value = "ThoriumBackups")]
     pub output: PathBuf,
@@ -235,10 +267,46 @@ pub enum CensusSubCommands {
     New(NewCensus),
 }
 
+/// The different kinds of censuses to take
+#[derive(Parser, Debug, Copy, Clone, clap::ValueEnum, PartialEq, Eq)]
+pub enum CensusKinds {
+    /// Take a census of all data
+    All,
+    /// Take a census of tag data
+    Tags,
+    /// Take a census of tag data case-insensitive
+    TagsCaseInsensitive,
+    /// Take a census of files data
+    Files,
+    /// Take a census of repo data
+    Repos,
+    /// Take a census of commitish data
+    Commitishes,
+}
+
+impl std::fmt::Display for CensusKinds {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            &CensusKinds::All => write!(f, "All"),
+            &CensusKinds::Tags => write!(f, "Tags"),
+            &CensusKinds::TagsCaseInsensitive => write!(f, "TagsCaseInsensitive"),
+            &CensusKinds::Files => write!(f, "Files"),
+            &CensusKinds::Repos => write!(f, "Repos"),
+            &CensusKinds::Commitishes => write!(f, "Commitishes"),
+        }
+    }
+}
+
 /// Take a new census
 #[derive(Parser, Debug, Clone)]
 pub struct NewCensus {
+    /// The data we should take a census of
+    #[clap(default_value = "all")]
+    pub census_kinds: Vec<CensusKinds>,
     /// The chunk multiplier to use with our worker count
     #[clap(short, long, default_value = "100")]
     pub multiplier: u64,
+    /// Whether this census should only report counts but not save them to the DB
+    #[clap(short, long)]
+    pub dry_run: bool,
 }

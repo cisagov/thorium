@@ -13,11 +13,15 @@ pub enum Error {
     /// A Thorium API error
     Thorium(thorium::Error),
     /// A Scylla new session error occured
-    ScyllaNewSession(scylla::transport::errors::NewSessionError),
+    ScyllaNewSession(scylla::errors::NewSessionError),
+    /// An error preparing a scylla statement
+    ScyllaPrepareSatement(scylla::errors::PrepareError),
     /// A Scylla query error occured
-    ScyllaQuery(scylla::transport::errors::QueryError),
+    ScyllaQuery(scylla::errors::ExecutionError),
+    /// A Scylla paged query error occured
+    ScyllaPagedQuery(scylla::errors::PagerExecutionError),
     /// A Scylla next row error occured
-    ScyllaNextRow(scylla::transport::iterator::NextRowError),
+    ScyllaNextRow(scylla::client::pager::NextRowError),
     /// A Redis error
     Redis(redis::RedisError),
     /// A tokio join error
@@ -51,6 +55,8 @@ pub enum Error {
     RkyvDesererialize(String),
     /// An error from stripping a prefix from a path
     StripPrefix(std::path::StripPrefixError),
+    // An error from dialoguer
+    Dialoguer(dialoguer::Error),
 }
 
 impl Error {
@@ -70,7 +76,9 @@ impl std::fmt::Display for Error {
             Error::Generic(err) => write!(f, "{err}"),
             Error::Thorium(err) => write!(f, "Thorium Client Error: {err}"),
             Error::ScyllaNewSession(err) => write!(f, "ScyllaNewSession Error: {err}"),
+            Error::ScyllaPrepareSatement(err) => write!(f, "ScyllaPreparedSatement Error: {err}"),
             Error::ScyllaQuery(err) => write!(f, "ScyllaQuery Error: {err}"),
+            Error::ScyllaPagedQuery(err) => write!(f, "ScyllaPagedQuery Error: {err}"),
             Error::ScyllaNextRow(err) => write!(f, "ScyllaNextRow Error: {err}"),
             Error::Redis(err) => write!(f, "Redis Error: {err}"),
             Error::TokioJoin(err) => write!(f, "TokioJoin Error: {err}"),
@@ -94,6 +102,7 @@ impl std::fmt::Display for Error {
             Error::KanalRecv(err) => write!(f, "KanalRecv Error: {err}"),
             Error::RkyvDesererialize(err) => write!(f, "RkyvDeserialize Error: {err}"),
             Error::StripPrefix(err) => write!(f, "StripPrefix Error: {err}"),
+            Error::Dialoguer(err) => write!(f, "Dialoguer: {err}"),
         }
     }
 }
@@ -104,20 +113,32 @@ impl From<thorium::Error> for Error {
     }
 }
 
-impl From<scylla::transport::errors::NewSessionError> for Error {
-    fn from(error: scylla::transport::errors::NewSessionError) -> Self {
+impl From<scylla::errors::NewSessionError> for Error {
+    fn from(error: scylla::errors::NewSessionError) -> Self {
         Error::ScyllaNewSession(error)
     }
 }
 
-impl From<scylla::transport::errors::QueryError> for Error {
-    fn from(error: scylla::transport::errors::QueryError) -> Self {
+impl From<scylla::errors::PrepareError> for Error {
+    fn from(error: scylla::errors::PrepareError) -> Self {
+        Error::ScyllaPrepareSatement(error)
+    }
+}
+
+impl From<scylla::errors::ExecutionError> for Error {
+    fn from(error: scylla::errors::ExecutionError) -> Self {
         Error::ScyllaQuery(error)
     }
 }
 
-impl From<scylla::transport::iterator::NextRowError> for Error {
-    fn from(error: scylla::transport::iterator::NextRowError) -> Self {
+impl From<scylla::errors::PagerExecutionError> for Error {
+    fn from(error: scylla::errors::PagerExecutionError) -> Self {
+        Error::ScyllaPagedQuery(error)
+    }
+}
+
+impl From<scylla::client::pager::NextRowError> for Error {
+    fn from(error: scylla::client::pager::NextRowError) -> Self {
         Error::ScyllaNextRow(error)
     }
 }
@@ -324,5 +345,11 @@ impl From<CheckArchiveError<StructCheckError, DefaultValidatorError>> for Error 
 impl From<std::path::StripPrefixError> for Error {
     fn from(error: std::path::StripPrefixError) -> Self {
         Error::StripPrefix(error)
+    }
+}
+
+impl From<dialoguer::Error> for Error {
+    fn from(error: dialoguer::Error) -> Self {
+        Error::Dialoguer(error)
     }
 }

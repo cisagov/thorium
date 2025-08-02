@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use chrono::{Duration, Utc};
-use std::collections::{BTreeMap, HashMap};
+use hashbrown::HashMap;
+use std::collections::BTreeMap;
 use thorium::models::{Image, Pools, Requisition, Resources, SpawnedUpdate, Worker};
 use thorium::same;
 

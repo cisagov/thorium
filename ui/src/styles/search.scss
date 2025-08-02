@@ -18,10 +18,6 @@ $grid-breakpoints: (
   margin-top: 0.1em !important;
 }
 
-.search-main-col {
-  flex: 1 !important;
-}
-
 .limit-field {
   max-width: 85px !important;
 }
@@ -38,13 +34,34 @@ $grid-breakpoints: (
   display: none;
 }
 
-.groups-col {
+.sha256-col {
+  flex-grow: 4;
+}
+
+.group-col {
   flex-wrap: wrap;
+  flex-grow: 2;
+}
+
+.index-col {
+  flex-wrap: wrap;
+  flex-grow: 1;
+}
+
+.search-header {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .search-bar {
   max-width: 800px;
   width: 100%;
+}
+
+.search-input {
+  padding-right: 50px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 // 1400px
@@ -76,6 +93,10 @@ $grid-breakpoints: (
   .sha256-col {
     min-width: 0;
   }
+}
+
+.param-sub-text {
+  font-size: 11pt;
 }
 
 // 768px

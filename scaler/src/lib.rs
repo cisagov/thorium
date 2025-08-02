@@ -1,6 +1,5 @@
 //! The scaler responsible for scaling workers for Thorium
 #![feature(hash_set_entry)]
-#![feature(hash_raw_entry)]
 #![feature(btree_extract_if)]
 
 mod args;

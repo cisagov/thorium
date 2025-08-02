@@ -1,6 +1,7 @@
 //! The shared scylla utilties for Thoradm
 
-use scylla::{Session, SessionBuilder};
+use scylla::client::session::Session;
+use scylla::client::session_builder::SessionBuilder;
 use std::time::Duration;
 use thorium::Conf;
 

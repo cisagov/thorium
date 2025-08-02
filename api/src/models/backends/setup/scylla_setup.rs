@@ -3,14 +3,13 @@
 use chrono::prelude::*;
 use chrono::Duration;
 use futures::{poll, task::Poll};
-use scylla::transport::session_builder::GenericSessionBuilder;
-use scylla::{Session, SessionBuilder};
+use scylla::client::session::Session;
+use scylla::client::session_builder::{GenericSessionBuilder, SessionBuilder};
 use std::time::Duration as StdDuration;
 
 mod comments;
 mod commitishes;
 mod events;
-mod exports;
 mod logs;
 mod network_policies;
 mod nodes;
@@ -25,7 +24,6 @@ mod tools;
 use comments::CommentsPreparedStatements;
 use commitishes::CommitishesPreparedStatements;
 use events::EventsPreparedStatements;
-use exports::ExportsPreparedStatements;
 use logs::LogsPreparedStatements;
 use network_policies::NetworkPoliciesPreparedStatements;
 use nodes::NodesPreparedStatements;
@@ -47,8 +45,6 @@ pub struct ScyllaPreparedStatements {
     pub commitishes: CommitishesPreparedStatements,
     /// The events related prepared statements
     pub events: EventsPreparedStatements,
-    /// The exports related prepared statements
-    pub exports: ExportsPreparedStatements,
     /// The logs related prepared statements
     pub logs: LogsPreparedStatements,
     /// The network policies related prepared statements
@@ -81,7 +77,6 @@ impl ScyllaPreparedStatements {
         let comments = CommentsPreparedStatements::new(session, config).await;
         let commitishes = CommitishesPreparedStatements::new(session, config).await;
         let events = EventsPreparedStatements::new(session, config).await;
-        let exports = ExportsPreparedStatements::new(session, config).await;
         let logs = LogsPreparedStatements::new(session, config).await;
         let network_policies = NetworkPoliciesPreparedStatements::new(session, config).await;
         let nodes = NodesPreparedStatements::new(session, config).await;
@@ -96,7 +91,6 @@ impl ScyllaPreparedStatements {
             comments,
             commitishes,
             events,
-            exports,
             logs,
             network_policies,
             nodes,

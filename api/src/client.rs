@@ -11,7 +11,6 @@ pub mod conf;
 mod cursors;
 mod error;
 mod events;
-mod exports;
 mod files;
 mod groups;
 mod helpers;
@@ -28,13 +27,13 @@ mod system;
 mod traits;
 mod updates;
 mod users;
+mod utils;
 
 pub use basic::Basic;
 pub use conf::{ClientSettings, CtlConf};
 pub use cursors::{Cursor, LogsCursor, SearchDate};
 pub use error::Error;
 pub use events::Events;
-pub use exports::Exports;
 pub use files::Files;
 pub use groups::Groups;
 pub use images::Images;
@@ -44,6 +43,9 @@ pub use network_policies::NetworkPolicies;
 pub use pipelines::Pipelines;
 pub use reactions::Reactions;
 pub use repos::Repos;
+pub use search::events::results::ResultSearchEvents;
+pub use search::events::tags::TagSearchEvents;
+pub use search::events::{SearchEvents, SearchEventsClient};
 pub use search::Search;
 pub use streams::Streams;
 pub use system::System;
@@ -62,7 +64,6 @@ cfg_if::cfg_if! {
         pub use pipelines::PipelinesBlocking;
         pub use reactions::ReactionsBlocking;
         pub use repos::ReposBlocking;
-        pub use exports::ExportsBlocking;
         pub use search::SearchBlocking;
         pub use streams::StreamsBlocking;
         pub use system::SystemBlocking;
@@ -234,7 +235,6 @@ impl ThoriumClientBuilder {
         let users = Users::new(&self.host, &auth_str, &client);
         let system = System::new(&self.host, &auth_str, &client);
         let search = Search::new(&self.host, &auth_str, &client);
-        let exports = Exports::new(&self.host, &auth_str, &client);
         let files = Files::new(&self.host, &auth_str, &client);
         let repos = Repos::new(&self.host, &auth_str, &client);
         let updates = Updates::new(&self.host, &auth_str, &client);
@@ -252,7 +252,6 @@ impl ThoriumClientBuilder {
             users,
             system,
             search,
-            exports,
             files,
             repos,
             events,
@@ -311,7 +310,6 @@ impl ThoriumClientBuilder {
         let users = UsersBlocking::new(&self.host, &auth_str, &client);
         let system = SystemBlocking::new(&self.host, &auth_str, &client);
         let search = SearchBlocking::new(&self.host, &auth_str, &client);
-        let exports = ExportsBlocking::new(&self.host, &auth_str, &client);
         let files = FilesBlocking::new(&self.host, &auth_str, &client);
         let repos = ReposBlocking::new(&self.host, &auth_str, &client);
         let events = EventsBlocking::new(&self.host, &auth_str);
@@ -328,7 +326,6 @@ impl ThoriumClientBuilder {
             users,
             system,
             search,
-            exports,
             files,
             repos,
             events,
@@ -365,8 +362,6 @@ pub struct Thorium {
     pub system: System,
     /// Handles search routes in Thorium
     pub search: Search,
-    /// Handles exports routes in Thorium
-    pub exports: Exports,
     /// Handles files routes in Thorium
     pub files: Files,
     /// Handles repos routes in Thorium
@@ -411,8 +406,6 @@ pub struct ThoriumBlocking {
     pub system: SystemBlocking,
     /// Handles search routes in Thorium
     pub search: SearchBlocking,
-    /// Handles exports routes in Thorium
-    pub exports: ExportsBlocking,
     /// Handles files routes in Thorium
     pub files: FilesBlocking,
     /// Handles repos routes in Thorium

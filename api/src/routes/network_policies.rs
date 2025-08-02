@@ -327,13 +327,13 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route(
-            "/api/network-policies/:name",
+            "/api/network-policies/{name}",
             get(get_network_policy).patch(update).delete(delete),
         )
         .route("/api/network-policies", post(create))
         .route("/api/network-policies/", get(list))
         .route(
-            "/api/network-policies/default/:group/",
+            "/api/network-policies/default/{group}/",
             get(get_all_default),
         )
         .route("/api/network-policies/details/", get(list_details))

@@ -780,11 +780,11 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route("/api/system/nodes/", post(register_node).get(list_nodes))
         .route("/api/system/nodes/details/", get(list_node_details))
         .route(
-            "/api/system/nodes/:cluster/:node",
+            "/api/system/nodes/{cluster}/{node}",
             get(get_node).patch(update_node),
         )
         .route(
-            "/api/system/worker/:scaler_or_name",
+            "/api/system/worker/{scaler_or_name}",
             post(register_worker)
                 .delete(delete_workers)
                 .get(get_worker)

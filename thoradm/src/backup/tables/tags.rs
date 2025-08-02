@@ -6,15 +6,17 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
-use scylla::prepared_statement::PreparedStatement;
-use scylla::transport::errors::QueryError;
-use scylla::{DeserializeRow, Session};
+use scylla::client::session::Session;
+use scylla::errors::{ExecutionError, PrepareError};
+use scylla::statement::prepared::PreparedStatement;
+use scylla::DeserializeRow;
 use std::hash::Hasher;
 use std::sync::Arc;
 use thorium::models::backends::TagSupport;
 use thorium::models::{TagRequest, TagType};
 use thorium::Conf;
 
+use crate::args::BackupComponents;
 use crate::backup::{utils, Backup, Restore, Scrub, Utils};
 use crate::Error;
 
@@ -50,6 +52,11 @@ impl Utils for Tag {
 
 #[async_trait::async_trait]
 impl Backup for Tag {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::Tags
+    }
+
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -59,7 +66,7 @@ impl Backup for Tag {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         // build tags get prepared statement
         scylla
             .prepare(format!(
@@ -95,9 +102,10 @@ impl Scrub for Tag {}
 #[async_trait::async_trait]
 impl Restore for Tag {
     /// The steps to once run before restoring data
-    async fn prep(scylla: &Session, ns: &str) -> Result<(), QueryError> {
+    async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
         utils::drop_materialized_view(ns, "tags_by_item", scylla).await?;
+        utils::drop_materialized_view(ns, "tags_case_insensitive", scylla).await?;
         Ok(())
     }
 
@@ -110,12 +118,12 @@ impl Restore for Tag {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         scylla
             .prepare(format!(
                 "INSERT INTO {}.{} \
-                (type, group, item, year, bucket, key, value, uploaded) \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (type, group, item, year, bucket, key, value, uploaded, key_lower, value_lower) \
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 ns,
                 Self::name(),
             ))
@@ -161,6 +169,9 @@ impl Restore for Tag {
             let uploaded = row.uploaded.deserialize(&mut rkyv::Infallible)?;
             // calculate the new bucket
             let bucket = thorium::utils::helpers::partition(uploaded, row.year, partition_size);
+            // get the lowercase versions of key/value
+            let key_lower = row.key.to_lowercase();
+            let value_lower = row.value.to_lowercase();
             // restore this row back to scylla
             let query = scylla.execute_unpaged(
                 prepared,
@@ -173,6 +184,8 @@ impl Restore for Tag {
                     row.key.as_str(),
                     row.value.as_str(),
                     uploaded,
+                    key_lower,
+                    value_lower,
                 ),
             );
             // add this to our futures

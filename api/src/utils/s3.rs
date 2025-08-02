@@ -865,7 +865,7 @@ impl S3Client {
         // get the password to use
         let password = params.get_password(shared).as_bytes();
         // setup our zip options
-        let opts = zip::write::FileOptions::default().with_deprecated_encryption(password);
+        let opts = zip::write::SimpleFileOptions::default().with_deprecated_encryption(password);
         // build our writer
         let mut writer = ZipWriter::new(std::io::Cursor::new(vec![]));
         // start our file

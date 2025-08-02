@@ -242,6 +242,11 @@ a.dropdown-toggle.nav-link {
     background-color: var(--thorium-highlight-panel-bg);
   }
 }
+
+.accordion-button::-webkit-scrollbar {
+  display: none !important;
+}
+
 // -----------------------------------------------------------------------------
 // ----------------------------------- Forms -----------------------------------
 .form-label {

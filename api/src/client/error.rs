@@ -41,6 +41,8 @@ pub enum Error {
     GitCommit(gix::object::commit::Error),
     /// An error from casting a git object to a target type
     GitObjectTryInto(gix::object::try_into::Error),
+    /// An error from parsing a git date
+    GitDateParse(gix_date::parse::Error),
     /// An error from converting a type to a Uuid
     Uuid(uuid::Error),
     /// An error from loading a config
@@ -94,6 +96,13 @@ pub enum Error {
     // An error from sending a crossbeam message
     #[cfg(feature = "crossbeam-err")]
     CrossbeamSend(crossbeam::channel::SendError<String>),
+    #[cfg(feature = "scylla-utils")]
+    ScyllaType(scylla::deserialize::TypeCheckError),
+    #[cfg(feature = "scylla-utils")]
+    ScyllaNextRow(scylla::errors::NextRowError),
+    /// An error from dialoguer
+    #[cfg(feature = "dialoguer-err")]
+    Dialoguer(dialoguer::Error),
 }
 
 impl Error {
@@ -142,6 +151,7 @@ impl Error {
             Error::GitDecodeObject(err) => Some(err.to_string()),
             Error::GitCommit(err) => Some(err.to_string()),
             Error::GitObjectTryInto(err) => Some(err.to_string()),
+            Error::GitDateParse(err) => Some(err.to_string()),
             Error::Uuid(err) => Some(err.to_string()),
             Error::Config(err) => Some(err.to_string()),
             Error::Elastic(err) => Some(err.to_string()),
@@ -172,6 +182,12 @@ impl Error {
             Error::KanalSend(err) => Some(err.to_string()),
             #[cfg(feature = "kanal-err")]
             Error::KanalRecv(err) => Some(err.to_string()),
+            #[cfg(feature = "scylla-utils")]
+            Error::ScyllaType(err) => Some(err.to_string()),
+            #[cfg(feature = "scylla-utils")]
+            Error::ScyllaNextRow(err) => Some(err.to_string()),
+            #[cfg(feature = "dialoguer-err")]
+            Error::Dialoguer(err) => Some(err.to_string()),
         }
     }
 
@@ -194,6 +210,7 @@ impl Error {
             Error::GitDecodeObject(_) => "GitDecodeObject",
             Error::GitCommit(_) => "GitCommit",
             Error::GitObjectTryInto(_) => "GitObjectTryInto",
+            Error::GitDateParse(_) => "GitDateParse",
             Error::GitOpen(_) => "GitOpen",
             Error::Uuid(_) => "Uuid",
             Error::Config(_) => "Config",
@@ -225,6 +242,12 @@ impl Error {
             Error::KanalRecv(_) => "KanalRecv",
             #[cfg(feature = "crossbeam-err")]
             Error::CrossbeamSend(_) => "Crossbeam",
+            #[cfg(feature = "scylla-utils")]
+            Error::ScyllaType(_) => "ScyllaType",
+            #[cfg(feature = "scylla-utils")]
+            Error::ScyllaNextRow(_) => "ScyllaNextRow",
+            #[cfg(feature = "dialoguer-err")]
+            Error::Dialoguer(_) => "Dialoguer",
         }
     }
 }
@@ -334,6 +357,12 @@ impl From<gix::object::commit::Error> for Error {
 impl From<gix::object::try_into::Error> for Error {
     fn from(error: gix::object::try_into::Error) -> Self {
         Error::GitObjectTryInto(error)
+    }
+}
+
+impl From<gix_date::parse::Error> for Error {
+    fn from(error: gix_date::parse::Error) -> Self {
+        Error::GitDateParse(error)
     }
 }
 
@@ -479,5 +508,26 @@ impl From<kanal::SendError> for Error {
 impl From<kanal::ReceiveError> for Error {
     fn from(error: kanal::ReceiveError) -> Self {
         Error::KanalRecv(error)
+    }
+}
+
+#[cfg(feature = "scylla-utils")]
+impl From<scylla::deserialize::TypeCheckError> for Error {
+    fn from(error: scylla::deserialize::TypeCheckError) -> Self {
+        Error::ScyllaType(error)
+    }
+}
+
+#[cfg(feature = "scylla-utils")]
+impl From<scylla::errors::NextRowError> for Error {
+    fn from(error: scylla::errors::NextRowError) -> Self {
+        Error::ScyllaNextRow(error)
+    }
+}
+
+#[cfg(feature = "dialoguer-err")]
+impl From<dialoguer::Error> for Error {
+    fn from(error: dialoguer::Error) -> Self {
+        Error::Dialoguer(error)
     }
 }

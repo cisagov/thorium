@@ -7,8 +7,8 @@ use axum::http::request::Parts;
 use chrono::prelude::*;
 use futures_util::stream::{self, StreamExt};
 use futures_util::{Future, TryStreamExt};
-use scylla::transport::errors::QueryError;
-use scylla::QueryResult;
+use scylla::errors::ExecutionError;
+use scylla::response::query_result::QueryResult;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tracing::instrument;
@@ -211,6 +211,12 @@ impl Sample {
         let Some(hashes) = hashes_opt else {
             return bad!(format!("Data entry must be set!"));
         };
+        // make sure we actually have groups
+        if form.groups.is_empty() {
+            return bad!(format!(
+                "No groups provided! Sample must be uploaded to at least one group."
+            ));
+        }
         // make sure we actually have access to all requested groups
         let groups =
             Group::authorize_check_allow_all(user, &form.groups, GroupAllowAction::Files, shared)
@@ -613,12 +619,14 @@ impl Sample {
     /// * `dedupe` - Whether to dedupe when listing samples or not
     /// * `shared` - Shared objects in Thorium
     #[instrument(name = "Sample::list", skip(user, shared), err(Debug))]
-    pub async fn list(
+    pub async fn list<P: Into<FileListParams> + std::fmt::Debug>(
         user: &User,
-        mut params: FileListParams,
+        params: P,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<ApiCursor<SampleListLine>, ApiError> {
+        // convert our params if needed
+        let mut params = params.into();
         // authorize the groups to list files from
         user.authorize_groups(&mut params.groups, shared).await?;
         // get a chunk of the files list
@@ -1261,6 +1269,15 @@ impl CursorCore for SampleListLine {
         }
     }
 
+    /// Get whether the matching on tags should be case-insensitive
+    ///
+    /// # Arguments
+    ///
+    /// `params` - The params to use to build this cursor
+    fn get_tags_case_insensitive(params: &Self::Params) -> bool {
+        params.tags_case_insensitive
+    }
+
     /// Get our the max number of rows to return
     ///
     /// # Arguments
@@ -1400,6 +1417,32 @@ impl ScyllaCursorSupport for SampleListLine {
         SampleListLine::from(row)
     }
 
+    /// Build all of the keys needs to retrieve census data
+    ///
+    /// # Arguments
+    ///
+    /// * `group_by` - The values to group our the rows by
+    /// * `extra` - The extra values required to list this data
+    /// * `year` - The year we are looking for census data for
+    /// * `keys` - The vec to add our census stream keys too
+    /// * `shared` - Shared Thorium objects
+    fn census_keys<'a>(
+        group_by: &'a Vec<Self::GroupBy>,
+        _extra: &Self::ExtraFilters,
+        year: i32,
+        bucket: u32,
+        keys: &mut Vec<(&'a Self::GroupBy, String, i32)>,
+        shared: &Shared,
+    ) {
+        // build the keys for each census stream we are going to crawl
+        for group in group_by {
+            // build the key for this commitish kinds census stream
+            let key = db::keys::samples::census_stream(group, year, shared);
+            // add this key to our keys
+            keys.push((group, key, bucket as i32));
+        }
+    }
+
     /// builds the query string for getting data from ties in the last query
     ///
     /// # Arguments
@@ -1421,7 +1464,7 @@ impl ScyllaCursorSupport for SampleListLine {
         uploaded: DateTime<Utc>,
         limit: i32,
         shared: &Shared,
-    ) -> Result<Vec<impl Future<Output = Result<QueryResult, QueryError>>>, ApiError> {
+    ) -> Result<Vec<impl Future<Output = Result<QueryResult, ExecutionError>>>, ApiError> {
         // allocate space for 300 futures
         let mut futures = Vec::with_capacity(ties.len());
         // if any ties were found then get the rest of them and add them to data
@@ -1461,7 +1504,7 @@ impl ScyllaCursorSupport for SampleListLine {
         end: DateTime<Utc>,
         limit: i32,
         shared: &Shared,
-    ) -> Result<QueryResult, QueryError> {
+    ) -> Result<QueryResult, ExecutionError> {
         // query the samples list table
         shared
             .scylla
@@ -1507,7 +1550,6 @@ impl ApiCursor<SampleListLine> {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for FileListParams
 where
     S: Send + Sync,
@@ -1525,7 +1567,6 @@ where
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for DeleteCommentParams
 where
     S: Send + Sync,
@@ -1543,7 +1584,6 @@ where
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for DeleteSampleParams
 where
     S: Send + Sync,
@@ -1576,7 +1616,6 @@ impl ZipDownloadParams {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for ZipDownloadParams
 where
     S: Send + Sync,

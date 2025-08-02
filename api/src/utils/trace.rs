@@ -1,11 +1,9 @@
 //! Sets up tracing for Thorium using either jaeger or stdout/stderr
 
-use opentelemetry::sdk::trace::BatchConfig;
-use opentelemetry::sdk::Resource;
 use opentelemetry::trace::TraceContextExt;
-use opentelemetry::KeyValue;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::path::Path;
 use tracing::Span;
 use tracing_core::LevelFilter;
@@ -62,54 +60,6 @@ pub fn get_trace() -> Option<String> {
         .then(|| span_context.trace_id().to_string())
 }
 
-/// Setup our jaeger tracer
-///
-/// This talks directly to a jaeger collector
-///
-/// # Arguments
-///
-/// * `name` - The name of the service to trace
-/// * `collector` - The collector endpoint to send traces too
-/// * `level` - The log level to set
-/// * `registry` - The registry to add our tracers too
-fn setup_jaeger(
-    name: &str,
-    collector: &str,
-    level: LogLevel,
-    registry: Layered<Filtered<Layer<Registry>, LevelFilter, Registry>, Registry>,
-) {
-    // build the endpoint to send traces too
-    let endpoint = format!("http://{}/api/traces", collector);
-    // setup our tracer
-    let tracer = opentelemetry_jaeger::new_collector_pipeline()
-        .with_endpoint(endpoint)
-        .with_service_name(name)
-        .with_hyper()
-        .with_batch_processor_config(
-            BatchConfig::default()
-                .with_max_queue_size(8192)
-                .with_max_concurrent_exports(10),
-        )
-        .install_batch(opentelemetry::runtime::Tokio)
-        .expect("Failed to setup tracer");
-    // build our tracing layer
-    let filtered = tracing_opentelemetry::layer()
-        .with_tracer(tracer)
-        .with_filter(level.to_filter());
-    // init our tracing registry
-    registry
-        .with(filtered)
-        .try_init()
-        .expect("Failed to register opentelemetry tracers/subscribers");
-    info!(
-        level,
-        format!(
-            "Sending {} traces for {} to jaeger at {}",
-            level, name, collector
-        )
-    );
-}
-
 /// Setup our grpc tracer.
 ///
 /// # Arguments
@@ -123,22 +73,20 @@ fn setup_grpc(
     endpoint: &str,
     level: LogLevel,
     registry: Layered<Filtered<Layer<Registry>, LevelFilter, Registry>, Registry>,
-) {
-    let exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        .with_endpoint(endpoint);
-    // setup our tracer
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(exporter)
-        .with_trace_config(
-            opentelemetry::sdk::trace::config().with_resource(Resource::new(vec![KeyValue::new(
-                SERVICE_NAME,
-                name.to_string(),
-            )])),
-        )
-        .install_batch(opentelemetry::runtime::Tokio)
-        .expect("Failed to setup tracer");
+) -> SdkTracerProvider {
+    // setup an exporter
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(endpoint)
+        .build()
+        .expect("Failed to setup tracing grpc exporter");
+    // setup our tracer provider
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        //.with_simple_exporter(exporter)
+        .build();
+    // build a tracer
+    let tracer = provider.tracer(name.to_owned());
     // define our layer filter
     let filtered = tracing_opentelemetry::layer()
         .with_tracer(tracer)
@@ -155,6 +103,7 @@ fn setup_grpc(
             level, name, endpoint
         )
     );
+    provider
 }
 
 /// Setup our local tracer
@@ -178,36 +127,42 @@ fn setup_local(
 ///
 /// # Arguments
 ///
-/// * `conf` - The Thorium config
-pub fn setup(name: &str, trace_conf: &Tracing) {
+/// * `name` - The name of the application we are tracing
+/// * `trace_conf` - The Thorium tracing config to use
+#[must_use = "Tracing provider must be manually shutdown"]
+pub fn setup(name: &str, trace_conf: &Tracing) -> Option<SdkTracerProvider> {
     // build our local tracer/subscriber
     let local = setup_local(name, &trace_conf.local);
     // Add our local tracer to our registry
     let registry = tracing_subscriber::registry().with(local);
     // get out external tracing settings
     if let Some(external) = &trace_conf.external {
-        match external {
+        // send traces to an external application and get a provider
+        let provider = match external {
             // setup the correct external tracer
-            TracingServices::Jaeger { collector, level } => {
-                setup_jaeger(name, collector, *level, registry)
-            }
             TracingServices::Grpc { endpoint, level } => {
                 setup_grpc(name, endpoint, *level, registry)
             }
-        }
+        };
+        // return our newly setup provider
+        Some(provider)
     } else {
         registry
             .try_init()
             .expect("Failed to register stdout registry");
-    };
+        // local traces have no provider
+        None
+    }
 }
 
 /// Setup the correct tracer from a stand alone config file
 ///
 /// # Arguments
 ///
-/// * `conf` - The Thorium config
-pub fn from_file(name: &str, path: &str) {
+/// * `name` - The name of the application we are tracing
+/// * `trace_conf` - The Thorium tracing config to use
+#[must_use = "Tracing provider must be manually shutdown"]
+pub fn from_file(name: &str, path: &str) -> Option<SdkTracerProvider> {
     // Check if our tracing file exists or not
     let trace_config = if Path::new(path).exists() {
         // load our tracing config from a file
@@ -217,5 +172,20 @@ pub fn from_file(name: &str, path: &str) {
         Tracing::default()
     };
     // setup our tracers/subscribers
-    setup(name, &trace_config);
+    setup(name, &trace_config)
+}
+
+/// Shutdown this tracer
+///
+/// # Arguments
+///
+/// * `provider` - The tracing provider to shutdown
+pub fn shutdown(provider: Option<SdkTracerProvider>) {
+    // if we have a provider shut it down
+    if let Some(provider) = provider {
+        // shutdown this provider
+        provider
+            .shutdown()
+            .expect("Failed to shutdown tracing provider");
+    }
 }

@@ -5,6 +5,7 @@ use crate::models::Image;
 /// The components forming a unique key to access an image's data in Scylla;
 /// these components may make up only part of a partition key
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreJson))]
 pub struct ImageKey {
     /// The group the image is in

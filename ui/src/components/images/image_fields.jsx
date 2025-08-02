@@ -17,6 +17,8 @@ const ImageFieldsToolTips = {
   image: `The container registry path:tag for this K8s scaled image.`,
   timeout: `The max time in seconds that an image will be allowed to run before it is
     terminated.`,
+  lifetime: `How long k8s scaled pods of this image will run before being scaled down. Units are
+    time in seconds or number of jobs.`,
   runtime: `Average execution time for the previous 100k runs of this image. (600 default).`,
   display_type: `The format used to render image results (JSON, String, etc). Results files
     are not rendered, download links for those will be shown.`,
@@ -37,6 +39,7 @@ const ImageFieldsTemplate = {
   scaler: 'K8s',
   image: '',
   timeout: '',
+  lifetime: '',
   display_type: '',
   spawn_limit: 'Unlimited',
   collect_logs: true,
@@ -54,6 +57,17 @@ const ImageFieldsErrorTemplate = {
 // All possible Enums for the display_type field and scaler
 const DisplayTypes = ['JSON', 'String', 'Table', 'Markdown', 'XML', 'HTML', 'Image', 'Disassembly', 'Hidden', 'Custom'];
 const ScalerTypes = ['K8s', 'BareMetal', 'External', 'Windows', 'Kvm'];
+
+const formatLifetimeDisplay = (lifetime) => {
+  if (lifetime == null) {
+    return lifetime;
+  } else if (lifetime.counter && lifetime.counter == 'time') {
+    return `${lifetime.amount} Seconds`;
+  } else if (lifetime.counter && lifetime.counter == 'jobs') {
+    return `${lifetime.amount} Jobs`;
+  }
+  return lifetime;
+};
 
 const DisplayImageFields = ({ image }) => {
   return (
@@ -122,6 +136,18 @@ const DisplayImageFields = ({ image }) => {
           <FieldBadge field={image['timeout']} color={'#7e7c7c'} />
         </Col>
       </Row>
+      {image.scaler == 'K8s' && (
+        <Row>
+          <Col className="field-name-col">
+            <OverlayTipRight tip={ImageFieldsToolTips.lifetime}>
+              <b>{'Lifetime'}</b> <FaQuestionCircle />
+            </OverlayTipRight>
+          </Col>
+          <Col className="field-value-col">
+            <FieldBadge field={formatLifetimeDisplay(image['lifetime'])} color={'#7e7c7c'} />
+          </Col>
+        </Row>
+      )}
       <Row>
         <Col className="field-name-col">
           <OverlayTipRight tip={ImageFieldsToolTips.runtime}>
@@ -237,6 +263,7 @@ const filterImageFields = (image) => {
   fields['group'] = image.group;
   fields['description'] = image.description;
   fields['scaler'] = image.scaler;
+  fields['lifetime'] = image.lifetime;
   fields['timeout'] = image.timeout;
   fields['display_type'] = image.display_type;
   fields['spawn_limit'] = image.spawn_limit;
@@ -254,9 +281,16 @@ const updateCreateRequestImageFields = (newImageFields, setRequestImageFields) =
   if (requestImageFields.description == '') {
     delete requestImageFields.description;
   }
-
+  // timeout
   if (requestImageFields.timeout == '') {
     delete requestImageFields.timeout;
+  }
+  // lifetime
+  if (requestImageFields.lifetime == '') {
+    delete requestImageFields.lifetime;
+  }
+  if (requestImageFields.scaler != 'K8s') {
+    delete requestImageFields['lifetime'];
   }
   setRequestImageFields(requestImageFields);
 };
@@ -276,10 +310,17 @@ const updateEditRequestImageFields = (newImageFields, setRequestImageFields) => 
     requestImageFields.timeout = Number(requestImageFields.timeout);
   }
 
+  // clear lifetimes if not specified in update
+  if (requestImageFields.lifetime == null) {
+    requestImageFields['clear_lifetime'] = true;
+  }
+
   // image string is only required for k8s scheduled images
   if (requestImageFields.scaler != 'K8s') {
     delete requestImageFields['image'];
+    delete requestImageFields['lifetime'];
     requestImageFields['clear_image'] = true;
+    requestImageFields['clear_lifetime'] = true;
   }
   setRequestImageFields(requestImageFields);
 };
@@ -289,22 +330,42 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
   const [errors, setErrors] = useState({});
 
   // update a <images>'s <field> with new <value>
-  const updateImage = (field, value) => {
+  const updateImage = (field, value, type) => {
     // make a deep copy of the image fields
     const imageCopy = structuredClone(image);
-    // set the new value for the key
-    imageCopy[field] = value;
+    // lifetime is special, lets handle those here
+    if (field == 'lifetime') {
+      const newLifetime = imageCopy['lifetime'] == null ? { counter: 'jobs' } : imageCopy['lifetime'];
+      // counter is the type of lifetime, options are jobs or time in seconds
+      if (type == 'counter') {
+        newLifetime['counter'] = value;
+        // amount is the number of jobs or time in seconds (integer)
+      } else if (type == 'amount') {
+        if (value == '') {
+          // empty string for amount clears the field
+          delete newLifetime['amount'];
+        } else {
+          newLifetime['amount'] = Number(value);
+        }
+      }
+      imageCopy['lifetime'] = newLifetime;
+    } else {
+      // set the new value for the key
+      imageCopy[field] = value;
+    }
     // update the image object and trigger dom refresh
     checkCreateErrors(imageCopy, setErrors, setHasErrors);
     setImage(imageCopy);
+    // need to remove optional lifetimes field if amount isn't present
+    if (imageCopy.lifetime && imageCopy.lifetime.amount == null) {
+      delete imageCopy.lifetime;
+    }
     setRequestFields(imageCopy);
   };
 
   // calculate height of description field
-  let descriptionHeight = image.description.split(/\r\n|\r|\n/).length * 25;
-  if (descriptionHeight < 200) {
-    descriptionHeight = 200;
-  }
+  let descriptionHeight =
+    image.description && image.description != null ? Math.max(image.description.split(/\r\n|\r|\n/).length * 25, 200) : 200;
 
   return (
     <Fragment>
@@ -405,7 +466,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
             <b>{'Timeout'}</b> <FaQuestionCircle />
           </OverlayTipRight>
         </Col>
-        <Col className="field-value-col">
+        <Col className="field-value-col mb-2">
           <div className="image-fields">
             <Form.Group>
               <Form.Control
@@ -425,8 +486,44 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
           </div>
         </Col>
       </Row>
+      {/* Lifetime */}
+      {image.scaler == 'K8s' && (
+        <Row>
+          <Col className="field-name-col">
+            <OverlayTipRight tip={ImageFieldsToolTips.lifetime}>
+              <b>{'Lifetime'}</b> <FaQuestionCircle />
+            </OverlayTipRight>
+          </Col>
+          <Col className="field-value-col mb-1">
+            <div className="image-fields">
+              <Row>
+                <Col className="resource-type-col">
+                  <Form.Control
+                    type="text"
+                    value={image.lifetime != null && image.lifetime.amount >= 0 ? image.lifetime.amount : ''}
+                    placeholder={'0'}
+                    onChange={(e) => {
+                      const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
+                      updateImage('lifetime', validValue, 'amount');
+                    }}
+                  />
+                </Col>
+                <Col className="resource-unit-col">
+                  <Form.Select
+                    value={image.lifetime != null ? image.lifetime.counter : ''}
+                    onChange={(e) => updateImage('lifetime', String(e.target.value), 'counter')}
+                  >
+                    <option value="jobs">Jobs</option>
+                    <option value="time">Seconds</option>
+                  </Form.Select>
+                </Col>
+              </Row>
+            </div>
+          </Col>
+        </Row>
+      )}
       {/* Runtime can not be edited */}
-      <Row>
+      <Row className="mb-1">
         <Col className="field-name-col">
           <OverlayTipRight tip={ImageFieldsToolTips.runtime}>
             <b>{'Runtime'}</b> <FaQuestionCircle />
@@ -557,11 +654,29 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
   }, [showErrors]);
 
   // update a <images>'s <field> with new <value>
-  const updateImage = (field, value) => {
+  const updateImage = (field, value, type) => {
     // make a deep copy of the image fields
     const imageCopy = structuredClone(image);
     // set the new value for the key
-    imageCopy[field] = value;
+    if (field == 'lifetime') {
+      const newLifetime = imageCopy['lifetime'] == null ? { counter: 'jobs' } : imageCopy['lifetime'];
+      // counter is the type of lifetime, options are jobs or time in seconds
+      if (type == 'counter') {
+        newLifetime['counter'] = value;
+        // amount is the number of jobs or time in seconds (integer)
+      } else if (type == 'amount') {
+        if (value === '') {
+          // empty string for amount clears the field
+          delete newLifetime['amount'];
+        } else {
+          newLifetime['amount'] = Number(value);
+        }
+      }
+      imageCopy['lifetime'] = newLifetime;
+    } else {
+      // set the new value for the key
+      imageCopy[field] = value;
+    }
 
     // show errors if boolean passed in by parent is set
     checkCreateErrors(imageCopy, setErrors, setHasErrors);
@@ -689,6 +804,39 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
             </Alert>
           )}
         </Form.Group>
+        {image.scaler == 'K8s' && (
+          <Form.Group>
+            <Form.Label>
+              <Subtitle>Lifetime</Subtitle>
+            </Form.Label>
+            <OverlayTipRight tip={ImageFieldsToolTips.lifetime}>
+              <Row>
+                <Col className="resource-type-col">
+                  <Form.Control
+                    type="text"
+                    value={image.lifetime != null ? image.lifetime.amount : ''}
+                    placeholder={image.lifetime != null ? image.lifetime.amount : ''}
+                    onChange={(e) => {
+                      const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : null;
+                      if (validValue !== '') {
+                        updateImage('lifetime', Number(validValue), 'amount');
+                      }
+                    }}
+                  />
+                </Col>
+                <Col className="resource-unit-col">
+                  <Form.Select
+                    value={image.lifetime != null ? image.lifetime.counter : ''}
+                    onChange={(e) => updateImage('lifetime', String(e.target.value), 'counter')}
+                  >
+                    <option value="jobs">Jobs</option>
+                    <option value="time">Seconds</option>
+                  </Form.Select>
+                </Col>
+              </Row>
+            </OverlayTipRight>
+          </Form.Group>
+        )}
         <Form.Group>
           <Form.Label>
             <Subtitle>Display Type</Subtitle>

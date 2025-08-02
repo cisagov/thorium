@@ -5,7 +5,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use kanal::{AsyncReceiver, AsyncSender};
-use scylla::Session;
+use scylla::client::session::Session;
 use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::sync::Arc;
@@ -31,6 +31,7 @@ pub trait ScyllaCrawlSupport: Sized + Send + 'static {
         namespace: &str,
         updates: AsyncSender<MonitorUpdate>,
         args: &Self::WorkerArgs,
+        dry_run: bool,
         bar: ProgressBar,
     ) -> Result<Self, Error>;
 
@@ -148,7 +149,11 @@ impl<S: ScyllaCrawlSupport + Send> ScyllaCrawlController<S> {
     }
 
     /// Build and spawn all all of our workers
-    async fn spawn_all(&mut self) -> Result<(), Error> {
+    ///
+    /// # Arguments
+    ///
+    /// * `dry_run` - Whether this controller is doing a dry run or not
+    async fn spawn_all(&mut self, dry_run: bool) -> Result<(), Error> {
         // get this progress bars style
         let bar_style = S::bar_style()?;
         // create the right number of workers
@@ -167,6 +172,7 @@ impl<S: ScyllaCrawlSupport + Send> ScyllaCrawlController<S> {
                 &self.namespace,
                 self.updates_tx.clone(),
                 &self.args,
+                dry_run,
                 bar,
             )
             .await?;
@@ -222,11 +228,16 @@ impl<S: ScyllaCrawlSupport + Send> ScyllaCrawlController<S> {
     }
 
     /// Start crawling data in scylla
-    pub async fn start(&mut self, chunk_count: u64) -> Result<(), Error> {
+    ///
+    /// # Arguments
+    ///
+    /// * `chunk_count` - The number of chunks to split the work into
+    /// * `dry_run` - Whether this controller is doing a dry run or not
+    pub async fn start(&mut self, chunk_count: u64, dry_run: bool) -> Result<(), Error> {
         // start this controllers monitor
         let handle = self.start_monitor()?;
         // spawn all of our workers
-        self.spawn_all().await?;
+        self.spawn_all(dry_run).await?;
         // generate our token ranges
         self.generate_token_ranges(chunk_count).await?;
         // wait for all workers to complete

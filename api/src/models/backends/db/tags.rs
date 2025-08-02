@@ -5,16 +5,16 @@
 //! timestamp each tag should be uploaded at.
 
 use chrono::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tracing::{event, instrument, Level};
 
 use super::keys::tags;
 use crate::models::backends::TagSupport;
 use crate::models::{
-    Event, FullTagRow, TagDeleteRequest, TagMap, TagRequest, TagRow, TagType, User,
+    Event, FullTagRow, TagDeleteRequest, TagMap, TagRequest, TagRow, TagSearchEvent, TagType, User,
 };
 use crate::utils::{helpers, ApiError, Shared};
-use crate::{bad, conn, log_scylla_err};
+use crate::{bad, conn, internal_err, log_scylla_err};
 
 /// Save new tags into scylla
 ///
@@ -54,8 +54,10 @@ pub async fn create<T: TagSupport>(
                 let bucket = helpers::partition(*timestamp, year, chunk);
                 // crawl over all tags and save them
                 for (tag_key, tag_values) in &req.tags {
+                    let key_lower = tag_key.to_lowercase();
                     // save each tag values for this key
                     for tag_value in tag_values {
+                        let value_lower = tag_value.to_lowercase();
                         // save this tag into scylla
                         shared
                             .scylla
@@ -63,7 +65,7 @@ pub async fn create<T: TagSupport>(
                             .execute_unpaged(
                                 &shared.scylla.prep.tags.insert,
                                 (
-                                    kind, group, &key, year, bucket, tag_key, tag_value, *timestamp,
+                                    kind, group, &key, year, bucket, tag_key, tag_value, *timestamp, &key_lower, &value_lower
                                 ),
                             )
                             .await?;
@@ -85,8 +87,27 @@ pub async fn create<T: TagSupport>(
                             year,
                             shared,
                         );
+                        let count_key_case_insensitive = tags::census_count_case_insensitive(
+                            T::tag_kind(),
+                            group,
+                            tag_key,
+                            tag_value,
+                            year,
+                            bucket,
+                            shared,
+                        );
+                        let stream_key_case_insensitive = tags::census_stream_case_insensitive(
+                            T::tag_kind(),
+                            group,
+                            tag_key,
+                            tag_value,
+                            year,
+                            shared,
+                        );
                         // add data into redis
                         pipe.cmd("hincrby").arg(count_key).arg(bucket).arg(1)
+                            .cmd("hincrby").arg(count_key_case_insensitive).arg(bucket).arg(1)
+                            .cmd("zadd").arg(stream_key_case_insensitive).arg(bucket).arg(bucket)
                             .cmd("zadd").arg(stream_key).arg(bucket).arg(bucket);
                     }
                 }
@@ -100,9 +121,18 @@ pub async fn create<T: TagSupport>(
     // execute our redis pipeline
     let _:() = pipe.query_async(conn!(shared)).await?;
     // create our tag event
-    let event = Event::new_tag(user, key, req);
+    let event = Event::new_tag(user, key.clone(), req.clone());
     // save our event
     super::events::create(&event, shared).await?;
+    // create a search event that we modified tags
+    let search_event = TagSearchEvent::modified::<T>(key, req.groups);
+    if let Err(err) = super::search::events::create(search_event, shared).await {
+        return internal_err!(format!(
+            "Failed to create result search event! {}",
+            err.msg
+                .unwrap_or_else(|| "An unknown error occurred".to_string())
+        ));
+    }
     Ok(())
 }
 
@@ -115,6 +145,7 @@ pub async fn create<T: TagSupport>(
 /// * `req` - The request containing the tags to create and groups to save them in
 /// * `earliest` - The earliest each group has seen this item
 /// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
 #[instrument(
     name = "db::tags::create_owned",
     skip(user, req, earliest, shared),
@@ -143,8 +174,10 @@ pub async fn create_owned<T: TagSupport>(
                 let bucket = helpers::partition(*timestamp, year, chunk);
                 // crawl over all tags and save them
                 for (tag_key, tag_values) in &req.tags {
+                    let key_lower = tag_key.to_lowercase();
                     // save each tag values for this key
                     for tag_value in tag_values {
+                        let value_lower = tag_value.to_lowercase();
                         // save this tag into scylla
                         shared
                             .scylla
@@ -152,7 +185,16 @@ pub async fn create_owned<T: TagSupport>(
                             .execute_unpaged(
                                 &shared.scylla.prep.tags.insert,
                                 (
-                                    kind, group, &key, year, bucket, tag_key, tag_value, *timestamp,
+                                    kind,
+                                    group,
+                                    &key,
+                                    year,
+                                    bucket,
+                                    tag_key,
+                                    tag_value,
+                                    *timestamp,
+                                    &key_lower,
+                                    &value_lower,
                                 ),
                             )
                             .await?;
@@ -174,15 +216,28 @@ pub async fn create_owned<T: TagSupport>(
                             year,
                             shared,
                         );
+                        let count_key_case_insensitive = tags::census_count_case_insensitive(
+                            T::tag_kind(),
+                            group,
+                            tag_key,
+                            tag_value,
+                            year,
+                            bucket,
+                            shared,
+                        );
+                        let stream_key_case_insensitive = tags::census_stream_case_insensitive(
+                            T::tag_kind(),
+                            group,
+                            tag_key,
+                            tag_value,
+                            year,
+                            shared,
+                        );
                         // add data into redis
-                        pipe.cmd("hincrby")
-                            .arg(count_key)
-                            .arg(bucket)
-                            .arg(1)
-                            .cmd("zadd")
-                            .arg(stream_key)
-                            .arg(bucket)
-                            .arg(bucket);
+                        pipe.cmd("hincrby").arg(count_key).arg(bucket).arg(1)
+                            .cmd("hincrby").arg(count_key_case_insensitive).arg(bucket).arg(1)
+                            .cmd("zadd").arg(stream_key_case_insensitive).arg(bucket).arg(bucket)
+                            .cmd("zadd").arg(stream_key).arg(bucket).arg(bucket);
                     }
                 }
             }
@@ -195,16 +250,21 @@ pub async fn create_owned<T: TagSupport>(
     // execute our redis pipeline
     let _: () = pipe.query_async(conn!(shared)).await?;
     // create our tag event
-    let event = Event::new_tag(user, key, req);
+    let event = Event::new_tag(user, key.clone(), req.clone());
     // save our event
     super::events::create(&event, shared).await?;
+    // create a search event that we edited tags
+    let search_event = TagSearchEvent::modified::<T>(key, req.groups);
+    // save our search event
+    if let Err(err) = super::search::events::create(search_event, shared).await {
+        return internal_err!(format!(
+            "Failed to create result search event! {}",
+            err.msg
+                .unwrap_or_else(|| "An unknown error occurred".to_string())
+        ));
+    }
     Ok(())
 }
-
-/// A map of repo tags and the info needed to delete them
-pub type TagDeleteMap = HashMap<String, TagValueMap>;
-pub type TagValueMap = HashMap<String, TagGroupMap>;
-pub type TagGroupMap = HashMap<String, Vec<(i32, i32, DateTime<Utc>)>>;
 
 /// Get the full tag rows for some specific tags
 ///
@@ -217,12 +277,12 @@ pub type TagGroupMap = HashMap<String, Vec<(i32, i32, DateTime<Utc>)>>;
 #[instrument(name = "db::tags::get_tag_rows", skip(shared), err(Debug))]
 async fn get_tag_rows(
     tag_type: TagType,
-    groups: &Vec<String>,
+    groups: &[String],
     item: &str,
     shared: &Shared,
-) -> Result<TagDeleteMap, ApiError> {
-    // default to 30 tags
-    let mut map = HashMap::with_capacity(30);
+) -> Result<Vec<FullTagRow>, ApiError> {
+    // default to 30 rows
+    let mut full_rows = Vec::with_capacity(30);
     // if we have more then 100 groups then chunk it into bathes of 100  otherwise just get our tag rows
     if groups.len() > 100 {
         // break our groups into chunks of 100
@@ -240,22 +300,12 @@ async fn get_tag_rows(
                 .await?;
             // enable casting to types for this query
             let query_rows = query.into_rows_result()?;
-            // set the type to cast this stream too
-            let mut typed_stream = query_rows.rows::<FullTagRow>()?;
-            // cast our rows to typed values
-            while let Some(row_result) = typed_stream.next() {
-                // raise any errors from casting
-                if let Some(row) = log_scylla_err!(row_result) {
-                    // get an entry to this tags value map or create it
-                    let value_map: &mut TagValueMap = map.entry(row.key).or_default();
-                    // get an entry to this tags group map or create it
-                    let group_map: &mut TagGroupMap = value_map.entry(row.value).or_default();
-                    // get an entry to this groups row list
-                    let row_list = group_map.entry(row.group).or_default();
-                    // add our row info to this list
-                    row_list.push((row.year, row.bucket, row.uploaded));
-                }
-            }
+            // crawl over rows and add them to our list while logging any errors
+            full_rows.extend(
+                query_rows
+                    .rows::<FullTagRow>()?
+                    .filter_map(|row| log_scylla_err!(row)),
+            );
         }
     } else {
         // get the tag rows for this item
@@ -266,24 +316,42 @@ async fn get_tag_rows(
             .await?;
         // enable casting to types for this query
         let query_rows = query.into_rows_result()?;
-        // set the type to cast this stream too
-        let mut typed_stream = query_rows.rows::<FullTagRow>()?;
-        // cast our rows to typed values
-        while let Some(row_result) = typed_stream.next() {
-            // raise any errors from casting
-            if let Some(row) = log_scylla_err!(row_result) {
-                // get an entry to this tags value map or create it
-                let value_map: &mut TagValueMap = map.entry(row.key).or_default();
-                // get an entry to this tags group map or create it
-                let group_map: &mut TagGroupMap = value_map.entry(row.value).or_default();
-                // get an entry to this groups row list
-                let row_list = group_map.entry(row.group).or_default();
-                // add our row info to this list
-                row_list.push((row.year, row.bucket, row.uploaded));
-            }
-        }
+        // crawl over rows and add them to our list while logging any errors
+        full_rows.extend(
+            query_rows
+                .rows::<FullTagRow>()?
+                .filter_map(|row| log_scylla_err!(row)),
+        );
     }
-    Ok(map)
+    Ok(full_rows)
+}
+
+/// A map of repo tags and all of their info
+pub type TagDeleteMap = HashMap<String, TagValueMap>;
+pub type TagValueMap = HashMap<String, TagGroupMap>;
+pub type TagGroupMap = HashMap<String, Vec<(i32, i32, DateTime<Utc>)>>;
+
+/// Build a map of information needed to delete tags from a list
+/// of full tag rows
+///
+/// # Arguments
+///
+/// * `full_rows` - The full tag rows to build the map from
+fn build_tag_delete_map(full_rows: Vec<FullTagRow>) -> TagDeleteMap {
+    // default to 30 tags
+    let mut map = HashMap::with_capacity(30);
+    // crawl over our full rows and sort them
+    for row in full_rows {
+        // get an entry to this tags value map or create it
+        let value_map: &mut TagValueMap = map.entry(row.key).or_default();
+        // get an entry to this tags group map or create it
+        let group_map: &mut TagGroupMap = value_map.entry(row.value).or_default();
+        // get an entry to this groups row list
+        let row_list = group_map.entry(row.group).or_default();
+        // add our row info to this list
+        row_list.push((row.year, row.bucket, row.uploaded));
+    }
+    map
 }
 
 /// Deletes tags from scylla
@@ -293,6 +361,7 @@ async fn get_tag_rows(
 /// * `key` - The key to the item to delete tags from
 /// * `req` - The request containing the tags to delete and the groups to delete them from
 /// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
 #[instrument(
     name = "db::tags::delete",
     skip(req, shared),
@@ -307,9 +376,13 @@ pub async fn delete<T: TagSupport>(
     // get the type of tag we are deleting
     let kind = T::tag_kind();
     // get all tag rows for this object
-    let tag_map = get_tag_rows(kind, &req.groups, key, shared).await?;
+    let tag_rows = get_tag_rows(kind, &req.groups, key, shared).await?;
+    // build our delete map
+    let tag_map = build_tag_delete_map(tag_rows);
     // build a redis pipeline to decrement this tags counts
     let mut pipe = redis::pipe();
+    // track which groups had tags deleted
+    let mut groups_deleted: HashSet<&String> = HashSet::new();
     // crawl over the tags we want to delete and delete them
     // so this is pretty ugly but theres lots of nesting and so I am not sure of a better way to do it.
     for (tag_key, values) in &req.tags {
@@ -357,8 +430,20 @@ pub async fn delete<T: TagSupport>(
                                     *bucket,
                                     shared,
                                 );
-                                // add data into redis
-                                pipe.cmd("hincrby").arg(count_key).arg(bucket).arg(-1);
+                                let count_key_lower = tags::census_count_case_insensitive(
+                                    T::tag_kind(),
+                                    group,
+                                    tag_key,
+                                    value,
+                                    *year,
+                                    *bucket,
+                                    shared,
+                                );
+                                // decrement the tag's count in Redis
+                                pipe.cmd("hincrby").arg(count_key).arg(bucket).arg(-1)
+                                    .cmd("hincrby").arg(count_key_lower).arg(bucket).arg(-1);
+                                // mark that we deleted at least one tag in this group
+                                groups_deleted.insert(group);
                             }
                         }
                     }
@@ -368,7 +453,22 @@ pub async fn delete<T: TagSupport>(
     }
     // execute our redis pipeline
     let _: () = pipe.query_async(conn!(shared)).await?;
-    // TODO remove any buckets with no data
+    if !groups_deleted.is_empty() {
+        // if we deleted tags from at least one group, create a search event that we edited tags
+        let search_event = TagSearchEvent::modified::<T>(
+            key.to_string(),
+            groups_deleted.into_iter().cloned().collect(),
+        );
+        // save our search event
+        if let Err(err) = super::search::events::create(search_event, shared).await {
+            return internal_err!(format!(
+                "Failed to create tag search event! {}",
+                err.msg
+                    .unwrap_or_else(|| "An unknown error occurred".to_string())
+            ));
+        }
+    }
+    // TODO: remove any buckets with no data; delete lowercase buckets as well if needed
     Ok(())
 }
 

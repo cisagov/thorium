@@ -21,22 +21,6 @@ $grid-breakpoints: (
   padding: 0;
 }
 
-.page {
-  padding: 4rem 1rem 0.5rem 0rem;
-  flex: 11 !important;
-  justify-content: center !important;
-  align-items: center !important;
-}
-
-.body {
-  color: var(--thorium-text);
-  background-color: var(--thorium-body-bg);
-  min-height: 100vh;
-  // removed this to enable position: sticky
-  // this is needed for the results table of contents
-  // overflow-x: hidden;
-}
-
 .panel {
   color: var(--thorium-text);
   background-color: var(--thorium-panel-bg);
@@ -89,21 +73,6 @@ $grid-breakpoints: (
   width: auto;
 }
 
-.main-col {
-  flex: 4 !important;
-}
-
-.side-col {
-  flex: 1 !important;
-}
-
-// profile container
-.profile {
-  width: 50rem;
-  border: none;
-  background-color: var(--thorium-body-bg);
-}
-
 // login container
 .login {
   max-width: 25rem;
@@ -140,7 +109,7 @@ $grid-breakpoints: (
 }
 
 .full-min-width {
-  min-width: 100% !important;
+  min-width: 80% !important;
 }
 
 // no bullet unordered lists
@@ -158,12 +127,6 @@ $grid-breakpoints: (
 
 .alert {
   --bs-alert-margin-bottom: 0rem;
-}
-
-.viewport-center {
-  min-height: 320px;
-  height: 100vh;
-  margin-top: -4.5rem;
 }
 
 // 1400px

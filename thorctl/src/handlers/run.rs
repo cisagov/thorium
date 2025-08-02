@@ -1,6 +1,5 @@
 use owo_colors::{OwoColorize, Rgb};
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use std::{
     collections::HashMap,
     io::Write,
@@ -118,7 +117,7 @@ async fn log(mut log_rx: mpsc::Receiver<(String, String)>) -> HashMap<String, Rg
             Rgb(255, 0, 255), // light purple
             Rgb(255, 0, 128), // pink
         ];
-        colors.shuffle(&mut thread_rng());
+        colors.shuffle(&mut rand::rng());
         colors
     };
     let mut index = 0;

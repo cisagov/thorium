@@ -81,6 +81,7 @@ impl SearchSealed for GetNetworkPolicies {
         SearchParams {
             groups: &self.groups,
             tags: &[],
+            tags_case_insensitive: false,
             delimiter: ' ',
             start: &None,
             end: &None,
@@ -170,6 +171,7 @@ impl SearchSealed for DescribeNetworkPolicies {
         SearchParams {
             groups: &self.groups,
             tags: &[],
+            tags_case_insensitive: false,
             delimiter: ' ',
             start: &None,
             end: &None,

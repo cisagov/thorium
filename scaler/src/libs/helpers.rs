@@ -1,6 +1,6 @@
 use futures::Stream;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use regex::Regex;
 use thorium::Error;
 
@@ -151,10 +151,10 @@ pub fn gen_string(len: usize) -> String {
     const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz\
                            0123456789";
     // get some rng and build string 12 chars long
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     (0..len)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect()
@@ -191,7 +191,7 @@ macro_rules! same {
 }
 
 /// push a value into a vec at the given map key without cloning the key using
-/// the `RawEntryMut` API
+/// the `RawEntryMut` API from hasbrown::HashMap
 #[macro_export]
 macro_rules! raw_entry_vec_push {
     ($map:expr, $key:expr, $value:expr) => {
@@ -204,7 +204,7 @@ macro_rules! raw_entry_vec_push {
 }
 
 /// extend values to a vec at the given map key without cloning the key using
-/// the `RawEntryMut` API
+/// the `RawEntryMut` API from hasbrown::HashMap
 #[macro_export]
 macro_rules! raw_entry_vec_extend {
     ($map:expr, $key:expr, $values:expr) => {
@@ -217,7 +217,7 @@ macro_rules! raw_entry_vec_extend {
 }
 
 /// insert a key/value pair to an inner map at the given map key without
-/// cloning the key using the `RawEntryMut` API
+/// cloning the key using the `RawEntryMut` API from hasbrown::HashMap
 #[macro_export]
 macro_rules! raw_entry_map_insert {
     ($map:expr, $key:expr, $inner_key:expr, $value:expr) => {
@@ -230,7 +230,7 @@ macro_rules! raw_entry_map_insert {
 }
 
 /// extend an inner map at the given map key without
-/// cloning the key using the `RawEntryMut` API
+/// cloning the key using the `RawEntryMut` API from hasbrown::HashMap
 #[macro_export]
 macro_rules! raw_entry_map_extend {
     ($map:expr, $key:expr, $extend:expr) => {

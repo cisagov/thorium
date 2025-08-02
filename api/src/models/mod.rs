@@ -7,7 +7,6 @@ pub mod deadlines;
 pub mod elastic;
 mod errors;
 pub mod events;
-pub mod exports;
 pub mod files;
 pub mod git;
 pub mod groups;
@@ -22,22 +21,21 @@ pub mod reactions;
 pub mod requisitions;
 pub mod results;
 mod scylla_utils;
+pub mod search;
 pub mod streams;
 pub mod system;
 pub mod tags;
+mod trees;
 pub mod users;
 mod version;
 mod volumes;
 
 pub use deadlines::Deadline;
-pub use elastic::{ElasticDoc, ElasticSearchOpts, ElasticSearchParams};
+pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchParams};
 pub use errors::InvalidEnum;
 pub use events::{
     Event, EventCacheStatus, EventCacheStatusOpts, EventData, EventIds, EventMarks, EventPopOpts,
     EventRequest, EventTrigger, EventType, TriggerPotential,
-};
-pub use exports::{
-    Export, ExportError, ExportErrorRequest, ExportErrorResponse, ExportRequest, ExportUpdate,
 };
 pub use files::{
     Attachment, Buffer, CartedSample, CarvedOrigin, CarvedOriginTypes, Comment, CommentRequest,
@@ -96,9 +94,12 @@ pub use reactions::{
 pub use requisitions::{Requisition, ScopedRequisition, SpawnedUpdate};
 pub use results::{
     AutoTag, AutoTagLogic, AutoTagUpdate, FilesHandler, FilesHandlerUpdate, OnDiskFile, Output,
-    OutputBundle, OutputChunk, OutputCollection, OutputCollectionUpdate, OutputDisplayType,
-    OutputHandler, OutputListLine, OutputResponse, ResultGetParams, ResultListOpts,
-    ResultListParams,
+    OutputChunk, OutputCollection, OutputCollectionUpdate, OutputDisplayType, OutputHandler,
+    OutputResponse, ResultGetParams,
+};
+pub use search::events::{
+    ResultSearchEvent, SearchEvent, SearchEventPopOpts, SearchEventStatus, SearchEventType,
+    TagSearchEvent,
 };
 pub use streams::{Stream, StreamDepth, StreamObj};
 pub use system::{
@@ -108,6 +109,10 @@ pub use system::{
     SystemSettingsUpdate, SystemSettingsUpdateParams, SystemStats, Worker, WorkerDelete,
     WorkerDeleteMap, WorkerList, WorkerRegistration, WorkerRegistrationList, WorkerStatus,
     WorkerUpdate,
+};
+pub use trees::{
+    Tree, TreeGrowQuery, TreeNode, TreeNodeData, TreeParams, TreeQuery, TreeRelationships,
+    TreeSupport,
 };
 pub use users::{
     AuthResponse, Key, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings,
@@ -135,9 +140,9 @@ cfg_if::cfg_if! {
         pub use reactions::{RawGenericJobArgs, RawReactionRequest};
         pub use files::{SampleForm, OriginForm, CommentForm};
         pub use git::RepoDataForm;
-        pub use exports::ExportListParams;
         pub use jobs::JobReactionIds;
         pub use backends::results::ResultFileDownloadParams;
+        pub(crate) use backends::search::events::SearchEventBackend;
     }
 }
 
@@ -162,14 +167,14 @@ cfg_if::cfg_if! {
             RepoListRow, CommitData, BranchData, GitTagData,
         };
         pub use scylla_utils::files::{SubmissionListRow, SubmissionRow, CommentRow};
-        pub use scylla_utils::results::{OutputId, OutputIdRow, OutputRow, OutputStreamRow, OutputFormBuilder, OutputForm};
-        pub use scylla_utils::exports::{ExportOps, ExportRow, ExportCursorRow, ExportErrorRow, ExportIdRow};
+        pub use scylla_utils::results::{OutputId, OutputIdRow, OutputRow, OutputFormBuilder, OutputForm};
         pub use scylla_utils::system::{WorkerRow, NodeRow, WorkerName};
         pub use scylla_utils::tags::{TagRow, FullTagRow, TagListRow};
         pub use scylla_utils::events::EventRow;
         pub use scylla_utils::s3::S3Objects;
         pub use scylla_utils::network_policies::{NetworkPolicyRow, NetworkPolicyListRow};
-        pub use census::Census;
+        pub use census::{CensusSupport, CensusKeys};
+        pub use tags::TagCensusCaseInsensitive;
 
         #[cfg(feature = "rkyv-support")]
         pub use scylla_utils::s3::ArchivedS3Objects;

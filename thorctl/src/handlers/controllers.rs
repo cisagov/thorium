@@ -16,6 +16,8 @@ pub struct Controller<W: Worker> {
     pub jobs: AsyncSender<JobMsg<W>>,
     /// The channel to send monitor updates on
     pub monitor_tx: AsyncSender<MonitorMsg<W::Monitor>>,
+    /// The recieve channel for this controller (used to ensure our channel doesn't close)
+    monitor_rx: AsyncReceiver<MonitorMsg<W::Monitor>>,
     /// The handle for our monitor
     pub monitor: JoinHandle<()>,
     /// The progress bar to log updates on
@@ -50,11 +52,12 @@ impl<W: Worker> Controller<W> {
         // build our channel for sending/receiving monitor updates on
         let (monitor_tx, monitor_rx) = kanal::unbounded_async();
         // spawn our global monitor
-        let monitor = MonitorHandler::spawn(msg, monitor_rx, &multi);
+        let monitor = MonitorHandler::spawn(msg, monitor_rx.clone(), &multi);
         // build our controller
         let mut controller = Controller {
             jobs: jobs_tx.clone(),
             monitor_tx,
+            monitor_rx,
             monitor,
             multi,
             active: FuturesUnordered::default(),

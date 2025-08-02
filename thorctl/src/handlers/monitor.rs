@@ -76,8 +76,8 @@ impl<M: Monitor> MonitorHandler<M> {
                 Ok(MonitorMsg::Update(update)) => M::apply(&self.global_bar, update),
                 Ok(MonitorMsg::Extend(delta)) => self.global_bar.inc_length(delta),
                 Ok(MonitorMsg::Finished) => break,
-                Err(kanal::ReceiveError::Closed) => break,
-                Err(kanal::ReceiveError::SendClosed) => break,
+                Err(kanal::ReceiveError::Closed) => panic!("Monitor: ReceiveError::Closed"),
+                Err(kanal::ReceiveError::SendClosed) => panic!("Monitor: ReceiveError::SendClosed"),
             }
         }
         // finish our global bar

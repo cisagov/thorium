@@ -4,7 +4,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thorium::models::{
     CommitListOpts, Commitish, CommitishKinds, GenericJobArgs, ReactionRequest, Repo,
@@ -18,7 +18,7 @@ use tokio_stream::wrappers::LinesStream;
 mod download;
 mod ingest;
 
-use self::ingest::IngestWorker;
+use self::ingest::{IngestJob, IngestWorker};
 
 use super::{progress, update, Controller};
 use crate::args::repos::{
@@ -137,7 +137,7 @@ async fn list_commits(thorium: Thorium, cmd: &ListCommits) -> Result<(), Error> 
     // try to buil commit list opts
     let opts = cmd.build_commit_opts()?;
     // get our cursor
-    let mut cursor = thorium.repos.list_commits(&cmd.repo, &opts).await?;
+    let mut cursor = thorium.repos.list_commitishes(&cmd.repo, &opts).await?;
     // print the header
     CommitishLine::header();
     loop {
@@ -153,7 +153,7 @@ async fn list_commits(thorium: Thorium, cmd: &ListCommits) -> Result<(), Error> 
     Ok(())
 }
 
-/// Ingest repos from a list of position args
+/// Ingest repos from a list of positional args
 ///
 /// # Arguments
 ///
@@ -169,8 +169,10 @@ async fn ingest_positionals(
     for repo in &cmd.urls {
         // skip any repos already in our set
         if added.insert(repo.clone()) {
+            // wrap this repo url in a Remote job
+            let job = IngestJob::Remote(repo.to_owned());
             // add this repo to our jobs queue
-            if let Err(error) = controller.add_job(repo.to_owned()).await {
+            if let Err(error) = controller.add_job(job).await {
                 // log this error
                 controller.error(&error.to_string());
             }
@@ -213,11 +215,41 @@ async fn ingest_files_lists(
             };
             // skip any repos already in our set
             if added.insert(line.clone()) {
+                // wrap this repo url in a Remote job
+                let job = IngestJob::Remote(line.to_owned());
                 // add this line to our jobs queue
-                if let Err(error) = controller.add_job(line).await {
+                if let Err(error) = controller.add_job(job).await {
                     // log this error
                     controller.error(&error.to_string());
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Ingest local repos from a list of positional args
+///
+/// # Arguments
+///
+/// * `controller` - The controller for our workers
+/// * `cmd` - The command to use to ingest repos
+/// * `added` - A set of repos that we have already added
+async fn ingest_local_positionals(
+    controller: &mut Controller<IngestWorker>,
+    cmd: &IngestRepos,
+    added: &mut HashSet<PathBuf>,
+) -> Result<(), Error> {
+    // crawl over the urls passed as positional args
+    for repo in &cmd.local {
+        // skip any repos already in our set
+        if added.insert(repo.clone()) {
+            // wrap this repo url in a Local job
+            let job = IngestJob::Local(repo.to_owned());
+            // add this repo to our jobs queue
+            if let Err(error) = controller.add_job(job).await {
+                // log this error
+                controller.error(&error.to_string());
             }
         }
     }
@@ -250,10 +282,15 @@ async fn ingest(
     .await;
     // track and remove any duplicate repos as those can cause hangs
     let mut added = HashSet::with_capacity(100);
+    // ingest any remote repos
     // ingest any repos passed with positional args
     ingest_positionals(&mut controller, cmd, &mut added).await?;
     // ingest any repos from any lists in files
     ingest_files_lists(&mut controller, cmd, &mut added).await?;
+    // track and remove any duplicate local repos as its wasteful to ingest them more then once
+    let mut local_added = HashSet::with_capacity(100);
+    // Add any locally cloned repos
+    ingest_local_positionals(&mut controller, cmd, &mut local_added).await?;
     // wait for all our workers to complete
     controller.finish().await?;
     Ok(())
@@ -305,8 +342,10 @@ async fn update(
             for line in repos_cursor.data.drain(..) {
                 // skip any repos we aleady added
                 if added.insert(line.url.clone()) {
+                    // all update repos will be a remote job
+                    let job = IngestJob::Remote(line.url);
                     // add this repo to our jobs queue
-                    if let Err(error) = controller.add_job(line.url).await {
+                    if let Err(error) = controller.add_job(job).await {
                         // log this error
                         controller.error(&error.to_string());
                     }
@@ -607,7 +646,10 @@ async fn map_contributors(
     // build the options for listing commits
     let opts = CommitListOpts::default().page_size(1000);
     // build a cursor to crawl this repos commits
-    let mut cursor = thorium.repos.list_commit_details(&cmd.repo, &opts).await?;
+    let mut cursor = thorium
+        .repos
+        .list_commitish_details(&cmd.repo, &opts)
+        .await?;
     // crawl our cursor
     loop {
         // crawl the commits on this page

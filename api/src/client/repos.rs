@@ -17,12 +17,13 @@ use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferP
 use super::Error;
 use crate::models::{
     Attachment, CommitListOpts, Commitish, CommitishDetails, CommitishMapRequest, Cursor,
-    OutputBundle, OutputListLine, OutputMap, OutputRequest, OutputResponse, Repo,
-    RepoCreateResponse, RepoDataUploadResponse, RepoDownloadOpts, RepoListLine, RepoListOpts,
-    RepoRequest, ResultGetParams, ResultListOpts, TagDeleteRequest, TagRequest, TarredRepo,
-    UntarredRepo,
+    OutputMap, OutputRequest, OutputResponse, Repo, RepoCreateResponse, RepoDataUploadResponse,
+    RepoDownloadOpts, RepoListLine, RepoListOpts, RepoRequest, ResultGetParams, TagDeleteRequest,
+    TagRequest, TarredRepo, UntarredRepo,
 };
-use crate::{add_date, add_query, add_query_list, add_query_list_clone, send, send_build};
+use crate::{
+    add_date, add_query, add_query_bool, add_query_list, add_query_list_clone, send, send_build,
+};
 
 /// repos handler for the Thorium client
 #[derive(Clone)]
@@ -141,6 +142,10 @@ impl Repos {
     /// # Arguments
     ///
     /// * `repo` - The url of the repo to get info on
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::get", skip(self), err(Debug))
+    )]
     pub async fn get(&self, repo: &str) -> Result<Repo, Error> {
         // build url for adding commits to a repo
         let url = format!(
@@ -161,6 +166,10 @@ impl Repos {
     /// * `repo` - The repo to upload data for
     /// * `zip` - The tarred repo to save to s3
     /// * `groups` - The groups to share this repo with
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::upload", skip(self, tar), err(Debug))
+    )]
     pub async fn upload(
         &self,
         repo: &str,
@@ -190,6 +199,10 @@ impl Repos {
     /// * `repo` - The repo to add new commits too
     /// * `zip` - the sha256 of the data zip to add commits too
     /// * `map` - The map of commits that are contained in this zip
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::add_commits", skip(self, map), err(Debug))
+    )]
     pub async fn add_commits(
         &self,
         repo: &str,
@@ -322,6 +335,10 @@ impl Repos {
     /// * `repo` - The url of the repo to download
     /// * `opts` - The options for downloading a repo
     /// * `path` - The path to download this zipped repo to
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::download", skip(self, opts, path), err(Debug))
+    )]
     pub async fn download<P: Into<PathBuf>>(
         &self,
         repo: &str,
@@ -401,6 +418,14 @@ impl Repos {
     /// * `repo` - The url of the repo to download
     /// * `opts` - The options for downloading a repo
     /// * `path` - The path to download this zipped repo to
+    #[cfg_attr(
+        feature = "trace",
+        instrument(
+            name = "Thorium::Repos::download_unpack",
+            skip(self, opts, path),
+            err(Debug)
+        )
+    )]
     pub async fn download_unpack<P: Into<PathBuf>>(
         &self,
         repo: &str,
@@ -470,6 +495,10 @@ impl Repos {
     /// # Arguments
     ///
     /// * `params` - The params to use when listing repos
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::list", skip(self), err(Debug))
+    )]
     pub async fn list(&self, opts: &RepoListOpts) -> Result<Cursor<RepoListLine>, Error> {
         // build the url for listing repos
         let url = format!("{}/api/repos/", self.host);
@@ -491,6 +520,11 @@ impl Repos {
             // add this tag keys filters to our query params
             add_query_list_clone!(query, query_key, values);
         }
+        add_query_bool!(
+            query,
+            "tags_case_insensitive".to_owned(),
+            opts.tags_case_insensitive
+        );
         // get the data for this request and create our cursor
         Cursor::new(
             &url,
@@ -508,6 +542,10 @@ impl Repos {
     /// # Arguments
     ///
     /// * `params` - The params to use when listing repo details
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::list_details", skip(self), err(Debug))
+    )]
     pub async fn list_details(&self, opts: &RepoListOpts) -> Result<Cursor<Repo>, Error> {
         // build the url for listing repo details
         let url = format!("{}/api/repos/details/", self.host);
@@ -529,6 +567,11 @@ impl Repos {
             // add this tag keys filters to our query params
             add_query_list_clone!(query, query_key, values);
         }
+        add_query_bool!(
+            query,
+            "tags_case_insensitive".to_owned(),
+            opts.tags_case_insensitive
+        );
         // get the data for this request and create our cursor
         Cursor::new(
             &url,
@@ -547,7 +590,11 @@ impl Repos {
     ///
     /// * `repo` - The repo to list commits for
     /// * `params` - The params to use when listing commits
-    pub async fn list_commits(
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Repos::list_commitishes", skip(self), err(Debug))
+    )]
+    pub async fn list_commitishes(
         &self,
         repo: &str,
         opts: &CommitListOpts,
@@ -584,7 +631,15 @@ impl Repos {
     ///
     /// * `repo` - The repo to list commits for
     /// * `params` - The params to use when listing commits
-    pub async fn list_commit_details(
+    #[cfg_attr(
+        feature = "trace",
+        instrument(
+            name = "Thorium::Repos::list_commitish_details",
+            skip(self),
+            err(Debug)
+        )
+    )]
+    pub async fn list_commitish_details(
         &self,
         repo: &str,
         opts: &CommitListOpts,
@@ -671,6 +726,10 @@ impl ResultsClient for Repos {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "ResultsClient<Repos>::create_results", skip_all, err(Debug))
+    )]
     async fn create_result(
         &self,
         output_req: OutputRequest<Repo>,
@@ -706,6 +765,10 @@ impl ResultsClient for Repos {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "ResultsClient<Repos>::get_results", skip(self), fields(repo = repo.as_ref()), err(Debug))
+    )]
     async fn get_results<T: AsRef<str>>(
         &self,
         repo: T,
@@ -747,6 +810,15 @@ impl ResultsClient for Repos {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(
+            name = "ResultsClient<Repos>::download_result_file",
+            skip(self, repo, result_id, path),
+            fields(repo = repo.as_ref())
+            err(Debug)
+        )
+    )]
     async fn download_result_file<T, P>(
         &self,
         repo: T,
@@ -762,80 +834,5 @@ impl ResultsClient for Repos {
         let repo_trimmed = repo.as_ref().trim_end_matches('/');
         self.download_result_file_generic(repo_trimmed, tool, result_id, path)
             .await
-    }
-
-    /// Lists results for repos
-    ///
-    /// # Arguments
-    ///
-    /// * `opts` - The options for listing results
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::{Thorium, SearchDate};
-    /// use thorium::client::ResultsClient;
-    /// use thorium::models::ResultListOpts;
-    /// # use thorium::Error;
-    ///
-    /// # async fn exec() -> Result<(), Error> {
-    /// // create Thorium client
-    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // build a search to list results from 2020
-    /// let search = ResultListOpts::default()
-    ///     .start(SearchDate::year(2020, false)?)
-    ///     .end(SearchDate::year(2020, true)?)
-    ///     // limit it to 100 repos
-    ///     .limit(100);
-    /// // list the up to 100 results from 2020
-    /// thorium.repos.list_results(search).await?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
-    /// ```
-    async fn list_results(&self, opts: ResultListOpts) -> Result<Cursor<OutputListLine>, Error> {
-        self.list_results_generic(opts).await
-    }
-
-    /// Lists bundled results that meet some search criteria
-    ///
-    /// # Arguments
-    ///
-    /// * `opts` - The options for listing result bundles
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::{Thorium, SearchDate};
-    /// use thorium::client::ResultsClient;
-    /// use thorium::models::ResultListOpts;
-    /// # use thorium::Error;
-    ///
-    /// # async fn exec() -> Result<(), Error> {
-    /// // create Thorium client
-    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // build a search to list bundled results from 2020
-    /// let search = ResultListOpts::default()
-    ///     .start(SearchDate::year(2020, false)?)
-    ///     .end(SearchDate::year(2020, true)?)
-    ///     // limit it to 100 repos
-    ///     .limit(100);
-    /// // list up to 100 bundled results from 2020
-    /// thorium.repos.list_results_bundle(search).await?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
-    /// ```
-    async fn list_results_bundle(
-        &self,
-        opts: ResultListOpts,
-    ) -> Result<Cursor<OutputBundle>, Error> {
-        self.list_results_bundle_generic(opts).await
     }
 }

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Helmet, HelmetProvider } from 'react-helmet-async';
-import { Alert, Button, Col, Container, Card, Form, Modal, Row } from 'react-bootstrap';
+import { Alert, Button, Col, Card, Form, Modal, Row } from 'react-bootstrap';
 
 // project imports
-import { SimpleTitle, SimpleSubtitle, Subtitle, Title, LoadingSpinner } from '@components';
+import { LoadingSpinner, SimpleTitle, SimpleSubtitle, Subtitle, Title, Page } from '@components';
 import { useAuth } from '@utilities';
 import { getBanner } from '@thorpi';
 
@@ -205,93 +204,88 @@ const LoginContainer = () => {
   };
 
   return (
-    <HelmetProvider>
-      <Container>
-        <Helmet>
-          <title>Login &middot; Thorium</title>
-        </Helmet>
-        <Row>
-          <Col className="d-flex justify-content-center align-items-center">
-            <Card className="p-4 d-flex justify-content-center align-items-center panel">
-              <Card.Title>
-                <SimpleTitle>Welcome to Thorium!</SimpleTitle>
-              </Card.Title>
-              <Card.Body>
-                {banner != null && banner != '' && (
-                  <Row>
-                    <Col className="d-flex justify-content-center">
-                      <pre className="banner">
-                        <center>{String(banner)}</center>
-                      </pre>
+    <Page title="Login · Thorium">
+      <Row>
+        <Col className="d-flex justify-content-center align-items-center">
+          <Card className="p-4 d-flex justify-content-center align-items-center panel">
+            <Card.Title>
+              <SimpleTitle>Welcome to Thorium!</SimpleTitle>
+            </Card.Title>
+            <Card.Body>
+              {banner != null && banner != '' && (
+                <Row>
+                  <Col className="d-flex justify-content-center">
+                    <pre className="banner">
+                      <center>{String(banner)}</center>
+                    </pre>
+                  </Col>
+                </Row>
+              )}
+              <Row>
+                <Col className="d-flex justify-content-center">
+                  <Form.Control
+                    className="m-2 login"
+                    type="text"
+                    value={username}
+                    placeholder="username"
+                    onChange={(e) => setUsername(String(e.target.value))}
+                    onKeyDown={(e) => handleFormKeyPress(e)}
+                  />
+                </Col>
+              </Row>
+              <Row>
+                <Col className="d-flex justify-content-center">
+                  <Form.Control
+                    className="m-2 login"
+                    type="password"
+                    value={password}
+                    placeholder="password"
+                    onChange={(e) => setPassword(String(e.target.value))}
+                    onKeyDown={(e) => handleFormKeyPress(e)}
+                  />
+                </Col>
+              </Row>
+              {loggingIn ? (
+                <LoadingSpinner loading={loggingIn}></LoadingSpinner>
+              ) : (
+                <>
+                  <Row className="mt-3">
+                    <Col className="d-flex justify-content-center align-items-center">
+                      <SimpleSubtitle>
+                        New user? Create an&nbsp;
+                        <Link to="/auth" onClick={() => handleShowRegModal()}>
+                          account
+                        </Link>
+                        .
+                      </SimpleSubtitle>
                     </Col>
                   </Row>
-                )}
-                <Row>
-                  <Col className="d-flex justify-content-center">
-                    <Form.Control
-                      className="m-2 login"
-                      type="text"
-                      value={username}
-                      placeholder="username"
-                      onChange={(e) => setUsername(String(e.target.value))}
-                      onKeyDown={(e) => handleFormKeyPress(e)}
-                    />
-                  </Col>
-                </Row>
-                <Row>
-                  <Col className="d-flex justify-content-center">
-                    <Form.Control
-                      className="m-2 login"
-                      type="password"
-                      value={password}
-                      placeholder="password"
-                      onChange={(e) => setPassword(String(e.target.value))}
-                      onKeyDown={(e) => handleFormKeyPress(e)}
-                    />
-                  </Col>
-                </Row>
-                {loggingIn ? (
-                  <LoadingSpinner loading={loggingIn}></LoadingSpinner>
-                ) : (
-                  <>
-                    <Row className="mt-3">
-                      <Col className="d-flex justify-content-center align-items-center">
-                        <SimpleSubtitle>
-                          New user? Create an&nbsp;
-                          <Link to="/auth" onClick={() => handleShowRegModal()}>
-                            account
-                          </Link>
-                          .
-                        </SimpleSubtitle>
-                      </Col>
-                    </Row>
-                    <Row>
-                      {loginErr != '' && (
-                        <center>
-                          <Alert variant="danger">{loginErr}</Alert>
-                        </center>
-                      )}
-                    </Row>
-                    <Row>
-                      <Col className="d-flex justify-content-center">
-                        <Button
-                          className="primary-btn"
-                          onClick={() => handleAuthFormSubmit(username, password, setLoginErr)}
-                          variant="success"
-                        >
-                          Login
-                        </Button>
-                      </Col>
-                    </Row>
-                  </>
-                )}
-              </Card.Body>
-              <RegisterModal />
-            </Card>
-          </Col>
-        </Row>
-      </Container>
-    </HelmetProvider>
+                  <Row>
+                    {loginErr != '' && (
+                      <center>
+                        <Alert variant="danger">{loginErr}</Alert>
+                      </center>
+                    )}
+                  </Row>
+                  <Row>
+                    <Col className="d-flex justify-content-center">
+                      <Button
+                        className="primary-btn"
+                        onClick={() => handleAuthFormSubmit(username, password, setLoginErr)}
+                        variant="success"
+                      >
+                        Login
+                      </Button>
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </Card.Body>
+            <RegisterModal />
+          </Card>
+        </Col>
+      </Row>
+    </Page>
   );
 };
 

@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use uuid::Uuid;
 
+#[cfg(feature = "scylla-utils")]
+use crate::models::CensusKeys;
 use crate::models::InvalidEnum;
 
 /// Info about a single commit for a repo
@@ -192,7 +194,7 @@ impl GitTagRequest {
             // get this tags author
             let author = signature.email.to_string();
             // get when this tag was created
-            let git_time = signature.time;
+            let git_time = signature.time()?;
             // cast our git time to a chrono timestamp
             let timestamp = Utc
                 .timestamp_opt(git_time.seconds + git_time.offset as i64, 0)
@@ -313,6 +315,15 @@ impl CommitishRequest {
             CommitishRequest::Commit(commit) => commit.timestamp,
             CommitishRequest::Branch(branch) => branch.timestamp,
             CommitishRequest::Tag(tag) => tag.timestamp,
+        }
+    }
+
+    /// Get the kind of commitish this is
+    pub fn kind(&self) -> CommitishKinds {
+        match self {
+            CommitishRequest::Commit(_) => CommitishKinds::Commit,
+            CommitishRequest::Branch(_) => CommitishKinds::Branch,
+            CommitishRequest::Tag(_) => CommitishKinds::Tag,
         }
     }
 }
@@ -468,6 +479,80 @@ impl Commitish {
             Self::Branch(_) => CommitishKinds::Branch,
             Self::Tag(_) => CommitishKinds::Tag,
         }
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "scylla-utils", derive(scylla::DeserializeRow))]
+#[cfg_attr(
+    feature = "scylla-utils",
+    scylla(flavor = "enforce_order", skip_name_checks)
+)]
+pub struct CommitishCensusRow {
+    pub kind: CommitishKinds,
+    pub group: String,
+    pub year: i32,
+    pub bucket: i32,
+    pub repo: String,
+    pub count: i64,
+}
+
+#[cfg(feature = "scylla-utils")]
+impl crate::models::CensusSupport for Commitish {
+    /// The type returned by our prepared statement
+    type Row = CommitishCensusRow;
+
+    /// Build the prepared statement for getting partition count info
+    async fn scan_prepared_statement(
+        scylla: &scylla::client::session::Session,
+        ns: &str,
+    ) -> Result<scylla::statement::prepared::PreparedStatement, scylla::errors::PrepareError> {
+        // build tags get partition count prepared statement
+        scylla
+            .prepare(format!(
+                "SELECT kind, group, year, bucket, repo, count(*) \
+                FROM {}.commitish_list \
+                WHERE token(kind, group, year, bucket, repo) >= ? AND token(kind, group, year, bucket, repo) <= ? \
+                GROUP BY kind, group, year, bucket, repo",
+                ns,
+            ))
+            .await
+    }
+
+    /// Get the count for this partition
+    fn get_count(row: &CommitishCensusRow) -> i64 {
+        row.count
+    }
+
+    /// Get the bucket for this partition
+    fn get_bucket(row: &CommitishCensusRow) -> i32 {
+        row.bucket
+    }
+
+    /// Build the count key for this partition
+    fn count_key_from_row(namespace: &str, row: &Self::Row, grouping: i32) -> String {
+        // build the key for this row
+        format!(
+            "{namespace}:census:commitish:counts:{kind}:{group}:{repo}:{year}:{grouping}",
+            namespace = namespace,
+            kind = row.kind,
+            group = row.group,
+            repo = row.repo,
+            year = row.year,
+            grouping = grouping,
+        )
+    }
+
+    /// Build the sorted set key for this census operation
+    fn stream_key_from_row(namespace: &str, row: &Self::Row) -> String {
+        format!(
+            "{namespace}:census:commitish:stream:{kind}:{group}:{repo}:{year}",
+            namespace = namespace,
+            kind = row.kind,
+            group = row.group,
+            repo = row.repo,
+            year = row.year,
+        )
     }
 }
 

@@ -5,23 +5,17 @@ use axum::extract::multipart::Field;
 use axum::extract::{FromRequestParts, Multipart};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
-use chrono::prelude::*;
-use futures_util::Future;
-use scylla::transport::errors::QueryError;
-use scylla::QueryResult;
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::{instrument, Span};
 use uuid::Uuid;
 
-use super::db::{self, CursorCore, ScyllaCursorSupport};
+use super::db::{self};
 use crate::models::backends::OutputSupport;
 use crate::models::{
-    ApiCursor, AutoTag, AutoTagUpdate, ElasticDoc, ElasticSearchParams, ImageVersion, Output,
-    OutputBundle, OutputChunk, OutputCollection, OutputCollectionUpdate, OutputDisplayType,
-    OutputForm, OutputFormBuilder, OutputKind, OutputListLine, OutputMap, OutputRow,
-    OutputStreamRow, Repo, ResultGetParams, ResultListParams, Sample, User,
+    AutoTag, AutoTagUpdate, ImageVersion, Output, OutputChunk, OutputCollection,
+    OutputCollectionUpdate, OutputDisplayType, OutputForm, OutputFormBuilder, OutputKind,
+    OutputMap, OutputRow, Repo, ResultGetParams, Sample, User,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{bad, deserialize, update, update_clear, update_opt};
@@ -306,70 +300,6 @@ impl Output {
         // download this result file
         shared.s3.results.download(&path).await
     }
-
-    /// Get a chunk of the Result list
-    /// # Arguments
-    ///
-    /// * `user` - The user that is listing results
-    /// * `kind` - The kind of results to list
-    /// * `params` - The query params for listing results
-    /// * `shared` - Shared Thorium objects
-    #[instrument(name = "Output::list", skip(kind, user, shared), err(Debug))]
-    pub async fn list(
-        user: &User,
-        kind: OutputKind,
-        mut params: ResultListParams,
-        shared: &Shared,
-    ) -> Result<ApiCursor<OutputListLine>, ApiError> {
-        // authorize the groups to list results from
-        user.authorize_groups(&mut params.groups, shared).await?;
-        // get a chunk of the results stream
-        let scylla_cursor = db::results::list(kind, params, shared).await?;
-        // convert our scylla cursor to a user facing crusor
-        Ok(ApiCursor::from(scylla_cursor))
-    }
-
-    /// Search results in elastic and return a list of sha256s
-    ///
-    /// # Arguments
-    ///
-    /// * `user` - The user that is listing samples
-    /// * `params` - The query params for searching results
-    /// * `shared` - Shared objects in Thorium
-    pub async fn search(
-        user: &User,
-        mut params: ElasticSearchParams,
-        shared: &Shared,
-    ) -> Result<ApiCursor<ElasticDoc>, ApiError> {
-        // authorize the groups to list files from
-        user.authorize_groups(&mut params.groups, shared).await?;
-        // search for results documents in elastic
-        db::results::search(params, shared).await
-    }
-
-    /// Get a bundled chunk of the results stream
-    ///
-    /// Bundling the results stream means that we get the latest result for each
-    /// tool + group for each sample in our list
-    ///
-    /// # Arguments
-    ///
-    /// * `user` - The user that is listing results
-    /// * `kind` - The kind of results to get bundles for
-    /// * `params` - The query params for getting bundles of results
-    /// * `shared` - Shared Thorium objects
-    #[instrument(name = "Output::bundle", skip(kind, user, shared), err(Debug))]
-    pub async fn bundle(
-        user: &User,
-        kind: OutputKind,
-        mut params: ResultListParams,
-        shared: &Shared,
-    ) -> Result<ApiCursor<OutputBundle>, ApiError> {
-        // authorize the groups to list results from
-        user.authorize_groups(&mut params.groups, shared).await?;
-        // get a bundled chunk of the results stream
-        db::results::bundle(kind, params, shared).await
-    }
 }
 
 impl AutoTag {
@@ -455,277 +385,6 @@ impl From<OutputRow> for OutputChunk {
     }
 }
 
-impl From<OutputStreamRow> for OutputListLine {
-    /// Convert an [`OutputStreamRow`] to an [`OutputListLine`]
-    ///
-    /// # Arguments
-    ///
-    /// * `row` - The search row to convert
-    fn from(row: OutputStreamRow) -> Self {
-        OutputListLine {
-            groups: vec![row.group],
-            key: row.key,
-            tool: row.tool,
-            id: row.id,
-            uploaded: row.uploaded,
-        }
-    }
-}
-
-// implement cursor for our results stream
-#[async_trait::async_trait]
-impl CursorCore for OutputListLine {
-    /// The params to build this cursor from
-    type Params = ResultListParams;
-
-    /// The extra info to filter with
-    type ExtraFilters = OutputKind;
-
-    /// The type of data to group our rows by
-    type GroupBy = String;
-
-    /// The data structure to store tie info in
-    type Ties = HashMap<String, Uuid>;
-
-    /// Get our cursor id from params
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - The params to use to build this cursor
-    fn get_id(params: &mut Self::Params) -> Option<Uuid> {
-        params.cursor.take()
-    }
-
-    // Get our start and end timestamps
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - The params to use to build this cursor
-    fn get_start_end(
-        params: &Self::Params,
-        shared: &Shared,
-    ) -> Result<(DateTime<Utc>, DateTime<Utc>), ApiError> {
-        // get our end timestmap
-        let end = params.end(shared)?;
-        Ok((params.start, end))
-    }
-
-    /// Get any group restrictions from our params
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - The params to use to build this cursor
-    fn get_group_by(params: &mut Self::Params) -> Vec<Self::GroupBy> {
-        std::mem::take(&mut params.groups)
-    }
-
-    /// Get our extra filters from our params
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - The params to use to build this cursor
-    fn get_extra_filters(_params: &mut Self::Params) -> Self::ExtraFilters {
-        unimplemented!("USE FROM PARAMS EXTRA INSTEAD!")
-    }
-
-    /// Get our the max number of rows to return
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - The params to use to build this cursor
-    fn get_limit(params: &Self::Params) -> usize {
-        params.limit
-    }
-
-    /// Get the partition size for this cursor
-    ///
-    /// # Arguments
-    ///
-    /// * `shared` - Shared Thorium objects
-    fn partition_size(shared: &Shared) -> u16 {
-        // get our partition size
-        shared.config.thorium.results.partition_size
-    }
-
-    /// Add an item to our tie breaker map
-    ///
-    /// # Arguments
-    ///
-    /// * `ties` - Our current ties
-    fn add_tie(&self, ties: &mut Self::Ties) {
-        // if its not already in the tie map then add each of its groups to our map
-        for group in &self.groups {
-            // if this group doesn't already have a tie entry then add it
-            ties.entry(group.clone()).or_insert_with(|| self.id.clone());
-        }
-    }
-
-    /// Determines if a new item is a duplicate or not
-    ///
-    /// # Arguments
-    ///
-    /// * `set` - The current set of deduped data
-    fn dedupe_item(&self, dedupe_set: &mut HashSet<String>) -> bool {
-        // if this is already in our dedupe set then skip it
-        if dedupe_set.contains(&self.key) {
-            // we already have this result so skip it
-            false
-        } else {
-            // add this new result to our dedupe set
-            dedupe_set.insert(self.key.clone());
-            // keep this new result
-            true
-        }
-    }
-}
-
-// implement cursor for our results stream
-#[async_trait::async_trait]
-impl ScyllaCursorSupport for OutputListLine {
-    /// The intermediate list row to use
-    type IntermediateRow = OutputStreamRow;
-
-    /// The unique key for this cursors row
-    type UniqueType<'a> = Uuid;
-
-    /// Get the timestamp from this items intermediate row
-    ///
-    /// # Arguments
-    ///
-    /// * `intermediate` - The intermediate row to get a timestamp for
-    fn get_intermediate_timestamp(intermediate: &Self::IntermediateRow) -> DateTime<Utc> {
-        intermediate.uploaded
-    }
-
-    /// Get the timestamp for this item
-    ///
-    /// # Arguments
-    ///
-    /// * `item` - The item to get a timestamp for
-    fn get_timestamp(&self) -> DateTime<Utc> {
-        self.uploaded
-    }
-
-    /// Get the unique key for this intermediate row if it exists
-    ///
-    /// # Arguments
-    ///
-    /// * `intermediate` - The intermediate row to get a unique key for
-    fn get_intermediate_unique_key<'a>(
-        intermediate: &'a Self::IntermediateRow,
-    ) -> Self::UniqueType<'a> {
-        intermediate.id
-    }
-
-    /// Get the unique key for this row if it exists
-    fn get_unique_key<'a>(&'a self) -> Self::UniqueType<'a> {
-        self.id
-    }
-
-    /// Add a group to a specific returned line
-    ///
-    /// # Arguments
-    ///
-    /// * `group` - The group to add to this line
-    fn add_group_to_line(&mut self, group: String) {
-        // add this group
-        self.groups.push(group);
-    }
-
-    /// Add a group to a specific returned line
-    fn add_intermediate_to_line(&mut self, intermediate: Self::IntermediateRow) {
-        // add this intermediate rows group
-        self.groups.push(intermediate.group);
-    }
-
-    /// builds the query string for getting data from ties in the last query
-    ///
-    /// # Arguments
-    ///
-    /// * `group` - The group that this query is for
-    /// * `_filters` - Any filters to apply to this query
-    /// * `year` - The year to get data for
-    /// * `bucket` - The bucket to get data for
-    /// * `uploaded` - The timestamp to get the remaining tied values for
-    /// * `breaker` - The value to use as a tie breaker
-    /// * `limit` - The max number of rows to return
-    /// * `shared` - Shared Thorium objects
-    fn ties_query(
-        ties: &mut Self::Ties,
-        extra: &Self::ExtraFilters,
-        year: i32,
-        bucket: i32,
-        uploaded: DateTime<Utc>,
-        limit: i32,
-        shared: &Shared,
-    ) -> Result<Vec<impl Future<Output = Result<QueryResult, QueryError>>>, ApiError> {
-        // allocate space for 300 futures
-        let mut futures = Vec::with_capacity(ties.len());
-        // if any ties were found then get the rest of them and add them to data
-        for (group, id) in ties.drain() {
-            // execute our query
-            let future = shared.scylla.session.execute_unpaged(
-                &shared.scylla.prep.results.list_ties_stream,
-                (extra, group, year, bucket, uploaded, id, limit),
-            );
-            // add this future to our set
-            futures.push(future);
-        }
-        Ok(futures)
-    }
-
-    /// builds the query string for getting the next page of values
-    ///
-    /// # Arguments
-    ///
-    /// * `group` - The group to restrict our query too
-    /// * `_filters` - Any filters to apply to this query
-    /// * `year` - The year to get data for
-    /// * `bucket` - The bucket to get data for
-    /// * `start` - The earliest timestamp to get data from
-    /// * `end` - The oldest timestamp to get data from
-    /// * `limit` - The max amount of data to get from this query
-    /// * `shared` - Shared Thorium objects
-    #[allow(clippy::too_many_arguments)]
-    async fn pull(
-        group: &Self::GroupBy,
-        extra: &Self::ExtraFilters,
-        year: i32,
-        bucket: Vec<i32>,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-        limit: i32,
-        shared: &Shared,
-    ) -> Result<QueryResult, QueryError> {
-        // execute our query
-        shared
-            .scylla
-            .session
-            .execute_unpaged(
-                &shared.scylla.prep.results.list_pull_stream,
-                (extra, group, year, bucket, start, end, limit),
-            )
-            .await
-    }
-}
-
-impl From<OutputListLine> for OutputBundle {
-    /// Convert an [`&OutputLineLine`] to an [`OutputBundle`]
-    ///
-    /// # Arguments
-    ///
-    /// * `row` - The output list line to convert
-    fn from(line: OutputListLine) -> Self {
-        OutputBundle {
-            sha256: line.key,
-            latest: line.uploaded,
-            results: HashMap::with_capacity(5),
-            map: HashMap::with_capacity(5),
-        }
-    }
-}
-
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for ResultGetParams
 where
     S: Send + Sync,
@@ -739,72 +398,6 @@ where
             Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
         } else {
             Ok(Self::default())
-        }
-    }
-}
-
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for ResultListParams
-where
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // try to extract our query
-        if let Some(query) = parts.uri.query() {
-            // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
-        } else {
-            Ok(Self::default())
-        }
-    }
-}
-
-impl ResultListParams {
-    pub fn end(&self, shared: &Shared) -> Result<DateTime<Utc>, ApiError> {
-        match self.end {
-            Some(end) => Ok(end),
-            None => match Utc.timestamp_opt(shared.config.thorium.results.earliest, 0) {
-                chrono::LocalResult::Single(default_end) => Ok(default_end),
-                _ => crate::internal_err!(format!(
-                    "default earliest results timestamp is invalid or ambigous - {}",
-                    shared.config.thorium.results.earliest
-                )),
-            },
-        }
-    }
-}
-
-#[axum::async_trait]
-impl<S> FromRequestParts<S> for ElasticSearchParams
-where
-    S: Send + Sync,
-{
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // try to extract our query
-        if let Some(query) = parts.uri.query() {
-            // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
-        } else {
-            Ok(Self::default())
-        }
-    }
-}
-
-impl ElasticSearchParams {
-    pub fn end(&self, shared: &Shared) -> Result<DateTime<Utc>, ApiError> {
-        match self.end {
-            Some(end) => Ok(end),
-            None => match Utc.timestamp_opt(shared.config.thorium.results.earliest, 0) {
-                chrono::LocalResult::Single(default_end) => Ok(default_end),
-                _ => crate::internal_err!(format!(
-                    "default earliest results timestamp is invalid or ambigous - {}",
-                    shared.config.thorium.results.earliest
-                )),
-            },
         }
     }
 }
@@ -840,7 +433,6 @@ pub struct ResultFileDownloadParams {
     pub result_file: PathBuf,
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for ResultFileDownloadParams
 where
     S: Send + Sync,

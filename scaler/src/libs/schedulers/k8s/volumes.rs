@@ -164,7 +164,7 @@ impl Volumes {
         let mut vol = Self::base(&name);
         // create config map source
         let config = ConfigMapVolumeSource {
-            name: Some(name),
+            name: name,
             // set the rest of the fields to default
             ..Default::default()
         };
@@ -246,7 +246,7 @@ impl Volumes {
         // build required config_map settings in
         let mut cmap = ConfigMapVolumeSource {
             default_mode,
-            name: Some(self.kustomize_support(vol, ns).await?),
+            name: self.kustomize_support(vol, ns).await?,
             items: None,
             optional: None,
         };
@@ -435,6 +435,15 @@ impl MountGen {
     ///
     /// * `vol` - A volume to add to a pod in k8s
     fn build(vol: &ThoriumVolume) -> VolumeMount {
+        // set recursive read only correctly based on our volume settings
+        let recursive_read_only = if vol.read_only {
+            // this volume is supposed to be read only so lets enforce this
+            // recusively if possible
+            Some("IfPossible".to_owned())
+        } else {
+            // this volume is not read only
+            None
+        };
         VolumeMount {
             name: vol.name.clone(),
             mount_path: vol.mount_path.clone(),
@@ -443,6 +452,7 @@ impl MountGen {
             // Thorium doesn't support these two current just ignore them
             sub_path_expr: None,
             mount_propagation: None,
+            recursive_read_only,
         }
     }
 }

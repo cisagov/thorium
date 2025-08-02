@@ -139,7 +139,6 @@ impl Worker {
                 // increment our job counter
                 self.lifetime.claimed_job();
                 // get this jobs reaction and job id
-                let reaction = job.reaction.clone();
                 let job_id = job.id.clone();
                 // build the path to write this jobs logs to
                 let log_path = format!("/tmp/{}-thorium.log", job.id);
@@ -151,7 +150,7 @@ impl Worker {
                         let handle =
                             tokio::spawn(async move { agents::execute(agent, log_path).await });
                         // build our active target info
-                        let current = CurrentTarget::new(reaction, job_id, handle);
+                        let current = CurrentTarget::new(job_id, handle);
                         // set our targets active job
                         self.target.active = Some(current);
                     }

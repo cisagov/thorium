@@ -1,161 +1,153 @@
 //! Monitor our exports for errors and push them into the queue
 
-use chrono::prelude::*;
-use chrono::Duration;
-use kanal::{AsyncReceiver, AsyncSender};
-use std::collections::{BTreeMap, HashSet};
-use thorium::models::{Export, ExportUpdate, ResultListOpts};
-use thorium::{Error, Thorium};
-use uuid::Uuid;
+use kanal::AsyncReceiver;
+use thorium::Error;
+use thorium::client::SearchEventsClient;
+use thorium::models::SearchEventStatus;
+use tracing::{Level, event, instrument};
 
-use crate::msg::{Msg, Response};
+use crate::init::InitSession;
+use crate::msg::JobStatus;
+use crate::sources::DataSource;
 
-pub struct Monitor {
-    /// A client for Thorium
-    thorium: Thorium,
-    /// The export to monitor
-    export: Export,
-    /// The channel to push jobs into
-    jobs_tx: AsyncSender<Msg>,
+pub struct Monitor<D: DataSource> {
+    /// The client to use to send status on events
+    event_client: D::EventClient,
     /// The channel to listen for worker progress updates on
-    progress_rx: AsyncReceiver<Response>,
-    /// The current watermark
-    watermark: u64,
-    /// The pending watermarks
-    pending_marks: BTreeMap<u64, DateTime<Utc>>,
-    /// The currently pending retries
-    pending_retries: HashSet<Uuid>,
-    /// Keep track of the last time we updated our watermark in scylla
-    last_updated: DateTime<Utc>,
+    progress_rx: AsyncReceiver<JobStatus>,
+    // TODO: make Monitor stateful to avoid checking option each loop
+    /// The init session
+    init_session: Option<InitSession>,
 }
 
-impl Monitor {
+impl<D: DataSource> Monitor<D> {
     /// Create a new monitor
     ///
     /// # Arguments
     ///
-    /// * `thorium` - A Thorium client
-    /// * `export` - The export we are monitoring
-    /// * `jobs_tx` - The channel to send new jobs on
+    /// * `event_client` - The client to use to send status on events
     /// * `progress_rx` - The channel to listen for progress on
+    /// * `init_session` - A possible init session to use to track progress
     pub fn new(
-        thorium: &Thorium,
-        export: &Export,
-        jobs_tx: &AsyncSender<Msg>,
-        progress_rx: &AsyncReceiver<Response>,
+        event_client: D::EventClient,
+        progress_rx: AsyncReceiver<JobStatus>,
+        init_session: Option<InitSession>,
     ) -> Self {
         Monitor {
-            thorium: thorium.clone(),
-            export: export.clone(),
-            jobs_tx: jobs_tx.clone(),
-            progress_rx: progress_rx.clone(),
-            watermark: 0,
-            pending_marks: BTreeMap::default(),
-            pending_retries: HashSet::default(),
-            last_updated: Utc::now(),
-        }
-    }
-
-    /// Check if theres any new errors to retry
-    async fn check_errors(&mut self) -> Result<(), Error> {
-        // build our result list opts
-        let opts = ResultListOpts::default();
-        // check if there is any export errors to retry
-        let mut cursor = self
-            .thorium
-            .exports
-            .list_errors(&self.export.name, opts)
-            .await?;
-        // loop over our cursor
-        loop {
-            // crawl over the errors in this cursor
-            for error in cursor.data.drain(..) {
-                // add this retry job to our queue
-                self.jobs_tx.send(Msg::Retry(error.clone())).await?;
-                // add this error to our current pending retries
-                self.pending_retries.insert(error.id);
-            }
-            // if our cursor exhausted then break out
-            if cursor.exhausted() {
-                break;
-            }
-            // get the next page of errors
-            cursor.refill().await?;
-        }
-        Ok(())
-    }
-
-    /// Handle a watermark update
-    async fn check_watermark(&mut self) {
-        // get the first watermark entry
-        if let Some((watermark, mut start)) = self.pending_marks.pop_first() {
-            // check if this is the next watermark
-            if self.watermark == watermark - 1 {
-                // increment our watermark
-                self.watermark += 1;
-                // crawl our pending watermark until we have a gap in marks
-                for (mark, timestamp) in &self.pending_marks {
-                    // if this watermark is the next one then update our watermark
-                    if self.watermark == mark - 1 {
-                        // increment our watermark
-                        self.watermark += 1;
-                        // update our start time
-                        start = *timestamp;
-                    } else {
-                        // there is a gap in watermarks
-                        break;
-                    }
-                }
-                // drop any pending marks lower then our new watermark
-                self.pending_marks.retain(|mark, _| *mark > self.watermark);
-                // build our export update
-                let update = ExportUpdate::new(start);
-                // update our export
-                if let Err(error) = self
-                    .thorium
-                    .exports
-                    .update(&self.export.name, &update)
-                    .await
-                {
-                    // log that we failed to update our export
-                    println!("Failed to update export: {error:#?}");
-                }
-            } else {
-                // add the first mark back in
-                self.pending_marks.insert(watermark, start);
-            }
+            event_client,
+            progress_rx,
+            init_session,
         }
     }
 
     /// Monitor our export for any errors and send them to workers
+    #[instrument(name = "Monitor::start", fields(data = D::DATA_NAME), skip_all, err(Debug))]
     pub async fn start(mut self) -> Result<(), Error> {
         loop {
-            // check if we have any new errors to retry
-            self.check_errors().await?;
-            // track how many iterations it has been since we checked watermarks
-            let mut since_check = 0;
+            // create a new event status report
+            let mut status = SearchEventStatus::default();
+            // track how many iterations it has been since we cleared events
+            let mut since_send_status = 0;
             // handle any responses
             while let Some(resp) = self.progress_rx.try_recv()? {
                 // handle our message
                 match resp {
-                    Response::Completed { watermark, start } => {
-                        self.pending_marks.insert(watermark, start);
+                    JobStatus::InitComplete { start, end } => {
+                        // TODO: Make Monitor stateful to avoid checking option each loop
+                        if let Some(init_session) = self.init_session.as_mut() {
+                            // update our log with the tokens that we completed
+                            init_session.log(start, end).await.map_err(|err| {
+                                Error::new(format!("Error logging completed token range: {err}"))
+                            })?;
+                            // remove the tokens from the remaining map
+                            init_session.tokens_remaining.remove(&start);
+                            // check if we're done initiating
+                            if init_session.tokens_remaining.is_empty() {
+                                // log that we've completed initiation
+                                event!(
+                                    Level::INFO,
+                                    msg = "Index initiation complete!",
+                                    duration = init_session.duration()
+                                );
+                                // TODO: state would be good here so we don't accidently try to
+                                // keep using a finished session
+                                // finish our session, deleting its info from Redis
+                                init_session.finish().await.map_err(|err| {
+                                    Error::new(format!(
+                                        "Failed to delete init session data from Redis: {err}"
+                                    ))
+                                })?;
+                                // set our init session to None
+                                self.init_session = None;
+                            } else {
+                                // calculate how many chunks we've completed
+                                let completed = init_session
+                                    .info
+                                    .chunk_count
+                                    .checked_sub(init_session.tokens_remaining.len() as u64);
+                                // log this chunk as complete
+                                event!(
+                                    Level::INFO,
+                                    msg = "Init chunk completed",
+                                    start = start,
+                                    end = end,
+                                    completed = completed,
+                                    remaining = init_session.tokens_remaining.len()
+                                );
+                            }
+                        } else {
+                            /* TODO:
+                             *  Make Monitor stateful to avoid checking option each loop
+                             *  This should never occur, but having state would make it actually impossible
+                             */
+                            return Err(Error::new(format!(
+                                "No init session in progress but got init response from worker! start: {start}, end: {end}"
+                            )));
+                        }
                     }
-                    Response::Fixed(error_id) => {
-                        self.pending_retries.remove(&error_id);
+                    // events were completed so add their ids to our success list
+                    JobStatus::EventComplete { mut ids } => status.successes.append(&mut ids),
+                    // events errored, so log the error and add their ids to our failure list
+                    JobStatus::EventError { error, mut ids } => {
+                        // log our error
+                        // TODO: we are logging the elastic error in its entirety here;
+                        // if those errors are too long, we might want to truncate instead
+                        event!(
+                            Level::ERROR,
+                            msg = format!(
+                                "Failed event: {}",
+                                error
+                                    .msg()
+                                    .unwrap_or_else(|| "An unknown error occurred".to_string()),
+                            ),
+                            ids = format!("{ids:?}"),
+                        );
+                        // add the failed event to the list of failures for the API to retry later
+                        status.failures.append(&mut ids);
                     }
                 }
                 // increment our counter
-                since_check += 1;
-                // if there has been more then 5000 iterations since our check then break out
-                if since_check > 5000 {
+                since_send_status += 1;
+                // if there has been more then 5000 iterations since we've sent status, break out
+                if since_send_status > 5000 {
                     break;
                 }
             }
-            // check our watermarks every minute
-            if self.last_updated + Duration::seconds(60) < Utc::now() {
-                // check our watermarks and update them in scylla
-                self.check_watermark().await;
+            // report our status to Thorium if it's not empty
+            if !status.is_empty() {
+                // send the status of the events back to thorium
+                self.event_client
+                    .send_status(&status)
+                    .await
+                    .map_err(|err| {
+                        Error::new(format!("Failed to send event status to Thorium: {err}"))
+                    })?;
+                // log how many events we've handled
+                event!(
+                    Level::INFO,
+                    events_success = status.successes.len(),
+                    events_failed = status.failures.len()
+                );
             }
             // sleep for 1 second if we emptied our queue
             if self.progress_rx.is_empty() {

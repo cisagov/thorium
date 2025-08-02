@@ -1,7 +1,7 @@
 //! Setup the samples tables/prepared statements in Scylla
 
-use scylla::prepared_statement::PreparedStatement;
-use scylla::Session;
+use scylla::client::session::Session;
+use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
@@ -19,6 +19,10 @@ pub struct TagsPreparedStatements {
     pub list_ties: PreparedStatement,
     /// Pull tag rows for a specific cursor page
     pub list_pull: PreparedStatement,
+    /// List ties from a previous tag cursor regardless of key/value case
+    pub list_ties_case_insensitive: PreparedStatement,
+    /// Pull tag rows for a specific cursor page regardless of key/value case
+    pub list_pull_case_insensitive: PreparedStatement,
 }
 
 impl TagsPreparedStatements {
@@ -33,6 +37,7 @@ impl TagsPreparedStatements {
         setup_tags_table(session, config).await;
         // setup the tags materialized view
         setup_tags_by_item_mat_view(session, config).await;
+        setup_tags_case_insensitve_mat_view(session, config).await;
         // setup our prepared statements
         let insert = insert(session, config).await;
         let get = get(session, config).await;
@@ -40,6 +45,8 @@ impl TagsPreparedStatements {
         let delete = delete(session, config).await;
         let list_ties = list_ties(session, config).await;
         let list_pull = list_pull(session, config).await;
+        let list_ties_case_insensitive = list_ties_case_insensitive(session, config).await;
+        let list_pull_case_insensitive = list_pull_case_insensitive(session, config).await;
         // build our prepared statement object
         TagsPreparedStatements {
             insert,
@@ -48,6 +55,8 @@ impl TagsPreparedStatements {
             delete,
             list_ties,
             list_pull,
+            list_ties_case_insensitive,
+            list_pull_case_insensitive,
         }
     }
 }
@@ -73,7 +82,9 @@ async fn setup_tags_table(session: &Session, config: &Conf) {
             key TEXT,
             value TEXT,
             uploaded TIMESTAMP,
-            PRIMARY KEY ((type, group, year, bucket, key, value), uploaded, item)) \
+            key_lower TEXT,
+            value_lower TEXT,
+            PRIMARY KEY ((type, group, year, bucket, key, value), uploaded, item, key_lower, value_lower)) \
             WITH CLUSTERING ORDER BY (uploaded DESC)",
         ns = &config.thorium.namespace,
     );
@@ -93,22 +104,54 @@ async fn setup_tags_by_item_mat_view(session: &Session, config: &Conf) {
     // build cmd for table insert
     let table_create = format!(
         "CREATE MATERIALIZED VIEW IF NOT EXISTS {ns}.tags_by_item AS \
-            SELECT type, group, item, year, bucket, key, value, uploaded FROM {ns}.tags \
+            SELECT type, group, item, year, bucket, key, value, key_lower, value_lower, uploaded FROM {ns}.tags \
             WHERE type IS NOT NULL \
             AND group IS NOT NULL \
             AND item IS NOT NULL \
-            AND year IS NOT NULL 
+            AND year IS NOT NULL
             AND bucket IS NOT NULL \
             AND key IS NOT NULL \
             AND value IS NOT NULL \
             AND uploaded IS NOT NULL \
-            PRIMARY KEY ((type, item), group, year, bucket, uploaded, key, value)",
+            AND key_lower IS NOT NULL \
+            AND value_lower IS NOT NULL \
+            PRIMARY KEY ((type, item), group, year, bucket, uploaded, key, value, key_lower, value_lower)",
         ns = &config.thorium.namespace,
     );
     session
         .query_unpaged(table_create, &[])
         .await
         .expect("failed to add tags search materialized view");
+}
+
+/// Create the materialized view for case-insensitve queries
+///
+/// # Arguments
+///
+/// * `session` - The scylla session to use
+/// * `config` - The Thorium config
+async fn setup_tags_case_insensitve_mat_view(session: &Session, config: &Conf) {
+    // build cmd for table insert
+    let table_create = format!(
+        "CREATE MATERIALIZED VIEW IF NOT EXISTS {ns}.tags_case_insensitive AS \
+            SELECT type, group, item, year, bucket, key_lower, value_lower, uploaded, key, value FROM {ns}.tags \
+            WHERE type IS NOT NULL \
+            AND group IS NOT NULL \
+            AND item IS NOT NULL \
+            AND year IS NOT NULL
+            AND bucket IS NOT NULL \
+            AND key_lower IS NOT NULL \
+            AND value_lower IS NOT NULL \
+            AND uploaded IS NOT NULL \
+            AND key IS NOT NULL \
+            AND value IS NOT NULL \
+            PRIMARY KEY ((type, group, year, bucket, key_lower, value_lower), uploaded, item, key, value)",
+        ns = &config.thorium.namespace,
+    );
+    session
+        .query_unpaged(table_create, &[])
+        .await
+        .expect("failed to add tags case-insensitive materialized view");
 }
 
 /// build the tags insert prepared statement
@@ -122,8 +165,8 @@ async fn insert(session: &Session, config: &Conf) -> PreparedStatement {
     session
         .prepare(format!(
             "INSERT INTO {}.tags \
-                (type, group, item, year, bucket, key, value, uploaded) \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (type, group, item, year, bucket, key, value, uploaded, key_lower, value_lower) \
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             &config.thorium.namespace
         ))
         .await
@@ -243,4 +286,57 @@ async fn list_pull(session: &Session, config: &Conf) -> PreparedStatement {
         ))
         .await
         .expect("Failed to prepare scylla list tag pull statement")
+}
+
+/// Gets any remaining rows from past ties in listing items by tags regardless of
+/// key/value case
+///
+/// # Arguments
+///
+/// * `sessions` - The scylla session to use
+/// * `conf` - The Thorium config
+async fn list_ties_case_insensitive(session: &Session, config: &Conf) -> PreparedStatement {
+    // build list tag ties case insensitive prepared statement
+    session
+        .prepare(format!(
+            "SELECT group, item, uploaded \
+                FROM {}.tags_case_insensitive \
+                WHERE type = ? \
+                AND group = ? \
+                AND year = ? \
+                AND bucket = ? \
+                AND key_lower = ? \
+                AND value_lower = ? \
+                AND uploaded = ? \
+                AND item >= ?",
+            &config.thorium.namespace
+        ))
+        .await
+        .expect("Failed to prepare scylla list tag ties case insensitive statement")
+}
+
+/// Pull the data needed to list items by tags regardless of key/value case
+///
+/// # Arguments
+///
+/// * `sessions` - The scylla session to use
+/// * `conf` - The Thorium config
+async fn list_pull_case_insensitive(session: &Session, config: &Conf) -> PreparedStatement {
+    // build list tag pull case insensitive prepared statement
+    session
+        .prepare(format!(
+            "SELECT group, item, uploaded \
+                FROM {}.tags_case_insensitive \
+                WHERE type = ? \
+                AND group = ? \
+                AND year = ? \
+                AND bucket in ? \
+                AND key_lower = ? \
+                AND value_lower = ? \
+                AND uploaded < ? \
+                AND uploaded > ?",
+            &config.thorium.namespace
+        ))
+        .await
+        .expect("Failed to prepare scylla list tag pull case insensitive statement")
 }

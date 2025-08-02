@@ -1,8 +1,9 @@
 //! A cache of data in Thorium
 
 use chrono::prelude::*;
+use hashbrown::HashMap;
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use thorium::conf::{BaseNetworkPolicy, Conf};
 use thorium::models::{

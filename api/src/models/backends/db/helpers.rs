@@ -9,7 +9,7 @@ use crate::{bad, unavailable};
 #[macro_export]
 macro_rules! conn {
     ($shared:expr) => {
-        &mut *super::helpers::get_conn($shared).await?
+        &mut *$crate::models::backends::db::helpers::get_conn($shared).await?
     };
 }
 
@@ -18,7 +18,7 @@ macro_rules! conn {
 #[macro_export]
 macro_rules! query {
     ($cmd:expr, $shared:expr) => {
-        $cmd.query_async(&mut *super::helpers::get_conn($shared).await?)
+        $cmd.query_async(&mut *$crate::models::backends::db::helpers::get_conn($shared).await?)
     };
 }
 
@@ -27,7 +27,7 @@ macro_rules! query {
 #[macro_export]
 macro_rules! exec_query {
     ($cmd:expr, $shared:expr) => {
-        $cmd.query_async::<_, ()>(&mut *super::helpers::get_conn($shared).await?)
+        $cmd.exec_async(&mut *$crate::models::backends::db::helpers::get_conn($shared).await?)
     };
 }
 

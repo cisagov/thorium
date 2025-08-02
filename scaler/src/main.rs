@@ -1,5 +1,4 @@
 #![feature(hash_set_entry)]
-#![feature(hash_raw_entry)]
 #![feature(btree_extract_if)]
 
 use clap::Parser;
@@ -22,9 +21,11 @@ async fn main() {
     // generate a name for this scaler based on what it schedules
     let name = format!("Thorium{}Scaler", args.scaler);
     // setup our tracer
-    thorium::utils::trace::setup(&name, &conf.thorium.tracing);
+    let trace_provider = thorium::utils::trace::setup(&name, &conf.thorium.tracing);
     // setup scaler
     let mut scaler = Scaler::new(args).await.expect("Scaler failed to initalize");
     // start scaler
     scaler.start().await.expect("Scaler crashed");
+    // shutdown our trace provider
+    thorium::utils::trace::shutdown(trace_provider);
 }

@@ -9,9 +9,9 @@ const Formats = ['CaRT', 'Encrypted ZIP'];
 
 const downloadFile = async (sha256, setDownloadFileError, archiveFormat, archivePassword) => {
   const res = await getFile(sha256, setDownloadFileError, archiveFormat, archivePassword);
-  if (res && res.data && res.headers) {
+  if (res) {
     // turn response data to blob object
-    const blob = new Blob([res.data]);
+    const blob = new Blob([res]);
     // map url to blob in memory
     const url = window.URL.createObjectURL(blob);
     // create anchor tag for blob link
@@ -29,7 +29,7 @@ const downloadFile = async (sha256, setDownloadFileError, archiveFormat, archive
   }
 };
 
-const Download = ({ sha256 }) => {
+export const Download = ({ sha256 }) => {
   const [downloadFileError, setDownloadFileError] = useState('');
   const [archiveFormat, setArchiveFormat] = useState('Encrypted ZIP');
   const [archivePassword, setArchivePassword] = useState('');
@@ -92,5 +92,3 @@ const Download = ({ sha256 }) => {
     </div>
   );
 };
-
-export default Download;

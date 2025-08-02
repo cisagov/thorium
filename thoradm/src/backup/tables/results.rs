@@ -7,10 +7,10 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
-use scylla::prepared_statement::PreparedStatement;
-use scylla::transport::errors::QueryError;
+use scylla::client::session::Session;
+use scylla::errors::{ExecutionError, PrepareError};
+use scylla::statement::prepared::PreparedStatement;
 use scylla::DeserializeRow;
-use scylla::Session;
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::path::PathBuf;
@@ -19,6 +19,7 @@ use thorium::models::OutputDisplayType;
 use thorium::Conf;
 use uuid::Uuid;
 
+use crate::args::BackupComponents;
 use crate::backup::S3Backup;
 use crate::backup::S3Restore;
 use crate::backup::{utils, Backup, Restore, Scrub, Utils};
@@ -57,6 +58,11 @@ impl Utils for Output {
 /// Implement backup support for the results table
 #[async_trait::async_trait]
 impl Backup for Output {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::Results
+    }
+
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -66,7 +72,7 @@ impl Backup for Output {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         // build output get prepared statement
         scylla
             .prepare(format!(
@@ -97,7 +103,7 @@ impl Scrub for Output {}
 #[async_trait::async_trait]
 impl Restore for Output {
     /// The steps to once run before restoring data
-    async fn prep(_scylla: &Session, _ns: &str) -> Result<(), QueryError> {
+    async fn prep(_scylla: &Session, _ns: &str) -> Result<(), ExecutionError> {
         Ok(())
     }
 
@@ -110,7 +116,7 @@ impl Restore for Output {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         scylla
             .prepare(format!(
                 "INSERT INTO {}.{} \
@@ -212,6 +218,11 @@ impl Restore for Output {
 
 #[async_trait::async_trait]
 impl S3Backup for Output {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::ResultFiles
+    }
+
     /// Get the result files and where to write them off to disk at
     ///
     /// # Arguments
@@ -323,6 +334,11 @@ impl Utils for OutputStream {
 /// Implement backup support for the results table
 #[async_trait::async_trait]
 impl Backup for OutputStream {
+    /// Return the corresponding backup component for the implementor
+    fn backup_component() -> BackupComponents {
+        BackupComponents::ResultsStream
+    }
+
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -332,7 +348,7 @@ impl Backup for OutputStream {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         // build output get prepared statement
         scylla
             .prepare(format!(
@@ -366,7 +382,7 @@ impl Scrub for OutputStream {}
 #[async_trait::async_trait]
 impl Restore for OutputStream {
     /// The steps to once run before restoring data
-    async fn prep(scylla: &Session, ns: &str) -> Result<(), QueryError> {
+    async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
         utils::drop_materialized_view(ns, "results_auth", scylla).await?;
         utils::drop_materialized_view(ns, "results_ids", scylla).await?;
@@ -382,7 +398,7 @@ impl Restore for OutputStream {
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError> {
+    ) -> Result<PreparedStatement, PrepareError> {
         scylla
             .prepare(format!(
                 "INSERT INTO {}.{} \

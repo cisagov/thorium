@@ -4,11 +4,11 @@ use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use super::backends::TagSupport;
 use super::InvalidEnum;
+use super::backends::TagSupport;
 
 /// The different types of tags
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Hash, Eq)]
 #[cfg_attr(
     feature = "rkyv-support",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
@@ -60,7 +60,7 @@ impl std::fmt::Display for TagType {
 }
 
 /// A request to add new tags to a sample or repo
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TagRequest<T: TagSupport> {
     /// The groups these tags should be visible to
@@ -73,7 +73,21 @@ pub struct TagRequest<T: TagSupport> {
     pub trigger_depth: u8,
     /// The type we are implementing a tag request for
     #[serde(default)]
+    #[cfg_attr(feature = "api", schema(ignore, value_type = String))]
     phantom: PhantomData<T>,
+}
+
+// manually implement Clone to avoid requiring TagSupport to implement Clone,
+// as we just have PhantomData here, not an actual instance of TagSupport
+impl<T: TagSupport> Clone for TagRequest<T> {
+    fn clone(&self) -> Self {
+        Self {
+            groups: self.groups.clone(),
+            tags: self.tags.clone(),
+            trigger_depth: self.trigger_depth,
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: TagSupport> TagRequest<T> {
@@ -237,6 +251,7 @@ pub struct TagDeleteRequest<T: TagSupport> {
     pub tags: HashMap<String, Vec<String>>,
     /// The type we are implementing a tag delete request for
     #[serde(default)]
+    #[cfg_attr(feature = "api", schema(ignore, value_type = String))]
     phantom: PhantomData<T>,
 }
 
@@ -405,16 +420,15 @@ pub struct TagCensusRow {
 }
 
 #[cfg(feature = "scylla-utils")]
-impl<T: TagSupport + 'static + Send> super::Census for TagRequest<T> {
+impl<T: TagSupport + 'static + Send> super::CensusSupport for TagRequest<T> {
     /// The type returned by our prepared statement
     type Row = TagCensusRow;
 
     /// Build the prepared statement for getting partition count info
     async fn scan_prepared_statement(
-        scylla: &scylla::Session,
+        scylla: &scylla::client::session::Session,
         ns: &str,
-    ) -> Result<scylla::prepared_statement::PreparedStatement, scylla::transport::errors::QueryError>
-    {
+    ) -> Result<scylla::statement::prepared::PreparedStatement, scylla::errors::PrepareError> {
         // build tags get partition count prepared statement
         scylla
         .prepare(format!(
@@ -461,6 +475,89 @@ impl<T: TagSupport + 'static + Send> super::Census for TagRequest<T> {
             group = row.group,
             key = row.key,
             value = row.value,
+            year = row.year,
+        )
+    }
+}
+
+/// A placeholder struct for implementing census support for case-insensitive
+/// tags
+#[cfg(feature = "scylla-utils")]
+pub struct TagCensusCaseInsensitive<T: TagSupport> {
+    phantom: PhantomData<T>,
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "scylla-utils", derive(scylla::DeserializeRow))]
+#[cfg_attr(
+    feature = "scylla-utils",
+    scylla(flavor = "enforce_order", skip_name_checks)
+)]
+pub struct TagCensusCaseInsensitiveRow {
+    pub kind: TagType,
+    pub group: String,
+    pub year: i32,
+    pub bucket: i32,
+    pub key_lower: String,
+    pub value_lower: String,
+    pub count: i64,
+}
+
+#[cfg(feature = "scylla-utils")]
+impl<T: TagSupport + 'static + Send> super::CensusSupport for TagCensusCaseInsensitive<T> {
+    /// The type returned by our prepared statement
+    type Row = TagCensusCaseInsensitiveRow;
+
+    /// Build the prepared statement for getting partition count info
+    async fn scan_prepared_statement(
+        scylla: &scylla::client::session::Session,
+        ns: &str,
+    ) -> Result<scylla::statement::prepared::PreparedStatement, scylla::errors::PrepareError> {
+        // build tags case insensitive get partition count prepared statement
+        scylla
+        .prepare(format!(
+            "SELECT type, group, year, bucket, key_lower, value_lower, count(*) \
+            FROM {ns}.tags_case_insensitive \
+            WHERE token(type, group, year, bucket, key_lower, value_lower) >= ? AND token(type, group, year, bucket, key_lower, value_lower) <= ? \
+            GROUP BY type, group, year, bucket, key_lower, value_lower"
+        ))
+        .await
+    }
+
+    /// Get the count for this partition
+    fn get_count(row: &TagCensusCaseInsensitiveRow) -> i64 {
+        row.count
+    }
+
+    /// Get the bucket for this partition
+    fn get_bucket(row: &TagCensusCaseInsensitiveRow) -> i32 {
+        row.bucket
+    }
+
+    /// Build the count key for this partition
+    fn count_key_from_row(namespace: &str, row: &Self::Row, grouping: i32) -> String {
+        // build the key for this row
+        format!(
+            "{namespace}:census:tags_case_insensitive:counts:{kind}:{group}:{key}:{value}:{year}:{grouping}",
+            namespace = namespace,
+            kind = row.kind,
+            group = row.group,
+            key = row.key_lower,
+            value = row.value_lower,
+            year = row.year,
+            grouping = grouping,
+        )
+    }
+
+    /// Build the sorted set key for this census operation
+    fn stream_key_from_row(namespace: &str, row: &Self::Row) -> String {
+        format!(
+            "{namespace}:census:tags_case_insensitive:stream:{kind}:{group}:{key}:{value}:{year}",
+            namespace = namespace,
+            kind = row.kind,
+            group = row.group,
+            key = row.key_lower,
+            value = row.value_lower,
             year = row.year,
         )
     }

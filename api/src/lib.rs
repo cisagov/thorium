@@ -1,12 +1,6 @@
 //! The Thorium API, client, and objects
 
-#![feature(
-    proc_macro_hygiene,
-    decl_macro,
-    io_error_more,
-    round_char_boundary,
-    let_chains
-)]
+#![feature(proc_macro_hygiene, decl_macro, io_error_more, round_char_boundary)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -72,6 +66,18 @@ async fn initial_settings_consistency_scan(
                         Using default system settings: {default_settings:?}"
                     )
                 );
+                // set default settings in the db
+                crate::models::backends::db::system::reset_settings(&shared)
+                    .await
+                    .map_err(|err| {
+                        utils::ApiError::new(
+                            err.code,
+                            Some(format!(
+                                "Failed to set default system settings: {}",
+                                err.msg.unwrap_or("An unknown error occurred".to_string())
+                            )),
+                        )
+                    })?;
                 default_settings
             } else {
                 return Err(utils::ApiError::new(
@@ -107,13 +113,19 @@ async fn initial_settings_consistency_scan(
 
 #[cfg(feature = "api")]
 /// Build the axum app
-fn build_app(state: utils::AppState, conf: &Conf) -> axum::Router {
+fn build_app(
+    state: utils::AppState,
+    conf: &Conf,
+) -> (
+    axum::Router,
+    Option<opentelemetry_sdk::trace::SdkTracerProvider>,
+) {
     use axum::extract::DefaultBodyLimit;
     use axum::http::header::{HeaderName, HeaderValue};
     use axum::{http::Request, response::Response};
     use routes::{
-        basic, binaries, docs, events, exports, files, groups, images, jobs, network_policies,
-        pipelines, reactions, repos, search, streams, system, ui, users,
+        basic, binaries, docs, events, files, groups, images, jobs, network_policies, pipelines,
+        reactions, repos, search, streams, system, trees, ui, users,
     };
     use std::time::Duration;
     use tower_http::set_header::SetResponseHeaderLayer;
@@ -128,7 +140,6 @@ fn build_app(state: utils::AppState, conf: &Conf) -> axum::Router {
     app = binaries::mount(app, conf);
     app = docs::mount(app, conf);
     app = events::mount(app);
-    app = exports::mount(app);
     app = files::mount(app);
     app = groups::mount(app);
     app = images::mount(app);
@@ -142,8 +153,9 @@ fn build_app(state: utils::AppState, conf: &Conf) -> axum::Router {
     app = system::mount(app);
     app = ui::mount(app);
     app = users::mount(app);
+    app = trees::mount(app);
     // setup our tracing
-    trace::setup("ThoriumAPI", &conf.thorium.tracing);
+    let trace_provider = trace::setup("ThoriumAPI", &conf.thorium.tracing);
     // build cors middleware for our app
     let cors = if conf.thorium.cors.insecure {
         CorsLayer::permissive()
@@ -208,7 +220,7 @@ fn build_app(state: utils::AppState, conf: &Conf) -> axum::Router {
             HeaderValue::from_str(env!("CARGO_PKG_VERSION"))
                 .expect("Thorium version is not a valid header value"),
         ));
-    app.with_state(state)
+    (app.with_state(state), trace_provider)
 }
 
 #[cfg(feature = "api")]
@@ -238,7 +250,7 @@ pub async fn axum(config: Conf) {
         log_level,
     ));
     // build our app
-    let app = build_app(state, &config);
+    let (app, trace_provider) = build_app(state, &config);
     // parse our interface addr
     let bind_addr: IpAddr = config
         .thorium
@@ -273,8 +285,15 @@ pub async fn axum(config: Conf) {
         // increment our attempt count
         attempts += 1;
         // check if we reached our attempt limit
-        assert!(attempts <= 10, "Faild to bind server in 10 attempts");
+        if attempts <= 10 {
+            // we have tried and failed 10 times now so abort
+            break;
+        }
         // sleep for 3 seconds between attempts
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     }
+    // log that we failed to start
+    error!(log_level, "Failed to bind server in 10 attempts".to_owned());
+    // shutdown our trace provider if we ever exit
+    crate::utils::trace::shutdown(trace_provider);
 }

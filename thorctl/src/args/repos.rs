@@ -52,6 +52,9 @@ pub struct GetRepos {
     /// Any tags to filter by when searching for repos
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -102,6 +105,7 @@ impl SearchSealed for GetRepos {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,
@@ -134,6 +138,9 @@ pub struct DescribeRepos {
     /// Any tags to filter by when searching for repos to describe
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -174,6 +181,7 @@ impl SearchSealed for DescribeRepos {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,
@@ -257,6 +265,9 @@ fn default_temp_ingest_path() -> PathBuf {
 pub struct IngestRepos {
     /// The urls to the repos to ingest
     pub urls: Vec<String>,
+    /// The paths to already cloned repos to ingest from disk
+    #[clap(short, long)]
+    pub local: Vec<PathBuf>,
     /// The groups to add these repos to
     #[clap(short = 'G', long, value_delimiter = ',', required = true, value_parser = NonEmptyStringValueParser::new())]
     pub add_groups: Vec<String>,
@@ -343,6 +354,7 @@ impl From<&UpdateRepos> for IngestRepos {
     fn from(update: &UpdateRepos) -> IngestRepos {
         IngestRepos {
             urls: update.urls.clone(),
+            local: Vec::default(),
             add_groups: update.add_groups.clone(),
             add_tags: update.add_tags.clone(),
             delimiter: update.delimiter,
@@ -401,6 +413,9 @@ pub struct UpdateRepos {
     /// Any tags to filter by when searching for repos to update
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The most recent datetime to start searching at in UTC
     #[clap(short, long)]
     pub start: Option<String>,
@@ -449,6 +464,7 @@ impl SearchSealed for UpdateRepos {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,
@@ -504,6 +520,9 @@ pub struct DownloadRepos {
     /// Any tags to filter by when searching for repos
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -594,6 +613,7 @@ impl SearchSealed for DownloadRepos {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,

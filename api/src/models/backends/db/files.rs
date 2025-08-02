@@ -10,13 +10,17 @@ use uuid::Uuid;
 use super::ScyllaCursor;
 use crate::models::backends::TagSupport;
 use crate::models::{
-    Comment, CommentForm, CommentRow, Event, FileListParams, Sample, SampleCheck,
-    SampleCheckResponse, SampleForm, SampleListLine, SampleSubmissionResponse, Submission,
-    SubmissionChunk, SubmissionRow, SubmissionUpdate, TagDeleteRequest, TagRequest, User,
+    Comment, CommentForm, CommentRow, Event, FileListParams, ResultSearchEvent, Sample,
+    SampleCheck, SampleCheckResponse, SampleForm, SampleListLine, SampleSubmissionResponse,
+    Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate, TagDeleteRequest, TagRequest,
+    TagSearchEvent, User,
 };
 use crate::utils::s3::StandardHashes;
 use crate::utils::{helpers, ApiError, Shared};
-use crate::{conflict, for_groups, log_scylla_err, not_found, same_vec, serialize, unauthorized};
+use crate::{
+    conflict, for_groups, internal_err, log_scylla_err, not_found, same_vec, serialize,
+    unauthorized,
+};
 
 /// Deletes a submission from multiple groups, breaking into chunks of 100 if > 100
 macro_rules! delete_from_groups {
@@ -256,6 +260,10 @@ pub async fn create(
             (group, &year, bucket, &hashes.sha256, &hashes.sha1, &hashes.md5, &id, &form.file_name, &form.description, &user.username, &origin_str, now)
         ).await?;
     }
+    // build the keys for this items census cache
+    let keys = super::keys::samples::census_keys(&form.groups, year, bucket, shared);
+    // update this samples census cache info
+    super::census::incr_cache(keys, shared).await?;
     // add our origin tags to our tags map
     origin.get_tags(&mut form.tags);
     // build a tag request
@@ -602,6 +610,11 @@ pub async fn delete_submission(
         // prune access for our target groups
         prune_access(sample, &prunes, shared).await?;
     }
+    // build the ache keys for these submissions
+    // There is no extra info for samples to pass so we just pass in an &()
+    let keys = super::keys::samples::census_keys(groups, year, bucket, shared);
+    // update this samples census cache info
+    super::census::decr_cache(keys, shared).await?;
     Ok(())
 }
 
@@ -726,6 +739,15 @@ async fn prune_access(
     }
     // prune comment attachments now that the comments are deleted
     prune_comment_attachments(&sample.comments, &sample.sha256, shared).await?;
+    // create events to delete search info for this sample in the pruned groups
+    let tag_event = TagSearchEvent::deleted::<Sample>(sample.sha256.clone(), groups.clone());
+    let result_event = ResultSearchEvent::deleted::<Sample>(sample.sha256.clone(), groups.clone());
+    if let Err(err) = tokio::try_join!(
+        super::search::events::create(tag_event, shared),
+        super::search::events::create(result_event, shared)
+    ) {
+        return internal_err!(format!("Failed to create search event: {err}"));
+    }
     Ok(())
 }
 

@@ -77,6 +77,14 @@ pub async fn reconcile(cluster: Arc<ThoriumCluster>, state: Arc<State>) -> Resul
 ///
 /// * `args` - Arguments passed to the thorium-operator operate sub command
 pub async fn run(args: &OperateCluster) {
+    // TODO: explicitly set ring as default crypto provider, otherwise we get panics
+    // when creating the kube client; possibly fixed in newer versions of the kube crate
+    // so we might be able to remove this after upgrading kube
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("Failed to set 'ring' as default crypto provider");
+    }
     let client = Client::try_default()
         .await
         .expect("failed to create kube Client");

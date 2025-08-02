@@ -117,7 +117,7 @@ impl Secrets {
     pub fn registry_token(&self) -> Vec<LocalObjectReference> {
         if self.registry_token.is_some() {
             // create registry token if it does not exist in this group
-            let name = Some("thorium-registry-token".to_owned());
+            let name = "thorium-registry-token".to_owned();
             let impage_pull_secret = LocalObjectReference { name };
             vec![impage_pull_secret]
         } else {

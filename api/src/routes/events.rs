@@ -134,7 +134,6 @@ async fn reset_all(
     )
 )]
 #[instrument(name = "routes::events::get_cache_status", skip_all, err(Debug))]
-#[axum_macros::debug_handler]
 async fn get_cache_status(
     user: User,
     Query(params): Query<EventCacheStatusOpts>,
@@ -167,8 +166,8 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/events/pop/:kind/", patch(pop))
-        .route("/api/events/clear/:kind/", delete(clear))
-        .route("/api/events/reset/:kind/", patch(reset_all))
+        .route("/api/events/pop/{kind}/", patch(pop))
+        .route("/api/events/clear/{kind}/", delete(clear))
+        .route("/api/events/reset/{kind}/", patch(reset_all))
         .route("/api/events/cache/status/", get(get_cache_status))
 }

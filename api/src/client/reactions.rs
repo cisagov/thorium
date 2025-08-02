@@ -132,6 +132,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::create", skip_all, err(Debug))
+    )]
     pub async fn create(&self, data: &ReactionRequest) -> Result<ReactionCreation, Error> {
         // build request
         let req = self
@@ -185,6 +189,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::create_bulk", skip_all, err(Debug))
+    )]
     pub async fn create_bulk(
         &self,
         reqs: &[ReactionRequest],
@@ -242,6 +250,14 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::create_bulk_by_user",
+            skip_all,
+            err(Debug)
+        )
+    )]
     pub async fn create_bulk_by_user(
         &self,
         reqs: &HashMap<String, Vec<ReactionRequest>>,
@@ -284,6 +300,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::get", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
     pub async fn get(&self, group: &str, id: &Uuid) -> Result<Reaction, Error> {
         // build url
         let url = format!(
@@ -330,6 +350,15 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::add_stage_logs",
+            skip(self, logs),
+            fields(reaction = reaction.to_string()),
+            err(Debug)
+        )
+    )]
     pub async fn add_stage_logs(
         &self,
         group: &str,
@@ -388,6 +417,15 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::logs",
+            skip(self),
+            fields(id = id.to_string()),
+            err(Debug)
+        )
+    )]
     pub async fn logs(
         &self,
         group: &str,
@@ -447,6 +485,14 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::logs_cursor",
+            skip(self),
+            fields(id = id.to_string()),
+        )
+    )]
     #[must_use]
     pub fn logs_cursor(&self, group: &str, id: &Uuid, stage: &str) -> LogsCursor {
         // build url
@@ -489,6 +535,15 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::status_logs",
+            skip(self),
+            fields(id = id.to_string()),
+            err(Debug)
+        )
+    )]
     pub async fn status_logs(&self, group: &str, id: &Uuid) -> Result<Vec<StatusUpdate>, Error> {
         // build url
         let url = format!(
@@ -528,6 +583,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list", skip(self))
+    )]
     #[must_use]
     pub fn list(&self, group: &str, pipeline: &str) -> Cursor<Reaction> {
         // build url for listing reactions
@@ -569,6 +628,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list_status", skip(self))
+    )]
     #[must_use]
     pub fn list_status(
         &self,
@@ -612,6 +675,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list_tag", skip(self))
+    )]
     #[must_use]
     pub fn list_tag(&self, group: &str, tag: &str) -> Cursor<Reaction> {
         // build url for listing reactions
@@ -649,6 +716,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list_group", skip(self))
+    )]
     #[must_use]
     pub fn list_group(&self, group: &str, status: &ReactionStatus) -> Cursor<Reaction> {
         // build url for listing reactions
@@ -689,6 +760,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list_sub", skip(self), fields(reaction = reaction.to_string()))
+    )]
     #[must_use]
     pub fn list_sub(&self, group: &str, reaction: &Uuid) -> Cursor<Reaction> {
         // build url for listing reactions
@@ -732,6 +807,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list_sub_status", skip(self), fields(reaction = reaction.to_string()))
+    )]
     #[must_use]
     pub fn list_sub_status(
         &self,
@@ -783,6 +862,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::update", skip(self, update), fields(id = id.to_string()), err(Debug))
+    )]
     pub async fn update(
         &self,
         group: &str,
@@ -833,6 +916,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::delete", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
     pub async fn delete(&self, group: &str, id: &Uuid) -> Result<reqwest::Response, Error> {
         // build url for deleting a reaction
         let url = format!(
@@ -878,6 +965,10 @@ impl Reactions {
     /// #    exec().await
     /// # });
     /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::download_ephemeral", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
     pub async fn download_ephemeral(
         &self,
         group: &str,

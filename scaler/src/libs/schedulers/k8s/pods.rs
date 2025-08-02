@@ -1,13 +1,14 @@
 use futures::stream::{self, StreamExt};
+use hashbrown::HashMap;
 use k8s_openapi::api::core::v1::{Pod, PodSecurityContext, PodSpec};
 use kube::api::{Api, DeleteParams, ListParams, ObjectList, PostParams};
 use reqwest::StatusCode;
 use serde_json::json;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use thorium::conf::K8sHostAliases;
 use thorium::models::Image;
 use thorium::{Conf, Error};
-use tracing::{event, instrument, Level, Span};
+use tracing::{event, instrument, Level};
 
 use super::{Containers, Secrets, Volumes};
 use crate::libs::scaler::ErrorOutKinds;

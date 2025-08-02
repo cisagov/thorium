@@ -3,42 +3,94 @@
 use chrono::prelude::*;
 use uuid::Uuid;
 
+#[cfg(feature = "api")]
+use strum::{EnumIter, IntoEnumIterator};
+
 /// The different elastic indexes
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub enum ElasticIndexes {
+#[cfg_attr(feature = "api", derive(EnumIter))]
+pub enum ElasticIndex {
     /// The results for jobs on samples
-    SamplesResults,
+    SampleResults,
+    /// The results for jobs on repos
+    RepoResults,
+    /// The tags on samples
+    SampleTags,
+    /// The tags on repos
+    RepoTags,
 }
 
-impl std::fmt::Display for ElasticIndexes {
+impl std::fmt::Display for ElasticIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ElasticIndexes::SamplesResults => write!(f, "SamplesResults"),
+            ElasticIndex::SampleResults => write!(f, "SampleResults"),
+            ElasticIndex::RepoResults => write!(f, "RepoResults"),
+            ElasticIndex::SampleTags => write!(f, "SampleTags"),
+            ElasticIndex::RepoTags => write!(f, "RepoTags"),
         }
     }
 }
 
-impl Default for ElasticIndexes {
-    /// Set our default elastic index to samples results
-    fn default() -> Self {
-        ElasticIndexes::SamplesResults
-    }
-}
-
-impl ElasticIndexes {
+impl ElasticIndex {
     /// Get the full index name for a specific index
+    ///
+    /// # Arguments
+    ///
+    /// * `elastic_conf` - The elastic config
+    #[must_use]
+    pub fn full_name<'a>(&self, elastic_conf: &'a crate::conf::Elastic) -> &'a str {
+        match self {
+            ElasticIndex::SampleResults => &elastic_conf.results.samples,
+            ElasticIndex::RepoResults => &elastic_conf.results.repos,
+            ElasticIndex::SampleTags => &elastic_conf.tags.samples,
+            ElasticIndex::RepoTags => &elastic_conf.tags.repos,
+        }
+    }
+
+    /// Get the earliest date for documents in the given index
     ///
     /// # Arguments
     ///
     /// * `shared` - Shared Thorium objects
     #[cfg(feature = "api")]
-    pub fn full_name<'a>(&self, shared: &'a crate::utils::Shared) -> &'a str {
+    pub fn earliest(&self, shared: &crate::utils::Shared) -> i64 {
         match self {
-            ElasticIndexes::SamplesResults => &shared.config.elastic.results,
+            ElasticIndex::SampleResults | ElasticIndex::RepoResults => {
+                shared.config.thorium.results.earliest
+            }
+            ElasticIndex::SampleTags | ElasticIndex::RepoTags => {
+                shared.config.thorium.tags.earliest
+            }
         }
     }
+
+    /// Get the earliest date for documents in all possible indexes
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    ///
+    /// # Panics
+    ///
+    /// Panics if `ElasticIndex` has no variants (there are no possible indexes)
+    #[cfg(feature = "api")]
+    pub fn earliest_all(shared: &crate::utils::Shared) -> i64 {
+        Self::iter()
+            .map(|index| index.earliest(shared))
+            .min()
+            // safe to unwrap because we'll always have at least one index
+            .expect("No elastic indexes")
+    }
 }
+
+/// Returns all elastic indexes as a default
+fn default_search_indexes() -> Vec<ElasticIndex> {
+    // only search on samples, as the Web UI is the only user of
+    // search and only samples are currently supported there
+    vec![ElasticIndex::SampleResults, ElasticIndex::SampleTags]
+}
+
 /// Default the Result list limit to 50
 fn default_search_limit() -> u32 {
     50
@@ -49,8 +101,8 @@ fn default_search_limit() -> u32 {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ElasticSearchParams {
     /// The indexes to search
-    #[serde(default)]
-    pub index: ElasticIndexes,
+    #[serde(default = "default_search_indexes")]
+    pub indexes: Vec<ElasticIndex>,
     /// The query to use when searching
     #[serde(default)]
     pub query: String,
@@ -73,7 +125,7 @@ pub struct ElasticSearchParams {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ElasticSearchOpts {
     /// The indexes to search
-    pub index: ElasticIndexes,
+    pub indexes: Vec<ElasticIndex>,
     /// The query to use when searching
     pub query: String,
     /// The groups to search data from
@@ -99,7 +151,7 @@ impl ElasticSearchOpts {
     pub fn new<T: Into<String>>(query: T) -> Self {
         // build a base search options struct
         ElasticSearchOpts {
-            index: ElasticIndexes::SamplesResults,
+            indexes: default_search_indexes(),
             query: query.into(),
             groups: Vec::default(),
             start: None,
@@ -108,6 +160,17 @@ impl ElasticSearchOpts {
             page_size: 50,
             limit: None,
         }
+    }
+
+    /// Set the indexes to search on
+    ///
+    /// # Arguments
+    ///
+    /// * `indexes` - The indexes to search on
+    #[must_use]
+    pub fn indexes(mut self, indexes: Vec<ElasticIndex>) -> Self {
+        self.indexes = indexes;
+        self
     }
 }
 

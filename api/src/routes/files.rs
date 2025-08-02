@@ -14,11 +14,11 @@ use super::OpenApiSecurity;
 use crate::models::backends::{CommentSupport, TagSupport};
 use crate::models::{
     ApiCursor, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,
-    FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputBundle, OutputDisplayType,
-    OutputFormBuilder, OutputHandler, OutputKind, OutputListLine, OutputMap, OutputResponse,
-    PcapNetworkProtocol, ResultFileDownloadParams, ResultGetParams, ResultListParams, Sample,
-    SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk,
-    SubmissionUpdate, TagDeleteRequest, TagRequest, User, ZipDownloadParams,
+    FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType,
+    OutputFormBuilder, OutputHandler, OutputKind, OutputMap, OutputResponse, PcapNetworkProtocol,
+    ResultFileDownloadParams, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
+    SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest,
+    TagRequest, User, ZipDownloadParams,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -665,78 +665,11 @@ async fn download_result_file(
     Ok(body)
 }
 
-/// Get a portion of files results streamed backwards through time
-///
-/// # Arguments
-///
-/// * `user` - The user that is listing submissions
-/// * `params` - The query params to use with this request
-/// * `state` - Shared Thorium objects
-#[utoipa::path(
-    get,
-    path = "/api/files/results/",
-    params(
-        ("params" = ResultListParams, description = "Query params to use for this result list request"),
-    ),
-    responses(
-        (status = 200, description = "JSON-formatted cursor response containing the key and uuid of a result, the result group information, the tool that produced it, and upload timestamp", body = ApiCursor<OutputListLine>),
-        (status = 401, description = "This user is not authorized to access this route"),
-    ),
-    security(
-        ("basic" = []),
-    )
-)]
-#[instrument(name = "routes::files::list_results", skip_all, err(Debug))]
-async fn list_results(
-    user: User,
-    params: ResultListParams,
-    State(state): State<AppState>,
-) -> Result<Json<ApiCursor<OutputListLine>>, ApiError> {
-    // set our result kind
-    let kind = OutputKind::Files;
-    // get a section of the results list
-    let cursor = Output::list(&user, kind, params, &state.shared).await?;
-    Ok(Json(cursor))
-}
-
-/// Get a portion of results streamed backwards through time
-///
-/// # Arguments
-///
-/// * `user` - The user that is listing submissions
-/// * `params` - The query params to use with this request
-/// * `state` - Shared Thorium objects
-/// * `req_id` - This requests ID
-#[utoipa::path(
-    get,
-    path = "/api/files/results/bundle/",
-    params(
-        ("params" = ResultListParams, description = "Query params to use for this result list request"),
-    ),
-    responses(
-        (status = 200, description = "JSON-formatted cursor response containing the key and uuid of a result, the result group information, the tool that produced it, and upload timestamp", body = ApiCursor<OutputBundle>),
-        (status = 401, description = "This user is not authorized to access this route"),
-    ),
-    security(
-        ("basic" = []),
-    )
-)]
-#[instrument(name = "routes::files::bundle_results", skip_all, err(Debug))]
-async fn bundle_results(
-    user: User,
-    params: ResultListParams,
-    State(state): State<AppState>,
-) -> Result<Json<ApiCursor<OutputBundle>>, ApiError> {
-    // get a section of the results stream
-    let cursor = Output::bundle(&user, OutputKind::Files, params, &state.shared).await?;
-    Ok(Json(cursor))
-}
-
 /// The struct containing our openapi docs
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, upload, list_details, get_sample, delete_sample, exists, download, download_as_zip, /*download_result_file,*/ update, tag, delete_tags, create_comment, delete_comment, download_attachment, get_results, upload_results, list_results, bundle_results),
-    components(schemas(ApiCursor<OutputBundle>, ApiCursor<OutputListLine>, ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputBundle, OutputDisplayType, OutputHandler, OutputListLine, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, ResultListParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams)),
+    paths(list, upload, list_details, get_sample, delete_sample, exists, download, download_as_zip, /*download_result_file,*/ update, tag, delete_tags, create_comment, delete_comment, download_attachment, get_results, upload_results),
+    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct FileApiDocs;
@@ -755,34 +688,32 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/api/files/", get(list).post(upload))
-        .route("/api/files/details", get(list_details))
-        .route("/api/files/sample/:sha256", get(get_sample))
+        .route("/api/files/details/", get(list_details))
+        .route("/api/files/sample/{sha256}", get(get_sample))
         .route(
-            "/api/files/sample/:sha256/:submission",
+            "/api/files/sample/{sha256}/{submission}",
             delete(delete_sample),
         )
         .route("/api/files/exists", post(exists))
-        .route("/api/files/sample/:sha256/download", get(download))
+        .route("/api/files/sample/{sha256}/download", get(download))
         .route(
-            "/api/files/sample/:sha256/download/zip",
+            "/api/files/sample/{sha256}/download/zip",
             get(download_as_zip),
         )
-        .route("/api/files/sample/:sha256", patch(update))
-        .route("/api/files/tags/:sha256", post(tag).delete(delete_tags))
-        .route("/api/files/comment/:sha256", post(create_comment))
-        .route("/api/files/comment/:sha256/:id", delete(delete_comment))
+        .route("/api/files/sample/{sha256}", patch(update))
+        .route("/api/files/tags/{sha256}", post(tag).delete(delete_tags))
+        .route("/api/files/comment/{sha256}", post(create_comment))
+        .route("/api/files/comment/{sha256}/{id}", delete(delete_comment))
         .route(
-            "/api/files/comment/download/:sha256/:comment/:name",
+            "/api/files/comment/download/{sha256}/{comment}/{name}",
             get(download_attachment),
         )
         .route(
-            "/api/files/results/:sha256",
+            "/api/files/results/{sha256}",
             get(get_results).post(upload_results),
         )
         .route(
-            "/api/files/result-files/:sha256/:tool/:result_id",
+            "/api/files/result-files/{sha256}/{tool}/{result_id}",
             get(download_result_file),
         )
-        .route("/api/files/results/", get(list_results))
-        .route("/api/files/results/bundle/", get(bundle_results))
 }

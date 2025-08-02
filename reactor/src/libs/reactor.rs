@@ -5,7 +5,7 @@
 
 use chrono::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use sysinfo::{CpuRefreshKind, RefreshKind, System, SystemExt};
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 use thorium::models::{Component, NodeGetParams, Worker, WorkerStatus};
 use thorium::{Error, Keys, Thorium};
 use tokio::fs::File;
@@ -96,9 +96,8 @@ impl Reactor {
         let tasks = Tasks::setup_queue();
         // configure our system poller to listen to specific info
         let refresh = RefreshKind::default()
-            .with_cpu(CpuRefreshKind::new())
-            .with_disks()
-            .with_disks_list();
+            .with_cpu(CpuRefreshKind::everything())
+            .with_memory(MemoryRefreshKind::everything());
         // setup a system poller
         let system = System::new_with_specifics(refresh);
         // build our launcher
@@ -128,7 +127,7 @@ impl Reactor {
         // track the tasks we completed
         let mut completed = Vec::default();
         // get any tasks we want to spawn and build a list of completed blocking tasks to rerun again
-        for (_, task) in self.tasks.extract_if(|time, _| time < &now) {
+        for (_, task) in self.tasks.extract_if(.., |time, _| time < &now) {
             // log that we are spawning a task
             event!(parent: &span, Level::INFO, task = task.as_str());
             // spawn or execute this task

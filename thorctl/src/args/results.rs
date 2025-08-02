@@ -80,6 +80,9 @@ pub struct GetResults {
     /// Any tags to filter by when searching for samples/repos to get results from
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on sample/repo tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     /// (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=")]
@@ -141,6 +144,7 @@ impl SearchSealed for GetResults {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,

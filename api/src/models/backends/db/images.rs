@@ -522,7 +522,7 @@ pub async fn delete_all(group: &Group, shared: &Shared) -> Result<(), ApiError> 
             .fold(redis::pipe().atomic(), |pipe, name|
                 pipe.cmd("del").arg(ImageKeys::data(&group.name, name, shared))
                     .cmd("del").arg(ImageKeys::used_by(&group.name, name, shared)))
-            .query_async::<_, ()>(conn!(shared)).await?;
+            .exec_async(conn!(shared)).await?;
         // delete all of the objects the images own
         let mut images = images.details(group, shared).await?;
         for image in images.details.drain(..) {

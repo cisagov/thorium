@@ -4,9 +4,9 @@ use indicatif::ProgressBar;
 use kanal::{AsyncReceiver, AsyncSender};
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::Archive;
-use scylla::prepared_statement::PreparedStatement;
-use scylla::transport::errors::QueryError;
-use scylla::Session;
+use scylla::client::session::Session;
+use scylla::errors::{ExecutionError, PrepareError};
+use scylla::statement::prepared::PreparedStatement;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -127,13 +127,13 @@ impl<R: Restore> RestoreWorker<R> {
 #[async_trait::async_trait]
 pub trait Restore: Utils + std::fmt::Debug + 'static + Send + Archive {
     /// The steps to once run before restoring data
-    async fn prep(scylla: &Session, ns: &str) -> Result<(), QueryError>;
+    async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError>;
 
     /// The prepared statement to use when restoring data to scylla
     async fn prepared_statement(
         scylla: &Session,
         ns: &str,
-    ) -> Result<PreparedStatement, QueryError>;
+    ) -> Result<PreparedStatement, PrepareError>;
 
     /// Get the partition size for this data type
     ///

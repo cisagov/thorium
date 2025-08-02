@@ -179,6 +179,9 @@ pub struct DownloadFiles {
     /// Any tags to filter by when searching for files
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -247,6 +250,7 @@ impl SearchSealed for DownloadFiles {
             limit: self.limit,
             no_limit: self.no_limit,
             page_size: self.page_size,
+            tags_case_insensitive: self.tags_case_insensitive,
         }
     }
 }
@@ -261,6 +265,9 @@ pub struct GetFiles {
     /// Any tags to filter by when searching for files (<Key>=<Value>)
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <Key>=<VALUE>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -307,6 +314,7 @@ impl SearchSealed for GetFiles {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,
@@ -345,6 +353,9 @@ pub struct DeleteFiles {
     /// Any tags to filter by when searching for files to delete
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -399,6 +410,7 @@ impl SearchSealed for DeleteFiles {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,
@@ -433,6 +445,9 @@ pub struct DescribeFiles {
     /// Any tags to filter by when searching for files to describe
     #[clap(short, long)]
     pub tags: Vec<String>,
+    /// Whether matching on tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
     /// The delimiter character to use when splitting tags into key/values
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
@@ -474,6 +489,7 @@ impl SearchSealed for DescribeFiles {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
             delimiter: self.delimiter,
             start: &self.start,
             end: &self.end,

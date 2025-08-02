@@ -1,14 +1,35 @@
-// file comments
-export { default as Comments } from './comments';
-
-// Download carted/zipped files
-export { default as Download } from './download';
-
-// display some groups info
-export { GroupRoleBadge, GroupMemberCount, SelectGroups } from './group';
+export * from './comments';
+export * from './download';
+export * from './shared/group';
+export * from './pages/navigation';
+export * from './pages/page';
+export * from './reactions';
+export * from './shared/alerts';
+export * from './shared/titles';
+export * from './shared/card';
+export * from './shared/time';
+export * from './shared/uploaddropzone';
+export * from './shared/loading_spinner';
+export * from './shared/overlaytips';
+export { default as SelectableDictionary } from './shared/selectable/selectable_dictionary';
+export { default as SelectableArray } from './shared/selectable/selectable_array';
+export { default as SelectInputArray } from './shared/selectable/select_input_array';
+export { default as SelectInput } from './shared/selectable/select_input';
+export * from './tags/badges';
+export { default as CondensedFileTags } from './tags/condensed_file_tags';
+export { default as CondensedEntityTags } from './tags/condensed_entity_tags';
+export { default as EditableTags } from './tags/editable_tags';
+export * from './tags/tags';
+export * from './tags/utilities';
+export * from './entities/filters';
+export * from './entities/browsing';
+export * from './search/search';
+export * from './search/index_select';
+export * from './entities/shared';
+export * from './entities/upload';
 
 // ------------------------ Images -------------------------
-export { default as FieldBadge } from './images/field_badge';
+export { default as FieldBadge } from './shared/field_badge';
 export { default as ImageFields } from './images/image_fields';
 export { default as ImageNetworkPolicies } from './images/image_network_policies';
 export { default as ImageResources } from './images/image_resources';
@@ -20,46 +41,10 @@ export { default as ImageVolumes } from './images/image_volumes';
 export { default as ImageSecurityContext } from './images/image_security_context';
 // ---------------------------------------------------------
 
-// select pipelines and use those selections to run reactions
-export {
-  SelectPipelines,
-  RunPipelines,
-  submitReactions,
-  RunReactionAlerts,
-  ReactionStatus,
-  getStatusBadge,
-  getStatusIcon,
-  orderComparePipeline,
-} from './reactions';
-
 // relational graph
-export { default as Related } from './related';
+export { default as Related } from './associations/related';
 
-// search
-export { default as Search } from './search';
-
-// selectable components
-export { default as SelectableDictionary } from './selectable/selectable_dictionary';
-export { default as SelectableArray } from './selectable/selectable_array';
-
-// ------------------- Shared components -------------------
-// site alerting for render/update errors
-export { RenderErrorAlert, StateAlerts } from './shared/alerts';
-// misc components
-export { Banner, SimpleSubtitle, SimpleTitle, Subtitle, Title } from './shared/titles';
-export { Card } from './shared/card';
-export { default as Time } from './shared/time';
-export { UploadDropzone } from './shared/uploaddropzone';
-export { default as LoadingSpinner } from './shared/loading_spinner';
-// hover tool tips
-export { OverlayTipTop, OverlayTipBottom, OverlayTipLeft, OverlayTipRight } from './shared/overlaytips';
-// ---------------------------------------------------------
-
-// tags
-export { CondensedTags, EditableTags, filterIncludedTags, filterExcludedTags, TagBadge } from './tags/tags';
-
-// ------------------- Tools and Results -------------------
-//                    (file details page)
+// ------------------------ Tools --------------------------
 export { default as Tool } from './tools/tool';
 export { default as Image } from './tools/image';
 export { default as String } from './tools/string';

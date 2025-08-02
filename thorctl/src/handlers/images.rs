@@ -6,12 +6,26 @@ use crate::args::{
     DescribeCommand,
 };
 
-use super::update;
 use crate::utils;
 
 mod bans;
 mod edit;
 mod notifications;
+
+cfg_if::cfg_if! {
+    if #[cfg(any(target_os = "linux", target_os = "macos"))] {
+        use thorium::CtlConf;
+
+        use crate::args::images::{ExportImages, ImportImages};
+        use super::Controller;
+
+        mod export;
+        mod import;
+
+        use export::ImageExportWorker;
+        use import::ImageImportWorker;
+    }
+}
 
 struct GetImagesLine;
 
@@ -101,6 +115,72 @@ async fn describe(thorium: Thorium, cmd: &DescribeImages) -> Result<(), Error> {
     cmd.describe(&thorium).await
 }
 
+/// Import images into Thorium
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub async fn import(
+    thorium: &Thorium,
+    cmd: &ImportImages,
+    args: &Args,
+    conf: &CtlConf,
+) -> Result<(), Error> {
+    // limit our workers by the number of images we are going to export
+    let workers = std::cmp::min(args.workers, cmd.images.len());
+    // create a new worker controller
+    let mut controller = Controller::<ImageImportWorker>::spawn(
+        "Importing Images",
+        thorium,
+        workers,
+        conf,
+        args,
+        cmd,
+    )
+    .await;
+    // add the images to export
+    for image in &cmd.images {
+        // try to add this download job
+        if let Err(error) = controller.add_job(image.clone()).await {
+            // log this error
+            controller.error(&error.to_string());
+        }
+    }
+    // wait for all our workers to complete
+    controller.finish().await?;
+    Ok(())
+}
+
+/// Export images from Thorium
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub async fn export(
+    thorium: &Thorium,
+    cmd: &ExportImages,
+    args: &Args,
+    conf: &CtlConf,
+) -> Result<(), Error> {
+    // limit our workers by the number of images we are going to export
+    let workers = std::cmp::min(args.workers, cmd.images.len());
+    // create a new worker controller
+    let mut controller = Controller::<ImageExportWorker>::spawn(
+        "Exporting Images",
+        thorium,
+        workers,
+        conf,
+        args,
+        cmd,
+    )
+    .await;
+    // add the images to export
+    for image in &cmd.images {
+        // try to add this download job
+        if let Err(error) = controller.add_job(image.clone()).await {
+            // log this error
+            controller.error(&error.to_string());
+        }
+    }
+    // wait for all our workers to complete
+    controller.finish().await?;
+    Ok(())
+}
+
 /// Handle all images commands
 ///
 /// # Arguments
@@ -116,7 +196,7 @@ pub async fn handle(args: &Args, cmd: &Images) -> Result<(), Error> {
     }
     // check if we need to update
     if !args.skip_update && !conf.skip_update.unwrap_or_default() {
-        update::ask_update(&thorium).await?;
+        super::update::ask_update(&thorium).await?;
     }
     // call the right reactions handler
     match cmd {
@@ -125,5 +205,9 @@ pub async fn handle(args: &Args, cmd: &Images) -> Result<(), Error> {
         Images::Notifications(cmd) => notifications::handle(thorium, cmd).await,
         Images::Bans(cmd) => bans::handle(thorium, cmd).await,
         Images::Edit(cmd) => edit::edit(thorium, &conf, cmd).await,
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        Images::Import(cmd) => import(&thorium, cmd, args, &conf).await,
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        Images::Export(cmd) => export(&thorium, cmd, args, &conf).await,
     }
 }

@@ -567,8 +567,14 @@ pub async fn sub_execute(
             // send any logs in our logs channel
             agent.send_channel_logs().await?;
             // submit our results and tags
-            let results =
-                results::submit(&agent.thorium, &raw_results, &agent.job, &agent.image).await?;
+            let results = results::submit(
+                &agent.thorium,
+                &raw_results,
+                &agent.job,
+                &agent.image,
+                &mut agent.sender,
+            )
+            .await?;
             // send any logs in our logs channel
             agent.send_channel_logs().await?;
             // submit any tags we found

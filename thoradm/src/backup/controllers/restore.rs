@@ -7,7 +7,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use kanal::{AsyncReceiver, AsyncSender};
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::Archive;
-use scylla::Session;
+use scylla::client::session::Session;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -228,8 +228,26 @@ impl<R: Restore> TableRestore<R> {
         <R as Archive>::Archived:
             for<'a> bytecheck::CheckBytes<DefaultValidator<'a>> + std::fmt::Debug,
     {
-        // get our name without '_'
-        let pretty_name = R::name().replace('_', " ");
+        // get the name of the table to scrub without any '_'
+        let pretty_name = R::pretty_name();
+        // get the path to this specific scrub
+        let table_path = path.join(R::name());
+        // check if the subdir for this table exists
+        if !tokio::fs::try_exists(&table_path).await.map_err(|err| {
+            Error::new(format!(
+                "Failed to check if path '{}' exists: {}",
+                table_path.to_string_lossy(),
+                err
+            ))
+        })? {
+            // the path is missing, so skip this restore
+            self.progress.println(format!(
+                "Path '{}' missing. Skipping {} restore...",
+                table_path.to_string_lossy(),
+                pretty_name
+            ))?;
+            return Ok(());
+        }
         // log the table we are backing up
         self.progress.println(format!("Restoring {pretty_name}"))?;
         // run our restore prep function
@@ -439,11 +457,27 @@ impl<R: S3Restore> S3RestoreController<R> {
     /// * `path` - The path to restore objects too
     async fn restore(&mut self, mut path: PathBuf) -> Result<(), Error> {
         // get our name without '_'
-        let pretty_name = R::name().replace('_', " ");
-        // log the table we are backing up
-        self.progress.println(format!("Restoring {pretty_name}"))?;
+        let pretty_name = R::pretty_name();
         // nest our path by our table name
         path.push(R::name());
+        // check if the subdir for this table exists
+        if !tokio::fs::try_exists(&path).await.map_err(|err| {
+            Error::new(format!(
+                "Failed to check if path '{}' exists: {}",
+                path.to_string_lossy(),
+                err
+            ))
+        })? {
+            // the path is missing, so skip this restore
+            self.progress.println(format!(
+                "Path '{}' missing. Skipping {} restore...",
+                path.to_string_lossy(),
+                pretty_name
+            ))?;
+            return Ok(());
+        }
+        // log the table we are backing up
+        self.progress.println(format!("Restoring {pretty_name}"))?;
         // start our global tracker
         let handle = self.start_monitor();
         // build our workers
@@ -591,6 +625,20 @@ impl RestoreController {
         let client = Thorium::from_ctl_conf(self.ctl_conf.clone()).await?;
         // build the path to our backup file
         path.push("redis.json");
+        // check if the redis backup exists
+        if !tokio::fs::try_exists(&path).await.map_err(|err| {
+            Error::new(format!(
+                "Failed to check if path '{}' exists: {}",
+                path.to_string_lossy(),
+                err
+            ))
+        })? {
+            println!(
+                "Redis backup at '{}' not found. Skipping redis restore...",
+                path.to_string_lossy()
+            );
+            return Ok(());
+        }
         // load our backup from disk
         let backup_str = tokio::fs::read_to_string(&path).await?;
         // deserialize our backup

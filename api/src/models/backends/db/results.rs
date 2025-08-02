@@ -1,21 +1,18 @@
 //! Saves results into the backend
 
 use chrono::prelude::*;
-use futures::stream::{self, StreamExt};
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
 use tracing::{event, instrument, span, Level, Span};
 use uuid::Uuid;
 
-use super::{ElasticCursor, ScyllaCursor};
 use crate::models::backends::OutputSupport;
 use crate::models::{
-    ApiCursor, ElasticDoc, ElasticSearchParams, Output, OutputBundle, OutputChunk,
-    OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKind, OutputListLine, OutputMap,
-    OutputRow, OutputStreamRow, ResultListParams,
+    Output, OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKind, OutputMap, OutputRow,
+    ResultSearchEvent,
 };
 use crate::utils::{helpers, ApiError, Shared};
-use crate::{log_scylla_err, unauthorized};
+use crate::{internal_err, log_scylla_err, unauthorized};
 
 /// Saves a files result into the backend
 ///
@@ -94,6 +91,15 @@ pub async fn create<O: OutputSupport>(
     if past.len() >= shared.config.thorium.retention.results {
         // prune any results in groups with more then 3 values
         prune(kind, &form.groups, key, &past, shared, &span).await?;
+    }
+    // create an event since we've modified results
+    let event = ResultSearchEvent::modified::<O>(key.to_string(), form.groups.clone());
+    if let Err(err) = super::search::events::create(event, shared).await {
+        return internal_err!(format!(
+            "Failed to create result search event! {}",
+            err.msg
+                .unwrap_or_else(|| "An unknown error occurred".to_string())
+        ));
     }
     Ok(())
 }
@@ -516,355 +522,4 @@ pub async fn prune(
         prune_helper(kind, key, result_id, files, shared).await?;
     }
     Ok(())
-}
-
-//// Gets a chunk of the most recently updated results stream
-///
-/// # Arguments
-///
-/// * `kind` - The kind of results to list
-/// * `params` - The query params for listing results
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::list", skip(kind, shared), err(Debug))]
-pub async fn list(
-    kind: OutputKind,
-    params: ResultListParams,
-    shared: &Shared,
-) -> Result<ScyllaCursor<OutputListLine>, ApiError> {
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params_extra(params, kind, false, shared).await?;
-    // get the next page of data for this cursor
-    cursor.next(shared).await?;
-    // save this cursor
-    cursor.save(shared).await?;
-    Ok(cursor)
-}
-
-/// Filter a list of result hashes down to only the latest versions
-///
-/// # Arguments
-///
-/// * `cursor` - The cursor to filter
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::latest_filter", skip_all, fields(input_rows = cursor.data.len()))]
-pub async fn latest_filter(
-    kind: OutputKind,
-    cursor: &mut ScyllaCursor<OutputListLine>,
-    shared: &Shared,
-) {
-    // build a list of futures to execute of the expected size
-    let mut futures = Vec::with_capacity((cursor.data.len() / 100) * cursor.retain.group_by.len());
-    // break our sha256s into chunks of 100
-    for chunk in cursor.data.chunks(100) {
-        // cast our chunk to a vec
-        let chunk_vec = chunk
-            .iter()
-            .map(|line| line.key.to_owned())
-            .collect::<Vec<String>>();
-        // perform this search for each group
-        for group in cursor.retain.group_by.iter() {
-            // build our latest result query
-            let query = shared.scylla.session.execute_unpaged(
-                &shared.scylla.prep.results.get_uploaded,
-                (kind, group, chunk_vec.clone()),
-            );
-            // create the future for this query and add it to our future list
-            futures.push(query);
-        }
-    }
-    // execute our futures
-    let queries = stream::iter(futures)
-        .buffer_unordered(10)
-        .collect::<Vec<Result<_, _>>>()
-        .await
-        .into_iter()
-        .filter_map(|res| log_scylla_err!(res));
-    // get the latest timestamp for each sha256
-    let mut latest = HashMap::with_capacity(cursor.data.len());
-    // handle each query response
-    for query in queries {
-        // enable rows for this query
-        if let Some(query_rows) = log_scylla_err!(query.into_rows_result()) {
-            // set the type for our returned rows
-            if let Some(typed_iter) = log_scylla_err!(query_rows.rows::<(String, DateTime<Utc>)>())
-            {
-                // log and skip any failures
-                typed_iter
-                    .filter_map(|res| log_scylla_err!(res))
-                    // build a map containing the latest timestamp for each sample
-                    .for_each(|(sha256, uploaded)| {
-                        // if this sha isn't in latest yet then add it
-                        latest
-                            .entry(sha256)
-                            .and_modify(|time| {
-                                if *time < uploaded {
-                                    *time = uploaded
-                                }
-                            })
-                            .or_insert(uploaded);
-                    });
-            }
-        }
-    }
-    // remove any sha256s whose latest timestamps are not the same as our
-    cursor
-        .data
-        .retain(|chunk| latest.get(&chunk.key) == Some(&chunk.uploaded));
-}
-
-/// A temporary nested map to determine the latest id for each sha256/group/tool with timestamps
-pub type TimedOutputMap = HashMap<String, HashMap<String, HashMap<String, (Uuid, DateTime<Utc>)>>>;
-
-/// Get the latest tool result ids for all sha256s by group
-///
-/// # Arguments
-///
-/// * `kind` - The kind of results to get
-/// * `groups` - The groups to get the latest ids from
-/// * `data` - The cursor data to get the latest ids from
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::latest_ids", skip(groups, data, shared))]
-async fn latest_ids(
-    kind: OutputKind,
-    groups: &[String],
-    data: &[OutputListLine],
-    shared: &Shared,
-) -> TimedOutputMap {
-    // build a list of futures to execute of the expected size
-    let mut futures = Vec::with_capacity((data.len() / 100) * groups.len());
-    // break our keys into chunks of 100
-    for chunk in data.chunks(100) {
-        // build a list of keys for our outpus
-        let keys = chunk
-            .iter()
-            .map(|output| &output.key)
-            .collect::<Vec<&String>>();
-        // perform this search for each group
-        for group in groups.iter() {
-            // create the future for this query and add it to our future list
-            futures.push(shared.scylla.session.execute_unpaged(
-                &shared.scylla.prep.results.get_stream,
-                (kind, group, keys.clone()),
-            ));
-        }
-    }
-    // execute our futures
-    let queries = stream::iter(futures)
-        .buffer_unordered(10)
-        .collect::<Vec<Result<_, _>>>()
-        .await
-        .into_iter()
-        .filter_map(|res| log_scylla_err!(res));
-    // get the latest ids for each key tool/group
-    let mut timed: TimedOutputMap = HashMap::with_capacity(data.len());
-    // handle each query response
-    for query in queries {
-        // enable rows for this query
-        if let Some(query_rows) = log_scylla_err!(query.into_rows_result()) {
-            // set the type for our returned rows
-            if let Some(typed_iter) = log_scylla_err!(query_rows.rows::<OutputStreamRow>()) {
-                // log and skip any failures
-                typed_iter
-                    .filter_map(|res| log_scylla_err!(res))
-                    // build a map containing the latest timestamp for each sample
-                    .for_each(|row| {
-                        // if this key isn't already in our map then add it with a map of groups
-                        let groups = timed.entry(row.key).or_default();
-                        // if this group isn't already in the map then add it
-                        let tools = groups.entry(row.group).or_default();
-                        // get the entry for this tool in our tools map
-                        tools.entry(row.tool).
-                // if this tool does exist then check if this result is newer
-                and_modify(|result| {
-                    if result.1 < row.uploaded {
-                        *result = (row.id, row.uploaded);
-                    }
-                })
-            .or_insert((row.id, row.uploaded));
-                    });
-            }
-        }
-    }
-    timed
-}
-
-/// Get the results for a map of tools and ids
-///
-/// # Arguments
-///
-/// * `temp` - The latest reuslts to get output chunks for
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::get_output_chunks", skip_all)]
-pub async fn get_output_chunks(
-    temp: &TimedOutputMap,
-    shared: &Shared,
-) -> Result<HashMap<Uuid, OutputChunk>, ApiError> {
-    // get a list of all ids
-    let ids = temp
-        .values()
-        .flat_map(|groups| groups.values())
-        .flat_map(|tools| tools.values())
-        .map(|(res_id, _)| res_id)
-        .collect::<Vec<&Uuid>>();
-    // build a list of futures to execute
-    let mut futures = Vec::with_capacity(ids.len());
-    // build a map of outputs
-    let mut outputs = HashMap::with_capacity(ids.len());
-    // crawl over these result ids 100 at a time
-    for chunk in ids.chunks(100) {
-        // create the future for this query and add it to our future list
-        futures.push(
-            shared
-                .scylla
-                .session
-                .execute_unpaged(&shared.scylla.prep.results.get, (chunk,)),
-        );
-    }
-    // build a stream of futures to execute
-    let mut query_stream = stream::iter(futures).buffer_unordered(10);
-    // cast our results as they come in
-    while let Some(query) = query_stream.next().await {
-        // return any errors from our query
-        let query = query?;
-        // enable rows on this query
-        let query_rows = query.into_rows_result()?;
-        // cast our rows to the right row type
-        for cast in query_rows.rows::<OutputRow>()? {
-            // return any casting errors
-            let cast = cast?;
-            // this rows to our output map
-            outputs.insert(cast.id, OutputChunk::from(cast));
-        }
-    }
-    Ok(outputs)
-}
-
-/// Convert the latest result ids to [`OutputBundle`]s
-///
-/// # Arguments
-///
-/// * `kind` - The kind of results to get
-/// * `cursor` - The cursor to get bundled results for
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::bundle_cursor", skip(cursor, shared), fields(rows = cursor.data.len()))]
-async fn bundle_cursor(
-    kind: OutputKind,
-    cursor: ScyllaCursor<OutputListLine>,
-    shared: &Shared,
-) -> Result<Vec<OutputBundle>, ApiError> {
-    // get the latest result ids for our sha256s
-    let mut latest = latest_ids(kind, &cursor.retain.group_by, &cursor.data, shared).await;
-    // get our result chunks
-    let mut chunks = get_output_chunks(&latest, shared).await?;
-    // build the output details list
-    let mut details = Vec::with_capacity(latest.len());
-    for item in cursor.data {
-        // remove this sha256 from our latest stream
-        if let Some(groups) = latest.remove(&item.key) {
-            // build an empty output list map for this sha256
-            let mut output = OutputBundle::from(item);
-            // iterate over the groups
-            for (group, tools) in groups {
-                // create a hashmap for this sha256
-                let entry = output
-                    .map
-                    .entry(group)
-                    .or_insert_with(|| HashMap::with_capacity(tools.len()));
-                // iterate over the tools
-                for (tool, (chunk_id, uploaded)) in tools {
-                    // if this chunk is in our chunk map then insert it into our results map
-                    if let Some((res_id, result)) = chunks.remove_entry(&chunk_id) {
-                        // check if this results id is newer then our current one
-                        if output.latest < uploaded {
-                            // this results timestamp is newer then our other results so upate our latest
-                            output.latest = uploaded;
-                        }
-                        output.results.insert(res_id, result);
-                    }
-                    // add this tool and id into our tools map
-                    entry.insert(tool, chunk_id);
-                }
-            }
-            // add this output to our details list
-            details.push(output);
-        }
-    }
-    Ok(details)
-}
-
-/// Gets a chunk of results list deduped to the latest result for each group and tool
-///
-/// # Arguments
-///
-/// * `kind` - The kind of results to get bundles for
-/// * `params` - The query params for listing results
-/// * `shared` - Shared Thorium objects
-/// * `span` - The span to log traces under
-#[instrument(name = "db::results::bundle", skip(kind, shared), err(Debug))]
-pub async fn bundle(
-    kind: OutputKind,
-    params: ResultListParams,
-    shared: &Shared,
-) -> Result<ApiCursor<OutputBundle>, ApiError> {
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params_extra(params, kind, false, shared).await?;
-    // loop over this cursor and get more pages until our data vector is full or we have exchausted it
-    while cursor.data.len() < cursor.limit {
-        // get the next page of data for this cursor
-        cursor.next(shared).await?;
-        // filter out any results which were already streamed
-        latest_filter(kind, &mut cursor, shared).await;
-        // check if this cursor has been exhausted
-        if cursor.exhausted() {
-            break;
-        }
-    }
-    // save this cursor
-    cursor.save(shared).await?;
-    // get the id for this cursor and determine if its exhausted or not
-    let cursor_id = cursor.id;
-    let exhausted = cursor.exhausted();
-    // build a details stream from our cursor
-    let data = bundle_cursor(kind, cursor, shared).await?;
-    // build the external cursor object for this flattened list
-    let api_cursor = if exhausted {
-        ApiCursor { cursor: None, data }
-    } else {
-        ApiCursor {
-            cursor: Some(cursor_id),
-            data,
-        }
-    };
-    Ok(api_cursor)
-}
-
-/// Search for results matching a query in elastic
-///
-/// # Arguments
-///
-/// * `params` - The query params for searching results
-/// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::search", skip(shared), err(Debug))]
-pub async fn search(
-    params: ElasticSearchParams,
-    shared: &Shared,
-) -> Result<ApiCursor<ElasticDoc>, ApiError> {
-    // get our cursor or build a new one
-    let mut cursor = ElasticCursor::from_params(params, shared).await?;
-    //  get the next page of data
-    cursor.next(shared).await?;
-    // save this cursor
-    cursor.save(shared).await?;
-    let data = std::mem::take(&mut cursor.data);
-    // determine if this cursor has been exhausted or not
-    if data.len() < cursor.limit as usize {
-        // this cursor is exhausted so omit the cursor ID
-        Ok(ApiCursor { cursor: None, data })
-    } else {
-        // this cursor is exhausted so omit the cursor ID
-        Ok(ApiCursor {
-            cursor: Some(cursor.id),
-            data,
-        })
-    }
 }

@@ -1,6 +1,5 @@
 import React, { Fragment, useEffect, useState } from 'react';
 import { Accordion, Alert, Badge, Button, ButtonToolbar, ButtonGroup, Container, Col, Form, Modal, Row } from 'react-bootstrap';
-import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { FaQuestionCircle } from 'react-icons/fa';
 import { default as MarkdownHtml } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,8 +12,9 @@ import {
   OverlayTipBottom,
   OverlayTipLeft,
   OverlayTipRight,
-  Title,
   SimpleSubtitle,
+  Title,
+  Page,
 } from '@components';
 import { getGroupRole, getThoriumRole, fetchGroups, useAuth } from '@utilities';
 import { createPipeline, deletePipeline, listPipelines, updatePipeline } from '@thorpi';
@@ -42,7 +42,7 @@ const Pipelines = () => {
 
   // need user's group roles to validate permissions to create/edit/delete pipelines
   useEffect(() => {
-    fetchGroups(setGroups, checkCookie, null, true);
+    fetchGroups(setGroups, null, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -576,41 +576,36 @@ const Pipelines = () => {
   };
 
   return (
-    <HelmetProvider>
-      <Container>
-        <Helmet>
-          <title>Pipelines &middot; Thorium</title>
-        </Helmet>
-        <PipelineHeader className="accordion-list" />
-        <LoadingSpinner loading={loading}></LoadingSpinner>
-        <Accordion alwaysOpen>
-          {pipelines
-            .sort((a, b) => orderComparePipeline(a, b))
-            .map((pipeline) => (
-              <Accordion.Item key={`${pipeline.name}_${pipeline.group}`} eventKey={`${pipeline.name}_${pipeline.group}`}>
-                <Accordion.Header>
-                  <Container className="accordion-list">
-                    <Col className="accordion-item-name">
-                      <div className="text">{pipeline.name}</div>
-                    </Col>
-                    <Col className="accordion-item-relation" />
-                    <Col className="accordion-item-ownership">
-                      <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
-                        <small>
-                          <i>{pipeline.group}</i>
-                        </small>
-                      </OverlayTipLeft>
-                    </Col>
-                  </Container>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <PipelineInfo pipeline={pipeline} />
-                </Accordion.Body>
-              </Accordion.Item>
-            ))}
-        </Accordion>
-      </Container>
-    </HelmetProvider>
+    <Page title="Pipelines · Thorium">
+      <PipelineHeader className="accordion-list" />
+      <LoadingSpinner loading={loading}></LoadingSpinner>
+      <Accordion alwaysOpen>
+        {pipelines
+          .sort((a, b) => orderComparePipeline(a, b))
+          .map((pipeline) => (
+            <Accordion.Item key={`${pipeline.name}_${pipeline.group}`} eventKey={`${pipeline.name}_${pipeline.group}`}>
+              <Accordion.Header>
+                <Container className="accordion-list">
+                  <Col className="accordion-item-name">
+                    <div className="text">{pipeline.name}</div>
+                  </Col>
+                  <Col className="accordion-item-relation" />
+                  <Col className="accordion-item-ownership">
+                    <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
+                      <small>
+                        <i>{pipeline.group}</i>
+                      </small>
+                    </OverlayTipLeft>
+                  </Col>
+                </Container>
+              </Accordion.Header>
+              <Accordion.Body>
+                <PipelineInfo pipeline={pipeline} />
+              </Accordion.Body>
+            </Accordion.Item>
+          ))}
+      </Accordion>
+    </Page>
   );
 };
 

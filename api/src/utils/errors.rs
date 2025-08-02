@@ -110,6 +110,13 @@ macro_rules! internal_err {
     ($($msg:tt)+) => {Err($crate::utils::ApiError::new(axum::http::status::StatusCode::INTERNAL_SERVER_ERROR, Some($($msg)+)))}
 }
 
+/// 500 internal server error without the Err wrap
+#[macro_export]
+macro_rules! internal_err_unwrapped {
+    () => {$crate::utils::ApiError::new(axum::http::status::StatusCode::INTERNAL_SERVER_ERROR, None)};
+    ($($msg:tt)+) => {$crate::utils::ApiError::new(axum::http::status::StatusCode::INTERNAL_SERVER_ERROR, Some($($msg)+))}
+}
+
 /// 503 service unavailable
 #[macro_export]
 macro_rules! unavailable {
@@ -274,32 +281,14 @@ impl From<elasticsearch::http::response::Error> for ApiError {
     }
 }
 
-//impl From<scylla::transport::query_result::RowsExpectedError> for ApiError {
-//    fn from(error: scylla::transport::query_result::RowsExpectedError) -> Self {
-//        bad_internal!(format!("Scylla rows expected error {:#?}", error))
-//    }
-//}
-//
-//impl From<scylla::transport::query_result::FirstRowTypedError> for ApiError {
-//    fn from(error: scylla::transport::query_result::FirstRowTypedError) -> Self {
-//        bad_internal!(format!("Scylla first row typed error {:#?}", error))
-//    }
-//}
-//
-//impl From<scylla::transport::query_result::MaybeFirstRowTypedError> for ApiError {
-//    fn from(error: scylla::transport::query_result::MaybeFirstRowTypedError) -> Self {
-//        bad_internal!(format!("Scylla maybe first row typed error {:#?}", error))
-//    }
-//}
-
-impl From<scylla::transport::query_result::IntoRowsResultError> for ApiError {
-    fn from(error: scylla::transport::query_result::IntoRowsResultError) -> Self {
+impl From<scylla::response::query_result::IntoRowsResultError> for ApiError {
+    fn from(error: scylla::response::query_result::IntoRowsResultError) -> Self {
         bad_internal!(format!("Scylla into rows error {error:#?}"))
     }
 }
 
-impl From<scylla::transport::query_result::RowsError> for ApiError {
-    fn from(error: scylla::transport::query_result::RowsError) -> Self {
+impl From<scylla::response::query_result::RowsError> for ApiError {
+    fn from(error: scylla::response::query_result::RowsError) -> Self {
         bad_internal!(format!("Scylla rows error {error:#?}"))
     }
 }
@@ -310,15 +299,21 @@ impl From<scylla::deserialize::DeserializationError> for ApiError {
     }
 }
 
-impl From<scylla::transport::query_result::MaybeFirstRowError> for ApiError {
-    fn from(error: scylla::transport::query_result::MaybeFirstRowError) -> Self {
+impl From<scylla::response::query_result::MaybeFirstRowError> for ApiError {
+    fn from(error: scylla::response::query_result::MaybeFirstRowError) -> Self {
         bad_internal!(format!("Scylla maybe first row error {error:#?}"))
     }
 }
 
-impl From<scylla::transport::iterator::NextRowError> for ApiError {
-    fn from(error: scylla::transport::iterator::NextRowError) -> Self {
+impl From<scylla::client::pager::NextRowError> for ApiError {
+    fn from(error: scylla::client::pager::NextRowError) -> Self {
         bad_internal!(format!("Scylla next row error {:#?}", error))
+    }
+}
+
+impl From<scylla::errors::PagerExecutionError> for ApiError {
+    fn from(error: scylla::errors::PagerExecutionError) -> Self {
+        bad_internal!(format!("Scylla pager execution error {:#?}", error))
     }
 }
 

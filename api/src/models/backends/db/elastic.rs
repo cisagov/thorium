@@ -15,13 +15,13 @@ impl PointInTime {
     ///
     /// # Arguments
     ///
-    /// * `index` - The index we are creating a point in time for
+    /// * `indexes` - The indexes we are creating a point in time for
     /// * `shared` - Shared Thorium objects
-    pub async fn new(index: &str, shared: &Shared) -> Result<Self, ApiError> {
+    pub async fn new(indexes: &[&str], shared: &Shared) -> Result<Self, ApiError> {
         //  create a point in time api for our query
         let resp = shared
             .elastic
-            .open_point_in_time(OpenPointInTimeParts::Index(&[index]))
+            .open_point_in_time(OpenPointInTimeParts::Index(indexes))
             .keep_alive("1d")
             .send()
             .await?;

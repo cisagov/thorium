@@ -22,13 +22,6 @@ $grid-breakpoints: (
   flex: 1 0 0%;
 }
 
-/*.edit-icon { // only use this class at < 1200px
-}*/
-
-.edit-button-margin {
-  margin-top: 1rem;
-}
-
 .details-col {
   width: 125px;
 }
@@ -147,16 +140,14 @@ $grid-breakpoints: (
     align-items: center;
     justify-content: center;
   }
+
+  .details-circle {
+    display: none;
+  }
 }
 
 // 1200px
 @media (max-width: scaling.$xl) {
-  .details-circle {
-    display: none;
-  }
-  .edit-button-margin {
-    margin-top: inherit;
-  }
 }
 
 // 992px

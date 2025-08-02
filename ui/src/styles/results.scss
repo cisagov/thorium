@@ -10,12 +10,19 @@ $grid-breakpoints: (
 );
 */
 
+.results-container {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+}
+
 .results-col {
-  flex: 8;
+  //flex: 8;
 }
 
 .results-toc-col {
-  flex: 2;
+  //flex: 2;
+  padding-left: 1rem;
+  width: 15vw;
 }
 
 .results-toc {
@@ -23,7 +30,6 @@ $grid-breakpoints: (
   position: sticky;
   top: 5rem;
   left: 3rem;
-  overflow-y: auto;
   height: calc(100vh - 50px);
 }
 
@@ -31,13 +37,14 @@ $grid-breakpoints: (
 // for scrolling within the tool results card
 .results-content {
   position: relative;
-  max-width: 74vw;
+  max-width: 65vw;
 }
 
 // table of contents entry for tool results
 .results-toc-item {
   font-size: 1rem;
   text-transform: uppercase;
+  overflow-wrap: break-word;
 }
 
 // coloring for results TOC items whose result IS in view
@@ -56,19 +63,22 @@ $grid-breakpoints: (
 //@media (max-width: scaling.$xxl) { ... }
 
 // 1200px
-//@media (max-width: scaling.$xl) { ... }
-
-// 992px
-@media (max-width: scaling.$lg) {
-  // hide results TOC for smaller page sizes
+@media (max-width: scaling.$xl) {
   .results-toc {
     display: none;
   }
-
   .results-content {
-    max-width: 100%;
+    position: relative;
+    max-width: 78vw;
+  }
+  .results-container {
+    display: grid;
+    grid-template-columns: 3fr 0fr;
   }
 }
+
+// 992px
+//@media (max-width: scaling.$lg) { ... }
 
 // 768px
 //@media (max-width: scaling.$md) { ... }

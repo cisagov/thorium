@@ -51,9 +51,11 @@ pub struct NetworkPolicyPort {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct Ipv4Block {
     /// The IP CIDR to allow
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub cidr: Ipv4Cidr,
     /// A subset of the [`Ipv4Block::cidr`] to exclude
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub except: Option<Vec<Ipv4Cidr>>,
 }
 
@@ -87,9 +89,11 @@ impl Ipv4Block {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct Ipv6Block {
     /// The IP CIDR to allow
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub cidr: Ipv6Cidr,
     /// A subset of the [`Ipv6Block::cidr`] to exclude
     #[serde(default)]
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub except: Option<Vec<Ipv6Cidr>>,
 }
 

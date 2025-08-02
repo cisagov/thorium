@@ -1016,53 +1016,56 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route("/api/reactions/bulk/", post(create_bulk))
         .route("/api/reactions/bulk/by/user/", post(create_bulk_by_user))
         .route(
-            "/api/reactions/:group/:id",
+            "/api/reactions/{group}/{id}",
             get(get_reaction).patch(update).delete(delete_reaction),
         )
-        .route("/api/reactions/handle/:group/:id/:cmd", post(handle))
-        .route("/api/reactions/logs/:group/:id", get(logs))
+        .route("/api/reactions/handle/{group}/{id}/{cmd}", post(handle))
+        .route("/api/reactions/logs/{group}/{id}", get(logs))
         .route(
-            "/api/reactions/logs/:group/:id/:stage",
+            "/api/reactions/logs/{group}/{id}/{stage}",
             get(stage_logs).post(add_stage_logs),
         )
-        .route("/api/reactions/list/:group/:pipeline/", get(list))
+        .route("/api/reactions/list/{group}/{pipeline}/", get(list))
         .route(
-            "/api/reactions/list/:group/:pipeline/details/",
+            "/api/reactions/list/{group}/{pipeline}/details/",
             get(list_details),
         )
         .route(
-            "/api/reactions/status/:group/:pipeline/:status/",
+            "/api/reactions/status/{group}/{pipeline}/{status}/",
             get(list_status),
         )
         .route(
-            "/api/reactions/status/:group/:pipeline/:status/details/",
+            "/api/reactions/status/{group}/{pipeline}/{status}/details/",
             get(list_status_details),
         )
-        .route("/api/reactions/tag/:group/:tag/", get(list_tag))
+        .route("/api/reactions/tag/{group}/{tag}/", get(list_tag))
         .route(
-            "/api/reactions/tag/:group/:tag/details/",
+            "/api/reactions/tag/{group}/{tag}/details/",
             get(list_tag_details),
         )
-        .route("/api/reactions/group/:group/:status/", get(list_group_set))
         .route(
-            "/api/reactions/group/:group/:status/details/",
+            "/api/reactions/group/{group}/{status}/",
+            get(list_group_set),
+        )
+        .route(
+            "/api/reactions/group/{group}/{status}/details/",
             get(list_group_set_details),
         )
-        .route("/api/reactions/sub/:group/:reaction/", get(list_sub))
+        .route("/api/reactions/sub/{group}/{reaction}/", get(list_sub))
         .route(
-            "/api/reactions/sub/:group/:reaction/details/",
+            "/api/reactions/sub/{group}/{reaction}/details/",
             get(list_sub_details),
         )
         .route(
-            "/api/reactions/sub/:group/:reaction/:status/details/",
+            "/api/reactions/sub/{group}/{reaction}/{status}/details/",
             get(list_sub_status_details),
         )
         .route(
-            "/api/reactions/sub/:group/:reaction/:status/",
+            "/api/reactions/sub/{group}/{reaction}/{status}/",
             get(list_sub_status),
         )
         .route(
-            "/api/reactions/ephemeral/:group/:id/:name",
+            "/api/reactions/ephemeral/{group}/{id}/{name}",
             get(download_ephemeral),
         )
 }

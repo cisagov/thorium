@@ -7,10 +7,13 @@ use tracing::instrument;
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
-use crate::models::elastic::ElasticIndexes;
+use crate::models::backends;
+use crate::models::elastic::ElasticIndex;
 use crate::models::ElasticSearchParams;
-use crate::models::{ApiCursor, ElasticDoc, Output, User};
+use crate::models::{ApiCursor, ElasticDoc, User};
 use crate::utils::{ApiError, AppState};
+
+pub mod events;
 
 /// Search results in elastic and return a list of sha256s
 ///
@@ -39,8 +42,8 @@ async fn search(
     params: ElasticSearchParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<ElasticDoc>>, ApiError> {
-    // get a list of all samples with the correct handler based on the query params provided
-    let cursor = Output::search(&user, params, &state.shared).await?;
+    // get a list of elastic documents in the given indexes based on the given search
+    let cursor = backends::search::search(&user, params, &state.shared).await?;
     Ok(Json(cursor))
 }
 
@@ -48,7 +51,7 @@ async fn search(
 #[derive(OpenApi)]
 #[openapi(
     paths(search),
-    components(schemas(ApiCursor<ElasticDoc>, ElasticDoc, ElasticIndexes, ElasticSearchParams)),
+    components(schemas(ApiCursor<ElasticDoc>, ElasticDoc, ElasticIndex, ElasticSearchParams)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct SearchApiDocs;
@@ -61,5 +64,7 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
-    router.route("/api/search/", get(search))
+    let router = router.route("/api/search/", get(search));
+    // mount search events routes
+    events::mount(router)
 }

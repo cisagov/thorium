@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getResults } from '@thorpi';
-import { Alert, Col, Row } from 'react-bootstrap';
+import { Alert, Col, Row, Container } from 'react-bootstrap';
 
 // project imports
 import { LoadingSpinner, Tool } from '@components';
@@ -78,11 +78,11 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
   };
 
   return (
-    <div id="results-tab" className="navbar-scroll-offset">
+    <div id="results-tab" className="navbar-scroll-offset results-container">
       <LoadingSpinner loading={loading}></LoadingSpinner>
       {results && typeof results === 'object' && !loading && (
-        <Row>
-          <Col className="results-col">
+        <>
+          <div className="results-col">
             {numResults == 0 && !loading && (
               <>
                 <br />
@@ -112,13 +112,13 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
                   result={results[image][0]}
                 />
               ))}
-          </Col>
+          </div>
           {Object.keys(results).length > 0 && (
-            <Col className="results-toc-col">
+            <div className="results-toc-col">
               <ResultsTableOfContents results={results} />
-            </Col>
+            </div>
           )}
-        </Row>
+        </>
       )}
     </div>
   );

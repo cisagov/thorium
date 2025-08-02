@@ -237,6 +237,20 @@ impl Bar {
             .println(format!("{}: {}", "Info".bright_blue(), msg.as_ref(),));
     }
 
+    /// Print a warning message
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - The warning message to print
+    pub fn warning<T: AsRef<str>>(&self, msg: T) {
+        self.bar.println(format!(
+            "{}: {} - {}",
+            "Warning".bright_yellow(),
+            &self.name,
+            msg.as_ref(),
+        ));
+    }
+
     /// Print an error message
     ///
     /// # Arguments

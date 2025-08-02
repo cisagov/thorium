@@ -60,6 +60,7 @@ impl SearchSealed for DescribeGroups {
         SearchParams {
             groups: &[],
             tags: &[],
+            tags_case_insensitive: false,
             delimiter: '=',
             start: &None,
             end: &None,

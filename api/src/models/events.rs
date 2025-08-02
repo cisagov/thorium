@@ -222,6 +222,7 @@ impl Event {
 
 /// A list of event ids
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct EventIds {
     /// A list of event ids
     pub ids: Vec<Uuid>,
@@ -262,6 +263,7 @@ impl EventPopOpts {
     /// # Arguments
     ///
     /// * `limit` - The limit to set
+    #[must_use]
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = limit;
         self

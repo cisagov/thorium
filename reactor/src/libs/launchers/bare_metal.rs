@@ -226,10 +226,10 @@ impl ActiveWorker {
         for child_proc in self.cgroup.procs() {
             // get this pid as a rustix pid
             // this should not be unsafe as this doesn't cause against any I/O or memory safety problems
-            let child_pid = unsafe { rustix::process::Pid::from_raw(child_proc.pid as u32) };
+            let child_pid = unsafe { rustix::process::Pid::from_raw(child_proc.pid as i32) };
             // kill this pid if we could get a valid pid
             if let Some(child_pid) = child_pid {
-                rustix::process::kill_process(child_pid, Signal::Kill)?;
+                rustix::process::kill_process(child_pid, Signal::KILL)?;
             }
         }
         Ok(())

@@ -1180,7 +1180,6 @@ impl TryFrom<(HashMap<String, String>, Vec<String>)> for Image {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for ImageListParams
 where
     S: Send + Sync,

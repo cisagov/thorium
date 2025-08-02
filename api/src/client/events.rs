@@ -95,6 +95,10 @@ impl Events {
     ///
     /// * `kind` - The kind of events to pop
     /// * `opts` - The parameters to use when popping events
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::events::pop", skip(self, opts), err(Debug))
+    )]
     pub async fn pop(&self, kind: EventType, opts: &EventPopOpts) -> Result<Vec<Event>, Error> {
         // build the url for listing events
         let url = format!("{}/api/events/pop/{}/", self.host, kind);
@@ -116,6 +120,10 @@ impl Events {
     ///
     /// * `kind` - The kind of events to clear
     /// * `ids` - The events ids to clear
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::events::clear", skip(self, ids), err(Debug))
+    )]
     pub async fn clear(&self, kind: EventType, ids: &EventIds) -> Result<reqwest::Response, Error> {
         // build the url for listing events
         let url = format!("{}/api/events/clear/{}/", self.host, kind);
@@ -134,6 +142,10 @@ impl Events {
     /// # Arguments
     ///
     /// * `kind` - The kind of events to clear
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::events::reset_all", skip(self), err(Debug))
+    )]
     pub async fn reset_all(&self, kind: EventType) -> Result<reqwest::Response, Error> {
         // build the url for listing events
         let url = format!("{}/api/events/reset/{}/", self.host, kind);
@@ -148,6 +160,10 @@ impl Events {
     /// # Arguments
     ///
     /// * `params` - The params for getting the status of the event cache
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::events::get_cache_status", skip(self), err(Debug))
+    )]
     pub async fn get_cache_status(
         &self,
         opts: &EventCacheStatusOpts,

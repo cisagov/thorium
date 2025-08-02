@@ -8,9 +8,10 @@
 
 use chrono::prelude::*;
 use futures::{stream, StreamExt};
+use hashbrown::HashMap;
 use k8s_openapi::api::networking::v1::NetworkPolicy;
 use kube::config::{KubeConfigOptions, Kubeconfig};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 use thorium::models::{ImageScaler, ScrubbedUser, SystemSettings, UserRole, WorkerDeleteMap};
 use thorium::{Conf, Error, Thorium};

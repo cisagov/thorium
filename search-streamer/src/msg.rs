@@ -1,28 +1,24 @@
-//! The messages between the search streamer controller and worker
+//! The messages between the search streamer and worker
 
-use chrono::prelude::*;
-use thorium::models::ExportError;
+use thorium::Error;
 use uuid::Uuid;
 
+use crate::sources::DataSource;
+
 /// The messages between the search streamer controller and worker
-pub enum Msg {
-    /// A new chunk of time to try to stream
-    New {
-        watermark: u64,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    },
-    /// A previously errored section of time to retry
-    Retry(ExportError),
+pub enum Job<D: DataSource> {
+    /// An init job
+    Init { start: i64, end: i64 },
+    /// An event job
+    Event { compacted_event: D::CompactEvent },
 }
 
-/// The response messages from workers
-pub enum Response {
-    /// A new chunk reached a completed state (errors included)
-    Completed {
-        watermark: u64,
-        start: DateTime<Utc>,
-    },
-    /// A previously failed section was completed
-    Fixed(Uuid),
+/// A status report for a given job from workers to the monitor
+pub enum JobStatus {
+    /// An init job was completed
+    InitComplete { start: i64, end: i64 },
+    /// An event job was completed
+    EventComplete { ids: Vec<Uuid> },
+    /// An error occurred in an event job
+    EventError { error: Error, ids: Vec<Uuid> },
 }

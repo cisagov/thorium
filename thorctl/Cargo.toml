@@ -8,42 +8,43 @@ edition = { workspace = true }
 
 [dependencies]
 clap = { version = "4", features = ["derive", "wrap_help", "string"] }
-tokio = { version = "1.12", features = ["full"] }
+tokio = { version = "1.45", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }
-config = { version = "0.14", features = ["yaml"] }
+config = { version = "0.15", features = ["yaml"] }
 serde = "1.0"
 serde_json = "1.0"
 serde_yaml = "0.9"
 serde_derive = "1.0"
-thorium = { version = "1.0.0", path = "../api", default-features=false, features = ["client", "kanal-err"]}
-colored = "2"
-owo-colors = "3"
-http = "0.2"
+thorium = { version = "1.1.0", path = "../api", default-features=false, features = ["client", "kanal-err", "dialoguer-err"]}
+colored = "3"
+owo-colors = "4"
+http = "1.3"
 uuid = { version = "1", features = ["serde", "v4"] }
-walkdir = "2.3"
+walkdir = "2.5"
 async-walkdir = "2"
 futures = "0.3"
 generic-array = "0.14"
-lazy_static = "1.4"
+lazy_static = "1.5"
 sha2 = "0.10"
-data-encoding = "2.3"
-cart-rs = { version = "*", path = "../../cart-rs"}
-regex = "1.5"
-git2 = "0.18"
-gix = "0.63"
-itertools = "0.12"
+data-encoding = "2.9"
+cart-rs = { version = "*", path = "../cart-rs"}
+regex = "1.11"
+git2 = "0.20"
+gix = "0.72"
+itertools = "0.14"
 chrono = { version = "0.4", features = ["serde"] }
 url = "2"
-elasticsearch = "8.5.0-alpha.1"
+elasticsearch = "9.0.0-alpha.1"
 async-trait = "0.1"
 openssl = "*"
-rpassword = "7.2"
+rpassword = "7.4"
 indicatif = "0.17"
-rand = "0.8.4"
-kanal = "0.1.0-pre8"
+rand = "0.9.1"
+kanal = "0.1.1"
 semver = { version = "1", features = ["serde"] }
-dialoguer = "0.10"
-dirs = "5"
+dialoguer = "0.11"
+dirs = "6"
+cfg-if = "1"
 
 
 [features]

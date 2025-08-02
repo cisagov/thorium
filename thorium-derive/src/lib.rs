@@ -30,9 +30,9 @@ fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
 fn add_json_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {
-        impl<'frame, 'metadata> scylla::deserialize::DeserializeValue<'frame, 'metadata> for #name {
+        impl<'frame, 'metadata> scylla::deserialize::value::DeserializeValue<'frame, 'metadata> for #name {
             fn type_check(typ: &scylla::frame::response::result::ColumnType) -> Result<(), scylla::deserialize::TypeCheckError> {
-                if let scylla::frame::response::result::ColumnType::Text = typ {
+                if let scylla::frame::response::result::ColumnType::Native(scylla::cluster::metadata::NativeType::Text) = typ {
                     return Ok(());
                 }
                 Err(scylla::deserialize::TypeCheckError::new(crate::models::scylla_utils::errors::DeserializationError::ExpectedText))
@@ -100,9 +100,9 @@ fn add_as_str_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
 fn add_as_str_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {
-        impl<'frame, 'metadata> scylla::deserialize::DeserializeValue<'frame, 'metadata> for #name {
+        impl<'frame, 'metadata> scylla::deserialize::value::DeserializeValue<'frame, 'metadata> for #name {
             fn type_check(typ: &scylla::frame::response::result::ColumnType) -> Result<(), scylla::deserialize::TypeCheckError> {
-                if let scylla::frame::response::result::ColumnType::Text = typ {
+                if let scylla::frame::response::result::ColumnType::Native(scylla::cluster::metadata::NativeType::Text) = typ {
                     return Ok(());
                 }
                 Err(scylla::deserialize::TypeCheckError::new(crate::models::scylla_utils::errors::DeserializationError::ExpectedText))

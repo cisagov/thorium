@@ -56,7 +56,7 @@ impl Event {
         let data = EventData::NewTags {
             tag_type: T::tag_kind(),
             item: key,
-            groups: req.groups.clone(),
+            groups: req.groups,
             tags: req.tags,
         };
         // build our tag event
@@ -156,7 +156,6 @@ impl Event {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for EventPopOpts
 where
     S: Send + Sync,

@@ -7,7 +7,6 @@
 mod scylla_utils_reexport {
     pub mod errors;
     pub mod events;
-    pub mod exports;
     pub mod files;
     pub mod network_policies;
     pub mod repos;

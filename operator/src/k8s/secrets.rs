@@ -1,9 +1,8 @@
 use k8s_openapi::{api::core::v1::Secret, ByteString};
-use kube::{
-    api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
-    Api,
-};
-use rand::{distributions::Alphanumeric, Rng};
+use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
+use kube::Api;
+use rand::distr::Alphanumeric;
+use rand::Rng;
 use std::collections::BTreeMap;
 use thorium::Error;
 
@@ -198,7 +197,7 @@ pub async fn create_user_secret(
     meta: &ClusterMeta,
 ) -> Result<Option<String>, Error> {
     // generate alphanumeric password for operator
-    let password: String = rand::thread_rng()
+    let password: String = rand::rng()
         .sample_iter(&Alphanumeric)
         .take(32)
         .map(char::from)

@@ -15,13 +15,14 @@ use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferP
 use super::Error;
 use crate::models::{
     Attachment, CartedSample, CommentRequest, CommentResponse, Cursor, DeleteCommentParams,
-    DownloadedSample, FileDeleteOpts, FileDownloadOpts, FileListOpts, OutputBundle, OutputListLine,
-    OutputMap, OutputRequest, OutputResponse, ResultGetParams, ResultListOpts, Sample, SampleCheck,
-    SampleCheckResponse, SampleListLine, SampleRequest, SampleSubmissionResponse, SubmissionUpdate,
-    TagDeleteRequest, TagRequest, UncartedSample,
+    DownloadedSample, FileDeleteOpts, FileDownloadOpts, FileListOpts, OutputMap, OutputRequest,
+    OutputResponse, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine,
+    SampleRequest, SampleSubmissionResponse, SubmissionUpdate, TagDeleteRequest, TagRequest,
+    UncartedSample,
 };
 use crate::{
-    add_date, add_query, add_query_list, add_query_list_clone, send, send_build, send_bytes,
+    add_date, add_query, add_query_bool, add_query_list, add_query_list_clone, send, send_build,
+    send_bytes,
 };
 
 /// A handler for the files routes in Thorium
@@ -490,6 +491,11 @@ impl Files {
             // add this tag keys filters to our query params
             add_query_list_clone!(query, query_key, values);
         }
+        add_query_bool!(
+            query,
+            "tags_case_insensitive".to_owned(),
+            opts.tags_case_insensitive
+        );
         // get the data for this request and create our cursor
         Cursor::new(
             &url,
@@ -539,7 +545,7 @@ impl Files {
     )]
     pub async fn list_details(&self, opts: &FileListOpts) -> Result<Cursor<Sample>, Error> {
         // build the url for listing files
-        let url = format!("{}/api/files/details", self.host);
+        let url = format!("{}/api/files/details/", self.host);
         // get the correct page size if our limit is smaller then our page_size
         let page_size = opts.limit.map_or_else(
             || opts.page_size,
@@ -558,6 +564,11 @@ impl Files {
             // add this tag keys filters to our query params
             add_query_list_clone!(query, query_key, values);
         }
+        add_query_bool!(
+            query,
+            "tags_case_insensitive".to_owned(),
+            opts.tags_case_insensitive
+        );
         // get the data for this request and create our cursor
         Cursor::new(
             &url,
@@ -1013,80 +1024,5 @@ impl ResultsClient for Files {
     {
         self.download_result_file_generic(sha256, tool, result_id, path)
             .await
-    }
-
-    /// Lists results
-    ///
-    /// # Arguments
-    ///
-    /// * `opts` - The options for listing results
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::{Thorium, SearchDate};
-    /// use thorium::client::ResultsClient;
-    /// use thorium::models::ResultListOpts;
-    /// # use thorium::Error;
-    ///
-    /// # async fn exec() -> Result<(), Error> {
-    /// // create Thorium client
-    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // build a search to list results from 2020
-    /// let search = ResultListOpts::default()
-    ///     .start(SearchDate::year(2020, false)?)
-    ///     .end(SearchDate::year(2020, true)?)
-    ///     // limit it to 100 files
-    ///     .limit(100);
-    /// // list the up to 100 results from 2020
-    /// thorium.files.list_results(search).await?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
-    /// ```
-    async fn list_results(&self, opts: ResultListOpts) -> Result<Cursor<OutputListLine>, Error> {
-        self.list_results_generic(opts).await
-    }
-
-    /// Lists bundled results that meet some search criteria
-    ///
-    /// # Arguments
-    ///
-    /// * `opts` - The options for listing result bundles
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::{Thorium, SearchDate};
-    /// use thorium::client::ResultsClient;
-    /// use thorium::models::ResultListOpts;
-    /// # use thorium::Error;
-    ///
-    /// # async fn exec() -> Result<(), Error> {
-    /// // create Thorium client
-    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // build a search to list bundled results from 2020
-    /// let search = ResultListOpts::default()
-    ///     .start(SearchDate::year(2020, false)?)
-    ///     .end(SearchDate::year(2020, true)?)
-    ///     // limit it to 100 files
-    ///     .limit(100);
-    /// // list up to 100 bundled results from 2020
-    /// thorium.files.list_results_bundle(search).await?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
-    /// ```
-    async fn list_results_bundle(
-        &self,
-        opts: ResultListOpts,
-    ) -> Result<Cursor<OutputBundle>, Error> {
-        self.list_results_bundle_generic(opts).await
     }
 }

@@ -31,7 +31,7 @@ async fn main() {
     // build the name for this reactor based on type
     let trace_name = format!("Thorium{}Reactor", args.scaler);
     // setup our tracers/subscribers
-    thorium::utils::trace::from_file(&trace_name, &args.trace);
+    let trace_provider = thorium::utils::trace::from_file(&trace_name, &args.trace);
     // build and start this nodes reactor
     let reactor = match Reactor::new(args).await {
         Ok(reactor) => reactor,
@@ -46,6 +46,8 @@ async fn main() {
         span!(Level::ERROR, "Reactor Failure", err = err.msg());
         panic!("Error: {:#?}", err);
     }
+    // export any remaining traces and shutdown this provider
+    thorium::utils::trace::shutdown(trace_provider);
 }
 
 #[cfg(target_os = "macos")]

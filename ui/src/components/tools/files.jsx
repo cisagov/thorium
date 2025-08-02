@@ -9,25 +9,26 @@ import { useAuth } from '@utilities';
 const ResultsFiles = ({ result, sha256, tool }) => {
   const { checkCookie } = useAuth();
   const downloadFile = async (sha256, tool, id, fileName) => {
-    const res = await getResultsFile(sha256, tool, id, fileName, checkCookie);
-    if (res && res.data && res.headers) {
-      // turn response data to blob object
-      const blob = new Blob([res.data], { type: res.headers['content-type'] });
-      // map url to blob in memory
-      const url = window.URL.createObjectURL(blob);
-      // create anchor tag for blob link
-      const link = document.createElement('a');
-      // assign href
-      link.href = url;
-      // set link as download
-      link.setAttribute('download', fileName);
-      // Append to html link element page
-      document.body.appendChild(link);
-      // Start download
-      link.click();
-      // Clean up and remove the link
-      link.parentNode.removeChild(link);
-    }
+    await getResultsFile(sha256, tool, id, fileName, checkCookie).then((res) => {
+      if (res.data && res.headers) {
+        // turn response data to blob object
+        const blob = new Blob([res.data], { type: res.headers['content-type'] });
+        // map url to blob in memory
+        const url = window.URL.createObjectURL(blob);
+        // create anchor tag for blob link
+        const link = document.createElement('a');
+        // assign href
+        link.href = url;
+        // set link as download
+        link.setAttribute('download', fileName);
+        // Append to html link element page
+        document.body.appendChild(link);
+        // Start download
+        link.click();
+        // Clean up and remove the link
+        link.parentNode.removeChild(link);
+      }
+    });
   };
 
   const filesRef = useRef();

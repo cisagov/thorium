@@ -6,8 +6,8 @@ use axum::extract::FromRequestParts;
 use axum::http::{request::Parts, StatusCode};
 use chrono::prelude::*;
 use futures::{stream, Future, StreamExt, TryStreamExt};
-use scylla::transport::errors::QueryError;
-use scylla::QueryResult;
+use scylla::errors::ExecutionError;
+use scylla::response::query_result::QueryResult;
 use std::collections::{HashMap, HashSet};
 use tracing::{event, instrument, Level};
 use uuid::Uuid;
@@ -932,7 +932,7 @@ impl GroupedScyllaCursorSupport for NetworkPolicyListLine {
         _extra: &Self::ExtraFilters,
         limit: i32,
         shared: &Shared,
-    ) -> Vec<impl Future<Output = Result<QueryResult, QueryError>>> {
+    ) -> Vec<impl Future<Output = Result<QueryResult, ExecutionError>>> {
         let mut futures = Vec::new();
         for (name, groups) in ties {
             for group in groups {
@@ -961,7 +961,7 @@ impl GroupedScyllaCursorSupport for NetworkPolicyListLine {
         _extra: &Self::ExtraFilters,
         limit: i32,
         shared: &Shared,
-    ) -> impl Future<Output = Result<QueryResult, QueryError>> {
+    ) -> impl Future<Output = Result<QueryResult, ExecutionError>> {
         // execute the query
         shared.scylla.session.execute_unpaged(
             &shared.scylla.prep.network_policies.list_pull,
@@ -988,7 +988,7 @@ impl GroupedScyllaCursorSupport for NetworkPolicyListLine {
         current_sort_by: &Self::SortBy,
         limit: i32,
         shared: &Shared,
-    ) -> impl Future<Output = Result<QueryResult, QueryError>> {
+    ) -> impl Future<Output = Result<QueryResult, ExecutionError>> {
         // execute the query
         shared.scylla.session.execute_unpaged(
             &shared.scylla.prep.network_policies.list_pull_more,
@@ -1035,7 +1035,6 @@ impl ApiCursor<NetworkPolicyListLine> {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for NetworkPolicyListParams
 where
     S: Send + Sync,

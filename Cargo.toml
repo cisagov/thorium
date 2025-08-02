@@ -10,13 +10,15 @@ members = [
   "event-handler",
   "thoradm",
   "search-streamer",
-  "operator", "thorium-derive",
+  "operator",
+  "thorium-derive",
+  "cart-rs"
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 authors = ["mcarson <mcarson@sandia.gov>", "gmbaker <gmbaker@sandia.gov>", "jehamza <jehamza@sandia.gov>"]
-edition = "2021"
+edition = "2024"
 
 [profile.profiling]
 inherits = "release"

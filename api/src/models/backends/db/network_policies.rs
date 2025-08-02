@@ -59,7 +59,7 @@ pub async fn create(req: NetworkPolicyRequest, shared: &Shared) -> Result<(), Ap
         .arg(&SystemKeys::new(shared).data)
         .arg(K8S_CACHE_KEY)
         .arg(true)
-        .query_async::<_, ()>(conn!(shared))
+        .exec_async(conn!(shared))
         .await?;
     Ok(())
 }
@@ -510,7 +510,7 @@ pub async fn update(
     tokio::try_join!(
         async {
             pipe.atomic()
-                .query_async::<_, ()>(conn!(shared))
+                .exec_async(conn!(shared))
                 .await
                 .map_err(ApiError::from)
         },
@@ -559,7 +559,7 @@ pub async fn delete(network_policy: NetworkPolicy, shared: &Shared) -> Result<()
         // delete all the network policy's data in each group in Redis
         async {
             pipe.atomic()
-                .query_async::<_, ()>(conn!(shared))
+                .exec_async(conn!(shared))
                 .await
                 .map_err(ApiError::from)
         },
@@ -615,7 +615,7 @@ pub async fn delete_all_group(group: &Group, shared: &Shared) -> Result<(), ApiE
         // delete all of the group's network policy data in Redis
         async {
             pipe.atomic()
-                .query_async::<_, ()>(conn!(shared))
+                .exec_async(conn!(shared))
                 .await
                 .map_err(ApiError::from)
         },

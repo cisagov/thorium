@@ -256,7 +256,7 @@ impl Extractor {
     /// * `setttings` - The auto tag settings to use
     /// * `logs` - The logs to send to the API
     #[instrument(name = "tags::extract", skip_all, err(Debug))]
-    pub fn extract(
+    fn extract(
         &mut self,
         output: &String,
         settings: &OutputCollection,
@@ -360,10 +360,12 @@ pub async fn collect<P: AsRef<Path>>(
 ) -> Result<TagBundle, Error> {
     // skip extracting tags if we didn't get any results
     let raw = if output.scan && !settings.auto_tag.is_empty() {
+        // get our results
+        let results = output.results.get_results();
         // build an extractor
         let mut extractor = Extractor::default();
         // extract any tags from any dumped results
-        extractor.extract(&output.results, settings, logs)?
+        extractor.extract(results, settings, logs)?
     } else {
         RawTags::default()
     };

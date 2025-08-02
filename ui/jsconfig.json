@@ -1,0 +1,15 @@
+{ 
+  "compilerOptions": {
+    "baseUrl": "src",
+    "jsx": "react",
+    "esModuleInterop": true,
+    "target": "ES2015",
+    "moduleResolution": "node",
+    "paths": {
+      "@components": ["components/index.js"],
+      "@thorpi": ["thorpi/index.js"],
+      "@utilities": ["utilities/index.js"],
+    }
+  },
+  "include": ["src/**/*"]
+}
