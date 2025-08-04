@@ -1,7 +1,11 @@
 [package]
 name = "cart-rs"
 version = "1.2.3"
-edition = "2018"
+description = "A cart library that can cart/uncart data in a high performance streaming fashion"
+readme = "README.md"
+license-file = "../LICENSE"
+authors = { workspace = true }
+edition = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
