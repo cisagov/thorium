@@ -20,13 +20,13 @@ npm run dev
 ## Project Structure
 
 - Files in `public/static` e.g. `public/static/file.ext` are accessible in source files using `/static/file.ext`
-- `src/` is the root directory of all React source files
-  - `src/components/` contains reusuable React components with accompanying stylesheets written in SCSS
-  - `src/pages/` contains React source files for each page
-  - `src/styles` contains stylesheets for required pages. Contains stylesheets which define color and typography variables
-  - `src/main.tsx` main entrypoint for React app. Associated stylesheet (for whole app) which handles all includes: `main.scss`
-  - `src/thorium.tsx` contains source code of `App` which is loaded by `main.js`. Contains React Router and maintains routes, sidebar and OUO banner. Loads different pages based on specified route
-  - `index.html` is the HTML entrypoint of the webapp. `main.js` mounts a container using `#mount` in `index.html`
+- [`src/`](src/) is the root directory of all React source files
+  - [`src/components`](src/components/) contains reusuable React components with accompanying stylesheets written in SCSS
+  - [`src/pages`](src/pages/) contains React source files for each page
+  - [`src/styles`](src/styles/) contains stylesheets for required pages. Contains stylesheets which define color and typography variables
+  - [`src/main.tsx`](src/main.tsx) main entrypoint for React app. Associated stylesheet (for whole app) which handles all includes: `main.scss`
+  - [`src/thorium.tsx`](src/thorium.tsx) contains source code of `App` which is loaded by `main.js`. Contains React Router and maintains routes, sidebar and OUO banner. Loads different pages based on specified route
+  - [`index.html`](index.html) is the HTML entrypoint of the webapp. `main.js` mounts a container using `#mount` in `index.html`
 
 
 ## Formatting and Testing
