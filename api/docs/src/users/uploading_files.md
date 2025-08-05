@@ -132,7 +132,7 @@ The "Carved PCAP" Origin specifies that a file was "carved out" of a network/pac
 
 The "Carved Unknown" Origin specifies that a file was "carved out" of an unknown or unspecified file type.
 
-This origin has no other subfields except for the ones from it's parent "Carved" origin.
+This origin has no other subfields except for the ones from its parent "Carved" origin.
 
 ## Web UI
 ---

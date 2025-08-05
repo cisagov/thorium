@@ -37,7 +37,7 @@ impl Keys {
         config::Config::builder()
             // load from a file first
             .add_source(config::File::from(path.as_ref()).format(config::FileFormat::Yaml))
-            // then overlay any environment args ontop
+            // then overlay any environment args on top
             .add_source(config::Environment::with_prefix("THORIUM_KEYS").separator("__"))
             .build()?
             .try_deserialize()

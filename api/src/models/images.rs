@@ -222,7 +222,7 @@ impl PartialEq<ResourcesUpdate> for Resources {
     }
 }
 
-/// The requested resources to spawn spawn the container with
+/// The requested resources to spawn the container with
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ResourcesRequest {
@@ -420,7 +420,7 @@ impl From<Resources> for ResourcesRequest {
     }
 }
 
-/// The requested resources to spawn spawn the container with
+/// The requested resources to spawn the container with
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ResourcesUpdate {
@@ -725,11 +725,11 @@ impl ImageArgsUpdate {
         self
     }
 
-    /// Set a new kwarg to pass reaction ids in with
+    /// Set a new kwarg to pass reaction IDs in with
     ///
     /// # Arguments
     ///
-    /// * `reaction` - The kwarg to pass reaction ids in with
+    /// * `reaction` - The kwarg to pass reaction IDs in with
     #[must_use]
     pub fn reaction<T: Into<String>>(mut self, reaction: T) -> Self {
         self.reaction = Some(reaction.into());
@@ -1602,7 +1602,7 @@ fn default_children_strategy() -> DependencyPassStrategy {
     DependencyPassStrategy::default()
 }
 
-/// The settings the agent should use when passing childrens to tools
+/// The settings the agent should use when passing children to tools
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ChildrenDependencySettings {
@@ -1611,19 +1611,19 @@ pub struct ChildrenDependencySettings {
     /// The prior images to restrict children collection too
     #[serde(default)]
     pub images: Vec<String>,
-    /// Where the agent should store downloaded childrens
+    /// Where the agent should store downloaded children
     #[serde(default = "default_children_location")]
     pub location: String,
-    /// The kwarg to pass these childrens in with if one is set (otherwise use positional args)
+    /// The kwarg to pass these children in with if one is set (otherwise use positional args)
     pub kwarg: Option<String>,
     #[serde()]
-    /// The strategy the agent should use when passing childrens downloaded to jobs
+    /// The strategy the agent should use when passing children downloaded to jobs
     #[serde(default = "default_children_strategy")]
     pub strategy: DependencyPassStrategy,
 }
 
 impl Default for ChildrenDependencySettings {
-    /// Create a default childrens dependency settings
+    /// Create a default children dependency settings
     fn default() -> Self {
         ChildrenDependencySettings {
             enabled: false,
@@ -2452,11 +2452,11 @@ impl EphemeralDependencySettingsUpdate {
         self
     }
 
-    /// Add a new name to the list of dependendencies to download
+    /// Add a new name to the list of dependencies to download
     ///
     /// # Arguments
     ///
-    /// * `name` - The name to add our list of dependendencies to download
+    /// * `name` - The name to add our list of dependencies to download
     ///
     /// # Examples
     ///
@@ -2472,11 +2472,11 @@ impl EphemeralDependencySettingsUpdate {
         self
     }
 
-    /// Removes a name from the list of dependendencies to download
+    /// Removes a name from the list of dependencies to download
     ///
     /// # Arguments
     ///
-    /// * `name` - The name to remove from our list of dependendencies to download
+    /// * `name` - The name to remove from our list of dependencies to download
     ///
     /// # Examples
     ///
@@ -2996,10 +2996,10 @@ impl PartialEq<ResultDependencySettingsUpdate> for ResultDependencySettings {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct Dependencies {
-    /// The settings  the agent should use when passing donwloaded samples to tools
+    /// The settings  the agent should use when passing downloaded samples to tools
     #[serde(default)]
     pub samples: SampleDependencySettings,
-    /// The settings the agent should use when passing donwloaded ephemeral files to tools
+    /// The settings the agent should use when passing downloaded ephemeral files to tools
     #[serde(default)]
     pub ephemeral: EphemeralDependencySettings,
     /// The settings the agent should use when passing prior results to tools
@@ -3117,7 +3117,7 @@ impl PartialEq<DependenciesUpdate> for Dependencies {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct DependenciesUpdate {
-    /// The strategy the agent should use when passing donwloaded samples to tools
+    /// The strategy the agent should use when passing downloaded samples to tools
     #[serde(default)]
     pub samples: DependencySettingsUpdate,
     /// The strategy the agent should use when passing downloaded ephemeral files to tools
@@ -3126,10 +3126,10 @@ pub struct DependenciesUpdate {
     /// The strategy the agent should use when passing in prior results
     #[serde(default)]
     pub results: ResultDependencySettingsUpdate,
-    /// The strategy the agent should use when passing donwloaded repos to tools
+    /// The strategy the agent should use when passing downloaded repos to tools
     #[serde(default)]
     pub repos: DependencySettingsUpdate,
-    /// The strategy the agent should use when passing donwloaded tags to tools
+    /// The strategy the agent should use when passing downloaded tags to tools
     #[serde(default)]
     pub tags: TagDependencySettingsUpdate,
     /// The settings the agent should use when passing children files from past tools
@@ -4003,7 +4003,7 @@ pub struct ImageRequest {
     /// The limit to use for how many workers of this image type can be spawned
     #[serde(default)]
     pub spawn_limit: SpawnLimits,
-    /// Any volumes to bind in to this container
+    /// Any volumes to bind into this container
     #[serde(default)]
     pub volumes: Vec<Volume>,
     /// The environment args to set
@@ -4073,7 +4073,7 @@ impl ImageRequest {
     /// };
     ///
     /// // create an image request for an image in the Corn group called harvester
-    /// // This image is built ontop of the Thorium:CornHarvester docker image
+    /// // This image is built on top of the Thorium:CornHarvester docker image
     /// // It has a lifetime of 1 job
     /// // A timeout of 300 seconds
     /// // The pod consumes 2 cores and 1 gibibyte of memory
@@ -4310,7 +4310,7 @@ impl ImageRequest {
     ///
     /// # Arguments
     ///
-    /// * `dependencies` - The depedency settings to set
+    /// * `dependencies` - The dependency settings to set
     #[must_use]
     pub fn dependencies(mut self, dependencies: Dependencies) -> Self {
         self.dependencies = dependencies;
@@ -5251,7 +5251,7 @@ pub struct Image {
     /// How long this image takes to execute on average in seconds (defaults to
     /// 10 minutes on image creation).
     pub runtime: f64,
-    /// Any volumes to bind in to this container
+    /// Any volumes to bind into this container
     pub volumes: Vec<Volume>,
     /// The arguments to add to this images jobs
     #[serde(default)]

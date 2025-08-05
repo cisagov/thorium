@@ -115,7 +115,7 @@ impl<N: NotificationSupport> Notification<N> {
     /// # Arguments
     ///
     /// * `ban` - The ban applied to the entity
-    /// * `key` - The key to the entity the notification refers to
+    /// * `key` - The key to the entity to which the notification refers
     #[must_use]
     pub fn new_ban<B: Ban<N>>(ban: &B, key: N::Key) -> Self {
         // build a notification from the ban and underlying entity

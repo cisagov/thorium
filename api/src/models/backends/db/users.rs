@@ -485,7 +485,7 @@ pub fn build_delete(
     }
     // build keys to user data
     let keys = UserKeys::new(user, shared);
-    // remove from user and and user sets/maps
+    // remove from user and user sets/maps
     pipe.cmd("srem").arg(&keys.global).arg(&user.username)
         .cmd("del").arg(&keys.data)
         .cmd("del").arg(&keys.groups)

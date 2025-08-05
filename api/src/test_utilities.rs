@@ -1,4 +1,4 @@
-//! Utilties for testing the Thorium API
+//! Utilities for testing the Thorium API
 
 mod api;
 pub mod generators;

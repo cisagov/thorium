@@ -82,7 +82,7 @@ macro_rules! matches_update {
         }
     };
     ($left:expr, $right:expr, $translator:expr) => {
-        // only check if the righ side was set
+        // only check if the right side was set
         if let Some(right) = $right.as_ref() {
             // try to convert this value first
             if let Ok(converted) = $translator(right) {
@@ -330,7 +330,7 @@ macro_rules! set {
     };
 }
 
-/// Returns the right value if its greater then the left
+/// Returns the right value if its greater than the left
 #[doc(hidden)]
 #[macro_export]
 macro_rules! at_least {

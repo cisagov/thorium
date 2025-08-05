@@ -36,7 +36,7 @@ A variety of databases are used to store different resources:
 | Database | Use Case | Example Resources |
 | -------- | -------- | -------- |
 | Redis | Low latency/high consistency data | reactions and scheduling streams |
-| Scylla | Higly scalable/medium latency data | file metadata, reaction logs |
+| Scylla | Highly scalable/medium latency data | file metadata, reaction logs |
 | Elastic | Full text search | tool results < 1 MiB |
 | S3 | Object storage | all files, tool results > 1MiB |
 | Jaeger | Tracing | API request logs |

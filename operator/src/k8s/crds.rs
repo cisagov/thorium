@@ -22,7 +22,7 @@ pub struct EnvVar {
     pub value: Option<String>,
 }
 
-/// A struct representing the cpu an memory resources of a container
+/// A struct representing the cpu and memory resources of a container
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Hash, Eq, PartialEq)]
 pub struct Resources {
     pub cpu: u64,

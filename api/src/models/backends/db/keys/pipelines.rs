@@ -31,7 +31,7 @@ impl PipelineKeys {
     ///
     /// # Arguments
     ///
-    /// * `group` - The group the pipeline is in
+    /// * `group` - The group containing the pipeline
     /// * `shared` - Shared Thorium objects
     pub fn set(group: &str, shared: &Shared) -> String {
         format!(
@@ -45,7 +45,7 @@ impl PipelineKeys {
     ///
     /// # Arguments
     ///
-    /// * `group` - The group the pipeline is in
+    /// * `group` - The group containing the pipeline
     /// * `name` - The name of the pipeline
     /// * `shared` - Shared Thorium objects
     pub fn data(group: &str, name: &str, shared: &Shared) -> String {

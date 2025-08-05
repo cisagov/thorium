@@ -43,7 +43,7 @@ impl Streams {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         #[derive(Clone)]
@@ -88,7 +88,7 @@ cfg_if::cfg_if! {
 
 #[syncwrap::clone_impl]
 impl Streams {
-    /// Gets the the number of objects between two points in a stream
+    /// Gets the number of objects between two points in a stream
     ///
     /// # Arguments
     ///
@@ -96,7 +96,7 @@ impl Streams {
     /// * `namespace` - The namespace of the stream within this group
     /// * `stream` - The name of the stream to check
     /// * `start` - The timestamp to start counting at
-    /// * `end` - The timestampt to sop counting at
+    /// * `end` - The timestamp to stop counting at
     ///
     /// # Examples
     ///
@@ -143,7 +143,7 @@ impl Streams {
         send_build!(self.client, req, StreamDepth)
     }
 
-    /// Gets the the number of objects between in even chunks of time between two timestamps
+    /// Gets the number of objects between in even chunks of time between two timestamps
     ///
     /// # Arguments
     ///
@@ -151,7 +151,7 @@ impl Streams {
     /// * `stream` - The name of the stream to check
     /// * `namespace` - The namespace of the stream within this group
     /// * `start` - The timestamp to start counting at
-    /// * `end` - The timestampt to sop counting at
+    /// * `end` - The timestamp to stop counting at
     /// * `split` - The size of chunk to use
     ///
     /// # Examples

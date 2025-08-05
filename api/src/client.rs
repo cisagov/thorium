@@ -1,4 +1,4 @@
-//! Asynchronous and synchronus clients for Thorium
+//! Asynchronous and synchronous clients for Thorium
 
 use base64::Engine as _;
 use chrono::prelude::*;
@@ -92,7 +92,7 @@ impl ThoriumClientBuilder {
     ///
     /// # Arguments
     ///
-    /// * `username` - The username to authetnicate with
+    /// * `username` - The username to authenticate with
     /// * `password` - The password to authenticate with
     ///
     /// # Examples
@@ -428,7 +428,7 @@ pub struct ThoriumBlocking {
 impl Thorium {
     /// Create a new Thorium client builder
     ///
-    /// This can user either username/password or token. When using a token the client will not
+    /// This can use either username/password or token. When using a token, the client will not
     /// known when it expires.
     ///
     /// # Arguments
@@ -480,7 +480,7 @@ impl Thorium {
     ///
     /// # async fn exec() -> Result<(), Error> {
     /// let client = reqwest::Client::new();
-    /// let (token, expriation) = Thorium::auth("http://127.0.0.1",
+    /// let (token, expiration) = Thorium::auth("http://127.0.0.1",
     ///     Some("user".into()),
     ///     Some("pass".into()),
     ///     &client)
@@ -500,7 +500,7 @@ impl Thorium {
     ) -> Result<(String, Option<DateTime<Utc>>), Error> {
         // make sure both username and password are specified
         if username.is_none() || password.is_none() {
-            panic!("Both username and password must be specfied if token is not");
+            panic!("Both username and password must be specified if token is not");
         }
 
         // create auth handler and get token

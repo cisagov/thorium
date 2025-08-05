@@ -269,7 +269,7 @@ impl Pipeline {
         group.allowable(GroupAllowAction::Pipelines)?;
         // make sure this group is editable
         group.editable(user)?;
-        // overlay update ontop of pipeline
+        // overlay update on top of pipeline
         let (add, remove) = if let Some(order) = update.order {
             // get the images that are currently in this pipeline
             let old = self

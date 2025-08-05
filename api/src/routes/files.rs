@@ -32,10 +32,10 @@ use crate::utils::{ApiError, AppState};
    handled as Vec<String> into a single String argument that can be
    split on '/' later.
 
-   The affected function is marked with 'TODO_UTOIPA: WIDLCARD'
+   The affected function is marked with 'TODO_UTOIPA: WILDCARD'
    and the utoipa annotation is commented out. The annotation
    should be at least somewhat functional if it were able to be used
-   but has not been tested due to the afforementioned compilation
+   but has not been tested due to the aforementioned compilation
    issue.
 */
 
@@ -437,7 +437,7 @@ async fn delete_comment(
 /// # Arguments
 ///
 /// * `user` - The user that is downloading this comment attachment
-/// * `sha256` - The sample this comment attachement is tied to
+/// * `sha256` - The sample this comment attachment is tied to
 /// * `comment` - The comment ID we are downloading an attachment from
 /// * `attachment` - The id of the attachment to download
 /// * `state` - Shared Thorium objects
@@ -445,7 +445,7 @@ async fn delete_comment(
     get,
     path = "/api/files/comment/download/:sha256/:comment/:name",
     params(
-        ("sha256" = String, Path, description = "Sha256 of sample the comment atachment is tied to"),
+        ("sha256" = String, Path, description = "Sha256 of sample the comment attachment is tied to"),
         ("comment" = Uuid, Path, description = "Uuid of of the comment to download an attachment from"),
         ("attachment" = Uuid, Path, description = "Uuid of the attachment to download")
     ),
@@ -632,7 +632,7 @@ async fn get_results(
 //     get,
 //     path = "/api/files/results/:sha256/:tool/:result_id/*path",
 //     params(
-//         ("path_params" = Vec<String>, Path, description = "3 path-formatted paramters containing the sample sha256, tool name, and result uuid")
+//         ("path_params" = Vec<String>, Path, description = "3 path-formatted parameters containing the sample sha256, tool name, and result uuid")
 //     ),
 //     responses(
 //         (status = 200, description = "Response containing body of requested result file", body = Vec<u8>),

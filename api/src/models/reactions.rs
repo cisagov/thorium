@@ -87,7 +87,7 @@ cfg_if::cfg_if! {
             pub group: String,
             /// The pipeline this reaction is build around
             pub pipeline: String,
-            /// The args to overlay ontop of the args for images in this reaction
+            /// The args to overlay on top of the args for images in this reaction
             pub args: RawReactionArgs,
             /// The number of seconds we have to meet this reactions SLA.
             pub sla: Option<u64>,
@@ -154,7 +154,7 @@ pub struct ReactionIdResponse {
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct BulkReactionResponse {
-    /// Any errors that occured while creating reactions
+    /// Any errors that occurred while creating reactions
     pub errors: HashMap<usize, String>,
     /// The successfully created reactions
     pub created: Vec<Uuid>,
@@ -194,7 +194,7 @@ pub struct ReactionRequest {
     pub group: String,
     /// The pipeline this reaction is build around
     pub pipeline: String,
-    /// The args to overlay ontop of the args for images in this reaction
+    /// The args to overlay on top of the args for images in this reaction
     pub args: ReactionArgs,
     /// The number of seconds we have to meet this reactions SLA.
     pub sla: Option<u64>,
@@ -293,7 +293,7 @@ impl ReactionRequest {
     ///
     /// # Arguments
     ///
-    /// * `sla` - The sla to set for an reaction
+    /// * `sla` - The sla to set for a reaction
     ///
     /// # Examples
     ///

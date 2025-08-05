@@ -23,7 +23,7 @@ met. This data is stored in Scylla and so requires some time to become
 consistent.
 
 ### What stops an infinite loop in events?
-Triggers have an configurable depth limit meaning any events that reach that
+Triggers have a configurable depth limit meaning any events that reach that
 limit will be immediately dropped instead of processed.
 
 ### Can I replay events?

@@ -25,7 +25,7 @@ use crate::{
 /// Deletes a submission from multiple groups, breaking into chunks of 100 if > 100
 macro_rules! delete_from_groups {
     ($shared:expr, $groups:expr, $year:expr, $bucket:expr, $uploaded:expr, $id:expr) => {
-        // if we have less then 100 groups then just delete them in one go
+        // if we have less than 100 groups then just delete them in one go
         if $groups.len() <= 100 {
             // remove any requested submissions
             $shared
@@ -37,7 +37,7 @@ macro_rules! delete_from_groups {
                 )
                 .await?;
         } else {
-            // we have more then 100 groups so break them into chunks of 100
+            // we have more than 100 groups so break them into chunks of 100
             for chunk in $groups.chunks(100) {
                 // copy this chunk into a vec
                 let chunk_vec = chunk.to_vec();
@@ -137,7 +137,7 @@ pub async fn sha256_exists(
 ///
 /// * `sha256` - The sha256 that is being ingested as a child sample
 /// * `submission` - The submission id of the child sample being ingested
-/// * `results` - The result ids to add this child under
+/// * `results` - The result IDs to add this child under
 /// * `shared` - Shared Thorium objects
 /// * `req_id` - The uuid for this request
 #[instrument(name = "db::files::add_child", skip(shared), err(Debug))]
@@ -304,7 +304,7 @@ pub async fn authorize(
     sha256s: &Vec<String>,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // if we specified no groups then we do not have acess to this sample
+    // if we specified no groups then we do not have access to this sample
     if groups.is_empty() {
         return unauthorized!();
     }
@@ -378,7 +378,7 @@ async fn get_comments(
     list: &mut Vec<Comment>,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // if we have more then 100 groups then chunk it into bathes of 100  otherwise just get our info
+    // if we have more than 100 groups then chunk it into bathes of 100  otherwise just get our info
     if groups.len() > 100 {
         // break our groups into chunks of 100
         for chunk in groups.chunks(100) {
@@ -420,7 +420,7 @@ async fn get_comments(
             list.extend(map.into_iter().flat_map(|(_, map)| map.into_values()));
         }
     } else {
-        // we have less then 100 groups so just get their data
+        // we have less than 100 groups so just get their data
         let query = shared
             .scylla
             .session
@@ -474,7 +474,7 @@ pub async fn get(
 ) -> Result<Option<Sample>, ApiError> {
     // build a btree to sort our submissions
     let mut sorted: BTreeMap<DateTime<Utc>, Vec<Submission>> = BTreeMap::default();
-    // if we have more then 100 groups then chunk it into bathes of 100  otherwise just get our info
+    // if we have more than 100 groups then chunk it into bathes of 100  otherwise just get our info
     if groups.len() > 100 {
         // break our groups into chunks of 100
         for chunk in groups.chunks(100) {
@@ -586,7 +586,7 @@ pub async fn delete_submission(
         shared,
     )
     .await?;
-    // if no other submisisons exist then just clean up all data otherwise we
+    // if no other submissions exist then just clean up all data otherwise we
     // need to prune data from groups that no longer have access to prevent
     // leaking other groups also can see this sample
     let prunes: Vec<String> = if group_submitter_map.is_empty() {
@@ -1004,13 +1004,13 @@ pub async fn prune_comment_attachments(
 ///
 /// # Arguments
 ///
-/// * `ids` - The comment ids to check for
+/// * `ids` - The comment IDs to check for
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::files::comment_exists", skip(shared), err(Debug))]
 async fn comments_exist(ids: &[&Uuid], shared: &Shared) -> Result<HashSet<Uuid>, ApiError> {
     // build our hashset of comments
     let mut found = HashSet::with_capacity(ids.len());
-    // break these ids into chunks of 100
+    // break these IDs into chunks of 100
     for ids_chunk in ids.chunks(100) {
         // execute this query
         let query = shared
@@ -1025,7 +1025,7 @@ async fn comments_exist(ids: &[&Uuid], shared: &Shared) -> Result<HashSet<Uuid>,
             // raise instead of just logging errors as ignoring them can cause
             // dangling references in the Db
             let (id_opt,) = cast?;
-            // skip any rows without ids
+            // skip any rows without IDs
             if let Some(id) = id_opt {
                 // track that this comment id was still found
                 found.insert(id);

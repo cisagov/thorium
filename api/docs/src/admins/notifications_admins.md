@@ -19,7 +19,7 @@ thorctl <ENTITY-TYPE> notifications create <group> <ENTITY-NAME> --msg <MESSAGE>
 
 ### Notification Level
 
-By default, the added notificaion will have the `INFO` level, but you can manually specify the level as well:
+By default, the added notification will have the `INFO` level, but you can manually specify the level as well:
 
 ```Bash
 ... notifications create --level <info/warn/error>

@@ -10,7 +10,7 @@ The following table explains each possible reaction status:
 | Status | Meaning |
 | ---- | ---- |
 | Created | The reaction has been created, but is not yet running. |
-| Running | Atleast one stage of the reaction has started. |
+| Running | At least one stage of the reaction has started. |
 | Completed | This reaction has completed successfully. |
 | Failed | The reaction has failed due to an error. |
 

@@ -34,7 +34,7 @@ pub struct SubmissionRow {
     pub name: Option<String>,
     /// A description for this sample
     pub description: Option<String>,
-    /// The group this submisison is for
+    /// The group this submission is for
     pub group: String,
     /// The user who submitted this sample
     pub submitter: String,
@@ -93,6 +93,6 @@ pub struct CommentRow {
     pub author: String,
     /// The comment for this file
     pub comment: String,
-    /// Any paths in s3 to files/attachements for this comment in serialized form
+    /// Any paths in s3 to files/attachments for this comment in serialized form
     pub files: String,
 }

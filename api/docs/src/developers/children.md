@@ -29,7 +29,7 @@ paths) and the values are the metadata to encode. An example `thorium_pcap_metad
 
 ```JSON
 {
-    "carved_from_pcap1.hmtl": {
+    "carved_from_pcap1.html": {
         "src": "1.1.1.1",
         "dest": "2.2.2.2",
         "src_port": 80,

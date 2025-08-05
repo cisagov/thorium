@@ -7,7 +7,7 @@ use crate::utils::{ApiError, Shared};
 ///
 /// # Arguments
 ///
-/// * `pipe` - The Redis [`redis::Pipeline`] to build ontop of
+/// * `pipe` - The Redis [`redis::Pipeline`] to build on top of
 /// * `job` - The job object to add to redis
 /// * `shared` - Shared Thorium objects
 pub fn build<'a>(
@@ -15,7 +15,7 @@ pub fn build<'a>(
     casts: &[StatusUpdate],
     shared: &Shared,
 ) -> Result<&'a mut redis::Pipeline, ApiError> {
-    // inject comamnds to push status logs updates to their respective lists
+    // inject commands to push status logs updates to their respective lists
     for update in casts {
         pipe.cmd("rpush")
             .arg(logs::queue_name(update, shared))

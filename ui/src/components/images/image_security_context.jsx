@@ -124,7 +124,7 @@ const SecurityContextFields = ({ initialSecurityContext, setRequestFields, disab
     setRequestFields(securityContextCopy);
   };
 
-  // this is needed for onload when cloning from an exisitng image
+  // this is needed for onload when cloning from an existing image
   useEffect(() => {
     setRequestFields(initialSecurityContext);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,7 +176,7 @@ const SecurityContextFields = ({ initialSecurityContext, setRequestFields, disab
               <h6>
                 <Form.Check
                   type="switch"
-                  id="allow-escalalation"
+                  id="allow-escalation"
                   label=""
                   checked={securityContext.allow_privilege_escalation}
                   disabled={disabled}

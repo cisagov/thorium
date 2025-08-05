@@ -1,11 +1,11 @@
-//! Setup the repos tables/prepared statements in Scylla
+//! Set up the repos tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for repos
+/// The prepared statements for repos
 pub struct ReposPreparedStatements {
     /// Insert a new repo
     pub insert: PreparedStatement,
@@ -41,10 +41,10 @@ impl ReposPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the repos tables
+        // set up the repos tables
         setup_repos_data_table(session, config).await;
         setup_repos_list_table(session, config).await;
-        // setup the repos materialized view
+        // set up the repos materialized view
         setup_repos_mat_view(session, config).await;
         // setup our prepared statements
         let insert = insert(session, config).await;
@@ -77,7 +77,7 @@ impl ReposPreparedStatements {
     }
 }
 
-/// Setup the repo data table for Thorium
+/// Set up the repo data table for Thorium
 ///
 /// # Arguments
 ///
@@ -98,7 +98,7 @@ async fn setup_repos_data_table(session: &Session, config: &Conf) {
         .expect("failed to add repo data table");
 }
 
-/// Setup the repo list table for Thorium
+/// Set up the repo list table for Thorium
 ///
 /// # Arguments
 ///
@@ -131,7 +131,7 @@ async fn setup_repos_list_table(session: &Session, config: &Conf) {
         .expect("failed to add repos list table");
 }
 
-/// Setup the repo materialized view for Thorium
+/// Set up the repo materialized view for Thorium
 ///
 /// # Arguments
 ///
@@ -358,7 +358,7 @@ async fn delete_data(session: &Session, config: &Conf) -> PreparedStatement {
 /// * `sessions` - The scylla session to use
 /// * `conf` - The Thorium config
 async fn list_ties(session: &Session, config: &Conf) -> PreparedStatement {
-    // build repo repo list ties prepared statement
+    // build repo list ties prepared statement
     session
         .prepare(format!(
             "SELECT group, url, id, uploaded \
@@ -382,7 +382,7 @@ async fn list_ties(session: &Session, config: &Conf) -> PreparedStatement {
 /// * `sessions` - The scylla session to use
 /// * `conf` - The Thorium config
 async fn list_pull(session: &Session, config: &Conf) -> PreparedStatement {
-    // build repo repo list pull prepared statement
+    // build repo list pull prepared statement
     session
         .prepare(format!(
             "SELECT group, url, id, uploaded \

@@ -107,7 +107,7 @@ impl DataSource for Results {
         if info.is_empty() {
             Ok(Vec::new())
         } else {
-            // get ids from the results data
+            // get IDs from the results data
             let keys = info.iter().map(|i| &i.key).collect::<Vec<_>>();
             // pull results info
             let results_data = self.pull_results_data(&keys, scylla).await?;
@@ -134,7 +134,7 @@ impl DataSource for Results {
         let results_data = self
             .pull_results_data_event(compacted_event, scylla)
             .await?;
-        // get ids from the info
+        // get IDs from the info
         let ids = results_data
             .values()
             .flat_map(|i| i.keys())
@@ -227,11 +227,11 @@ fn bundle_results(results_data: ResultsDataMap, results_map: &ResultsMap) -> Vec
 }
 
 impl Results {
-    /// Pull results for the given result ids
+    /// Pull results for the given result IDs
     ///
     /// # Argument
     ///
-    /// * `ids` - The ids of results to pull
+    /// * `ids` - The IDs of results to pull
     /// * `scylla` - The scylla client
     #[instrument(name = "sources::results::Results::pull_results", skip_all, err(Debug))]
     async fn pull_results(&self, ids: &[&Uuid], scylla: &Session) -> Result<ResultsMap, Error> {

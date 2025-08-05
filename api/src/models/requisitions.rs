@@ -56,7 +56,7 @@ impl Requisition {
         }
     }
 
-    /// Create a requisiton from labels on a pod
+    /// Create a requisition from labels on a pod
     ///
     /// This is used to compare currently living pods with pods that we have scaled this round.
     ///
@@ -232,7 +232,7 @@ impl TryFrom<&String> for ScopedRequisition {
     ///
     /// * `raw` - The raw string to convert from
     fn try_from(raw: &String) -> Result<Self, Error> {
-        // split this string by ':' into its seperate parts
+        // split this string by ':' into its separate parts
         let chunks = raw.split(':').collect::<Vec<_>>();
         // if we didn't find 5 chunks then throw an error
         if chunks.len() == 5 {
@@ -247,7 +247,7 @@ impl TryFrom<&String> for ScopedRequisition {
             Ok(scoped_req)
         } else {
             Err(Error::new(format!(
-                "{raw} can not be cast to a scoped requisition!",
+                "{raw} cannot be cast to a scoped requisition!",
             )))
         }
     }

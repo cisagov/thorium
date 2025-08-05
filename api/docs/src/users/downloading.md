@@ -24,7 +24,7 @@ Thorium supports two different download types each with its own pros and cons:
 | Native Windows/Linux/Mac Support | ❌ | ✅ |
 
 At a high level encrypted zips are more user friendly but are less performant
-and cause a high load on the API. When peforming actions at scale or working
+and cause a high load on the API. When performing actions at scale or working
 with large files using CaRT is highly recommended.
 
 ### Web UI Sample File Download

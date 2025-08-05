@@ -9,7 +9,7 @@ can be due to multiple issues:
 ### High Load
 ---
 When the cluster has a high number of jobs in queue, jobs may be
-in a created state for an extended period of time. The fairshare scheduler
+in a created state for an extended period of time. The fair share scheduler
 should help mitigate this when other users are the cause of the load (the fair
 share scheduler balances across users, not images/pipelines). If the user
 experiencing the stuck jobs is also the cause of heavy load, the user needs

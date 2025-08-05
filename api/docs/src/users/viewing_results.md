@@ -80,7 +80,7 @@ You can download results for specific samples using Thorctl with the following c
 thorctl results get <SHA256>
 ```
 
-Download results for multiple samples by passing multable file SHA's:
+Download results for multiple samples by passing multiple file SHA's:
 
 ```bash
 thorctl results get <SHA256-1> <SHA256-2> <SHA256-3>

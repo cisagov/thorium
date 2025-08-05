@@ -54,7 +54,7 @@ pub async fn handle(args: &Args, cmd: &Cart) -> Result<(), Error> {
         )
         .await;
     }
-    // remove temporary drectory after in-place conversion
+    // remove temporary directory after in-place conversion
     if cmd.in_place {
         tokio::fs::remove_dir_all(base_out_path).await?;
     }
@@ -114,7 +114,7 @@ async fn cart_target(
                 }
             }),
     )
-    // await the mapped futures, limiting the maxmimum running at any given time by the number of workers
+    // await the mapped futures, limiting the maximum running at any given time by the number of workers
     .for_each_concurrent(workers, |future| future)
     .await;
 }

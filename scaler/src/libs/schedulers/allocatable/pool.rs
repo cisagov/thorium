@@ -5,7 +5,7 @@ use thorium::models::{Image, Pools, Resources, SystemSettings};
 /// Tracks what resources are freed from what pool
 #[derive(Debug, Default)]
 pub struct PoolFrees {
-    /// The resources freed from our fairshare pool
+    /// The resources freed from our fair share pool
     pub fairshare: Resources,
     /// The resources freed from our deadline pool
     pub deadline: Resources,
@@ -60,7 +60,7 @@ impl Pool {
         self.resources += free;
     }
 
-    /// Setup this pool for fairshare based on system settings
+    /// Setup this pool for fair share based on system settings
     pub fn setup_fairshare(settings: &SystemSettings) -> Self {
         // build the total amount of resources in this pool
         let total = Resources::new(

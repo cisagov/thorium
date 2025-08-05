@@ -7,7 +7,7 @@ use elasticsearch::Elasticsearch;
 use url::Url;
 
 use crate::{setup, Conf};
-/// Setup a connection pool to the elastic search backend
+/// Set up a connection pool to the elastic search backend
 ///
 /// # Arguments
 ///

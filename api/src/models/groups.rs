@@ -72,7 +72,7 @@ impl std::fmt::Display for GroupAllowAction {
     }
 }
 
-/// The data that is allowed to be added/uploaded to a groupi
+/// The data that is allowed to be added/uploaded to a group
 ///
 /// These permission are not retroactive.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -99,7 +99,7 @@ pub struct GroupAllowed {
 impl Default for GroupAllowed {
     /// All actions are allowed in a group by default
     fn default() -> Self {
-        // create a group allowed structure where everthing is allowed by default
+        // create a group allowed structure where everything is allowed by default
         GroupAllowed {
             files: true,
             repos: true,
@@ -329,7 +329,7 @@ impl GroupRequest {
 
     /// Sets the managers that should be specified in a [`GroupRequest`]
     ///
-    /// Managers can not delete the group but can add users and delete users jobs within this group.
+    /// Managers cannot delete the group but can add users and delete users jobs within this group.
     ///
     /// # Arguments
     ///
@@ -377,7 +377,7 @@ impl GroupRequest {
 
     /// Sets the monitors that should be specified in a [`GroupRequest`]
     ///
-    /// Monitors can not create/delete jobs/users but can monitor the jobs and users within a group
+    /// Monitors cannot create/delete jobs/users but can monitor the jobs and users within a group
     ///
     /// # Arguments
     ///
@@ -559,7 +559,7 @@ fn default_as_false() -> bool {
     false
 }
 
-/// The updates to the data that is allowed to be added/uploaded to a groupi
+/// The updates to the data that is allowed to be added/uploaded to a group
 ///
 /// These permission are not retroactive.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

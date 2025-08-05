@@ -231,7 +231,7 @@ pub enum PipelineBans {
     /// Add a ban to a pipeline, preventing it from being run
     #[clap(version, author)]
     Add(AddPipelineBan),
-    /// Remove a ban from an pipeline
+    /// Remove a ban from a pipeline
     #[clap(version, author)]
     Remove(RemovePipelineBan),
 }

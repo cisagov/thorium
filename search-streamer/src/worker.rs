@@ -127,7 +127,7 @@ where
             }
             // the item was deleted, so delete it in all its groups
             SearchEventType::Deleted => {
-                // get the ids to the event's respective documents
+                // get the IDs to the event's respective documents
                 let store_ids = compacted_event
                     .store_ids()
                     .into_iter()
@@ -179,7 +179,7 @@ where
                 Job::Init { start, end } => self.handle_init(start, end).await?,
                 // handle an event job; if an event job fails, we tell the monitor to tell the Thorium API
                 Job::Event { compacted_event } => {
-                    // get a copy of the event's ids before we move the compacted event
+                    // get a copy of the event's IDs before we move the compacted event
                     let ids = compacted_event.get_ids();
                     match self.handle_event(compacted_event).await {
                         Ok(()) => {

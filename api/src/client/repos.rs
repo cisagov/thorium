@@ -67,7 +67,7 @@ impl Repos {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// repos handler for the Thorium client
@@ -130,7 +130,7 @@ impl Repos {
             .header("authorization", &self.token)
             .json(req)
             // use a really long timeout for really large repos
-            // this is probably done better some otherway
+            // this is probably done better some other way
             // 86,400 seconds == a day
             .timeout(std::time::Duration::from_secs(86_400));
         // send this request
@@ -262,7 +262,7 @@ impl Repos {
         repo: &str,
         tags: &TagRequest<Repo>,
     ) -> Result<reqwest::Response, Error> {
-        // build url for updating an file
+        // build url for updating a file
         let url = format!("{}/api/repos/tags/{}", self.host, repo);
         // build request
         let req = self
@@ -312,7 +312,7 @@ impl Repos {
         url: &str,
         tags_del: &TagDeleteRequest<Repo>,
     ) -> Result<reqwest::Response, Error> {
-        // build url for updating an file
+        // build url for updating a file
         let url = format!("{}/api/repos/tags/{}", self.host, url);
         // build request
         let req = self

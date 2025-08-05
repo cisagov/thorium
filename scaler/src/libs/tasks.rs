@@ -39,7 +39,7 @@ pub enum Tasks {
 }
 
 impl Tasks {
-    /// Setup a tasks queue with for all tasks
+    /// Set up a tasks queue with for all tasks
     pub fn setup_queue(conf: &Conf) -> BTreeMap<DateTime<Utc>, Tasks> {
         // create an empty map
         let mut queue = BTreeMap::default();
@@ -153,7 +153,7 @@ impl ZombieChecker {
 
     /// Get the currently running jobs
     async fn get_jobs(&self) -> Result<Vec<RunningJob>, Error> {
-        // build arbitrary dates for reading the urnning jobs queue
+        // build arbitrary dates for reading the running jobs queue
         let start = DateTime::from_timestamp(0, 0).unwrap();
         let end = Utc::now() + chrono::Duration::weeks(1000);
         // get the running jobs for this page
@@ -239,7 +239,7 @@ impl ZombieChecker {
     #[instrument(name = "ZombieChecker::scan_workers", skip_all, err(Debug))]
     async fn scan_workers(&mut self, spawned: &HashSet<&String>) -> Result<WorkerDeleteMap, Error> {
         // build our params info
-        // scan our nodes 500 at at ime
+        // scan our nodes 500 at a time
         let params = NodeListParams::default().scaler(self.scaler).limit(500);
         // get info on the current Thorium nodes
         let mut cursor = self.thorium.system.list_node_details(&params).await?;

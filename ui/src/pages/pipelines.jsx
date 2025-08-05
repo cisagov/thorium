@@ -459,7 +459,7 @@ const Pipelines = () => {
         if (newPipelineDescription) {
           data['description'] = newPipelineDescription;
         }
-        // add optional SLA arguement to request body
+        // add optional SLA argument to request body
         if (newPipelineSla != '') {
           if (!isNaN(newPipelineSla) && parseInt(newPipelineSla) > 0) {
             data['sla'] = parseInt(newPipelineSla);

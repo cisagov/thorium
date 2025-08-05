@@ -17,7 +17,7 @@ helm repo update
 helm show values traefik/traefik > traefik-values.yml
 ```
 
-### 3) Modify the default helm values fpr Traefik
+### 3) Modify the default helm values for Traefik
 
 Update read and write response timeouts for http and https requests going through the traefik ingress proxy.
 

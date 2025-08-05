@@ -1,7 +1,7 @@
 //! Handles tag operations in Thorium
 //!
 //! This does not handle create operations as they are very specific to the type
-//! of data they are tied too. This is largely becuause how they determine the
+//! of data they are tied too. This is largely because how they determine the
 //! timestamp each tag should be uploaded at.
 
 use chrono::prelude::*;
@@ -283,7 +283,7 @@ async fn get_tag_rows(
 ) -> Result<Vec<FullTagRow>, ApiError> {
     // default to 30 rows
     let mut full_rows = Vec::with_capacity(30);
-    // if we have more then 100 groups then chunk it into bathes of 100  otherwise just get our tag rows
+    // if we have more than 100 groups then chunk it into bathes of 100  otherwise just get our tag rows
     if groups.len() > 100 {
         // break our groups into chunks of 100
         for chunk in groups.chunks(100) {
@@ -489,7 +489,7 @@ pub async fn get(
     map: &mut TagMap,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // if we have more then 100 groups then chunk it into bathes of 100  otherwise just get our info
+    // if we have more than 100 groups then chunk it into bathes of 100  otherwise just get our info
     if groups.len() > 100 {
         // break our groups into chunks of 100
         for chunk in groups.chunks(100) {
@@ -509,7 +509,7 @@ pub async fn get(
             while let Some(row) = typed_stream.next() {
                 // raise any errors from casting
                 if let Some(tag) = log_scylla_err!(row) {
-                    // get our key map oroinsert a default one
+                    // get our key map or insert a default one
                     let key_map = map.entry(tag.key).or_default();
                     // get our value map or insert a default one
                     let group_list = key_map.entry(tag.value).or_default();
@@ -519,7 +519,7 @@ pub async fn get(
             }
         }
     } else {
-        // we have less then 100 groups so just get their data
+        // we have less than 100 groups so just get their data
         let query = shared
             .scylla
             .session
@@ -533,7 +533,7 @@ pub async fn get(
         while let Some(row) = typed_stream.next() {
             // raise any errors from casting
             if let Some(tag) = log_scylla_err!(row) {
-                // get our key map oroinsert a default one
+                // get our key map or insert a default one
                 let key_map = map.entry(tag.key).or_default();
                 // get our value map or insert a default one
                 let group_list = key_map.entry(tag.value).or_default();

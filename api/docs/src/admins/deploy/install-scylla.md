@@ -141,7 +141,7 @@ EOF
 # The name of the cluster. This is mainly used to prevent machines in
 # one logical cluster from joining another.
 # It is recommended to change the default value when creating a new cluster.
-# You can NOT modify this value for an existing cluster
+# You CANNOT modify this value for an existing cluster
 #cluster_name: 'Test Cluster'
 
 # This defines the number of tokens randomly assigned to this node on the ring
@@ -152,7 +152,7 @@ num_tokens: 256
 
 # Directory where Scylla should store all its files, which are commitlog,
 # data, hints, view_hints and saved_caches subdirectories. All of these
-# subs can be overriden by the respective options below.
+# subs can be overridden by the respective options below.
 # If unset, the value defaults to /var/lib/scylla
 # workdir: /var/lib/scylla
 
@@ -184,7 +184,7 @@ commitlog_sync_period_in_ms: 10000
 
 # The size of the individual commitlog file segments.  A commitlog
 # segment may be archived, deleted, or recycled once all the data
-# in it (potentially from each columnfamily in the system) has been
+# in it (potentially from each column family in the system) has been
 # flushed to sstables.
 #
 # The default size is 32, which is almost always fine, but if you are
@@ -429,7 +429,7 @@ authorizer: CassandraAuthorizer
 
 # The partitioner is responsible for distributing groups of rows (by
 # partition key) across nodes in the cluster.  You should leave this
-# alone for new clusters.  The partitioner can NOT be changed without
+# alone for new clusters.  The partitioner CANNOT be changed without
 # reloading all data, so when upgrading you should set this to the
 # same partitioner you were already using.
 #
@@ -497,7 +497,7 @@ commitlog_total_space_in_mb: -1
 # tombstones seen in memory so we can return them to the coordinator, which
 # will use them to make sure other replicas also know about the deleted rows.
 # With workloads that generate a lot of tombstones, this can cause performance
-# problems and even exaust the server heap.
+# problems and even exhaust the server heap.
 # (http://www.datastax.com/dev/blog/cassandra-anti-patterns-queues-and-queue-like-datasets)
 # Adjust the thresholds here if you understand the dangers and want to
 # scan more tombstones anyway.  These thresholds may also be adjusted at runtime
@@ -577,7 +577,7 @@ commitlog_total_space_in_mb: -1
 #    certificate: conf/scylla.crt
 #    keyfile: conf/scylla.key
 #    truststore: <not set, use system trust>
-#    certficate_revocation_list: <not set>
+#    certificate_revocation_list: <not set>
 #    require_client_auth: False
 #    priority_string: <not set, use default>
 
@@ -587,7 +587,7 @@ commitlog_total_space_in_mb: -1
 #    certificate: conf/scylla.crt
 #    keyfile: conf/scylla.key
 #    truststore: <not set, use system trust>
-#    certficate_revocation_list: <not set>
+#    certificate_revocation_list: <not set>
 #    require_client_auth: False
 #    priority_string: <not set, use default>
 
@@ -610,11 +610,11 @@ commitlog_total_space_in_mb: -1
 # not met, performance and reliability can be degraded.
 #
 # These requirements include:
-#    - A filesystem with good support for aysnchronous I/O (AIO). Currently,
+#    - A filesystem with good support for asynchronous I/O (AIO). Currently,
 #      this means XFS.
 #
 # false: strict environment checks are in place; do not start if they are not met.
-# true: relaxed environment checks; performance and reliability may degraade.
+# true: relaxed environment checks; performance and reliability may degrade.
 #
 developer_mode: false
 
@@ -647,7 +647,7 @@ developer_mode: false
 #  [shard0] [shard1] ... [shardN-1] [shard0] [shard1] ... [shardN-1] ...
 #
 # Scylla versions 1.6 and below used just one repetition of the pattern;
-# this intefered with data placement among nodes (vnodes).
+# this interfered with data placement among nodes (vnodes).
 #
 # Scylla versions 1.7 and above use 4096 repetitions of the pattern; this
 # provides for better data distribution.

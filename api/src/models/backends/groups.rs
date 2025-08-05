@@ -98,7 +98,7 @@ impl GroupUsersUpdate {
         // remove any users that got removed and added to the same role
         self.direct_add
             .retain(|name| !self.direct_remove.contains(name));
-        // add any new users to our our added set
+        // add any new users to our added set
         added.extend(self.direct_add.iter().cloned());
         // track the users we are removing
         removed.extend(self.direct_remove.iter().cloned());
@@ -400,7 +400,7 @@ impl Group {
         if user.is_admin() {
             return Ok(());
         }
-        // make sure this user has the devloper role
+        // make sure this user has the developer role
         if !user.is_developer(scaler) {
             // this user is not a developer
             event!(
@@ -439,7 +439,7 @@ impl Group {
         if user.is_admin() {
             return Ok(());
         }
-        // make sure this user has the devloper role
+        // make sure this user has the developer role
         if !user.is_developer_many(scalers) {
             // this user is not a developer
             event!(
@@ -593,7 +593,7 @@ impl Group {
         // make sure the user has some role in this group
         if user.is_admin() {
             // if we are an admin we need to do a second call to make sure these groups exist
-            // this is because non existent groups will still return empty user lists
+            // this is because nonexistent groups will still return empty user lists
             if !db::groups::exists(names, shared).await? {
                 // one or more of the groups don't exist throw an error
                 return not_found!(format!("all of {:?} groups must exist", names));
@@ -654,7 +654,7 @@ impl Group {
                 group.allowable(action)?;
             }
             // if we are an admin we need to do a second call to make sure these groups exist
-            // this is because non existent groups will still return empty user lists
+            // this is because nonexistent groups will still return empty user lists
             if !db::groups::exists(names, shared).await? {
                 // one or more of the groups don't exist throw an error
                 return not_found!(format!("all of {:?} groups must exist", names));
@@ -735,7 +735,7 @@ impl Group {
         // get a list of all valid users in Thorium to validate against
         let valid = HashSet::from_iter(db::users::list(shared).await?);
         // make sure we can modify this group with our role
-        // if we are adding/removing owners we need to also be an owner
+        // if we are adding/removing owners we also need to be an owner
         if !update.owners.is_empty() {
             // make sure we are an owner
             self.is_owner(user)?;
@@ -752,9 +752,9 @@ impl Group {
                 return conflict!("You cannot update a group to have no owners".to_owned());
             }
         } else {
-            // only check manager if we are doing more then just removing ourselves
+            // only check manager if we are doing more than just removing ourselves
             if !update.removes_only_user(&user.username) {
-                // we are removing more then just ourselves so check for arbitrary delete perms
+                // we are removing more than just ourselves so check for arbitrary delete perms
                 self.modifiable(user)?;
             }
         }
@@ -1068,7 +1068,7 @@ impl LdapUserMap {
                     Self::group_name_extract(&entry.dn),
                     entry.attrs.remove(&conf.group_members_attr),
                 ) {
-                    // extract our usernames if necesary
+                    // extract our usernames if necessary
                     let mut users = Self::group_member_extract(users, conf);
                     // trim the user list down to only valid Thorium users
                     users.retain(|name| valid_users.contains(name));
@@ -1097,7 +1097,7 @@ impl LdapUserMap {
             // set the start to just past the cn=
             let mut start = 3;
             loop {
-                // get the index the first ','
+                // get the index of the first ','
                 if let Some(end) = raw[start..].find(',') {
                     // check to see if this comma was escaped
                     if &raw[end - 1..end - 1] == "\\" {

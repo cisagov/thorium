@@ -136,7 +136,7 @@ pub struct Volume {
 }
 
 impl Volume {
-    /// Creates a new barebones volume without any archetype specifc settings
+    /// Creates a new barebones volume without any archetype specific settings
     ///
     /// The name of the volume should match the name of the volume already created in k8s if a
     /// volume must already exist in k8s in order for this volume to be bound. When kustomize

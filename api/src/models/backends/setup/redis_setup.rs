@@ -3,7 +3,7 @@ use bb8_redis::{bb8::Pool, RedisConnectionManager};
 
 use crate::{setup, Conf};
 
-/// Setup a connection pool to the redis backend
+/// Set up a connection pool to the redis backend
 ///
 /// # Arguments
 ///

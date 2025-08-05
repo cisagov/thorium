@@ -8,7 +8,7 @@ import { useAuth } from '@utilities';
 import { listRepos } from '@thorpi';
 import { Filters } from '@models';
 
-// get repos using filters and and an optional cursor
+// get repos using filters and an optional cursor
 const getRepos = async (filters: Filters, cursor: string | null) => {
   // get files list from API
   const { entityList, entityCursor } = await listRepos(

@@ -46,7 +46,7 @@ pub struct StatusRequest {
     pub pipeline: String,
     /// The reaction this status update is for
     pub reaction: String,
-    /// The action that occured
+    /// The action that occurred
     pub action: Actions,
     /// The update that was applied
     pub update: HashMap<String, String>,
@@ -94,7 +94,7 @@ pub struct StatusUpdate {
     pub action: Actions,
     /// The timestamp this occurred
     pub timestamp: DateTime<chrono::Utc>,
-    /// A message or reason why this action occured
+    /// A message or reason why this action occurred
     pub msg: Option<String>,
     /// The update that occurred
     pub update: HashMap<String, String>,

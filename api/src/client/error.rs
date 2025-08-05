@@ -13,7 +13,7 @@ pub enum Error {
     },
     /// A generic error with a message
     Generic(String),
-    /// An error from sending or recieving a request
+    /// An error from sending or receiving a request
     Reqwest(reqwest::Error),
     /// An IO Error
     IO(std::io::Error),
@@ -29,7 +29,7 @@ pub enum Error {
     GitFindReference(gix::reference::find::existing::Error),
     /// An error from a gix reference iter
     GitReferenceIter(gix::reference::iter::Error),
-    /// An error from initing a git refernce iter
+    /// An error from initing a git reference iter
     GitReferenceIterInit(gix::reference::iter::init::Error),
     /// An error from peeling a git reference
     GitReferencePeel(gix::reference::peel::Error),
@@ -65,7 +65,7 @@ pub enum Error {
     UrlParse(url::ParseError),
     /// An error from parsing an IP CIDR
     CidrParse(cidr::errors::NetworkParseError),
-    /// An error from aprsing an int
+    /// An error from parsing an int
     ParseInt(std::num::ParseIntError),
     /// An error from joining a tokio task
     JoinError(tokio::task::JoinError),
@@ -253,7 +253,7 @@ impl Error {
 }
 
 impl std::fmt::Display for Error {
-    /// display this error in a easy readble format
+    /// display this error in a easy readable format
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match (self.status(), self.msg()) {
             (Some(code), Some(msg)) => write!(f, "Code: {} Error: {}", code, msg),

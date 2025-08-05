@@ -11,7 +11,7 @@ pub struct Args {
     /// The path to the keys to use for this node daemon
     #[clap(short, long, default_value = "keys.yml")]
     pub keys: String,
-    /// The path to use for the tracing config for this deamon
+    /// The path to use for the tracing config for this daemon
     #[clap(short, long, default_value = "/opt/thorium/tracing.yml")]
     pub trace: String,
     /// The scaler this reactor should spawn jobs for

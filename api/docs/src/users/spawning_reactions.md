@@ -29,7 +29,7 @@ thorctl reactions create --group <PIPELINE_GROUP> --pipeline <PIPELINE> <SHA256>
 If you want to run a pipeline on files that have a specific tag or tags, add the `-t/--tags` flag and specify a tag in the format
 `KEY=VALUE` as shown below:
 ```bash
-thorctl reactions create --limit <LIMIT> --group <PIPELINE_GROUP> --pipeline <PIPELINE> --tags Datatset=Examples
+thorctl reactions create --limit <LIMIT> --group <PIPELINE_GROUP> --pipeline <PIPELINE> --tags Dataset=Examples
 ```
 
 To specify multiple tags, enter a `-t/--tags` flag for each tag:

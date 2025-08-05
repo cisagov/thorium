@@ -1,11 +1,11 @@
-//! Setup the network policies tables/prepared statements in Scylla
+//! Set up the network policies tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for network policies
+/// The prepared statements for network policies
 pub struct NetworkPoliciesPreparedStatements {
     /// Insert a network policy
     pub insert: PreparedStatement,
@@ -37,9 +37,9 @@ impl NetworkPoliciesPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the network policies table
+        // set up the network policies table
         setup_network_policies_table(session, config).await;
-        // setup the network policies materialized views
+        // set up the network policies materialized views
         setup_network_policies_default_mat_view(session, config).await;
         setup_network_policies_name_mat_view(session, config).await;
         // setup our prepared statements
@@ -69,7 +69,7 @@ impl NetworkPoliciesPreparedStatements {
     }
 }
 
-/// Setup a network policies table for Thorium
+/// Set up a network policies table for Thorium
 ///
 /// This is the ground truth for all network policies
 ///
@@ -99,7 +99,7 @@ async fn setup_network_policies_table(session: &Session, config: &Conf) {
         .expect("failed to add network policies table");
 }
 
-/// Setup a network policies by name material view for Thorium
+/// Set up a network policies by name material view for Thorium
 ///
 /// Allows callers to get all of a network policy's rows by its name more easily
 ///
@@ -123,7 +123,7 @@ async fn setup_network_policies_name_mat_view(session: &Session, config: &Conf) 
         .expect("failed to add network policies by name materialized view");
 }
 
-/// Setup a network policies by name material view for Thorium
+/// Set up a network policies by name material view for Thorium
 ///
 /// Allows callers to get all of a network policy's rows by its name more easily
 ///

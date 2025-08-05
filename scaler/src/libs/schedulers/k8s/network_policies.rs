@@ -119,7 +119,7 @@ impl NetworkPolicies {
             (Some(_), None) => Some(vec!["Ingress".to_string()]),
             (Some(_), Some(_)) => Some(vec!["Ingress".to_string(), "Egress".to_string()]),
         };
-        // overlay the Thorium network policy rules on top of the the K8's network policy
+        // overlay the Thorium network policy rules on top of the K8's network policy
         netpol_spec.ingress = thorium_policy
             .ingress
             .map(|mut ingress| ingress.drain(..).map(Into::into).collect());
@@ -184,7 +184,7 @@ impl NetworkPolicies {
             (Some(_), None) => Some(vec!["Ingress".to_string()]),
             (Some(_), Some(_)) => Some(vec!["Ingress".to_string(), "Egress".to_string()]),
         };
-        // overlay the Thorium network policy rules on top of the the K8's network policy
+        // overlay the Thorium network policy rules on top of the K8's network policy
         netpol_spec.ingress = base_policy
             .ingress
             .as_ref()

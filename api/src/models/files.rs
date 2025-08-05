@@ -58,7 +58,7 @@ cfg_if::cfg_if! {
         pub struct OriginForm {
             /// The type of origin this should be deserialized as
             pub origin_type: OriginTypes,
-            /// The result ids to add this child too
+            /// The result IDs to add this child too
             pub result_ids: Vec<Uuid>,
             /// The url this was downloaded from
             pub url: Option<String>,
@@ -84,9 +84,9 @@ cfg_if::cfg_if! {
             pub cover_term: Option<String>,
             /// The mission team that handled this incident
             pub mission_team: Option<String>,
-            /// The network this incident occured on
+            /// The network this incident occurred on
             pub network: Option<String>,
-            /// The IP or hostname of the machine this occured on
+            /// The IP or hostname of the machine this occurred on
             pub machine: Option<String>,
             /// The physical location of this incident
             pub location: Option<String>,
@@ -138,7 +138,7 @@ cfg_if::cfg_if! {
         /// A request for a comment about a specific sample
         #[derive(Debug)]
         pub struct CommentForm {
-            /// The Id to assign for this form
+            /// The ID to assign for this form
             pub id: Uuid,
             /// The groups to share this comment with
             pub groups: Vec<String>,
@@ -224,7 +224,7 @@ impl SampleCheck {
         self
     }
 
-    /// Adds multiple groupss for this existence check
+    /// Adds multiple groups for this existence check
     ///
     /// # Arguments
     ///
@@ -246,7 +246,7 @@ impl SampleCheck {
         self
     }
 
-    /// Sets the origin for this extence check
+    /// Sets the origin for this existence check
     ///
     /// # Arguments
     ///
@@ -515,7 +515,7 @@ impl SampleRequest {
         let mut form = multipart_list!(form, "groups", self.groups);
         // add any tags to this form
         for (key, mut values) in self.tags {
-            // build the tag key to for this tag
+            // build the tag key for this tag
             let tag_key = format!("tags[{key}]");
             // add this tags list of values to our form
             form = multipart_set!(form, &tag_key, values);
@@ -667,7 +667,7 @@ impl Default for OriginTypes {
 pub struct OriginRequest {
     /// The type of origin this should be deserialized as
     pub origin_type: String,
-    /// The result ids to add this child too
+    /// The result IDs to add this child too
     pub result_ids: Vec<Uuid>,
     /// The url this was downloaded from
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -705,10 +705,10 @@ pub struct OriginRequest {
     /// The mission team that handled this incident
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mission_team: Option<String>,
-    /// The network this incident occured on
+    /// The network this incident occurred on
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<String>,
-    /// The IP or hostname of the machine this occured on
+    /// The IP or hostname of the machine this occurred on
     #[serde(skip_serializing_if = "Option::is_none")]
     pub machine: Option<String>,
     /// The physical location of this incident
@@ -952,8 +952,8 @@ impl OriginRequest {
     /// * `incident` - The name or other unique identifier for this incident
     /// * `cover_term` - The cover term for this incident
     /// * `mission_team` - The mission team for this incident
-    /// * `network` - The name of the network this occured on
-    /// * `machine` - The machine this incident occured on
+    /// * `network` - The name of the network this occurred on
+    /// * `machine` - The machine this incident occurred on
     /// * `location` - The physical location of this incident (building/office)
     pub fn incident<T: Into<String>>(
         incident: T,
@@ -1209,22 +1209,22 @@ impl OriginRequest {
         }
     }
 
-    /// A a result id to this origin
+    /// A result ID to this origin
     ///
     /// # Arguments
     ///
-    /// * `result_id` - The result id to add to this origin
+    /// * `result_id` - The result ID to add to this origin
     #[must_use]
     pub fn result_id(mut self, result_id: Uuid) -> Self {
         self.result_ids.push(result_id);
         self
     }
 
-    /// Ads a list of result idis to this origin
+    /// Adds a list of result IDs to this origin
     ///
     /// # Arguments
     ///
-    /// * `result_id` - The result id to add to this origin
+    /// * `result_id` - The result ID to add to this origin
     #[must_use]
     pub fn result_ids(mut self, mut result_ids: Vec<Uuid>) -> Self {
         self.result_ids.append(&mut result_ids);
@@ -1551,7 +1551,7 @@ impl Origin {
                 tag!(tags, "Parent", parent);
                 // if any reconstruction methods are set then tag them
                 if !reconstructed.is_empty() {
-                    // get an entry to the reconstruction menthods tag values
+                    // get an entry to the reconstruction methods tag values
                     let entry = tags
                         .entry("MemoryDumpReconstructed".to_owned())
                         .or_default();
@@ -1572,7 +1572,7 @@ impl Origin {
                 tag!(tags, "Repo", repo);
                 opt_tag!(tags, "Commitish", commitish);
                 tag!(tags, "Commit", commit);
-                // if any build flagss are set then tag them
+                // if any build flags are set then tag them
                 if !flags.is_empty() {
                     // get an entry to the build flag tag values
                     let entry = tags.entry("BuildFlags".to_owned()).or_default();
@@ -2263,7 +2263,7 @@ impl PartialEq<TagRequest<Sample>> for Sample {
     ///
     /// * `req` - The `TagRequest` to compare against
     fn eq(&self, req: &TagRequest<Sample>) -> bool {
-        // crawl over the tags we requeted to be added
+        // crawl over the tags we requested to be added
         for (key, values) in &req.tags {
             // make sure each tag was added
             if let Some(updated) = self.tags.get(key) {
@@ -2313,7 +2313,7 @@ impl OutputSupport for Sample {
     ///
     /// # Arguments
     ///
-    /// * `user` - The use rthat is validating this object is in some groups
+    /// * `user` - The user that is validating this object is in some groups
     /// * `groups` - The user specified groups to check against
     /// * `shared` - Shared objects in Thorium
     #[cfg(feature = "api")]
@@ -2334,7 +2334,7 @@ impl OutputSupport for Sample {
     ///
     /// # Arguments
     ///
-    /// * `user` - The use rthat is validating this object is in some groups
+    /// * `user` - The user that is validating this object is in some groups
     /// * `groups` - The user specified groups to check against
     /// * `shared` - Shared objects in Thorium
     #[cfg(feature = "api")]
@@ -2546,7 +2546,7 @@ impl CartedSample {
 #[cfg(feature = "client")]
 #[derive(Debug)]
 pub struct UncartedSample {
-    /// The fild handle containing our uncarted sample
+    /// The file handle containing our uncarted sample
     pub file: File,
 }
 
@@ -2700,7 +2700,7 @@ impl FileListParams {
             None => match Utc.timestamp_opt(shared.config.thorium.files.earliest, 0) {
                 chrono::LocalResult::Single(default_end) => Ok(default_end),
                 _ => crate::internal_err!(format!(
-                    "default earliest files timestamp is invalid or ambigous - {}",
+                    "default earliest files timestamp is invalid or ambiguous - {}",
                     shared.config.thorium.files.earliest
                 )),
             },
@@ -2734,10 +2734,10 @@ pub struct CommentRequest {
     pub groups: Vec<String>,
     /// A description for this sample
     pub comment: String,
-    /// The path to the file to upload if attachemnts are on disk
+    /// The path to the file to upload if attachments are on disk
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<OnDiskFile>,
-    /// The attachemnts to upload directly
+    /// The attachments to upload directly
     pub buffers: Vec<Buffer>,
 }
 
@@ -2903,7 +2903,7 @@ impl CommentRequest {
     /// Create a multipart form from this comment request
     #[cfg(feature = "client")]
     pub async fn to_form(mut self) -> Result<reqwest::multipart::Form, Error> {
-        // build the forrm we are going to send
+        // build the form we are going to send
         let form = reqwest::multipart::Form::new()
             // the tool that created this result
             .text("comment", self.comment);

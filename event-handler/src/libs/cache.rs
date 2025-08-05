@@ -137,7 +137,7 @@ impl TriggerCache {
         event: &Event,
         filtered: &mut FilteredEvents<'a>,
     ) {
-        // build a list of potential/confirmed triggers for this eventi
+        // build a list of potential/confirmed triggers for this event
         let mut confirmed = Vec::default();
         let mut potential = Vec::default();
         // crawl over this users groups
@@ -202,7 +202,7 @@ impl TriggerCache {
         events: Vec<Event>,
         filtered: &mut FilteredEvents<'a>,
     ) {
-        // split out events up into potential events and events can not meet any triggers
+        // split out events up into potential events and events cannot meet any triggers
         for event in events {
             // check this event
             self.check_event(&event, filtered);

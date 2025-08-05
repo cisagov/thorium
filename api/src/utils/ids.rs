@@ -36,7 +36,7 @@ pub struct ReqIdService<S> {
 }
 
 impl<S> ReqIdService<S> {
-    // Create a new Request Id middleware service
+    // Create a new Request ID middleware service
     pub fn new(inner: S) -> Self {
         Self { inner }
     }

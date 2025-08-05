@@ -383,7 +383,7 @@ pub async fn update(
     // build pipeline to modify user accounts groups and add this group
     let mut pipe = redis::pipe();
     // make sure that we only add/remove users whose group memberships are changing
-    // and not just are chaning roles
+    // and not just are changing roles
     // update user accounts
     modify_users!(pipe, added.difference(removed), "sadd", &group.name, shared);
     modify_users!(pipe, removed.difference(added), "srem", &group.name, shared);

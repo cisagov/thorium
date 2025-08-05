@@ -134,8 +134,8 @@ Arguments:
 Options:
   -g, --groups <GROUPS>            The groups to upload these files to
   -p, --pipelines <PIPELINES>      The pipelines to spawn for all files that are uploaded
-  -t, --tags <TAGS>                The tags to add to any files uploaded where key/value is separated by a deliminator
-      --deliminator <DELIMINATOR>  The deliminator character to use when splitting tags into key/values [default: =]
+  -t, --tags <TAGS>                The tags to add to any files uploaded where key/value is separated by a delimiter
+      --delimiter <DELIMITER>      The delimiter character to use when splitting tags into key/values [default: =]
   -f, --filter <FILTER>            Any regular expressions to use to determine which files to upload
   -s, --skip <SKIP>                Any regular expressions to use to determine which files to skip
       --folder-tags <FOLDER_TAGS>  The tags keys to use for each folder name starting at the root of the specified targets

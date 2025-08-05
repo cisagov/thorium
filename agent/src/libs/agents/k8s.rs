@@ -18,7 +18,7 @@ use crate::{build_path_args, deserialize, log, purge};
 pub struct K8s {
     /// A client to Thorium
     pub thorium: Thorium,
-    /// A sender for a chennel of logs to add for this job
+    /// A sender for a channel of logs to add for this job
     pub logs: Sender<String>,
     /// The original entrypoint for the image we are in
     entrypoint: Vec<String>,
@@ -146,11 +146,11 @@ impl AgentExecutor for K8s {
         (results, result_files)
     }
 
-    /// Setup the environment for executing a single job in Thorium
+    /// Set up the environment for executing a single job in Thorium
     ///
     /// # Arguments
     ///
-    /// * `image` - The Image to setup a job for
+    /// * `image` - The Image to set up a job for
     /// * `job` - The job we are setting up for
     /// * `commits` - The commit that each repo is checked out too
     #[instrument(
@@ -173,7 +173,7 @@ impl AgentExecutor for K8s {
         job: &GenericJob,
         commits: &mut HashMap<String, String>,
     ) -> Result<(), Error> {
-        // setup dependendency base paths
+        // setup dependency base paths
         std::fs::create_dir_all(&image.dependencies.samples.location)?;
         std::fs::create_dir_all(&image.dependencies.ephemeral.location)?;
         std::fs::create_dir_all(&image.dependencies.repos.location)?;

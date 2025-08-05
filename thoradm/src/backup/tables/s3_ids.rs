@@ -165,7 +165,7 @@ impl Restore for S3Id {
                     *rows_restored += 1;
                     // set our current row count progress message
                     progress.set_message(rows_restored.to_string());
-                    // if we have less then 100 future to go then refill our future set
+                    // if we have less than 100 future to go then refill our future set
                     if futures.len() < 100 {
                         break;
                     }
@@ -265,7 +265,7 @@ impl S3Restore for S3Id {
         let bucket = match chunks.next().map(|comp| comp.as_os_str().to_str()) {
             Some(Some("files")) => conf.thorium.files.bucket.clone(),
             Some(Some("repos")) => conf.thorium.repos.bucket.clone(),
-            _ => return Err(Error::new("Uknown s3 id object type")),
+            _ => return Err(Error::new("Unknown s3 id object type")),
         };
         // skip the partitioning component
         let mut chunks = chunks.skip(1);

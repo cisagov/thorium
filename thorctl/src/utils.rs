@@ -199,7 +199,7 @@ pub fn convert_size_to_bytes(raw: &str) -> Result<u64, Error> {
         // if parse was successful then convert to mebibytes
         return Ok(bytes);
     }
-    // u64 failed parse check lets find first occurence of a any valid char
+    // u64 failed parse check lets find first occurrence of a any valid char
     let unit_regex = Regex::new(r"[KMGTPE]").unwrap();
     // find index where unit starts
     let reg = match unit_regex.find(&raw) {
@@ -260,7 +260,7 @@ pub fn get_hostname(url: &str) -> Result<&str, Error> {
 }
 
 /// Return a descriptive error that the function requires admin access if we get
-/// a 401, otherwise just return the error
+/// a 401; otherwise, just return the error
 #[macro_export]
 macro_rules! err_not_admin {
     ($func:expr) => {

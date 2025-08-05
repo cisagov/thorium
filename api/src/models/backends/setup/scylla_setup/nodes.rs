@@ -1,11 +1,11 @@
-//! Setup the nodes tables/prepared statements in Scylla
+//! Set up the nodes tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for nodes
+/// The prepared statements for nodes
 pub struct NodesPreparedStatements {
     /// Insert a node
     pub insert: PreparedStatement,
@@ -19,7 +19,7 @@ pub struct NodesPreparedStatements {
     pub update_heart_beat: PreparedStatement,
     /// Get the ties when listing nodes
     pub list_ties: PreparedStatement,
-    /// Get all the nodes for a specific clustser
+    /// Get all the nodes for a specific cluster
     pub list: PreparedStatement,
     /// Get the ties when listing node details for a specific cluster
     pub list_details_ties: PreparedStatement,
@@ -35,7 +35,7 @@ impl NodesPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the node table
+        // set up the node table
         setup_node_table(session, config).await;
         // setup our prepared statements
         let insert = insert(session, config).await;
@@ -62,9 +62,9 @@ impl NodesPreparedStatements {
     }
 }
 
-/// Setup the nodes table
+/// Set up the nodes table
 ///
-/// This table trackes nodes and their health
+/// This table tracks nodes and their health
 ///
 /// # Arguments
 ///

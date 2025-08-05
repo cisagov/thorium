@@ -37,7 +37,7 @@ impl NodeAllocatableUpdate {
     ///
     /// # Arguments
     ///
-    /// * `available` - The availabe resources to schedule on this node
+    /// * `available` - The available resources to schedule on this node
     /// * `total` - The total resources on this node
     pub fn new(available: Resources, total: Resources) -> Self {
         NodeAllocatableUpdate {
@@ -135,7 +135,7 @@ impl Allocatable {
         }
     }
 
-    /// Remove and return the cpu group and cluster info for a specfic cluster
+    /// Remove and return the cpu group and cluster info for a specific cluster
     ///
     /// # Arguments
     ///
@@ -236,7 +236,7 @@ impl Allocatable {
         self.low_resources = false;
         // step over all clusters in all cpu groups
         for (cluster, cluster_info) in self.clusters.values_mut().flatten() {
-            // check if this cluster has less then 5% of its resoruces remaining {
+            // check if this cluster has less than 5% of its resources remaining {
             if !cluster_info.has_remaining(0.05) {
                 // log this cluster is low on cpu/memory
                 event!(Level::INFO, cluster, low_resources = true);
@@ -407,7 +407,7 @@ impl Allocatable {
         None
     }
 
-    /// Calculate the increase in fairshare for a specific resource spec
+    /// Calculate the increase in fair share for a specific resource spec
     ///
     /// # Arguments
     ///
@@ -415,7 +415,7 @@ impl Allocatable {
     /// * `count` - The number of pods to use for this increase
     /// * `resources` - The resource spec we are calculating an increase for
     pub fn calc_fair_share(&self, rank: u64, count: i64, resources: &Resources) -> u64 {
-        // only calculate an increase if count is greater then 0
+        // only calculate an increase if count is greater than 0
         if count > 0 {
             // calculate the increase in cost for the cpu
             let mut incr = resources.cpu * self.weights.cpu;
@@ -424,7 +424,7 @@ impl Allocatable {
             // add this increase to our old rank
             rank + (incr * count as u64)
         } else {
-            // count is zero so just use our our old rank
+            // count is zero so just use our old rank
             rank
         }
     }
@@ -510,7 +510,7 @@ impl Allocatable {
         cache: &Cache,
         spawn_slots: &mut usize,
     ) -> Result<(), Error> {
-        // get the system stats for for Thorium so we can assign resources to users
+        // get the system stats for Thorium so we can assign resources to users
         let stats = thorium.system.stats().await?;
         // Build a map of each users outstanding job reqs
         let mut map = stats.users_jobs();
@@ -575,7 +575,7 @@ impl Allocatable {
         for cluster_group in self.clusters.values_mut() {
             // crawl over all of our clusters in this cluster cpu group
             for clusters in cluster_group.values_mut() {
-                // crawl over over all node cpu groups
+                // crawl over all node cpu groups
                 for node_group in clusters.nodes.values_mut() {
                     // add this size of this group to our node cnt
                     node_cnt += node_group.len();
@@ -617,9 +617,9 @@ impl Allocatable {
             // check if we spawned this image in the past
             if let Some(count) = self.counts.get_mut(&req) {
                 // if we spawned this in the past then we should skip this spawn
-                // otherwise we will repeatedly spwn workers for the same deadlines
+                // otherwise we will repeatedly spawn workers for the same deadlines
                 match count.cmp(&&mut 0) {
-                    // we spawened a worker for this deadline in the past
+                    // we spawned a worker for this deadline in the past
                     Ordering::Greater => {
                         // decrement our count
                         *count -= 1;
@@ -791,7 +791,7 @@ impl Allocatable {
     ) -> HashSet<Requisition> {
         // track our changes on a per req basis
         let mut reqs = HashSet::with_capacity(self.counts.len());
-        // build a map to store what changes happended on what cluster/node
+        // build a map to store what changes happened on what cluster/node
         let mut sorted: HashMap<String, HashMap<String, Vec<(DateTime<Utc>, Spawned)>>> =
             HashMap::with_capacity(self.clusters.len());
         // crawl our changes and start sorting
@@ -872,7 +872,7 @@ impl Allocatable {
         map
     }
 
-    /// Increase our fairshare ranks for all resources consumed by each user
+    /// Increase our fair share ranks for all resources consumed by each user
     ///
     /// # Arguments
     ///
@@ -891,7 +891,7 @@ impl Allocatable {
                 match by_user.get_mut(&req.user) {
                     Some(rank) => *rank = self.calc_fair_share(*rank, *count, &image.resources),
                     None => {
-                        // calculate a rank for a user not in the fairshare ranks yet
+                        // calculate a rank for a user not in the fair share ranks yet
                         let rank = self.calc_fair_share(0, *count, &image.resources);
                         // insert our new rank
                         by_user.insert(req.user.clone(), rank);
@@ -901,7 +901,7 @@ impl Allocatable {
         }
         // reinsert our fair share ranks
         for (user, rank) in by_user {
-            // get an entry into this fair shar ranks set
+            // get an entry into this fair share ranks set
             let entry = self.fair_share.entry(rank).or_default();
             // add our user to the correct rank entry
             entry.insert(user);
@@ -941,7 +941,7 @@ impl Allocatable {
             .for_each(|(_, rank)| *rank = rank.saturating_sub(decr));
         // add our sorted users bank into our fair share ranking map
         for (user, rank) in sorted {
-            // get an entry into this fair shar ranks set
+            // get an entry into this fair share ranks set
             let entry = self.fair_share.entry(rank).or_default();
             // add our user to the correct rank entry
             entry.insert(user);
@@ -959,7 +959,7 @@ impl Allocatable {
         thorium: &Thorium,
         failed: &HashSet<String>,
     ) -> Result<HashSet<String>, Error> {
-        // scan our nodes 50 at at ime
+        // scan our nodes 50 at a time
         let params = NodeListParams::default().scaler(self.scaler_type).limit(50);
         // get info on the current Thorium nodes
         let mut cursor = thorium.system.list_node_details(&params).await?;
@@ -1031,7 +1031,7 @@ impl Allocatable {
         let old_clusters = std::mem::take(&mut self.clusters);
         // crawl over our cluster cpu groups
         for cluster_group in old_clusters.into_values() {
-            // crawl over the clsuters in this cpu group
+            // crawl over the clusters in this cpu group
             for (name, mut cluster) in cluster_group {
                 // free any deleted workers in this cluster
                 cluster.free(
@@ -1041,7 +1041,7 @@ impl Allocatable {
                     &mut self.image_counts,
                     &mut self.counts,
                 );
-                // get an entry to this clusters new cpu grop
+                // get an entry to this clusters new cpu group
                 let cpu_entry = self.clusters.entry(cluster.resources.cpu).or_default();
                 // add our cluster to its new cpu group
                 cpu_entry.insert(name, cluster);
@@ -1315,7 +1315,7 @@ impl ClusterResources {
         self.resources = new_total;
     }
 
-    /// Determine if this cluster has a more then some % of resources remaining
+    /// Determine if this cluster has a more than some % of resources remaining
     ///
     /// This currently only evaluates cpu/memory.
     ///
@@ -1345,7 +1345,7 @@ impl ClusterResources {
     }
 }
 
-/// Resoruces for one node or k8s cluster
+/// Resources for one node or k8s cluster
 #[derive(Debug, Clone)]
 pub struct NodeResources {
     /// The name of this node

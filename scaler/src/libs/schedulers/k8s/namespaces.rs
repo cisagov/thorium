@@ -42,7 +42,7 @@ impl Namespaces {
         match self.api.create(&params, &ns).await {
             Ok(_) => event!(Level::INFO, msg = "Created namespace", namespace = name),
             Err(err) => {
-                // log that we failed to create this namespacei and are banning it
+                // log that we failed to create this namespace and are banning it
                 event!(
                     Level::ERROR,
                     msg = "Failed to create namespace",

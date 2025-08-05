@@ -18,7 +18,7 @@ Most other browsers such as Chrome, come with AV1 support by default.
 Thorium is primarily a file analysis and data generation platform. As such, it supports two primary types of data:
 
   - files
-  - repositiories (Git)
+  - repositories (Git)
 
 There are no restrictions on the file types that Thorium supports. All files are treated like raw data and
 safely packaged using CaRT upon upload. Some commonly uploaded file formats include binary executables (PEs, ELFs,

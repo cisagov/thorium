@@ -58,7 +58,7 @@ pub trait SearchStore: Clone + Sync + Send + 'static + Sized {
     /// # Arguments
     ///
     /// * `index` - The index to delete the document from
-    /// * `store_ids` - The ids of the documents in the store to delete
+    /// * `store_ids` - The IDs of the documents in the store to delete
     async fn delete(&self, index: Self::Index, store_ids: &[String]) -> Result<(), Error>;
 }
 
@@ -83,6 +83,6 @@ pub trait StoreLookup<'a> {
     /// The id type containing the components of the id string
     type Id: 'a + std::fmt::Display;
 
-    /// Get a list of one or more ids that `self` is referring to
+    /// Get a list of one or more IDs that `self` is referring to
     fn store_ids(&'a self) -> Vec<Self::Id>;
 }

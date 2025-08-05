@@ -16,7 +16,7 @@ pub fn base_path() -> PathBuf {
     PathBuf::from("C:\\thorium\\keys")
 }
 
-/// Build the path a users keys should be written too/at
+/// Build the path to a user's keys
 ///
 /// # Arguments
 ///

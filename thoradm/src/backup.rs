@@ -19,5 +19,5 @@ pub(super) use s3::{
 };
 pub(super) use scrub::{Scrub, ScrubWorker};
 pub(super) use utils::Utils;
-// rexport our controller handle function
+// re-export our controller handle function
 pub use controllers::handle;

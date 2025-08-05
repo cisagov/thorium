@@ -8,10 +8,10 @@ macro_rules! err {
     };
 }
 
-/// An error that occured while converting values
+/// An error that occurred while converting values
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ConversionError {
-    /// The message explaining the error that occured
+    /// The message explaining the error that occurred
     pub msg: String,
 }
 
@@ -26,7 +26,7 @@ impl ConversionError {
     ///
     /// # Arguments
     ///
-    /// * `msg` - The error that occured during this conversion
+    /// * `msg` - The error that occurred during this conversion
     #[must_use]
     pub fn new(msg: String) -> Self {
         ConversionError { msg }
@@ -69,7 +69,7 @@ pub fn storage<T: AsRef<str>>(raw: T) -> Result<u64, ConversionError> {
         return Ok(bytes * 1_048_576);
     }
 
-    // u64 failed parse check lets find first occurence of a any valid char
+    // u64 failed parse check lets find first occurrence of a any valid char
     let unit_regex = match Regex::new(r"[KMGTPE]") {
         Ok(regex) => regex,
         Err(error) => return err!(format!("Failed to compile regex: {error}")),

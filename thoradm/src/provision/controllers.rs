@@ -1,7 +1,7 @@
 use crate::provision;
 use crate::{args::ProvisionSubCommands, Error};
 
-/// Provision Throrium resources such as worker nodes
+/// Provision Thorium resources such as worker nodes
 pub async fn handle(cmd: &ProvisionSubCommands) -> Result<(), Error> {
     // handle provisioning Thorium resources
     match cmd {

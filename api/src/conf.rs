@@ -35,7 +35,7 @@ pub struct NodeFilters {
 }
 
 impl Default for NodeFilters {
-    /// Create defaultt `NodeFilter` object
+    /// Create default `NodeFilter` object
     fn default() -> Self {
         NodeFilters {
             master: false,
@@ -83,7 +83,7 @@ impl Default for Retention {
     }
 }
 
-/// Tt dehe credentials to use when listing group membership info from ldap
+/// The credentials to use when listing group membership info from ldap
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct LdapCreds {
     /// The filters to append to uid=<username> when binding in ldap
@@ -94,7 +94,7 @@ pub struct LdapCreds {
     pub password: String,
 }
 
-/// How to deserialize ids from ldap
+/// How to deserialize IDs from ldap
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub enum LdapIdCast {
     /// Read it as an int
@@ -283,7 +283,7 @@ fn default_token_expire() -> u32 {
     90
 }
 
-/// Helps serde default the local user/group ids to a sane default
+/// Helps serde default the local user/group IDs to a sane default
 fn default_local_user_ids() -> UnixInfo {
     UnixInfo {
         user: 1_879_048_192,
@@ -316,7 +316,7 @@ pub struct Auth {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ldap: Option<Ldap>,
-    /// The user/group unix ids to use for local users
+    /// The user/group unix IDs to use for local users
     #[serde(default = "default_local_user_ids")]
     pub local_user_ids: UnixInfo,
     /// The email settings to use
@@ -345,7 +345,7 @@ fn default_memory_weight() -> u64 {
     1
 }
 
-/// The settings to use when calculating fairshare costs
+/// The settings to use when calculating fair share costs
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct FairShareWeights {
     /// The multiplier to apply to cpu costs
@@ -428,7 +428,7 @@ pub struct K8sCluster {
 }
 
 impl Default for K8sCluster {
-    /// Create a default k8s cluster iconfig
+    /// Create a default k8s cluster config
     fn default() -> Self {
         K8sCluster {
             alias: None,
@@ -458,7 +458,7 @@ pub struct K8s {
     /// How long at minimum to wait between scale attempts in seconds
     #[serde(default = "default_dwell")]
     pub dwell: u64,
-    /// The settings to use when calculating fairshare costs
+    /// The settings to use when calculating fair share costs
     #[serde(default = "FairShareWeights::default")]
     pub fair_share: FairShareWeights,
     /// The divisor to use when calculating what % of resources to reduce fair share ranks by
@@ -610,7 +610,7 @@ fn default_bare_metal_agent() -> String {
 /// The settings for a specific bare metal cluster
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct BareMetalCluster {
-    /// The user to login to these nodes as
+    /// The user to log in to these nodes as
     #[serde(default = "default_bare_metal_user")]
     pub username: String,
     /// The nodes in the cluster to run Thorium jobs on by hostname/ip and any restrictions
@@ -625,7 +625,7 @@ pub struct BareMetalCluster {
 }
 
 impl Default for BareMetalCluster {
-    /// Craete a default bare metal config
+    /// Create a default bare metal config
     fn default() -> Self {
         BareMetalCluster {
             username: default_bare_metal_user(),
@@ -644,7 +644,7 @@ pub struct BareMetal {
     /// How long at minimum to wait between scale attempts in seconds
     #[serde(default = "default_dwell")]
     pub dwell: u64,
-    /// The settings to use when calculating fairshare costs
+    /// The settings to use when calculating fair share costs
     #[serde(default = "FairShareWeights::default")]
     pub fair_share: FairShareWeights,
     /// The divisor to use when calculating what % of resources to reduce fair share ranks by
@@ -701,7 +701,7 @@ pub struct Windows {
     /// How long at minimum to wait between scale attempts in seconds
     #[serde(default = "default_dwell")]
     pub dwell: u64,
-    /// The settings to use when calculating fairshare costs
+    /// The settings to use when calculating fair share costs
     #[serde(default = "FairShareWeights::default")]
     pub fair_share: FairShareWeights,
     /// The divisor to use when calculating what % of resources to reduce fair share ranks by
@@ -755,7 +755,7 @@ pub struct Kvm {
     /// How long at minimum to wait between scale attempts in seconds
     #[serde(default = "default_dwell")]
     pub dwell: u64,
-    /// The settings to use when calculating fairshare costs
+    /// The settings to use when calculating fair share costs
     #[serde(default = "FairShareWeights::default")]
     pub fair_share: FairShareWeights,
     /// The divisor to use when calculating what % of resources to reduce fair share ranks by
@@ -1010,7 +1010,7 @@ pub struct Scaler {
     /// The global scaler specific tasks
     #[serde(default)]
     pub tasks: ScalerTaskDelays,
-    /// The crane specific setttings
+    /// The crane specific settings
     #[serde(default)]
     pub crane: Crane,
 }
@@ -1244,7 +1244,7 @@ impl Tracing {
         config::Config::builder()
             // load from a file first
             .add_source(config::File::new(path, config::FileFormat::Yaml))
-            // then overlay any environment args ontop
+            // then overlay any environment args on top
             .add_source(config::Environment::with_prefix("TRACING").separator("__"))
             .build()?
             .try_deserialize()
@@ -1260,7 +1260,7 @@ pub enum LogLevel {
     Error,
     /// Log at the warning level
     Warn,
-    /// Only Setup and up info
+    /// Only Set up and up info
     Setup,
     /// Log at the info level
     Info,
@@ -1567,7 +1567,7 @@ fn default_json_limit() -> u64 {
     1024
 }
 
-/// Helps serde default the max size an form (sans files) can be in mebibytes
+/// Helps serde default the max size a form (sans files) can be in mebibytes
 fn default_form_limit() -> u64 {
     1024
 }
@@ -2042,7 +2042,7 @@ impl Conf {
         let mut conf: Conf = config::Config::builder()
             // load from a file first
             .add_source(config::File::from(path.as_ref()).format(config::FileFormat::Yaml))
-            // then overlay any environment args ontop
+            // then overlay any environment args on top
             .add_source(
                 config::Environment::with_prefix("thorium")
                     .prefix_separator("__")

@@ -24,7 +24,7 @@ pub struct Cmd {
     pub opts: GenericJobOpts,
     /// The source command from inspecting the docker image
     pub src: Vec<String>,
-    /// The command built from overlaying our values ontop of the source command
+    /// The command built from overlaying our values on top of the source command
     pub built: Vec<String>,
 }
 
@@ -359,7 +359,7 @@ impl Cmd {
         if let Some(override_cmd) = self.opts.override_cmd {
             return Ok(override_cmd);
         }
-        // inject our our command if it exists
+        // inject our command if it exists
         self.built.append(&mut self.src);
         // throw an error if the src command is empty to avoid simply running the sample naively
         if self.built_empty_or_shell() {
@@ -379,7 +379,7 @@ impl Cmd {
         self.inject_reaction_id(image, job);
         // add our output path if its set
         self.overwrite_arg(output, &image.args.output);
-        // overlay custom args ontop of the docker images entrypoint/cmd
+        // overlay custom args on top of the docker images entrypoint/cmd
         // inject any positional args
         self.inject_positionals();
         // inject any kwargs
@@ -974,7 +974,7 @@ mod tests {
 
     /// Test a barebones job with samples but no overlays
     #[tokio::test]
-    async fn empty_ephemnerals_kwargs() {
+    async fn empty_ephemerals_kwargs() {
         // create a temporary log channel
         let (mut logs_tx, _logs_rx) = crossbeam::channel::unbounded::<String>();
         // generate an image and set the kwarg to pass in samples with

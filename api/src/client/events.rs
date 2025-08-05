@@ -44,7 +44,7 @@ impl Events {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         #[derive(Clone)]
@@ -119,7 +119,7 @@ impl Events {
     /// # Arguments
     ///
     /// * `kind` - The kind of events to clear
-    /// * `ids` - The events ids to clear
+    /// * `ids` - The events IDs to clear
     #[cfg_attr(
         feature = "trace",
         tracing::instrument(name = "Thorium::events::clear", skip(self, ids), err(Debug))

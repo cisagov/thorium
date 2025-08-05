@@ -67,7 +67,7 @@ impl Files {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// A blocking handler for the files routes in Thorium
@@ -118,7 +118,7 @@ impl Files {
     ///
     /// # Arguments
     ///
-    /// * `file_req` - The file request to use to add an file to Thorium
+    /// * `file_req` - The file request to use to add a file to Thorium
     ///
     /// # Examples
     ///
@@ -130,7 +130,7 @@ impl Files {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // buld the file request
+    /// // build the file request
     /// let file_req = SampleRequest::new("corn.txt", vec!("plants".to_owned()));
     /// // try to create file in Thorium
     /// thorium.files.create(file_req).await?;
@@ -155,7 +155,7 @@ impl Files {
             .multipart(file_req.to_form().await?)
             .header("authorization", &self.token)
             // use a really long timeout for really large files
-            // this is probably done better some otherway
+            // this is probably done better some other way
             // 86,400 seconds == a day
             .timeout(std::time::Duration::from_secs(86_400));
         // send this request
@@ -618,7 +618,7 @@ impl Files {
         sha256: &str,
         update: &SubmissionUpdate,
     ) -> Result<reqwest::Response, Error> {
-        // build url for updating an file
+        // build url for updating a file
         let url = format!(
             "{base}/api/files/sample/{sha256}",
             base = self.host,
@@ -670,7 +670,7 @@ impl Files {
         sha256: &str,
         tags: &TagRequest<Sample>,
     ) -> Result<reqwest::Response, Error> {
-        // build url for updating an file
+        // build url for updating a file
         let url = format!("{}/api/files/tags/{}", self.host, sha256);
         // build request
         let req = self
@@ -720,7 +720,7 @@ impl Files {
         sha256: &str,
         tags_del: &TagDeleteRequest<Sample>,
     ) -> Result<reqwest::Response, Error> {
-        // build url for updating an file
+        // build url for updating a file
         let url = format!("{}/api/files/tags/{}", self.host, sha256);
         // build request
         let req = self
@@ -775,7 +775,7 @@ impl Files {
 
     /// Deletes a comment for a sample
     ///
-    /// * `sha256` - The SHA256 of the file the comment will be deleted from
+    /// * `sha256` - The SHA256 of the file from which the comment will be deleted
     /// * `comment_id` - The UUID of the comment to delete
     /// * `params` - The parameters to use when deleting the comment
     ///
@@ -912,7 +912,7 @@ impl ResultsClient for Files {
     ///
     /// # Arguments
     ///
-    /// * `output_req` - The ouput request to use to add output from a tool
+    /// * `output_req` - The output request to use to add output from a tool
     ///
     /// # Examples
     ///

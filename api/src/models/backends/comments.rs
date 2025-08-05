@@ -108,7 +108,7 @@ pub async fn create_comment_helper(
                 .insert(file_name.unwrap_or_else(|| s3_id.to_string()), s3_id);
         }
     }
-    // provide sane defaults if the user provided no groups, otherwise check that they are valid
+    // provide sane defaults if the user provided no groups; otherwise, check that they are valid
     if form.groups.is_empty() {
         // get the groups we can see this sample in
         form.groups.extend(groups.iter().map(ToString::to_string));

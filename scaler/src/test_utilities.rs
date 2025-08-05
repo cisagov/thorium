@@ -1,4 +1,4 @@
-//! The utilties for tests involving the scaler
+//! The utilities for tests involving the scaler
 
 use crate::Scaler;
 use std::sync::Arc;

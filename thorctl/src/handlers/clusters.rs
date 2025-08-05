@@ -66,7 +66,7 @@ pub async fn login(args: &Args, cmd: &Login) -> Result<(), Error> {
     if let Some(invalid_hostnames) = cmd.invalid_hostnames {
         builder.settings.invalid_hostnames = invalid_hostnames;
     }
-    if let Some(certificate_authorities) = &cmd.certificate_authorites {
+    if let Some(certificate_authorities) = &cmd.certificate_authorities {
         builder
             .settings
             .certificate_authorities
@@ -106,7 +106,7 @@ pub async fn login(args: &Args, cmd: &Login) -> Result<(), Error> {
     let config_file = std::fs::File::create(&args.config)?;
     // write this config file off to disk
     serde_yaml::to_writer(config_file, &config)?;
-    println!("🦀🎉 Login Suceeded! 🎉🦀");
+    println!("🦀🎉 Login Succeeded! 🎉🦀");
     // check if we need to update
     if !args.skip_update {
         update::ask_update(&thorium).await?;

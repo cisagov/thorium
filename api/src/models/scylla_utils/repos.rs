@@ -102,7 +102,7 @@ pub struct FullRepoTagRow {
     pub uploaded: DateTime<Utc>,
 }
 
-/// The commit specific data serialied in scylla
+/// The commit specific data serialized in scylla
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommitData {
     /// The author of this commit
@@ -115,13 +115,13 @@ pub struct CommitData {
     pub truncated: bool,
 }
 
-/// The  branch specific data serialied in scylla
+/// The  branch specific data serialized in scylla
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BranchData {
     /// The commit this branch is tied too
     pub commit: String,
 }
-/// The git tag specific data serialied in scylla
+/// The git tag specific data serialized in scylla
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GitTagData {
     /// The commit this tag is tied too

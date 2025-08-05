@@ -59,7 +59,7 @@ async fn create(
     get,
     path = "/api/users/resend/verify/email/:username",
     params(
-        ("username" = String, Path, description = "The user to resend verificaton email for"),
+        ("username" = String, Path, description = "The user to resend verification email for"),
     ),
     responses(
         (status = 200, description = "Verification email resent"),
@@ -96,7 +96,7 @@ async fn resend_email_verification(
     get,
     path = "/api/users/verify/:username/email/:verification_token",
     params(
-        ("username" = String, Path, description = "The user to resend verificaton email for"),
+        ("username" = String, Path, description = "The user to resend verification email for"),
         ("verification_token" = String, Path, description = "The token to send in the verification email"),
     ),
     responses(

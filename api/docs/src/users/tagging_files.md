@@ -9,7 +9,7 @@ by the agent when a tool is run on that file, or added later by a Thorium user m
 Tag values may contain any UTF-8 characters including symbols (e.g. Language=C++), characters from other languages
 (e.g. CountryOfOrigin=Україна), or even emojis (e.g. Status=✅).
 
-Tags are currently case sensitive, but tag normalization (standardizing capitalization of existing tags in a Thorium
+Tags are currently case-sensitive, but tag normalization (standardizing capitalization of existing tags in a Thorium
 instance) is a planned to be added in future versions of Thorium.
 
 ## Tagging on Upload (Web UI)
@@ -77,5 +77,5 @@ To delete a tag, you must specify the complete `name=value` tag to remove.
 $ thorctl tags delete --delete-tags "stripped=false"  --files 619dddbd681b593d8c6f66de50dd41e422bfac7a83feab6c3f0944de7c73a4d3
 ```
 
-Be aware that `thorctl` will report success for deleting a non-existent tag.
+Be aware that `thorctl` will report success for deleting a nonexistent tag.
 

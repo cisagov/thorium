@@ -1,7 +1,7 @@
 //! Handles spawning containers directly for windows nodes
 //!
 //! This support could likely be extended to linux k8s and baremetal nodes but
-//! for k8s nodes would come at the cost of everthing k8s buys us.
+//! for k8s nodes would come at the cost of everything k8s buys us.
 //!
 //! The Thorium reactor is only supported on Linux and Windows
 #![feature(btree_extract_if)]
@@ -52,5 +52,5 @@ async fn main() {
 
 #[cfg(target_os = "macos")]
 fn main() {
-    eprintln!("The Thorium Reactor is not supported on MacOS!");
+    eprintln!("The Thorium Reactor is not supported on macOS!");
 }

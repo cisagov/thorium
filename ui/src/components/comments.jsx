@@ -106,23 +106,23 @@ export const Comments = ({ sha256 }) => {
     return (
       <Fragment>
         {comments &&
-          comments.slice(page * limit, page * limit + limit).map((singleCommentobj, i) => (
+          comments.slice(page * limit, page * limit + limit).map((singleCommentObj, i) => (
             <Card key={i} className="single-comment mb-2 panel">
               <Card.Header>
-                {singleCommentobj.author} <i>{singleCommentobj.uploaded}</i>
+                {singleCommentObj.author} <i>{singleCommentObj.uploaded}</i>
               </Card.Header>
               <Card.Body>
                 <Row key={i}>
-                  <p key={i}>{singleCommentobj.comment}</p>
+                  <p key={i}>{singleCommentObj.comment}</p>
                 </Row>
-                {singleCommentobj &&
-                  singleCommentobj.files &&
-                  Object.keys(singleCommentobj.files).map((name, i) => (
+                {singleCommentObj &&
+                  singleCommentObj.files &&
+                  Object.keys(singleCommentObj.files).map((name, i) => (
                     <Col key={i}>
                       <a
                         href="#comments"
                         className="text"
-                        onClick={() => getAttachment(singleCommentobj.id, name, singleCommentobj.files[name])}
+                        onClick={() => getAttachment(singleCommentObj.id, name, singleCommentObj.files[name])}
                       >
                         {name}
                       </a>

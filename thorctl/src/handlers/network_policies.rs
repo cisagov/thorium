@@ -277,7 +277,7 @@ fn verify(cmd: &VerifyNetworkPolicies) -> Result<(), Error> {
                     ))
                 })?,
             };
-            // print what we succesfully parsed
+            // print what we successfully parsed
             println!("Rules:\n\n{rules:#?}");
         }
         VerifyNetworkPolicies::Base(cmd) => {
@@ -298,7 +298,7 @@ fn verify(cmd: &VerifyNetworkPolicies) -> Result<(), Error> {
                         err,
                     ))
                 })?;
-            // print what we succesfully parsed
+            // print what we successfully parsed
             println!("Base Network Policies:\n\n{base_policies:#?}");
         }
     }

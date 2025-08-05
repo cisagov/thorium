@@ -26,7 +26,7 @@ use crate::log;
 /// String representation
 // TODO: only one agent is running at a time, so we don't really need a Mutex here;
 // unfortunately, we can't make this thread-local because the Agent is run on a tokio
-// task an can be on any thread
+// task and can be on any thread
 static CHILD_FILTERS_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -183,7 +183,7 @@ fn child_matches_any(
             }
         }
     };
-    // get file name and convert to UTF-8, otherwise we can't match
+    // get file name and convert to UTF-8; otherwise, we can't match
     if let Some(file_name) = child.file_name().and_then(|name| name.to_str()) {
         if matches_any_filter(file_name, &filters.file_name, filters_cache)? {
             log!(
@@ -196,7 +196,7 @@ fn child_matches_any(
             return Ok(true);
         }
     }
-    // get file extension and convert to UTF-8, otherwise we can't match
+    // get file extension and convert to UTF-8; otherwise, we can't match
     if let Some(file_extension) = child.extension().and_then(|ext| ext.to_str()) {
         if matches_any_filter(file_extension, &filters.file_extension, filters_cache)? {
             log!(
@@ -239,14 +239,14 @@ async fn get_parent_groups(thorium: &Thorium, job: &GenericJob) -> Result<Vec<St
     for sha256 in &job.samples {
         // get info on this sample
         let sample = thorium.files.get(&sha256).await?;
-        // add this samples goups to our hashset
+        // add this samples groups to our hashset
         groups.extend(sample.groups().into_iter().map(|name| name.to_owned()));
     }
     // get the info on all the repos we depend on
     for repo_target in &job.repos {
         // get info on this repo
         let repo = thorium.repos.get(&repo_target.url).await?;
-        // add this repos goups to our hashset
+        // add this repos groups to our hashset
         groups.extend(repo.groups().into_iter().map(|name| name.to_owned()));
     }
     // convert our hash set to a vec
@@ -357,7 +357,7 @@ macro_rules! submit {
                 .await
                 .into_iter()
                 .map(|res| match res {
-                    // this child was submitted succesfully so log its sha256 and id
+                    // this child was submitted successfully so log its sha256 and id
                     Ok(sub) => {
                         log!($logs, "{} Submitted {} - {}", $msg, sub.sha256, sub.id);
                         Ok(())
@@ -450,7 +450,7 @@ impl Children {
     fn source(&mut self) {
         // build the path to our source children
         let root = self.root.join("source");
-        // recrusively walk through this directory skipping any hidden files
+        // recursively walk through this directory skipping any hidden files
         self.source = get_children(&root);
     }
 
@@ -462,7 +462,7 @@ impl Children {
     fn unpacked(&mut self) {
         // build the path to our source children
         let root = self.root.join("unpacked");
-        // recrusively walk through this directory skipping any hidden files
+        // recursively walk through this directory skipping any hidden files
         self.unpacked = get_children(&root);
     }
 
@@ -476,7 +476,7 @@ impl Children {
         let root = self.root.join("carved");
         let unknown_root = root.join("unknown");
         let pcap_root = root.join("pcap");
-        // recrusively walk through this directory skipping any hidden files
+        // recursively walk through this directory skipping any hidden files
         self.carved = CarvedChildren {
             unknown: get_children(&unknown_root),
             pcap: get_children(&pcap_root),
@@ -536,7 +536,7 @@ impl Children {
     ///
     /// * `thorium` - The Thorium client
     /// * `job` - The job we are collecting results from
-    /// * `results` - The result ids from the job that uploaded these children
+    /// * `results` - The result IDs from the job that uploaded these children
     /// * `depth` - The depth for this child source sample
     /// * `commits` - The commit that each repo is checked out too
     /// * `logs` - The logs to send to the API
@@ -551,7 +551,7 @@ impl Children {
         groups: &Vec<String>,
         logs: &mut Sender<String>,
     ) -> Result<(), Error> {
-        // only attemp to ingest children if some exist
+        // only attempt to ingest children if some exist
         if !self.source.is_empty() {
             // get the flags for this build job if any were set
             let flags = match job.args.kwargs.get("--flags") {
@@ -617,7 +617,7 @@ impl Children {
     ///
     /// * `thorium` - The Thorium client
     /// * `job` - The job we are collecting results from
-    /// * `results` - The result ids from the job that uploaded these children
+    /// * `results` - The result IDs from the job that uploaded these children
     /// * `logs` - The logs to send to the API
     #[instrument(name = "Children::submit_unpacked", skip_all, err(Debug))]
     pub async fn submit_unpacked(
@@ -710,13 +710,13 @@ impl Children {
         }
     }
 
-    /// submit charved children files to Thorium
+    /// submit carved children files to Thorium
     ///
     /// # Arguments
     ///
     /// * `thorium` - The Thorium client
     /// * `job` - The job we are collecting results from
-    /// * `results` - The result ids from the job that uploaded these children
+    /// * `results` - The result IDs from the job that uploaded these children
     /// * `groups` - The groups to submit to
     /// * `logs` - The logs to send to the API
     #[instrument(name = "Children::submit_carved", skip_all, err(Debug))]
@@ -807,7 +807,7 @@ impl Children {
     ///
     /// * `thorium` - The Thorium client
     /// * `job` - The job we are submitting children for
-    /// * `results` - The result ids to submit children for
+    /// * `results` - The result IDs to submit children for
     /// * `depth` - The current depth of triggers
     /// * `commits` - The commits for any repos passed in as inputs
     /// * `image` - The image for this job

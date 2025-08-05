@@ -9,7 +9,7 @@ To deploy Minithor, you will need a container runtime such as that provided by t
 
 ### Deploy Minikube
 
-Install and start minikube and any nessesary plugins.
+Install and start minikube and any necessary plugins.
 
 ```bash
 ./install-linux
@@ -83,7 +83,7 @@ kubectl create -n thorium -f thorium-cluster.yml
 
 ### Set Password For Node's Docker User
 
-You only have to do this once and only when using priveleged ports for your local host port mapping. Kkeep track of the docker-in-docker password you set so you can tunnel to the Thorium UI/API later.
+You only have to do this once and only when using privileged ports for your local host port mapping. Keep track of the docker-in-docker password you set so you can tunnel to the Thorium UI/API later.
 
 ```bash
 minikube ssh

@@ -106,7 +106,7 @@ pub fn storage(raw: Option<&Quantity>) -> Result<u64, Error> {
         return Ok((bytes as f64 / 1.049e+6).ceil() as u64);
     }
 
-    // u64 failed parse check lets find first occurence of a any valid char
+    // u64 failed parse check lets find first occurrence of a any valid char
     let unit_regex = Regex::new(r"[KMGTPE]").unwrap();
     // find index where unit starts
     let reg = match unit_regex.find(&raw) {

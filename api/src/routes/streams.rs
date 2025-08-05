@@ -8,7 +8,7 @@ use super::OpenApiSecurity;
 use crate::models::{Group, Stream, StreamDepth, User};
 use crate::utils::{ApiError, AppState};
 
-/// Gets the number of obects between two points in a stream
+/// Gets the number of objects between two points in a stream
 ///
 /// # Arguments
 ///
@@ -49,13 +49,13 @@ pub async fn depth(
     Ok(Json(depth))
 }
 
-/// Gets the number of obects between two points in a stream in a range smaller chunks
+/// Gets the number of objects between two points in a stream in a range smaller chunks
 ///
 /// If the split does not fit evenly into the overall range then the last chunk will be smaller.
 ///
 /// # Arguments
 ///
-/// * `user` - The user that is getting tream depths
+/// * `user` - The user that is getting stream depths
 /// * `group` - The group this stream is in
 /// * `stream` - The name of the stream to count objects in
 /// * `start` - The starting point in an epoch timestamp to count objects at

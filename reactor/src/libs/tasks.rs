@@ -25,7 +25,7 @@ pub enum Tasks {
 }
 
 impl Tasks {
-    /// Setup a tasks queue with for all tasks
+    /// Set up a tasks queue with for all tasks
     pub fn setup_queue() -> BTreeMap<DateTime<Utc>, Tasks> {
         // create an empty map
         let mut queue = BTreeMap::default();

@@ -187,7 +187,7 @@ const dumpFormattedLinks = (links) => {
 // uses DFS
 const buildNetworkData = async (
   sha256,
-  decendants,
+  descendents,
   ancestors,
   isRoot,
   depth,
@@ -197,7 +197,7 @@ const buildNetworkData = async (
   bypassDetails = { tags: {}, submissions: [] },
 ) => {
   // grab presets if results
-  const sample = new Sample(sha256, ancestors, decendants, isRoot);
+  const sample = new Sample(sha256, ancestors, descendents, isRoot);
   let results = bypassResults;
   let submissions = bypassDetails.submissions;
   let tags = bypassDetails.tags;
@@ -278,15 +278,15 @@ const buildNetworkData = async (
   // build children nodes
   const childrenPromises = [];
   children.map((child) => {
-    if (![...decendants, ...ancestors, sha256].includes(child.sha256)) {
-      childrenPromises.push(buildNetworkData(child.sha256, [...ancestors, sha256], [...decendants], false, depth - 1, nodes, links));
+    if (![...descendents, ...ancestors, sha256].includes(child.sha256)) {
+      childrenPromises.push(buildNetworkData(child.sha256, [...ancestors, sha256], [...descendents], false, depth - 1, nodes, links));
     } else if (isRoot) {
       childrenPromises.push(buildNetworkData(child.sha256, [], [], false, 0, nodes, links));
     }
   });
   sample.children.push(...(await Promise.all(childrenPromises)));
 
-  // build related cousin nodes (aka similiar samples)
+  // build related cousin nodes (aka similar samples)
   const cousinPromises = [];
   cousins.map((cousin) => {
     if (cousin.sha256 != sha256) {
@@ -299,8 +299,8 @@ const buildNetworkData = async (
   // build children nodes
   const parentPromises = [];
   parents.map((parent) => {
-    if (![...decendants, ...ancestors, sha256].includes(parent.sha256)) {
-      parentPromises.push(buildNetworkData(parent.sha256, [...ancestors], [...decendants, sha256], false, depth - 1, nodes, links));
+    if (![...descendents, ...ancestors, sha256].includes(parent.sha256)) {
+      parentPromises.push(buildNetworkData(parent.sha256, [...ancestors], [...descendents, sha256], false, depth - 1, nodes, links));
     } else if (isRoot) {
       // this is points back to itself, do not recurse further
       parentPromises.push(buildNetworkData(parent.sha256, [], [], false, 0, nodes, links));

@@ -116,7 +116,7 @@ pub struct GetResults {
     pub limit: usize,
     /// Retrieve file results with no limit
     ///
-    /// Note: Retrieiving results based on tags with no limit can lead
+    /// Note: Retrieving results based on tags with no limit can lead
     ///       to many results being retrieved. Be careful!
     #[clap(long, conflicts_with = "limit")]
     pub no_limit: bool,

@@ -1,7 +1,7 @@
 # Images
 
 Images are used to define what each stage of a pipeline looks like. Each stage
-can have multiple images or a single image. Seperating the image declarations
+can have multiple images or a single image. Separating the image declarations
 from pipeline declaration allows you to reuse images across pipelines
 without having to redefine an image every time. This also makes updating
 images easier as their is less duplicate information to update.
@@ -97,7 +97,7 @@ Lifetime and limits are still optional.
 
 #### Requests & Limits
 ---
-Requests and limits are very similiar, but represent the minumum and maximum
+Requests and limits are very similar, but represent the minimum and maximum
 bounds on the amount of resources a image may consume. This means that if you
 set your requested resources to be 16 cpu cores your image will only be spawned
 if the cluster has at minimum 16 cores.
@@ -132,14 +132,14 @@ Both of these lifetime handlers are not strongly enforced. This means that it
 is not guaranteed that pods will not outlive their lifetime. This is because
 lifetime is checked in between every loop when claiming jobs. So if we have an
 image that attempts to claim and execute N jobs then it is possible to execute
-at most N - 1 extra jobs before the lifetime handler catches it. A similiar
+at most N - 1 extra jobs before the lifetime handler catches it. A similar
 situation exists with the time handler but it is less defined as it depends on
 the time it takes to run a job and when that job is claimed in relation to the
 lifetime expiration.
 
 #### Timeout 
 ---
-Timeout is similiar to lifetime but it only constrains how long an individual job
+Timeout is similar to lifetime but it only constrains how long an individual job
 can run for. This means that if a timeout of 60 is set any job for that image will
 error out if it runs for longer then 60 seconds. This is enforced with a max
 resolution of 100ms. So a job may execute for 60.1 seconds and still complete.
@@ -153,13 +153,15 @@ volume bound in when being spawned. Currently Thorium supports three volume type
 - Secret
 - NFS
 
-Volumes are explored more [here](./volumes.md).
+For more information, see [Volumes in Images](./volumes.md).
 
-#### Volumes 
+#### Modifiers 
 ---
 The modifiers path is where the Thorium agent should look for files dropped while
 this stage was executing that tell Thorium how it should modify the remaining stages
-of this reaction. They are discussed more [here](./../reactions/modifiers.md).
+of this reaction.
+
+For more information, see [Modifiers](./../reactions/modifiers.md).
 
 #### Security Context 
 ---
@@ -178,7 +180,7 @@ update over time and get more accurate as you run more jobs.
 ### Generator
 ---
 A Generator is an image that crawls over some input or external data source creating
-sub reactions. It will create a batch of jobs (typically no more then 1-5,000) and
+sub reactions. It will create a batch of jobs (typically no more than 1-5,000) and
 then tell Thorium it should be slept before exiting with a return code of 0. If a
 generator stage completes without telling Thorium it should be slept the generator
 stage will be completed and no longer will be recreated. When telling a generator to
@@ -198,6 +200,6 @@ Generators are preferred over just creating millions of jobs at once due to how 
 impacts scheduling. Because the Thorium scheduler cannot easily view all jobs in the
 deadline stream at once (as that would require us to download the entire stream each
 scale loop) it only looks at the next 100k jobs in the stream. This means that when
-doing fairshare scheduling if you are the 100,001th job you will not be scheduled under
+doing fair share scheduling if you are the 100,001th job you will not be scheduled under
 fair share in this scale loop. By drip feeding jobs into Thorium though we can keep
 the deadline stream smaller and more manageable without requiring human interaction.

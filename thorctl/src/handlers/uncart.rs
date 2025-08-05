@@ -45,7 +45,7 @@ pub async fn handle(args: &Args, cmd: &Uncart) -> Result<(), Error> {
     for target in &cmd.targets {
         uncart_target(cmd, target, base_out_path, &filter, &skip, args.workers).await;
     }
-    // remove temporary drectory after in-place conversion
+    // remove temporary directory after in-place conversion
     if cmd.in_place {
         tokio::fs::remove_dir_all(base_out_path).await?;
     }
@@ -98,7 +98,7 @@ async fn uncart_target(
                     Ok(Err(err)) => UncartLine::error(entry_path, &err),
                     Err(join_err) => UncartLine::error(entry_path, &Error::from(join_err)),
                 }
-            }), // await the mapped futures, limiting the maxmimum running at any given time by the number of workers
+            }), // await the mapped futures, limiting the maximum running at any given time by the number of workers
     )
     .for_each_concurrent(workers, |future| future)
     .await;

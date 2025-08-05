@@ -51,7 +51,7 @@ async fn write_all_vectored<'a>(
     Ok(())
 }
 
-/// The current archive we are writting too
+/// The current archive we are writing too
 #[derive(Debug)]
 pub struct ArchiveWriter {
     /// The name of this archive
@@ -120,7 +120,7 @@ impl ArchiveWriter {
         let map = PartitionArchive::new(self.written, end, partition, sha256);
         // archive this partition and log its size
         let archived_map = rkyv::to_bytes::<_, 1024>(&map).unwrap();
-        // panic if our len is greater then 96 bytes
+        // panic if our len is greater than 96 bytes
         if archived_map.len() != 96 {
             panic!("entry len is {}", archived_map.len());
         }
@@ -204,7 +204,7 @@ impl ArchiveWriter {
                 )
             }
         };
-        // build an list of IO slices to write our pending data
+        // build a list of IO slices to write our pending data
         let mut archive_slices = self
             .pending
             .iter()
@@ -212,7 +212,7 @@ impl ArchiveWriter {
             .collect::<Vec<IoSlice>>();
         // write all of our data
         write_all_vectored(&mut data_file, &mut archive_slices[..], self.pending_bytes).await?;
-        // build an list of IO slices to write our pending maps
+        // build a list of IO slices to write our pending maps
         let mut map_slices = self
             .pending_maps
             .iter()
@@ -260,13 +260,13 @@ pub struct BackupWorker<T: Backup> {
     prepared: PreparedStatement,
     /// The kanal channel workers should send backup updates over
     updates: AsyncSender<MonitorUpdate>,
-    /// Our current parititons key
+    /// Our current partitions key
     partition: Option<u64>,
     /// The rows for our current partition
     rows: Vec<T>,
     /// The sha256 hasher we are using for partition hashes
     hasher: Sha256,
-    /// The archive we are writting too
+    /// The archive we are writing too
     writer: ArchiveWriter,
     /// The current number of rows this worker has backed up
     rows_backed_up: u64,
@@ -347,9 +347,9 @@ impl<T: Backup> BackupWorker<T> {
         Ok(())
     }
 
-    /// Check if we started a new parititon with this row
+    /// Check if we started a new partition with this row
     ///
-    /// This will flush the old partitiont to disk.
+    /// This will flush the old partition to disk.
     ///
     /// # Arguments
     ///

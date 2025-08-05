@@ -2,7 +2,7 @@
 
 Reactions are the execution of a single pipeline and are what allow you to
 follow the jobs that make up your pipeline. Reactions are used over tracking the 
-individual job ids as those constantly change as stages are completed. This 
+individual job IDs as those constantly change as stages are completed. This 
 allows you to track the execution of a pipeline without needing to keep track
 of all the jobs within that pipeline.
 
@@ -48,7 +48,7 @@ Explanations for this field are:
 
 ### Arguments
 ---
-Reaction arguments are a hashmap of arguments to overlay ontop of the docker
+Reaction arguments are a hashmap of arguments to overlay on top of the docker
 file for each image in the pipeline. So for example in the reaction above for a
 petshop we have a single image called adopt that specifies arguments to adopt a
 yellow puppy. If we assume the original docker file had its cmd set to:
@@ -57,9 +57,9 @@ yellow puppy. If we assume the original docker file had its cmd set to:
 ["--color", "brown"]
 ```
 
-Because we specified an arg to overlay ontop of "--color" that would be set to
+Because we specified an arg to overlay on top of "--color" that would be set to
 "yellow" when we call the entrypoint instead of "brown". This also means that 
-if you simply want to use the args specified in the docker file everytime you
+if you simply want to use the args specified in the docker file every time you
 can leave args set to an empty {}. You also do not need to specify args for
 every image in the pipeline.
 
@@ -100,17 +100,17 @@ allows users to dynamically spawn tasks instead of having to encode all
 dependencies into their pipeline statically. Sub reactions however do not fail
 out their parent reaction if they fail. This means that if a parent reaction
 cannot complete without a sub reaction completing the onus of ensuring that
-is entirely depdendent on the creator of the sub reactions. This was done to
+is entirely dependent on the creator of the sub reactions. This was done to
 more easily support Generator logic when it comes to sub reactions.
 
 Creating a sub reaction is exactly the same as creating a regular reaction but
-you set a parent field to your current reactions Id.
+you set a parent field to your current reactions ID.
 
 ### Creating Reactions in bulk
 ---
-You can also create reactions in bulk in single request in order to efficiently
-create large amounts of reactions. This request looks amost exactly the same as
-when creating a single reaction but the instead the reaction requests are in a list.
+You can also create reactions in bulk in a single request in order to efficiently
+create large amounts of reactions. This request looks almost exactly the same as
+when creating a single reaction but instead the reaction requests are in a list.
 
 Reactions can be created in bulk by POSTing to the following endpoint:
 ```

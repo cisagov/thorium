@@ -47,7 +47,7 @@ impl OutputKind {
 impl FromStr for OutputKind {
     type Err = InvalidEnum;
 
-    /// Conver this str to an [`OutputKind`]
+    /// Convert this str to an [`OutputKind`]
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         match raw {
             "Files" => Ok(OutputKind::Files),
@@ -364,7 +364,7 @@ impl<O: OutputSupport> OutputRequest<O> {
     //}
 }
 
-/// Optional arameters for getting results
+/// Optional parameters for getting results
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ResultGetParams {
@@ -474,7 +474,7 @@ impl ResultGetParams {
     }
 }
 
-/// An ondisk file to upload to Thorium
+/// An on-disk file to upload to Thorium
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct OnDiskFile {
@@ -622,7 +622,7 @@ pub struct OutputChunk {
     pub tool_version: Option<ImageVersion>,
     /// When this result was uploaded
     pub uploaded: DateTime<Utc>,
-    /// Set to true if a deserialization failure occured
+    /// Set to true if a deserialization failure occurred
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deserialization_error: Option<String>,
     /// The result
@@ -947,7 +947,7 @@ impl AutoTag {
     ///
     /// # Arguments
     ///
-    /// * `key` - The key to use instead of the the one found in the result
+    /// * `key` - The key to use instead of the one found in the result
     #[must_use]
     pub fn key(mut self, key: String) -> Self {
         self.key = Some(key);
@@ -1253,7 +1253,7 @@ impl AutoTagUpdate {
     ///
     /// # Arguments
     ///
-    /// * `key` - The key to use instead of the the one found in the result
+    /// * `key` - The key to use instead of the one found in the result
     #[must_use]
     pub fn key(mut self, key: String) -> Self {
         self.key = Some(key);
@@ -1393,7 +1393,7 @@ impl OutputCollectionUpdate {
         self
     }
 
-    /// Sets the result groups restictions to be cleared
+    /// Sets the result groups restrictions to be cleared
     ///
     /// # Examples
     ///

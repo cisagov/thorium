@@ -51,7 +51,7 @@ impl Groups {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// group handler for the Thorium client
@@ -101,7 +101,7 @@ cfg_if::cfg_if! {
 impl Groups {
     /// Creates a new [`Group`] in Thorium
     ///
-    /// # Aguments
+    /// # Arguments
     ///
     /// * `blueprint` - group creation blueprint
     ///
@@ -204,7 +204,7 @@ impl Groups {
 
     /// Deletes a [`Group`] from Thorium
     ///
-    /// # Aguments
+    /// # Arguments
     ///
     /// * `group` - name of the group to delete
     ///
@@ -240,7 +240,7 @@ impl Groups {
 
     /// Updates a [`Group`] in Thorium
     ///
-    /// # Aguments
+    /// # Arguments
     ///
     /// * `group` - The name of the group to update
     /// * `update` - The update to apply to this group
@@ -284,7 +284,7 @@ impl Groups {
         send!(self.client, req)
     }
 
-    /// Synca all [`Group`] data with LDAP
+    /// Sync all [`Group`] data with LDAP
     ///
     /// # Examples
     ///

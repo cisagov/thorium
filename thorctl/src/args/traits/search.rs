@@ -111,7 +111,7 @@ pub trait SearchParameterized: SearchSealed {
         for combined in params.tags {
             // split this combined tag by our delimiter
             match combined.split_once(params.delimiter) {
-                // add this tag filter to our searc
+                // add this tag filter to our search
                 Some((key, value)) => search = search.tag(key, value),
                 None => {
                     // build an error message to return
@@ -158,7 +158,7 @@ pub trait SearchParameterized: SearchSealed {
         for combined in params.tags {
             // split this combined tag by our delimiter
             match combined.split_once(params.delimiter) {
-                // add this tag filter to our searc
+                // add this tag filter to our search
                 Some((key, value)) => search = search.tag(key, value),
                 None => {
                     // build an error message to return

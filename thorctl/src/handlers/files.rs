@@ -22,7 +22,7 @@ use crate::args::files::{DeleteFiles, DescribeFiles, DownloadFiles, Files, GetFi
 use crate::args::{Args, DescribeCommand, SearchParameterized};
 use crate::utils;
 
-/// A single line for an file upload log
+/// A single line for a file upload log
 struct UploadLine;
 
 macro_rules! upload_print {
@@ -55,7 +55,7 @@ impl UploadLine {
     /// * `path` - The path this file was uploaded from
     /// * `resp` - The submission response from the API
     pub fn uploaded(path: &Path, resp: &SampleSubmissionResponse) {
-        // print an uplopaded line
+        // print an uploaded line
         upload_print!("200".bright_green(), path, resp.sha256, resp.id, "-");
     }
 
@@ -242,7 +242,7 @@ async fn download_targets(
 ) {
     // add any files from our cmd
     for sha256 in &cmd.sha256s {
-        // check if this repo has already been addded to be downloaded
+        // check if this repo has already been added to be downloaded
         if added.insert(sha256.clone()) {
             // try to add this download job
             if let Err(error) = controller.add_job(sha256.clone()).await {
@@ -275,7 +275,7 @@ async fn download_search(
     loop {
         // add each of these sha256s to be downloaded
         for line in cursor.data.drain(..) {
-            // check if this repo has already been addded to be downloaded
+            // check if this repo has already been added to be downloaded
             if added.insert(line.sha256.clone()) {
                 // try to add this download job
                 if let Err(error) = controller.add_job(line.sha256).await {
@@ -333,7 +333,7 @@ async fn download(
     Ok(())
 }
 
-/// A single line for an file upload log
+/// A single line for a file upload log
 struct GetLine;
 
 impl GetLine {
@@ -360,7 +360,7 @@ impl GetLine {
     pub fn list(line: &SampleListLine) {
         // if a submission was set the get it as a string or use "-"
         let submission = line.submission.map_or("-".to_string(), String::from);
-        // print an list file line
+        // print a list file line
         println!(
             "{:<64} | {:<36} | {:<28}",
             line.sha256, submission, line.uploaded
@@ -373,7 +373,7 @@ impl GetLine {
     ///
     ///* `line` - The sample list line to print
     pub fn list_tags(line: &SampleListLine) {
-        // print an list file line
+        // print a list file line
         println!("{:<64} | {:<28}", line.sha256, line.uploaded);
     }
 }
@@ -395,7 +395,7 @@ async fn get(thorium: &Thorium, cmd: &GetFiles) -> Result<(), Error> {
     let opts = cmd.build_file_opts()?;
     // build a cursor object
     let mut cursor = thorium.files.list(&opts).await?;
-    // track the submission ids that we find
+    // track the submission IDs that we find
     let mut ids = HashSet::with_capacity(10000);
     // track the number of pages we have crawled
     let mut pages = 0;
@@ -432,7 +432,7 @@ async fn describe(thorium: &Thorium, cmd: &DescribeFiles) -> Result<(), Error> {
     cmd.describe(thorium).await
 }
 
-/// A single line for an file upload log
+/// A single line for a file upload log
 struct DeleteLine;
 
 impl DeleteLine {
@@ -462,7 +462,7 @@ impl DeleteLine {
         }
     }
 
-    /// Log an error from writting a samples details
+    /// Log an error from writing a samples details
     pub fn error(sha256: &str, submission: Option<&Uuid>, err: &Error) {
         // print a delete file line
         match submission {
@@ -544,14 +544,14 @@ async fn delete_specific(
         .iter()
         .map(|sub| (sub.id, sub))
         .collect();
-    // select either all of the the file's submissions or only the given submissions
+    // select either all of the file's submissions or only the given submissions
     let submissions = if target.submissions.is_empty() {
         submission_map.keys().copied().collect()
     } else {
         target.submissions
     };
     let mut opts = FileDeleteOpts::default();
-    // if groups were specified, add them to the our delete opts, otherwise
+    // if groups were specified, add them to the our delete opts; otherwise,
     // delete submissions from all groups
     if !groups.is_empty() {
         opts = opts.groups(groups.clone());
@@ -620,7 +620,7 @@ async fn delete_from_details(
             .collect()
     };
     let mut opts = FileDeleteOpts::default();
-    // if groups were specified, add them to the our delete opts, otherwise
+    // if groups were specified, add them to the our delete opts; otherwise,
     // delete all submissions
     if !groups.is_empty() {
         opts = opts.groups(groups.clone());

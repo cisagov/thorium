@@ -50,7 +50,7 @@ impl Jobs {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         #[derive(Clone)]
@@ -101,7 +101,7 @@ impl Jobs {
     ///
     /// * `group` - The group this pipeline is from
     /// * `pipeline` - The pipeline to claim jobs for
-    /// * `stage` - The stage in the the pipeline to claim a job for
+    /// * `stage` - The stage in the pipeline to claim a job for
     /// * `worker` - The name of the worker that is claiming jobs
     /// * `count` - The number of jobs to claim
     ///
@@ -549,13 +549,13 @@ impl Jobs {
         send_build!(self.client, req, Vec<RunningJob>)
     }
 
-    /// Resets jobs in Thoium in bulk
+    /// Resets jobs in Thorium in bulk
     ///
     /// These jobs are normally reset because their worker was killed while executing this job.
     ///
     /// # Arguments
     ///
-    /// * `ids` - The job IDs to reset
+    /// * `IDs` - The job IDs to reset
     ///
     /// # Examples
     ///

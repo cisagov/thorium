@@ -128,7 +128,7 @@ fn equal(
 ///
 /// # Arguments
 ///
-/// * `setttings` - The auto tag settings to use
+/// * `settings` - The auto tag settings to use
 /// * `src` - The results to pull tags from
 /// * `key` - The key to create a tag for
 /// * `logs` - The logs to send to the API
@@ -253,7 +253,7 @@ impl Extractor {
     /// # Arguments
     ///
     /// * `output` - The output to extract tags from
-    /// * `setttings` - The auto tag settings to use
+    /// * `settings` - The auto tag settings to use
     /// * `logs` - The logs to send to the API
     #[instrument(name = "tags::extract", skip_all, err(Debug))]
     fn extract(
@@ -317,7 +317,7 @@ fn overlay(mut tags: RawTags, path: &Path, logs: &mut Sender<String>) -> Result<
                 // the value for this is an array so crawl the values in the array
                 Value::Array(values) => {
                     for value in values {
-                        // try to add each idividual value and error on objects or nested vectors
+                        // try to add each individual value and error on objects or nested vectors
                         match value {
                             // The value for this is just a string so just add it
                             Value::String(value) => tags.add_ref(&key, value),

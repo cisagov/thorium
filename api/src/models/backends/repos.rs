@@ -218,7 +218,7 @@ impl Repo {
             let info = Group::authorize_all(user, &groups, shared).await?;
             // if we want to edit these repos then check for edit permissions
             if editable {
-                // make sure we have modification privleges in these groups
+                // make sure we have modification privileges in these groups
                 can_create_all!(info, user, shared);
             }
         } else {
@@ -282,7 +282,7 @@ impl Repo {
             }
             // make sure we actually have access to all requested groups
             let info = Group::authorize_check_allow_all(user, &groups, action, shared).await?;
-            // make sure we have modification privleges in these groups
+            // make sure we have modification privileges in these groups
             can_create_all!(info, user, shared);
         } else {
             // this user specified no groups so default to the ones we can edit
@@ -309,7 +309,7 @@ impl Repo {
         Ok(())
     }
 
-    /// Helps the public upload mehtod save new data for this repository
+    /// Helps the public upload method save new data for this repository
     ///
     ///  If a user does not tie any commits to this data it will be pruned the next time commits are added.
     ///
@@ -333,7 +333,7 @@ impl Repo {
     ) -> Result<String, ApiError> {
         // build a repo upload form to populate
         let mut form = RepoDataForm::default();
-        // biuld an option to store our hashes
+        // build an option to store our hashes
         let mut sha256_opt = None;
         // begin crawling our multipart form
         while let Some(field) = upload.next_field().await? {
@@ -845,7 +845,7 @@ impl CursorCore for Commitish {
         params: &Self::Params,
         shared: &Shared,
     ) -> Result<(DateTime<Utc>, DateTime<Utc>), ApiError> {
-        // get our end timestmap
+        // get our end timestamp
         let end = params.end(shared)?;
         Ok((params.start, end))
     }
@@ -1114,9 +1114,9 @@ impl ApiCursor<Commitish> {
 }
 
 impl From<RepoListRow> for RepoListLine {
-    /// Covnert a repo list row to a repo list line
+    /// Convert a repo list row to a repo list line
     fn from(row: RepoListRow) -> RepoListLine {
-        // build our intitial group set
+        // build our initial group set
         let mut groups = HashSet::with_capacity(1);
         // ad this group
         groups.insert(row.group);
@@ -1131,9 +1131,9 @@ impl From<RepoListRow> for RepoListLine {
 }
 
 impl From<TagListRow> for RepoListLine {
-    /// Covnert a tag list row to a repo list line
+    /// Convert a tag list row to a repo list line
     fn from(row: TagListRow) -> RepoListLine {
-        // build our intitial group set
+        // build our initial group set
         let mut groups = HashSet::with_capacity(1);
         // ad this group
         groups.insert(row.group);
@@ -1180,7 +1180,7 @@ impl CursorCore for RepoListLine {
         params: &Self::Params,
         shared: &Shared,
     ) -> Result<(DateTime<Utc>, DateTime<Utc>), ApiError> {
-        // get our end timestmap
+        // get our end timestamp
         let end = params.end(shared)?;
         Ok((params.start, end))
     }

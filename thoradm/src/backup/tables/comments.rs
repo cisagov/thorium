@@ -38,7 +38,7 @@ pub struct Comment {
     pub author: String,
     /// The comment for this file
     pub comment: String,
-    /// Any paths in s3 to files/attachements for this comment
+    /// Any paths in s3 to files/attachments for this comment
     pub files: String,
 }
 
@@ -184,7 +184,7 @@ impl Restore for Comment {
                     *rows_restored += 1;
                     // set our current row count progress message
                     progress.set_message(rows_restored.to_string());
-                    // if we have less then 100 future to go then refill our future set
+                    // if we have less than 100 future to go then refill our future set
                     if futures.len() < 100 {
                         break;
                     }

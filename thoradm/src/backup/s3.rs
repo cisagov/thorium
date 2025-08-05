@@ -38,7 +38,7 @@ pub enum S3MonitorUpdate {
 pub struct S3Monitor {
     /// The total number of objects we have backed up
     total_objects: u64,
-    /// The reciever to pull updates from
+    /// The receiver to pull updates from
     receiver: AsyncReceiver<S3MonitorUpdate>,
     /// The progress bar to report updates on
     progress: ProgressBar,

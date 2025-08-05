@@ -41,7 +41,7 @@ const MAX_BATCHES: usize = 10;
 async fn check_child(child: &mut Child) -> Result<JobStatus, Error> {
     // check if this sub process has finished yet
     match child.try_wait() {
-        // get our exit code on MacOS
+        // get our exit code on macOS
         #[cfg(target_os = "macos")]
         Ok(Some(status)) => {
             // get and set the return code
@@ -50,7 +50,7 @@ async fn check_child(child: &mut Child) -> Result<JobStatus, Error> {
                 // the proc was killed by a signal so assume we failed
                 None => Some(-1),
             };
-            // check if an error occured or not
+            // check if an error occurred or not
             if code == Some(0) {
                 Ok(JobStatus::Finished(code))
             } else {
@@ -66,7 +66,7 @@ async fn check_child(child: &mut Child) -> Result<JobStatus, Error> {
                 // the proc was killed by a signal
                 None => status.signal(),
             };
-            // check if an error occured or not
+            // check if an error occurred or not
             if code == Some(0) {
                 Ok(JobStatus::Finished(code))
             } else {
@@ -78,7 +78,7 @@ async fn check_child(child: &mut Child) -> Result<JobStatus, Error> {
         Ok(Some(status)) => {
             // get our exit code
             let code = status.code();
-            // check if an error occured or not
+            // check if an error occurred or not
             if code == Some(0) {
                 Ok(JobStatus::Finished(code))
             } else {
@@ -151,13 +151,13 @@ pub struct Agent {
     pub thorium: Thorium,
     /// The image we are executing a job for
     pub image: Image,
-    /// The Job thisresults_path agent is executing
+    /// The Job this results_path agent is executing
     pub job: GenericJob,
     /// The stage logs to send to Thorium
     stage_logs: StageLogsAdd,
-    /// A reciever for a channel of logs to add for this job
+    /// A receiver for a channel of logs to add for this job
     receiver: Receiver<String>,
-    /// A sender for a chennel of logs to add for this job
+    /// A sender for a channel of logs to add for this job
     pub sender: Sender<String>,
     /// The agent executor this agent is using
     pub executor: Box<dyn AgentExecutor + Send + Sync>,
@@ -323,7 +323,7 @@ impl Agent {
         let timeout = self.image.timeout.map(|seconds| from_now!(start, seconds));
         // get the duration to sleep between checks
         let sleep = Duration::from_millis(100);
-        // wait for this job to finish exeucting
+        // wait for this job to finish executing
         loop {
             // send any logs in our log file
             self.send_file_logs(reader).await?;
@@ -425,11 +425,11 @@ pub trait AgentExecutor {
     /// Get the paths to this executors current jobs results and result files
     fn result_paths(&self, image: &Image) -> (String, String);
 
-    /// Setup the environment for executing a single job in Thorium
+    /// Set up the environment for executing a single job in Thorium
     ///
     /// # Arguments
     ///
-    /// * `image` - The Image to setup a job for
+    /// * `image` - The Image to set up a job for
     /// * `job` - The job we are setting up for
     /// * `commits` - The commit that each repo is checked out too
     async fn setup(
@@ -549,13 +549,13 @@ pub async fn sub_execute(
         .await?;
     // send any logs in our logs channel
     agent.send_channel_logs().await?;
-    // wait for this job to finish exeucting
+    // wait for this job to finish executing
     let status = agent.monitor(in_flight, reader).await?;
     // send any remaining logs from our log file
     agent.send_file_logs(reader).await?;
     // if this job finished successfully then look for results
     let code = match status {
-        // this job successfuly completed its job
+        // this job successfully completed its job
         JobStatus::Finished(code) => {
             // collect any results from this job
             let raw_results = agent.executor.results(&agent.image).await?;
@@ -582,11 +582,11 @@ pub async fn sub_execute(
             // send any logs in our logs channel
             agent.send_channel_logs().await?;
             // collect any children files
-            let mut childs = agent.executor.children(&agent.image).await?;
+            let mut children = agent.executor.children(&agent.image).await?;
             // send any logs in our logs channel
             agent.send_channel_logs().await?;
             // submit any collected children
-            childs
+            children
                 .submit(
                     &agent.thorium,
                     &agent.job,

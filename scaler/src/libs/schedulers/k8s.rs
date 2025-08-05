@@ -209,13 +209,13 @@ impl K8s {
         Ok(())
     }
 
-    /// Setup a normal users groups
+    /// Set up a normal users groups
     ///
     /// # Arguments
     ///
     /// * `user` - The user to setup groups for
     /// * `namespaces` - The namespaces that currently exist in K8s
-    /// * `checked` - The set of namespces we have already initially setup
+    /// * `checked` - The set of namespaces we have already initially setup
     #[instrument(name = "K8s::setup_user", skip_all, fields(user = user.username, namespaces_count = namespaces.len()))]
     pub async fn setup_user<'a>(
         &mut self,
@@ -237,7 +237,7 @@ impl K8s {
                 // add this namespace to our list already created namespaces
                 checked.insert(ns);
             }
-            // make sure this users secret is setup and correct
+            // make sure this users secret is set up and correct
             if let Err(err) = self.secrets.check_secret(ns, user).await {
                 // log that we failed to setup this users secret
                 event!(
@@ -250,20 +250,20 @@ impl K8s {
             }
             // if this user has unix info then create their passwd file
             if user.unix.is_some() {
-                // make sure this users passwd is setup and correct
+                // make sure this users passwd is set up and correct
                 self.configs.setup_passwd(ns, user, &mut bans.users).await;
             }
         }
     }
 
-    /// Setup an admins configs in all namespaces
+    /// Set up an admins configs in all namespaces
     ///
     /// # Arguments
     ///
     /// * `cache` - A cache of info from Thorium to use while setting things up
     /// * `user` - The user to setup groups for
     /// * `namespaces` - The namespaces that currently exist in K8s
-    /// * `checked` - The set of namespces we have already initially setup
+    /// * `checked` - The set of namespaces we have already initially setup
     #[instrument(name = "K8s::setup_admin", skip_all, fields(user = user.username, namespaces_count = namespaces.len()))]
     pub async fn setup_admin<'a>(
         &mut self,
@@ -286,7 +286,7 @@ impl K8s {
                 // add this namespace to our list already created namespaces
                 checked.insert(ns);
             }
-            // make sure this users secret is setup and correct
+            // make sure this users secret is set up and correct
             if let Err(err) = self.secrets.check_secret(ns, user).await {
                 // log that we failed to setup this users secret
                 event!(
@@ -299,7 +299,7 @@ impl K8s {
             }
             // if this user has unix info then create their passwd file
             if user.unix.is_some() {
-                // make sure this users passwd is setup and correct
+                // make sure this users passwd is set up and correct
                 self.configs.setup_passwd(ns, user, &mut bans.users).await;
             }
         }
@@ -742,7 +742,7 @@ impl K8s {
         &mut self,
         policies_to_add: HashMap<String, Vec<(Uuid, NetworkPolicy)>>,
     ) {
-        // create a list of policy ids, names, and their errors
+        // create a list of policy IDs, names, and their errors
         // to keep track of which policies failed to be created
         let mut errors: Vec<(Uuid, String, kube::Error)> = Vec::new();
         // deploy the network policies and save any errors
@@ -833,7 +833,7 @@ type K8sThoriumPolicies = (
 
 #[async_trait::async_trait]
 impl Scheduler for K8s {
-    /// Determine how long ot wait before running a task again
+    /// Determine how long to wait before running a task again
     ///
     /// # Arguments
     ///
@@ -867,7 +867,7 @@ impl Scheduler for K8s {
         self.cluster.resources_available(thorium).await
     }
 
-    /// Setup the K8's cluster before scheduling any jobs, ensuring the
+    /// Set up the K8's cluster before scheduling any jobs, ensuring the
     /// cluster's state is equivalent to the info in Thorium
     ///
     /// # Arguments
@@ -975,7 +975,7 @@ impl Scheduler for K8s {
                         // add this pod to this namespaces spawn list
                         entry.push(pod);
                     }
-                    // some error occured during pod generation
+                    // some error occurred during pod generation
                     Err(err) => {
                         errors.insert(spawn.name.clone(), err);
                     }

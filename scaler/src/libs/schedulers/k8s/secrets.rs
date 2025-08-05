@@ -26,7 +26,7 @@ impl Secrets {
     ///
     /// # Arguments
     ///
-    /// * `client` - kuberentes client
+    /// * `client` - kubernetes client
     /// * `conf` - Thorium Config
     /// * `context` - The name of the context to create secrets for
     pub fn new(client: &kube::Client, conf: &Conf, context: &str) -> Self {
@@ -118,7 +118,7 @@ impl Secrets {
         if self.registry_token.is_some() {
             // create registry token if it does not exist in this group
             let name = "thorium-registry-token".to_owned();
-            let impage_pull_secret = LocalObjectReference { name };
+            let image_pull_secret = LocalObjectReference { name };
             vec![impage_pull_secret]
         } else {
             Vec::default()
@@ -174,7 +174,7 @@ impl Secrets {
         let params = ListParams::default().fields(&format!("metadata.namespace=={}", ns));
         // get list of secrets in this namespace
         let secrets = self.api.list(&params).await?;
-        // check if the secret wass already created
+        // check if the secret was already created
         let created = secrets
             .iter()
             .any(|secret| secret.metadata.name == Some(name.to_owned()));
@@ -291,7 +291,7 @@ impl Secrets {
             {
                 Ok(_) => event!(Level::INFO, msg = "Setup registry token", namespace = ns),
                 Err(err) => {
-                    // log that we failed to create this namespacei and are banning it
+                    // log that we failed to create this namespace and are banning it
                     event!(
                         Level::ERROR,
                         msg = "Failed to setup registry token",
@@ -328,7 +328,7 @@ impl Secrets {
             .await
     }
 
-    /// Setup a users secret in Thorium
+    /// Set up a users secret in Thorium
     ///
     /// # Arguments
     ///

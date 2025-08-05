@@ -167,7 +167,7 @@ async fn settings_reset(
 ) -> Result<StatusCode, ApiError> {
     // determine if a scan is needed before resetting
     let scan_needed = if params.scan {
-        // retrieve the curent system settings
+        // retrieve the current system settings
         let old_settings = SystemSettings::get(&user, &state.shared).await?;
         let default_settings = SystemSettings::default();
         // a scan is needed if either the whitelist or allow_unrestricted_host_paths was changed
@@ -392,7 +392,7 @@ async fn backup(user: User, State(state): State<AppState>) -> Result<Json<Backup
 
 /// Restores a backup
 ///
-/// This will erase redis destorying any left over data to prevent orphaned data from a past
+/// This will erase redis destroying any left over data to prevent orphaned data from a past
 /// instance.
 ///
 /// # Arguments
@@ -462,11 +462,11 @@ async fn register_node(
 ///
 /// # Arguments
 ///
-/// * `user` - The user that is gettting this nodes info
+/// * `user` - The user that is getting this nodes info
 /// * `cluster` - The cluster this node is in
 /// * `node` - The node this heart beat is from
 /// * `state` - Shared Thorium objects
-/// * `heatbeat` - The heart beat info for this node
+/// * `heartbeat` - The heart beat info for this node
 #[utoipa::path(
     get,
     path = "/api/system/nodes/:cluster/:node",
@@ -540,10 +540,10 @@ async fn update_node(
 ///
 /// # Arguments
 ///
-/// * `user` - The user that is gettting this nodes info
+/// * `user` - The user that is getting this nodes info
 /// * `params` - The params to use when listing node names
 /// * `state` - Shared Thorium objects
-/// * `heatbeat` - The heart beat info for this node
+/// * `heartbeat` - The heart beat info for this node
 #[utoipa::path(
     get,
     path = "/api/system/nodes/",
@@ -573,10 +573,10 @@ async fn list_nodes(
 ///
 /// # Arguments
 ///
-/// * `user` - The user that is gettting this nodes info
+/// * `user` - The user that is getting this nodes info
 /// * `params` - The params to use when listing node details
 /// * `state` - Shared Thorium objects
-/// * `heatbeat` - The heart beat info for this node
+/// * `heartbeat` - The heart beat info for this node
 #[utoipa::path(
     get,
     path = "/api/system/nodes/details/",

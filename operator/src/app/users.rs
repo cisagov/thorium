@@ -156,7 +156,7 @@ pub async fn create(
     url: &str,
     username: &str,
 ) -> Result<(String, String), Error> {
-    // try and create secret, otherwise grab existing secret
+    // try and create secret; otherwise, grab existing secret
     let mut password = secrets::create_user_secret(username, meta).await?;
     if password.is_none() {
         println!("{} user secret exists, not updating password", username);

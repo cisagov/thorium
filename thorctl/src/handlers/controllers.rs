@@ -47,7 +47,7 @@ impl<W: Worker> Controller<W> {
     ) -> Self {
         // build a new multiprogress bar
         let multi = MultiBar::default();
-        // build our channel for sending/receiving messeges
+        // build our channel for sending/receiving messages
         let (jobs_tx, jobs_rx) = kanal::unbounded_async();
         // build our channel for sending/receiving monitor updates on
         let (monitor_tx, monitor_rx) = kanal::unbounded_async();
@@ -77,7 +77,7 @@ impl<W: Worker> Controller<W> {
     /// * `thorium` - A Thorium client
     /// * `workers` - The number of workers to spawn
     /// * `jobs_tx` - The channel to send new jobs on
-    /// * `jobs_rx` - The channel to recieve new jobs on
+    /// * `jobs_rx` - The channel to receive new jobs on
     /// * `conf` - The config for Thorctl
     /// * `args` - The arguments that were passed to Thorctl
     /// * `cmd` - The specific args for this controllers workers

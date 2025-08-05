@@ -90,7 +90,7 @@ fn parse_url(raw: &str, conf: &CtlConf) -> Result<(String, String, String), Erro
             let scheme = url.scheme();
             // build our thorium url
             let thorium_url = trimmed[scheme.len() + 3..].to_string();
-            // if we have ssh keys setup then clone with ssh instead
+            // if we have ssh keys set up then clone with ssh instead
             if conf.git.is_some() {
                 // skip the opening ""://" and replace the first / with a :
                 let replaced = trimmed[scheme.len() + 3..].replacen('/', ":", 1);
@@ -119,7 +119,7 @@ fn parse_url(raw: &str, conf: &CtlConf) -> Result<(String, String, String), Erro
             let parsable = format!("https://{raw}");
             // get our trimmed url
             let (url, trimmed) = trim_url(&parsable)?;
-            // if we have ssh keys setup then clone with ssh instead
+            // if we have ssh keys set up then clone with ssh instead
             if conf.git.is_some() {
                 // replace the first / with a :
                 let replaced = trimmed[8..].replacen('/', ":", 1);
@@ -176,7 +176,7 @@ async fn clone_repo_https(clone_url: String, path: PathBuf, bar: &Bar) -> Result
         // build our proxy options
         let mut proxy = ProxyOptions::new();
         proxy.auto();
-        // add our proxy options to our fetch optioins
+        // add our proxy options to our fetch options
         let mut fetch = FetchOptions::default();
         fetch.proxy_options(proxy);
         // build our repo builder and add our fetch options
@@ -213,7 +213,7 @@ async fn clone_repo_ssh(
         // build our proxy options
         let mut proxy = ProxyOptions::new();
         proxy.auto();
-        // add our proxy options to our fetch optioins
+        // add our proxy options to our fetch options
         let mut fetch = FetchOptions::default();
         fetch.proxy_options(proxy);
         // build a new callback to setup
@@ -259,9 +259,9 @@ fn crawl_all(
     let mut commits: HashSet<_> = HashSet::with_capacity(1000);
     // get an iter over the references in this repo
     let refs = repo.references()?;
-    // track the reference ids
+    // track the reference IDs
     let mut ref_ids = Vec::with_capacity(1);
-    // crawl over these repos and get the non commit commitishes and reference ids
+    // crawl over these repos and get the non commit commitishes and reference IDs
     for refer in refs.all().unwrap() {
         if let Ok(refer_ok) = refer {
             // detect if this is a branch that peels to a commit
@@ -320,7 +320,7 @@ fn crawl_specific(
     let repo = gix::open(untarred.path).unwrap();
     // track what commits we have already seen
     let mut commits: HashSet<_> = HashSet::with_capacity(1000);
-    // build a list of reference ids
+    // build a list of reference IDs
     let ids = references
         .iter()
         .map(|refer| repo.find_reference(refer).map(|refer| refer.id()))
@@ -440,7 +440,7 @@ impl CommitishIngestor {
     async fn wait_for_all(&mut self) {
         // poll our futures until they are all complete
         while let Some(handle) = self.active.next().await {
-            // check if an error occured
+            // check if an error occurred
             match handle {
                 Ok(Ok(_map)) => (),
                 Ok(Err((_map, error))) => {
@@ -764,7 +764,7 @@ impl Worker for IngestWorker {
     /// The command part of our args for this specific worker
     type Cmd = IngestRepos;
 
-    /// The type of jobs to recieve
+    /// The type of jobs to receive
     type Job = IngestJob;
 
     /// An update for the repo ingest monitor

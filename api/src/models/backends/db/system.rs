@@ -36,7 +36,7 @@ pub async fn health(shared: &Shared) -> Result<bool, ApiError> {
     if status == "PONG" {
         return Ok(true);
     }
-    // default to an unhealhy status
+    // default to an unhealthy status
     Ok(false)
 }
 
@@ -52,7 +52,7 @@ pub async fn iff(shared: &Shared) -> Result<String, ApiError> {
     Ok(iff)
 }
 
-/// Initalize [`SystemInfo`], [`SystemSettings`], and the IFF string in Redis with default values
+/// Initialize [`SystemInfo`], [`SystemSettings`], and the IFF string in Redis with default values
 ///
 /// # Arguments
 ///
@@ -134,7 +134,7 @@ pub async fn get_info(reset: Option<ImageScaler>, shared: &Shared) -> Result<Sys
     }
 }
 
-/// Initalize the [`SystemInfo`] in redis with default values and sets the IFF string
+/// Initialize the [`SystemInfo`] in redis with default values and sets the IFF string
 ///
 /// # Arguments
 ///
@@ -276,7 +276,7 @@ pub async fn update_settings(settings: &SystemSettings, shared: &Shared) -> Resu
         .cmd("hset").arg(&keys.settings).arg("reserved_cpu").arg(&settings.reserved_cpu)
         .cmd("hset").arg(&keys.settings).arg("reserved_memory").arg(&settings.reserved_memory)
         .cmd("hset").arg(&keys.settings).arg("reserved_storage").arg(&settings.reserved_storage)
-        // update fairshare settings
+        // update fair share settings
         .cmd("hset").arg(&keys.settings).arg("fairshare_cpu").arg(&settings.fairshare_cpu)
         .cmd("hset").arg(&keys.settings).arg("fairshare_memory").arg(&settings.fairshare_memory)
         .cmd("hset").arg(&keys.settings).arg("fairshare_storage").arg(&settings.fairshare_storage)
@@ -768,7 +768,7 @@ pub async fn can_delete_workers(
             }
             // get all of these workers users
             let users_set: HashSet<String> = pipe.query_async(conn!(shared)).await?;
-            // if we have multilple users or one user that isn't us then reject this request
+            // if we have multiple users or one user that isn't us then reject this request
             if users_set.len() != 1 || !users_set.contains(&user.username) {
                 return unauthorized!();
             }
@@ -814,7 +814,7 @@ pub async fn delete_workers(
         let maybe_info: Vec<Option<String>> = pipe.query_async(conn!(shared)).await?;
         // convert our info list to an iterator
         let mut info_iter = maybe_info.iter();
-        // build the pipeline for deleteing workers
+        // build the pipeline for deleting workers
         let mut pipe = redis::pipe();
         // combine our worker and cluster/node info
         for worker in chunk {

@@ -81,7 +81,7 @@ pub trait ResultsClientHelper: GenericClient {
     ///
     /// # Arguments
     ///
-    /// * `key` - The key to use to access the data the results are attached to
+    /// * `key` - The key to use to access the data to which the results are attached
     /// * `tool` - The tool to that made this result file
     /// * `result_id` - The uuid for this result
     /// * `path` - The path of the result file to download

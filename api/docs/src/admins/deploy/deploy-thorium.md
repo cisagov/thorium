@@ -282,7 +282,7 @@ are not multi-cluster.
 
 The operator will attempt to deploy the ThoriumCluster from the CRD you applied. This will include
 creating secrets such as the shared thorium config (`thorium.yml`). It will also deploy scaler,
-api, event-handler, and search-streamer pods if those have been been specified.
+api, event-handler, and search-streamer pods if those have been specified.
 
 ```bash
 # create the thorium CRD

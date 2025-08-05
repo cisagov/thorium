@@ -17,7 +17,7 @@ macro_rules! quantity {
 
 /// K8s API wrappers for containers
 pub struct Containers {
-    /// The name of the cluster this contianer will be spawned on
+    /// The name of the cluster this container will be spawned on
     pub cluster_name: String,
 }
 
@@ -67,21 +67,21 @@ impl Containers {
         // build the resource memory map
         btree.insert("cpu".to_owned(), quantity!(format!("{}m", raw.cpu))?);
         btree.insert("memory".to_owned(), quantity!(format!("{}Mi", raw.memory))?);
-        // inject ephemeral storage if its greater then 0
+        // inject ephemeral storage if its greater than 0
         if raw.ephemeral_storage > 0 {
             btree.insert(
                 "ephemeral-storage".to_owned(),
                 quantity!(format!("{}Mi", raw.ephemeral_storage))?,
             );
         }
-        // inject nvidia gpu if its greater then 0
+        // inject nvidia gpu if its greater than 0
         if raw.nvidia_gpu > 0 {
             btree.insert(
                 "nvidia/gpu".to_owned(),
                 quantity!(raw.nvidia_gpu.to_string())?,
             );
         }
-        // inject amd gpu if its greater then 0
+        // inject amd gpu if its greater than 0
         if raw.amd_gpu > 0 {
             btree.insert("amd/gpu".to_owned(), quantity!(raw.amd_gpu.to_string())?);
         }
@@ -103,11 +103,11 @@ impl Containers {
         }
     }
 
-    /// Builds a container soecific security context
+    /// Builds a container specific security context
     ///
     /// # Arguments
     ///
-    /// * `iamge` - The details for this container image in Thorium
+    /// * `image` - The details for this container image in Thorium
     fn build_security_context(image: &Image) -> SecurityContext {
         // build this containers security context
         SecurityContext {
@@ -121,7 +121,7 @@ impl Containers {
     /// # Arguments
     ///
     /// * `cache` - The Thorium scalers cache
-    /// * `req` - A requistion for a specific image type
+    /// * `req` - A requisition for a specific image type
     /// * `user` - The user this containers are being spawned for
     pub fn generate(
         &self,
@@ -142,7 +142,7 @@ impl Containers {
             Some(cmd) => serialize!(cmd),
             None => serialize!(&docker.config.cmd),
         };
-        // build our environemnt vars
+        // build our environment vars
         let mut env: Vec<EnvVar> = image
             .env
             .iter()

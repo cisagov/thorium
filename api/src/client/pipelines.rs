@@ -47,7 +47,7 @@ impl Pipelines {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         #[derive(Clone)]
@@ -312,7 +312,7 @@ impl Pipelines {
     ///
     /// # Arguments
     ///
-    /// * `group` - The group the pipeline is in
+    /// * `group` - The group containing the pipeline
     /// * `pipeline` - The name of the pipeline
     /// * `req` - The request to create a notification
     /// * `params` - The params to send with this notification create request

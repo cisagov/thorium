@@ -569,7 +569,7 @@ pub struct BackupController {
     components: HashSet<BackupComponents>,
     /// The samples list table
     samples_list: TableBackup<SamplesList>,
-    /// The s3 ids table
+    /// The s3 IDs table
     s3_ids: TableBackup<S3Id>,
     /// The comments table
     comments: TableBackup<Comment>,
@@ -589,7 +589,7 @@ pub struct BackupController {
     commitish_list: TableBackup<CommitishList>,
     /// The nodes tables
     nodes: TableBackup<Node>,
-    /// The s3 ids S3 backup
+    /// The s3 IDs S3 backup
     s3_ids_objects: S3BackupController<S3Id>,
     /// The comments S3 backup
     comment_attachments: S3BackupController<Comment>,
@@ -718,7 +718,7 @@ impl BackupController {
     }
 }
 
-/// Handle a backup take sub comamnd
+/// Handle a backup take sub command
 ///
 /// # Arguments
 ///

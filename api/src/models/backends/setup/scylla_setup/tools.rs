@@ -1,4 +1,4 @@
-//! Setup the tools tables/prepared statements in Scylla
+//! Set up the tools tables/prepared statements in Scylla
 //!
 //! This isn't used yet but it will be soon.
 
@@ -7,7 +7,7 @@ use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for tools
+/// The prepared statements for tools
 #[allow(dead_code)]
 pub struct ToolsPreparedStatements {
     /// Insert a tool
@@ -40,7 +40,7 @@ impl ToolsPreparedStatements {
     }
 }
 
-/// Setup the tools tables
+/// Set up the tools tables
 ///
 /// # Arguments
 ///
@@ -86,7 +86,7 @@ async fn setup_tools_table(session: &Session, config: &Conf) {
         .expect("failed to add tools table");
 }
 
-/// Setup the tools listing tables
+/// Set up the tools listing tables
 ///
 /// # Arguments
 ///

@@ -19,7 +19,7 @@ pub async fn check(thorium: &Thorium) -> Result<bool, Error> {
     // compare to our version and see if its different
     if version.thorium != semver::Version::parse(current)? {
         // print the version mismatch
-        eprintln!("Thorctl is out of date!");
+        eprintln!("Thorctl is out-of-date!");
         eprintln!("{current} -> {}", version.thorium);
         return Ok(true);
     }

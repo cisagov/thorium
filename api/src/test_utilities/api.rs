@@ -1,4 +1,4 @@
-//! The utlities for integration tests involving the API
+//! The utilities for integration tests involving the API
 use async_once::AsyncOnce;
 use bb8_redis::{bb8::Pool, RedisConnectionManager};
 use once_cell::sync::Lazy;
@@ -53,7 +53,7 @@ async fn get_scylla_client(config: &Conf) -> Result<Session, Error> {
     Ok(scylla)
 }
 
-/// Setup a connection pool to the redis backend
+/// Set up a connection pool to the redis backend
 ///
 /// # Arguments
 ///

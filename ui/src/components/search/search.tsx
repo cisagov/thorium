@@ -119,7 +119,7 @@ const SearchResultItem: React.FC<SearchResultItemProps> = ({ result, idx }) => {
   );
 };
 
-// get repos using filters and and an optional cursor
+// get repos using filters and an optional cursor
 const getSearchResults = async (
   query: string,
   indexes: ElasticIndex[],

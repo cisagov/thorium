@@ -57,7 +57,7 @@ Some volume types also require specific settings to also be set. Currently this 
 NFS but specific settings can also be set for ConfigMap and Secrets. Setting the
 incorrect specific settings will just be ignored.
 
-#### NFS specifc Settings
+#### NFS specific Settings
 
 ```json
 {

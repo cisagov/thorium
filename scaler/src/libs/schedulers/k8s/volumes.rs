@@ -101,7 +101,7 @@ impl Volumes {
         }
     }
 
-    /// Setup the shared Thorium volume
+    /// Set up the shared Thorium volume
     fn thorium() -> Result<Volume, serde_json::Error> {
         // build base volume
         let mut vol = Self::base("thorium");
@@ -113,7 +113,7 @@ impl Volumes {
         Ok(vol)
     }
 
-    /// Setup an empty home dir
+    /// Set up an empty home dir
     fn home() -> Volume {
         // build base volume
         let mut vol = Self::base("thorium-home");
@@ -122,7 +122,7 @@ impl Volumes {
         vol
     }
 
-    /// Setup an empty home dir
+    /// Set up an empty home dir
     fn scratch() -> Volume {
         // build base volume
         let mut vol = Self::base("thorium-scratch");
@@ -131,7 +131,7 @@ impl Volumes {
         vol
     }
 
-    /// Setup the Thorium keys volume
+    /// Set up the Thorium keys volume
     ///
     /// # Arguments
     ///
@@ -152,7 +152,7 @@ impl Volumes {
         Ok(vol)
     }
 
-    /// Setup the Thorium passwd volume
+    /// Set up the Thorium passwd volume
     ///
     /// # Arguments
     ///
@@ -197,7 +197,7 @@ impl Volumes {
         }
     }
 
-    /// Builds an host path [`Volume`] based on a [`thorium::models::Volume`]
+    /// Builds a host path [`Volume`] based on a [`thorium::models::Volume`]
     ///
     /// # Arguments
     ///

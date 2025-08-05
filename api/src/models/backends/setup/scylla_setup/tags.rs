@@ -1,11 +1,11 @@
-//! Setup the samples tables/prepared statements in Scylla
+//! Set up the samples tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for tags
+/// The prepared statements for tags
 pub struct TagsPreparedStatements {
     /// Insert a tag
     pub insert: PreparedStatement,
@@ -33,9 +33,9 @@ impl TagsPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the tags tables
+        // set up the tags tables
         setup_tags_table(session, config).await;
-        // setup the tags materialized view
+        // set up the tags materialized view
         setup_tags_by_item_mat_view(session, config).await;
         setup_tags_case_insensitve_mat_view(session, config).await;
         // setup our prepared statements
@@ -64,7 +64,7 @@ impl TagsPreparedStatements {
 ///// Setup all required tags tables and prepared statements
 //pub fn setup(session: &Session, config: &Conf)
 
-/// Setup the tags table for Thorium
+/// Set up the tags table for Thorium
 ///
 /// # Arguments
 ///

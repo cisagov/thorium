@@ -34,6 +34,6 @@ pub trait CompactEvent<E: SearchEvent>: From<E> {
     /// Returns the type of this compacted search event
     fn get_type(&self) -> SearchEventType;
 
-    /// Returns all of the comprised events ids
+    /// Returns all of the comprised events IDs
     fn get_ids(&self) -> Vec<Uuid>;
 }

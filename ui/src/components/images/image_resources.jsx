@@ -242,7 +242,7 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
     setRequestResources(resourcesCopy);
   };
 
-  // this is needed for onload when cloning from an exisitng image
+  // this is needed for onload when cloning from an existing image
   useEffect(() => {
     setRequestResources(initialResources);
     // eslint-disable-next-line react-hooks/exhaustive-deps

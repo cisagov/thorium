@@ -49,7 +49,7 @@ impl System {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// system handler for the Thorium client
@@ -99,7 +99,7 @@ cfg_if::cfg_if! {
 impl System {
     /// Inits [`SystemInfo`] in Thorium
     ///
-    /// This will overwrite the current system info if its called on a already initalized Thorium
+    /// This will overwrite the current system info if its called on a already initialized Thorium
     ///
     /// # Examples
     ///
@@ -110,7 +110,7 @@ impl System {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // initalize Thorium's system info
+    /// // initialize Thorium's system info
     /// thorium.system.init().await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
@@ -143,7 +143,7 @@ impl System {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // initalize Thorium's system info
+    /// // initialize Thorium's system info
     /// thorium.system.init().await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
@@ -176,7 +176,7 @@ impl System {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // initalize Thorium's system info
+    /// // initialize Thorium's system info
     /// thorium.system.reset_cache().await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())

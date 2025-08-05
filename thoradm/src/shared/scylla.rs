@@ -1,4 +1,4 @@
-//! The shared scylla utilties for Thoradm
+//! The shared scylla utilities for Thoradm
 
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;

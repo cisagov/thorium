@@ -279,7 +279,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
     updateRequestVolumes(volumesCopy);
   };
 
-  // this is needed for onload when cloning from an exisitng image
+  // this is needed for onload when cloning from an existing image
   useEffect(() => {
     // we don't check for errors because we assume the source for copy is valid and
     // might want to not assume that

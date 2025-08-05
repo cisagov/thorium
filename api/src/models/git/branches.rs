@@ -7,5 +7,5 @@ pub struct Branch {
     /// The name of this branch
     pub name: String,
     /// The timestamp for the most recent commit in this branch
-    pub last_commited: DateTime<Utc>,
+    pub last_committed: DateTime<Utc>,
 }

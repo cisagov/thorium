@@ -56,13 +56,13 @@ impl Images {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// A blocking handler for the image routes in Thorium
         ///
         /// Images are used to define what each stage of a pipeline look like. Each stage
-        /// can have multiple images or a single image. Seperating the image declarations
+        /// can have multiple images or a single image. Separating the image declarations
         /// from pipeline declaration allows you to reuse images across pipelines
         /// without having to redefine an image every time. This also makes updating
         /// images easier as their is less duplicate information to update.
@@ -125,7 +125,7 @@ impl Images {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // buld the image request
+    /// // build the image request
     /// let image_req = ImageRequest::new("Corn", "harvester")
     ///     .image("Thorium:CornHarvester");
     /// // try to create image in Thorium

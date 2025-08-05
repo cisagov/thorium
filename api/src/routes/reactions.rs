@@ -28,12 +28,12 @@ use crate::utils::{ApiError, AppState};
 ///
 /// * `user` - The user that is creating this reaction
 /// * `state` - Shared Thorium objects
-/// * `req` - The reaction request used to create a reqction
+/// * `req` - The reaction request used to create a reaction
 #[utoipa::path(
     post,
     path = "/api/reactions/",
     params(
-        ("req" = ReactionRequest, description = "The reaction request used to create a reqction"),
+        ("req" = ReactionRequest, description = "The reaction request used to create a reaction"),
     ),
     responses(
         (status = 200, description = "Pipeline created", body = ReactionIdResponse),
@@ -909,7 +909,7 @@ async fn update(
 /// Deletes a reaction
 ///
 /// This will only cancel any currently active pods if this is the only reaction causing that pod
-/// type to be spawend.
+/// type to be spawned.
 ///
 /// # Arguments
 ///

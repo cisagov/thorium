@@ -14,7 +14,7 @@ To create a new group follow the steps in the following video:
 </video>
 
 You may have noticed that you can add users to different group roles. As we described in the previous chapter, group roles
-are how you define the abilities a group member has within the group. Roles and their abilities are defined in the table
+are how you define the abilities that a group member has within the group. Roles and their abilities are defined in the table
 below. Group resources can include images, pipelines, repos, files, tags, comments, and tool results.
 
 | Ability | Owners | Managers | Users | Monitors |

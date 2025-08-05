@@ -4,7 +4,7 @@ Thorium scalers are responsible for determining when and where reactions/jobs
 are spawned. It accomplishes this by crawling the deadline stream and based
 on fair share scheduling logic. This means that some portion of your cluster
 will be dedicated to the most pressing jobs based on deadline while another
-portion will be trying to fairly executing everyones jobs evenly. This allows
+portion will be trying to fairly executing everyone's jobs evenly. This allows
 for users to spawn large groups of reactions/jobs without fear of abusing
 the cluster and preventing others from accomplishing tasks.
 
@@ -37,7 +37,7 @@ active jobs across all pools. The score increased is based on the resources
 required for their currently active jobs. When scheduling jobs for the fair
 share pool the users with the lowest score will get the highest priority.
 
-workers that are spawned in the fairshare pool will have a limited lifetime
+workers that are spawned in the fair share pool will have a limited lifetime
 depending on their original lifetime settings.
 
 | original | under fair share |
@@ -46,7 +46,7 @@ depending on their original lifetime settings.
 | Time Limited | Can claim new jobs for up to 60 (or a lower time specified limit) seconds before terminating |
 | Job Limited | Can claim a single job |
 
-This limit is in place to ensure workers spawned under fairshare churn often
+This limit is in place to ensure workers spawned under fair share churn often
 to allow for resources to be shared across users with minimal thrashing.
 
 # Scaler FAQ's

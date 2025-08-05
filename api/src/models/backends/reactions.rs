@@ -111,7 +111,7 @@ impl ReactionRequest {
         let sla_seconds = self.sla.unwrap_or(pipeline.sla);
         // bounds check sla
         bounder::number(sla_seconds as i64, "sla", 1, 3.154e+9 as i64)?;
-        // build the repo dedendency objects
+        // build the repo dependency objects
         let mut repos = Vec::with_capacity(self.repos.len());
         for req in self.repos {
             // try to get this repo to make sure this user actually has access
@@ -125,14 +125,14 @@ impl ReactionRequest {
                     .default_checkout
                     .map(|commitish| commitish.value().to_owned()),
             };
-            // build a repo depdendency object and insert it
+            // build a repo dependency object and insert it
             repos.push(RepoDependency {
                 url: req.url,
                 commitish,
                 kind: req.kind,
             });
         }
-        // gererate a uuuid for this reaction
+        // generate a uuid for this reaction
         let id = Uuid::new_v4();
         // upload our extra files
         let ephemeral = Self::upload_files(&id, self.buffers, shared).await?;
@@ -653,7 +653,7 @@ impl Reaction {
         span!(Level::INFO, "Deleting Reaction");
         // make sure we can modify reactions in this group
         can_delete!(self, group, user);
-        // use correct backend for deleteing this reaction
+        // use correct backend for deleting this reaction
         db::reactions::delete(self, shared).await
     }
 
@@ -733,7 +733,7 @@ impl Reaction {
             entry
                 .kwargs
                 .retain(|key, _| !args.remove_kwargs.contains(key));
-            // overlay any new kwargs ontop of the originals
+            // overlay any new kwargs on top of the originals
             for (key, value) in args.kwargs.drain() {
                 entry.kwargs.insert(key, value);
             }
@@ -805,7 +805,7 @@ impl TryFrom<(HashMap<String, String>, Vec<String>, Vec<String>)> for Reaction {
     fn try_from(
         raw: (HashMap<String, String>, Vec<String>, Vec<String>),
     ) -> Result<Self, Self::Error> {
-        // unwrap into hashmap and vector of job ids
+        // unwrap into hashmap and vector of job IDs
         let (mut map, raw_jobs, raw_generators) = raw;
         // return 404 if hashmap is empty
         if map.is_empty() {

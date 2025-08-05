@@ -91,7 +91,7 @@ pub struct S3 {
     pub results: S3Client,
     /// The s3 bucket for ephemeral files
     pub ephemeral: S3Client,
-    /// The s3 bucket for comment attachemnts
+    /// The s3 bucket for comment attachments
     pub attachments: S3Client,
     /// The s3 bucket for zipped repositories
     pub repos: S3Client,

@@ -83,7 +83,7 @@ like the following:
 You can also list reactions by both tags and statuses but you cannot list by
 both. This is largely due to the fact that we solely use Redis to store data.
 This means that we list data by crawling lists by a key. So we would need a 
-list for every single combinaton of keys.
+list for every single combination of keys.
 
 You can use the following urls to list by tags or statuses:
 

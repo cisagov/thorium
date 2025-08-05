@@ -77,11 +77,11 @@ async fn refresh_client(
 pub struct NetworkPolicyInfoCache {
     // Hash map of network policy info by id
     pub policies_by_id: HashMap<Uuid, NetworkPolicy>,
-    /// Hash map of network policies' ids by their group and name
+    /// Hash map of network policies' IDs by their group and name
     ids_by_group_name: HashMap<String, HashMap<String, Uuid>>,
-    /// Hash map of network policies' ids by their group and K8's name
+    /// Hash map of network policies' IDs by their group and K8's name
     pub ids_by_group_k8s_name: HashMap<String, HashMap<String, Uuid>>,
-    /// Hash map of network policy's ids that should always be applied by group
+    /// Hash map of network policy's IDs that should always be applied by group
     forced_ids_by_group: HashMap<String, Vec<Uuid>>,
     /// ID's of policies that were added this cache reload
     pub policies_added: Vec<Uuid>,
@@ -200,7 +200,7 @@ impl Cache {
         for group in &self.groups {
             // create a cursor object for images in this group
             let mut cursor = self.thorium.images.list(group).details().exec().await?;
-            // get an mutable reference to this groups entry into the image/docker map
+            // get a mutable reference to this groups entry into the image/docker map
             let image_map = self.images.entry(group.clone()).or_default();
             let docker_map = self.docker.entry(group.clone()).or_default();
             // loop over our cursor until its exhausted
@@ -225,7 +225,7 @@ impl Cache {
                                     image.image.as_ref().unwrap(),
                                     &span,
                                 ) {
-                                    // docker image info retrieved sucessfully
+                                    // docker image info retrieved successfully
                                     Ok(docker) => Some((Some(docker), image)),
                                     Err(e) => {
                                         event!(
@@ -254,7 +254,7 @@ impl Cache {
                     }
                     image_map.insert(image.name.clone(), image);
                 }
-                // if this cursor is exhaused that break
+                // if this cursor is exhausted that break
                 if cursor.exhausted {
                     break;
                 }
@@ -295,7 +295,7 @@ impl Cache {
             .await?;
         loop {
             for policy in cursor.data.drain(..) {
-                // add all of the policy's groups to the ids by group/name map
+                // add all of the policy's groups to the IDs by group/name map
                 for group in &policy.groups {
                     raw_entry_map_insert!(ids_by_group_name, group, policy.name.clone(), policy.id);
                     raw_entry_map_insert!(

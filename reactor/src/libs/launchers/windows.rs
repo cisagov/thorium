@@ -204,7 +204,7 @@ impl Launcher for Windows {
                 return Err(Error::from(error));
             }
         };
-        // get our childs process id
+        // get our child's process id
         Ok(())
     }
 
@@ -331,7 +331,7 @@ async fn ls_containers(span: &Span) -> Result<HashSet<String>, Error> {
     } else {
         // cast our error to a string
         let msg = String::from_utf8_lossy(&output.stderr).to_string();
-        // log that an error occured when getting output
+        // log that an error occurred when getting output
         event!(parent: &span, Level::ERROR, error = true, error_msg = msg);
         // return our error
         return Err(Error::new(msg));

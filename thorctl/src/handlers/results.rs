@@ -50,7 +50,7 @@ impl GetLine {
         let msg = err.msg().unwrap_or_else(|| "-".to_owned());
         // get the error status
         let status = err.status();
-        // get a default "-" if no status, otherwise map to a str
+        // get a default "-" if no status; otherwise, map to a str
         let status_str = status.as_ref().map_or("-", StatusCode::as_str);
         // log this line
         get_print!(status_str.bright_red(), target, msg);
@@ -454,7 +454,7 @@ async fn upload_helper(
     // build a path to our results file
     let mut path = entry.path();
     path.push(cmd.results.as_ref().unwrap_or(&"results".to_owned()));
-    // build a list of results_files and childrent
+    // build a list of results_files and children
     let mut results_files = Vec::default();
     // start recursively walking through this directory ignoring any hidden files
     for entry in WalkDir::new(entry.path())
@@ -509,7 +509,7 @@ pub async fn upload(thorium: &Thorium, cmd: &UploadResults) -> Result<(), Error>
     Ok(())
 }
 
-/// Handle all reults commands
+/// Handle all results commands
 ///
 /// # Arguments
 ///

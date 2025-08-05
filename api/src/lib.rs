@@ -32,7 +32,7 @@ pub mod client;
 #[cfg(feature = "client")]
 pub use client::{CtlConf, Cursor, Error, Keys, SearchDate, Thorium};
 
-// if the sync client is enabled then also rexport that
+// if the sync client is enabled then also re-export that
 #[cfg(feature = "sync")]
 pub use client::ThoriumBlocking;
 
@@ -83,7 +83,7 @@ async fn initial_settings_consistency_scan(
                 return Err(utils::ApiError::new(
                     err.code,
                     Some(format!(
-                        "An error occured retrieving system settings: {}",
+                        "An error occurred retrieving system settings: {}",
                         err.msg.unwrap_or("An unknown error occurred".to_string())
                     )),
                 ));
@@ -267,7 +267,7 @@ pub async fn axum(config: Conf) {
         // our scan failed, so don't start the API
         panic!("Error running initial consistency scan: {err}");
     }
-    // track how many bind attemps we have tried
+    // track how many bind attempts we have tried
     let mut attempts = 0;
     // bind and start handling requests
     loop {

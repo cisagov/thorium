@@ -193,7 +193,7 @@ impl SystemSettings {
     ///
     /// # Arguments
     ///
-    /// * `user` - The user that is reseting system settings
+    /// * `user` - The user that is resetting system settings
     /// * `shared` - Shared Thorium objects
     pub async fn reset(user: &User, shared: &Shared) -> Result<(), ApiError> {
         // only admins can reset system settings
@@ -375,7 +375,7 @@ impl SystemSettings {
     ) -> Result<(), ApiError> {
         // get a list of the pipeline's images
         let images = pipeline.order.iter().flatten().unique();
-        // get a map of images that already have a ban in the pipeline and their ban ids
+        // get a map of images that already have a ban in the pipeline and their ban IDs
         let current_bans_images = pipeline
             .bans
             .values()
@@ -530,7 +530,7 @@ impl Backup {
         is_admin!(user);
         // wipe backends now
         db::system::wipe(shared).await?;
-        // initialie the system and restore settings
+        // initialize the system and restore settings
         db::system::init(shared).await?;
         db::system::restore_settings(&self.settings, shared).await?;
         // restore user/group/pipeline data
@@ -560,7 +560,7 @@ impl Node {
     ) -> Result<(), ApiError> {
         // only admins can register nodes
         is_admin!(user);
-        // TODO cxheck if node is already registered
+        // TODO check if node is already registered
         db::system::register(node, shared).await
     }
 
@@ -999,7 +999,7 @@ impl WorkerDeleteMap {
     ///
     /// # Arguments
     ///
-    /// * `user` - The user that is deleteing workers
+    /// * `user` - The user that is deleting workers
     /// * `scaler` - The scaler that we are deleting workers from
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "WorkerDeleteMap::delete", skip(self, user, shared), fields(user = user.username, count = self.workers.len()), err(Debug))]
@@ -1011,7 +1011,7 @@ impl WorkerDeleteMap {
     ) -> Result<(), ApiError> {
         // if this user isn't an admin then make sure they are only deleting their own workers
         db::system::can_delete_workers(user, &self, shared).await?;
-        // delete the specified worekrs
+        // delete the specified workers
         db::system::delete_workers(scaler, self, shared).await?;
         Ok(())
     }

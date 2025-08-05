@@ -199,7 +199,7 @@ macro_rules! crawl_status {
 async fn info_specific(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
     // print our info line header
     InfoLine::header();
-    // crawl over all reaction ids and get info on them
+    // crawl over all reaction IDs and get info on them
     stream::iter(&cmd.targets)
         .map(|target| async move {
             match thorium.reactions.get(&cmd.group, target).await {
@@ -223,7 +223,7 @@ async fn info_specific(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Erro
 async fn delete_specific(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
     // print our info line header
     InfoLine::header();
-    // crawl over all reaction ids and get info on them
+    // crawl over all reaction IDs and get info on them
     stream::iter(&cmd.targets)
         .map(|target| async move {
             // get this reactions info

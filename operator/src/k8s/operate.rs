@@ -111,7 +111,7 @@ pub async fn apply(meta: &ClusterMeta, url: Option<String>) -> Result<Action, Er
 ///   the thorium-operator user, we also choose not to delete the corresponding thorium-operator-pass
 ///   k8s secret. This will allow future reprovisioning of a new ThoriumCluster using the same DBs without
 ///   manual intervention. If you wipe out the DBs after this operation runs, you will need to manually
-///   delete that secret, otherwise provisioning with that user will fail. Finally, since some resources
+///   delete that secret; otherwise, provisioning with that user will fail. Finally, since some resources
 ///   may remain inside this namespace, we do not delete the namespace from k8s.
 ///
 /// Arguments

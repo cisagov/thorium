@@ -161,7 +161,7 @@ network policies:
 
 A forced network policy is forcibly applied in the Thorium scaler to all tools that are in the
 policy's groups. Forced policies work similarly to base network policies in that they are not
-directly attached to any specific tools and do not appear in an image's info if it wasn't explictly
+directly attached to any specific tools and do not appear in an image's info if it wasn't explicitly
 added to an image.
 
 ### Default Network Policies

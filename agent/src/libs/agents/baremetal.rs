@@ -1,4 +1,4 @@
-//! Implements the Thorium agent for baremetal jobs
+//! Implements the Thorium agent for bare-metal jobs
 
 use crossbeam::channel::Sender;
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ fn isolate<P: AsRef<Path>>(raw: P, id: &str) -> Result<PathBuf, Error> {
 pub struct BareMetal {
     /// A client to Thorium
     pub thorium: Thorium,
-    /// A sender for a chennel of logs to add for this job
+    /// A sender for a channel of logs to add for this job
     pub logs: Sender<String>,
     /// The path to write sample dependencies to
     pub samples_path: PathBuf,
@@ -95,7 +95,7 @@ impl BareMetal {
         let result_files_path = isolate(&target.image.output_collection.files.result_files, &id)?;
         let tags_path = isolate(&target.image.output_collection.files.tags, &id)?;
         let children_path = isolate(&target.image.output_collection.children, &id)?;
-        // build our baremetal object
+        // build our bare-metal object
         let bare_metal = BareMetal {
             thorium: target.thorium.clone(),
             logs,
@@ -131,11 +131,11 @@ impl AgentExecutor for BareMetal {
         (results, result_files)
     }
 
-    /// Setup the environment for executing a single job in Thorium
+    /// Set up the environment for executing a single job in Thorium
     ///
     /// # Arguments
     ///
-    /// * `image` - The Image to setup a job for
+    /// * `image` - The Image to set up a job for
     /// * `job` - The job we are setting up for
     /// * `commits` - The commit that each repo is checked out too
     #[instrument(
@@ -167,7 +167,7 @@ impl AgentExecutor for BareMetal {
         purge!(self.result_files_path);
         purge!(self.tags_path);
         purge!(self.children_path);
-        // setup dependendency base paths that are isolated by job ids
+        // setup dependency base paths that are isolated by job IDs
         std::fs::create_dir_all(&self.samples_path)?;
         std::fs::create_dir_all(&self.ephemerals_path)?;
         std::fs::create_dir_all(&self.repos_path)?;

@@ -272,7 +272,7 @@ impl Scheduler for DryRun {
                         delete: scale_down,
                         error,
                     };
-                    // add this failed dleete
+                    // add this failed delete
                     deletes.push(delete);
                     // skip to the next spawn
                     continue;

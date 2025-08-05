@@ -469,7 +469,7 @@ macro_rules! ldap {
 
 /// Validate that all vectors are disjoint
 ///
-/// passing in two seperate vectors of items will not just uniqueness within a vector while passing
+/// passing in two separate vectors of items will not just uniqueness within a vector while passing
 /// in a vector of vectors will.
 #[doc(hidden)]
 #[macro_export]
@@ -482,7 +482,7 @@ macro_rules! disjoint {
     };
     // make sure a vector of vectors are disjoint
     ($vecs:expr) => {{
-        // if we have less then 200 items then its faster to just naively check each of them
+        // if we have less than 200 items then its faster to just naively check each of them
         let size = $vecs.iter().fold(0, |acc, g| acc + g.len());
         // but the heavier hashmap implementation does
         if size < 200 {
@@ -499,7 +499,7 @@ macro_rules! disjoint {
                     $crate::disjoint!(item, other);
                 }
             }
-        // we have more then 200 total items so insert all iterms into a hashmap and error on dups
+        // we have more than 200 total items so insert all items into a hashmap and error on dups
         } else {
             // build a mapping of what values have been seen in what set/vect
             let mut map: std::collections::HashMap<&String, usize> = HashMap::with_capacity(size);

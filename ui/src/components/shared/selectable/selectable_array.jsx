@@ -24,7 +24,7 @@ const SelectableArray = ({ initialEntries, setEntries, placeholder, disabled, tr
     return availableKeys;
   };
 
-  // needed for create/copy due to placeholder prop being initalized to empty
+  // needed for create/copy due to placeholder prop being initialized to empty
   // during the scope of the setInitialSelectable function passed to useState
   useEffect(() => {
     if (placeholder && Array.isArray(placeholder) && placeholder.length > 0) {

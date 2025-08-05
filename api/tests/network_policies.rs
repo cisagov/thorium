@@ -336,7 +336,7 @@ async fn update_bad() -> Result<(), thorium::Error> {
         .await;
     fail!(resp, 400, "already contains group");
     // try to remove groups from the network policy that it doesn't have
-    let update = NetworkPolicyUpdate::default().remove_group("non-existent-group");
+    let update = NetworkPolicyUpdate::default().remove_group("nonexistent-group");
     let resp = client
         .network_policies
         .update(&req.name, None, &update)
@@ -350,7 +350,7 @@ async fn update_bad() -> Result<(), thorium::Error> {
         .await;
     fail!(resp, 400, "delete all of a network policy's groups");
     // try to add a group to the network policy that doesn't exist
-    let update = NetworkPolicyUpdate::default().add_group("non-existent-group");
+    let update = NetworkPolicyUpdate::default().add_group("nonexistent-group");
     let resp = client
         .network_policies
         .update(&req.name, None, &update)
@@ -719,7 +719,7 @@ async fn list_details_user() -> Result<(), thorium::Error> {
         "group is user's group"
     );
     // make sure none of the allowed groups have more than one group (the user's group)
-    // the user shouldn't be able to see the other groups are allowed, otherwise those groups'
+    // the user shouldn't be able to see the other groups are allowed; otherwise, those groups'
     // existence would be leaked to the user
     for policy in &policies {
         for rule in policy.ingress.iter().flatten() {
@@ -775,7 +775,7 @@ async fn used_by() -> Result<(), thorium::Error> {
     is!(
         network_policy.used_by.get(&group),
         None::<&Vec<String>>,
-        "no admin group in used by"
+        "no admin group in `used by`"
     );
     // remove the network policy from the second image
     let image_update = ImageUpdate::default()

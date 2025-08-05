@@ -84,11 +84,11 @@ impl EventController {
 
     /// Check if any of our tasks have failed
     pub async fn check_tasks(&mut self) -> Result<(), Error> {
-        // check all spawnwed tasks
+        // check all spawned tasks
         for handle in self.handles.iter_mut() {
             // check if this handle has finished
             if handle.is_finished() {
-                // this handle has finish check what happenedi
+                // this handle has finish check what happened
                 // in the future we should respawn just the failed task
                 // but we only have one task so lets just catch fire
                 handle.await??;

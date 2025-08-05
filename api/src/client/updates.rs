@@ -303,7 +303,7 @@ impl Updates {
 ///
 /// # Arguments
 ///
-/// * `path` - The path to openi
+/// * `path` - The path to open
 #[cfg(unix)]
 async fn open_file<P: AsRef<Path>>(path: P) -> Result<File, std::io::Error> {
     // make a file to save the response stream too
@@ -321,7 +321,7 @@ async fn open_file<P: AsRef<Path>>(path: P) -> Result<File, std::io::Error> {
 ///
 /// # Arguments
 ///
-/// * `path` - The path to openi
+/// * `path` - The path to open
 #[cfg(target_os = "windows")]
 async fn open_file<P: AsRef<Path>>(path: P) -> Result<File, std::io::Error> {
     // make a file to save the response stream too

@@ -110,7 +110,7 @@
 //! #   if cart.next_bytes(frozen).unwrap() {
 //! #     // keep processing these bytes until they are finished
 //! #     while cart.process().unwrap() {
-//! #       // if we have more then 5 MiB worth of data then write to disk
+//! #       // if we have more than 5 MiB worth of data then write to disk
 //! #       if cart.ready() >= 5_242_800 {
 //! #           // get the bytes we have ready to write
 //! #           let writable = cart.carted_bytes();
@@ -195,7 +195,7 @@
 //!   if cart.next_bytes(frozen).unwrap() {
 //!     // keep processing these bytes until they are finished
 //!     while cart.process().unwrap() {
-//!       // if we have more then 5 MiB worth of data then write to disk
+//!       // if we have more than 5 MiB worth of data then write to disk
 //!       if cart.ready() >= 5_242_800 {
 //!           // get the bytes we have ready to write
 //!           let writable = cart.carted_bytes();

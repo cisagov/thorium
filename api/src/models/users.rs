@@ -189,7 +189,7 @@ pub struct UserUpdate {
     pub settings: Option<UserSettingsUpdate>,
 }
 
-/// The info to inject about this user on a Unix/Linx system
+/// The info to inject about this user on a Unix/Linux system
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct UnixInfo {
@@ -340,7 +340,7 @@ impl PartialEq<ScrubbedUser> for ScrubbedUser {
         same!(self.email, request.email);
         // make sure the group list is the same
         matches_vec!(self.groups, request.groups);
-        // make sure the token and its expriation are the same
+        // make sure the token and its expiration are the same
         same!(self.token, request.token);
         same!(self.token_expiration, request.token_expiration);
         // make sure our settings are the same
@@ -353,7 +353,7 @@ impl PartialEq<ScrubbedUser> for ScrubbedUser {
     }
 }
 
-/// Response to a sucessful auth
+/// Response to a successful auth
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct AuthResponse {

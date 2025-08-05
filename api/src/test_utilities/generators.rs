@@ -249,7 +249,7 @@ pub fn gen_ext_image(group: &str) -> ImageRequest {
         .description(name + " external image description")
 }
 
-/// Setup a number of random images in a group
+/// Set up a number of random images in a group
 ///
 /// # Arguments
 ///
@@ -347,7 +347,7 @@ pub async fn gen_generator_pipe(group: &str, client: &Thorium) -> Result<Pipelin
     Ok(pipe)
 }
 
-/// Setup a number of random pipelines in a group
+/// Set up a number of random pipelines in a group
 ///
 /// # Arguments
 ///
@@ -429,7 +429,7 @@ pub async fn gen_jobs(
     Ok(())
 }
 
-/// Setup a number of random pipelines and returnn all request data needed
+/// Set up a number of random pipelines and return all request data needed
 ///
 /// # Arguments
 ///
@@ -457,9 +457,9 @@ pub async fn gen_all(
         for image in group_images.iter() {
             client.images.create(image).await?;
         }
-        // create pipelines using these random iamges
+        // create pipelines using these random images
         for _ in 0..cnt {
-            // generate randome pipeline name
+            // generate random pipeline name
             let pipe_name = gen_string(25);
             // get some random images for this pipeline
             let reqs: Vec<&ImageRequest> = group_images.iter().choose_multiple(&mut rng, cnt);
@@ -531,7 +531,7 @@ pub fn gen_reaction(group: &str, pipe: &Pipeline, tag: Option<&str>) -> Reaction
     react_req
 }
 
-/// Setup a number of random reactions in a group for a specific pipeline
+/// Set up a number of random reactions in a group for a specific pipeline
 ///
 /// # Arguments
 ///
@@ -619,7 +619,7 @@ pub fn gen_sample(group: &str) -> SampleRequest {
         ))
 }
 
-/// Setup a number of random samples in a group
+/// Set up a number of random samples in a group
 ///
 /// # Arguments
 ///
@@ -644,7 +644,7 @@ pub async fn samples(
     Ok(reqs)
 }
 
-/// Setup a number of random samples in a group that have the same tag
+/// Set up a number of random samples in a group that have the same tag
 ///
 /// # Arguments
 ///
@@ -731,7 +731,7 @@ pub fn gen_repo(group: &str) -> RepoRequest {
     .tag(gen_string(gen_int!(4, 32)), gen_string(gen_int!(8, 64)))
 }
 
-/// Setup a number of random repos in a group
+/// Set up a number of random repos in a group
 ///
 /// # Arguments
 ///
@@ -752,7 +752,7 @@ pub async fn repos(group: &str, cnt: usize, client: &Thorium) -> Result<Vec<Repo
     Ok(reqs)
 }
 
-/// Setup a number of random repos in a group that have the same tag
+/// Set up a number of random repos in a group that have the same tag
 ///
 /// # Arguments
 ///
@@ -781,7 +781,7 @@ pub async fn repos_tagged(
     Ok((key, value, reqs))
 }
 
-/// Setup a node
+/// Set up a node
 ///
 /// # Arguments
 ///

@@ -107,7 +107,7 @@ async fn get() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // create an pipeline and then get it
+    // create a pipeline and then get it
     let pipeline = generators::gen_pipe(&group, 20, false, &client).await?;
     let resp = client.pipelines.create(&pipeline).await?;
     is!(resp.status().as_u16(), 204);
@@ -519,7 +519,7 @@ async fn create_notification() -> Result<(), Error> {
     let pipe_req = generators::gen_pipe(&group, 20, false, &client).await?;
     // Create a test pipeline
     client.pipelines.create(&pipe_req).await?;
-    // create an pipeline notification
+    // create a pipeline notification
     let req = NotificationRequest::new("Test warning message!", NotificationLevel::Warn);
     client
         .pipelines
@@ -556,7 +556,7 @@ async fn create_notification_bad() -> Result<(), Error> {
         .create_notification(&group, &pipe_req.name, &req, &NotificationParams::default())
         .await;
     fail!(resp, 401);
-    // fail to create an pipeline notification for a pipeline that doesn't exist
+    // fail to create a pipeline notification for a pipeline that doesn't exist
     let resp = client
         .pipelines
         .create_notification(
@@ -614,7 +614,7 @@ async fn delete_notification_bad() -> Result<(), Error> {
     let user_client = generators::client(&client).await?;
     // Create a group
     let group = generators::groups(1, &user_client).await?.remove(0).name;
-    // setup a random pipeline
+    // set up a random pipeline
     let pipe_req = generators::pipelines(&group, 1, false, &user_client)
         .await?
         .remove(0);
@@ -630,19 +630,19 @@ async fn delete_notification_bad() -> Result<(), Error> {
         .get_notifications(&group, &pipe_req.name)
         .await?
         .remove(0);
-    // fail to delete an pipeline notification as a regular user
+    // fail to delete a pipeline notification as a regular user
     let resp = user_client
         .pipelines
         .delete_notification(&group, &pipe_req.name, &notification.id)
         .await;
     fail!(resp, 401);
-    // fail to delete an pipeline notification for an pipeline that doesn't exist
+    // fail to delete a pipeline notification for a pipeline that doesn't exist
     let resp = client
         .pipelines
         .delete_notification(&group, "no-exists", &notification.id)
         .await;
     fail!(resp, 404);
-    // fail to delete an pipeline notification that doesn't exist
+    // fail to delete a pipeline notification that doesn't exist
     let resp = client
         .pipelines
         .delete_notification(&group, &pipe_req.name, &Uuid::new_v4())

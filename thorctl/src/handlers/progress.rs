@@ -285,7 +285,7 @@ impl Bar {
     pub fn refresh<M: Into<Cow<'static, str>>>(&self, msg: M, kind: BarKind) {
         // reset any progress in this bar
         self.bar.reset();
-        // resetup our bar
+        // re-setup our bar
         kind.setup(&self.name, &self.bar);
         // set our new message
         self.bar.set_message(msg);

@@ -366,7 +366,7 @@ async fn list() -> Result<(), thorium::Error> {
     let opts = FileListOpts::default().groups(vec![&group]);
     // list the 20 files we just created
     let cursor = client.files.list(&opts).await?;
-    // build the a list of hashes for the files we created
+    // build a list of hashes for the files we created
     let (_, sha256s, _) = get_hashes(&reqs);
     // make sure we listed our sha256s
     for item in &cursor.data {
@@ -389,7 +389,7 @@ async fn list_details() -> Result<(), thorium::Error> {
     let opts = FileListOpts::default().groups(vec![&group]);
     // list the 20 files we just created
     let cursor = client.files.list_details(&opts).await?;
-    // build the a list of hashes for the files we created
+    // build a list of hashes for the files we created
     let (sha1s, sha256s, md5s) = get_hashes(&reqs);
     // make sure our hashes were correctly set
     for item in &cursor.data {
@@ -416,7 +416,7 @@ async fn list_tag() -> Result<(), thorium::Error> {
     let opts = FileListOpts::default().groups(vec![&group]).tag(key, value);
     // list the 20 files we just created
     let cursor = client.files.list(&opts).await?;
-    // build the a list of hashes for the files we created
+    // build a list of hashes for the files we created
     let (_, sha256s, _) = get_hashes(&reqs);
     // make sure we listed our sha256s
     for item in cursor.data {
@@ -437,7 +437,7 @@ async fn list_tag_details() -> Result<(), thorium::Error> {
     let opts = FileListOpts::default().groups(vec![&group]).tag(key, value);
     // list the 20 files we just created
     let cursor = client.files.list_details(&opts).await?;
-    // build the a list of hashes for the files we created
+    // build a list of hashes for the files we created
     let (sha1s, sha256s, md5s) = get_hashes(&reqs);
     // make sure our hashes were correctly set
     for item in &cursor.data {
@@ -661,7 +661,7 @@ async fn delete_comment_fail() -> Result<(), thorium::Error> {
         .buffer(Buffer::new("I am an attachment"));
     // comment on this file
     let resp = client.files.comment(comment_req.clone()).await?;
-    // try to delete a non-existent comment
+    // try to delete a nonexistent comment
     let del_result = client
         .files
         .delete_comment(
@@ -1209,7 +1209,7 @@ async fn delete_from_group() -> Result<(), thorium::Error> {
     // attempt to delete from groups that all do not have access
     let result = client.files.delete(&resp.sha256, &resp.id, &del_opts).await;
     fail!(result, 404);
-    // attempt to delete from non-existent groups
+    // attempt to delete from nonexistent groups
     let fake_groups = vec!["fake".to_owned(), "groups".to_owned()];
     let fake_del_opts = FileDeleteOpts::default().groups(fake_groups);
     let result = client

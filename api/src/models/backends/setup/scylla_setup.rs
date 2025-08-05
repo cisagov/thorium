@@ -37,7 +37,7 @@ use tags::TagsPreparedStatements;
 
 use crate::{setup, Conf};
 
-/// The diffferent groups of prepared statements for scylla
+/// The different groups of prepared statements for scylla
 pub struct ScyllaPreparedStatements {
     /// The comments related prepared statements
     pub comments: CommentsPreparedStatements,
@@ -73,7 +73,7 @@ impl ScyllaPreparedStatements {
     /// * `session` - A scylla session
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup our preapred statements
+        // setup our prepared statements
         let comments = CommentsPreparedStatements::new(session, config).await;
         let commitishes = CommitishesPreparedStatements::new(session, config).await;
         let events = EventsPreparedStatements::new(session, config).await;
@@ -104,7 +104,7 @@ impl ScyllaPreparedStatements {
     }
 }
 
-/// The scylla client and prepared statments
+/// The scylla client and prepared statements
 pub struct Scylla {
     /// The scylla session object
     pub session: Session,
@@ -202,7 +202,7 @@ pub async fn new_session(config: &Conf) -> Session {
         .expect("Failed to build scylla session")
 }
 
-/// Setup a keyspace for Thorium
+/// Set up a keyspace for Thorium
 ///
 /// # Arguments
 ///

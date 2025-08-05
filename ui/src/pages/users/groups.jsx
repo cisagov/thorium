@@ -55,7 +55,7 @@ const Groups = () => {
     const role = getGroupRole(group, userInfo.username);
     const roleAction = {};
 
-    // Owners can not leave a group, neither can admins which don't have a group role
+    // Owners cannot leave a group, neither can admins which don't have a group role
     if (role && role != 'Owner') {
       // && role != ''
       roleAction[String(role.toLowerCase() + 's')] = {
@@ -447,7 +447,7 @@ const Groups = () => {
 
     // see if user should be able to edit group
     // thorium admins and group owners/managers can edit group membership
-    // a user can not remove themselves from the group if they are an owner
+    // a user cannot remove themselves from the group if they are an owner
     const groupAdmin = isGroupAdmin(group, userInfo);
 
     // update the changes to groups structure for eventual
@@ -1030,7 +1030,7 @@ const Groups = () => {
                 </center>
               )}
               <Form.Text className="text-muted">
-                {`Group descriptions should explain a group's indended membership and owned
+                {`Group descriptions should explain a group's intended membership and owned
                 resources.`}
               </Form.Text>
             </Form.Group>

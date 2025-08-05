@@ -184,7 +184,7 @@ pub async fn restore(pipelines: &[Pipeline], shared: &Shared) -> Result<(), ApiE
 ///
 /// # Arguments
 ///
-/// * `group` - The group the pipeline is in
+/// * `group` - The group containing the pipeline
 /// * `name` - The name of the pipeline to check
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::pipelines::get", skip(shared), err(Debug))]
@@ -352,7 +352,7 @@ pub async fn delete_all(
 /// Checks if a pipeline exists in the Redis backend after authentication
 ///
 /// Requiring a reference to a Group object obtained after authorization
-/// decreases the likelyhood of prematurely checking for the existence of
+/// decreases the likelihood of prematurely checking for the existence of
 /// the pipeline and leaking information to an unauthorized user
 ///
 /// # Arguments
@@ -431,7 +431,7 @@ pub async fn status(
         for user in users.iter() {
             // get the total count
             let total = raw[i].0 + raw[i].1 + raw[i].2 + raw[i].3 + raw[i].4;
-            // if total is greater then 0 then insert this stage/user stats
+            // if total is greater than 0 then insert this stage/user stats
             if total > 0 {
                 // build this users stage status object
                 let stage_status = StageStats {

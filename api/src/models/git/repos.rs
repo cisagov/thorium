@@ -205,7 +205,7 @@ pub struct RepoSubmission {
     pub creator: String,
     /// When this repo was added to Thorium
     pub uploaded: DateTime<Utc>,
-    // The scheme to use when cloning thixys repo
+    // The scheme to use when cloning this repo
     pub scheme: RepoScheme,
     /// The default checkout behavior for this repo
     pub default_checkout: Option<RepoCheckout>,
@@ -565,7 +565,7 @@ impl OutputSupport for Repo {
     ///
     /// # Arguments
     ///
-    /// * `user` - The use rthat is validating this object is in some groups
+    /// * `user` - The user that is validating this object is in some groups
     /// * `groups` - The user specified groups to check against
     /// * `shared` - Shared objects in Thorium
     #[cfg(feature = "api")]
@@ -586,7 +586,7 @@ impl OutputSupport for Repo {
     ///
     /// # Arguments
     ///
-    /// * `user` - The use rthat is validating this object is in some groups
+    /// * `user` - The user that is validating this object is in some groups
     /// * `groups` - The user specified groups to check against
     /// * `shared` - Shared objects in Thorium
     #[cfg(feature = "api")]
@@ -610,7 +610,7 @@ impl OutputSupport for Repo {
 
 impl From<RepoSubmission> for Repo {
     fn from(sub: RepoSubmission) -> Self {
-        // build repo with just curent submission
+        // build repo with just current submission
         let mut repo = Repo {
             provider: sub.provider.clone(),
             user: sub.user.clone(),
@@ -820,7 +820,7 @@ cfg_if::cfg_if! {
             ///
             /// # Arguments
             ///
-            /// * `preferred` - The branches we would prefer to checkout if they exist in priorized order
+            /// * `preferred` - The branches we would prefer to checkout if they exist in prioritized order
             ///
             /// # Panics
             ///
@@ -830,9 +830,9 @@ cfg_if::cfg_if! {
                 let repo = gix::open(&self.path)?;
                 // get an iterator over this repos references
                 let refs = repo.references()?;
-                // build a map of all branche and their last updated timestamp
+                // build a map of all branches and their last updated timestamp
                 let mut branch_map = BTreeMap::default();
-                // keep track of the preferred banches that we find
+                // keep track of the preferred branches that we find
                 let mut found_pref = Vec::with_capacity(preferred.len() - 1);
                 // crawl over all branches and find the most likely default branch
                 for info in refs.remote_branches()? {
@@ -997,7 +997,7 @@ pub struct RepoListLine {
     pub uploaded: DateTime<Utc>,
 }
 
-/// A request for a specic repo/commit to be downloaded executing a job
+/// A request for a specific repo/commit to be downloaded executing a job
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct RepoDependencyRequest {
@@ -1050,7 +1050,7 @@ impl RepoDependencyRequest {
     }
 }
 
-/// A specic repo/commit to download before executing a job
+/// A specific repo/commit to download before executing a job
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -1248,7 +1248,7 @@ impl RepoListParams {
             None => match Utc.timestamp_opt(shared.config.thorium.repos.earliest, 0) {
                 chrono::LocalResult::Single(default_end) => Ok(default_end),
                 _ => crate::internal_err!(format!(
-                    "default earliest repos timestamp is invalid or ambigous - {}",
+                    "default earliest repos timestamp is invalid or ambiguous - {}",
                     shared.config.thorium.repos.earliest
                 )),
             },

@@ -13,7 +13,7 @@ pub trait Worker: Send + 'static {
     /// The cmd part of args for this specific worker
     type Cmd: Clone + Send;
 
-    /// The type of jobs to recieve
+    /// The type of jobs to receive
     type Job: Send;
 
     /// The global monitor to use

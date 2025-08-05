@@ -273,7 +273,7 @@ async fn get_stats(
     Path(group): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<GroupStats>, ApiError> {
-    // get the grou we are getting pipeline statuses for
+    // get the group we are getting pipeline statuses for
     let group = Group::get(&user, &group, &state.shared).await?;
     // get the status object for this group
     let status = group

@@ -53,7 +53,7 @@ fn get_resources(node: &Node) -> Result<Resources, Error> {
 pub struct Nodes {
     /// API client for node commands in k8s
     api: Api<Node>,
-    /// Wrapper for pod comamnds in k8s
+    /// Wrapper for pod commands in k8s
     pods: Pods,
 }
 

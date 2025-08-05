@@ -83,7 +83,7 @@ async fn clear(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Eeset all in flight events
+/// Reset all in flight events
 ///
 /// # Arguments
 //
@@ -123,7 +123,7 @@ async fn reset_all(
     get,
     path = "/api/events/cache/status/",
     params(
-        ("params" = EventCacheStatusOpts, Query, description = "Whether to reset any cahce statuses")
+        ("params" = EventCacheStatusOpts, Query, description = "Whether to reset any cache statuses")
     ),
     responses(
         (status = 200, description = "Event handler cache status", body = EventCacheStatus),

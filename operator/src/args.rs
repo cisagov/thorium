@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser, Debug, Clone)]
 #[clap(version, author)]
 pub struct Args {
-    /// The sub command for to execute
+    /// The sub command to execute
     #[clap(subcommand)]
     pub cmd: SubCommands,
 }

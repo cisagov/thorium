@@ -282,7 +282,7 @@ async fn runtimes_update(
 ///
 /// * `user` - The user sending the request
 /// * `group` - The group the image is in
-/// * `image` - The name of the image the notification will be created for
+/// * `image` - The name of the image for which the notification will be created
 /// * `state` - Shared Thorium objects
 /// * `params` - The notification params sent with the request
 /// * `req` - The notification request that was sent
@@ -291,7 +291,7 @@ async fn runtimes_update(
     path = "/api/images/notifications/:group/:image",
     params(
         ("group" = String, Path, description = "The group the image is in"),
-        ("image" = String, Path, description = "The name of the image the notification will be created for"),
+        ("image" = String, Path, description = "The name of the image for which the notification will be created"),
         ("params" = NotificationParams, description = "The notification params sent with the request"),
         ("req" = NotificationRequest<Image>, description = "The notification request that was sent")
     ),

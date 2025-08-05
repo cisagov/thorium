@@ -1,4 +1,4 @@
-//! Setup the correct cgroups for a specific image
+//! Set up the correct cgroups for a specific image
 use cgroups_rs::cpu::CpuController;
 use cgroups_rs::memory::MemController;
 use cgroups_rs::Controller;
@@ -30,7 +30,7 @@ impl Cgroup {
         Ok(Cgroup { cgroup })
     }
 
-    /// Trys to load an existing control group
+    /// Tries to load an existing control group
     pub fn load(name: &str) -> Self {
         //get a handle to the cgroup hierarchy
         let hierarchy = cgroups_rs::hierarchies::auto();

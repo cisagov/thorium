@@ -240,7 +240,7 @@ async fn update() -> Result<(), thorium::Error> {
     // make sure our users all have this group now
     // this only checks the user roles but it should be accurate for all roles
     for user in &users {
-        // get this users users data
+        // get this user's data
         let user_data = client.users.get(user).await?;
         // make sure they are now members
         is_in!(user_data.groups, group);

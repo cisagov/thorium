@@ -11,7 +11,7 @@ default = []
 # support kvm based builds
 kvm = ["virt"]
 
-# Force openssl-sys to staticly link in the openssl library. Necessary when
+# Force openssl-sys to statically link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
 vendored-openssl = ["openssl/vendored"]
 

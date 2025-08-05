@@ -33,7 +33,7 @@ impl ReactionKeys {
         let logs = Self::logs(&reaction.group, &reaction.id, shared);
         // build key to reaction set
         let set = Self::set(&reaction.group, &reaction.pipeline, shared);
-        // buid key to jobs in this reaction
+        // build key to jobs in this reaction
         let jobs = Self::jobs(&reaction.group, &reaction.id, shared);
         // build key to the sorted set of reactions for this group
         let group_set = Self::group_set(&reaction.group, &reaction.status, shared);

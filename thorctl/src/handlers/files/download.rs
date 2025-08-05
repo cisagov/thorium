@@ -319,7 +319,7 @@ impl FilesDownloadWorker {
         }
     }
 
-    /// Setup the paths for downloading this file based on this submission chunk
+    /// Set up the paths for downloading this file based on this submission chunk
     async fn setup_organization(&self, sample: &mut Sample) -> Result<PathBuf, Error> {
         // get the path to write this file too based on our args
         match self.cmd.organization {
@@ -369,7 +369,7 @@ impl Worker for FilesDownloadWorker {
     /// The cmd part of args for this specific worker
     type Cmd = DownloadFiles;
 
-    /// The type of jobs to recieve
+    /// The type of jobs to receive
     type Job = String;
 
     /// The global monitor to use
@@ -421,7 +421,7 @@ impl Worker for FilesDownloadWorker {
         check!(self.bar, self.download(&sample, &output).await);
         // if this file needs to be copied to other paths on disk then do that
         if self.cmd.organization.may_copy() {
-            // iterato over the other submissions and copy them to the required positions
+            // iterate over the other submissions and copy them to the required positions
             while !sample.submissions.is_empty() {
                 // create the required organization structure for downloading this file
                 let target = check!(self.bar, self.setup_organization(&mut sample).await);

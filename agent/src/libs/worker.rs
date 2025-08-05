@@ -65,7 +65,7 @@ impl Worker {
             // start our update needed span
             event!(
                 Level::INFO,
-                update_neede = true,
+                update_needed = true,
                 current = current,
                 new = version.thorium.to_string()
             );

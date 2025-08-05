@@ -101,7 +101,7 @@ pub async fn get_all<N: NotificationSupport>(
     let mut notifs = Vec::with_capacity(query_rows.rows_num());
     // build our notifications
     for row in rows {
-        // try to deserialie this row
+        // try to deserialize this row
         let (key, created, id, msg, level, ban_id) = row?;
         // build this notification and add it to our list
         notifs.push(Notification {

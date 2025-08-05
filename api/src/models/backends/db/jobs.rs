@@ -45,7 +45,7 @@ macro_rules! status_queue {
 ///
 /// # Arguments
 ///
-/// * `pipe` - The Redis [`redis::Pipeline`] to build ontop of
+/// * `pipe` - The Redis [`redis::Pipeline`] to build on top of
 /// * `job` - The job object to add to redis
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
@@ -139,7 +139,7 @@ pub async fn get(id: &Uuid, shared: &Shared) -> Result<RawJob, ApiError> {
 ///
 /// # Arguments
 ///
-/// * `ids` - The ids of the job to get the scalers for
+/// * `ids` - The IDs of the job to get the scalers for
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::jobs::get_scalers", skip_all, fields(ids_len = ids.len()), err(Debug))]
 pub async fn get_scalers(
@@ -171,7 +171,7 @@ pub async fn get_scalers(
                         // log that we failed to deserialize scaler
                         event!(
                             Level::ERROR,
-                            msg = "Failed to desrialize scaler",
+                            msg = "Failed to deserialize scaler",
                             job = job.to_string(),
                             scaler,
                             error = error.to_string()
@@ -500,11 +500,11 @@ pub async fn sleep(
 ) -> Result<JobHandleStatus, ApiError> {
     // error on already completed jobs
     if job.status != JobStatus::Running {
-        return conflict!(format!("job {} must be runnig to sleep", &job.id));
+        return conflict!(format!("job {} must be running to sleep", &job.id));
     }
     // build key to this jobs data
     let key = JobKeys::data(&job.id, shared);
-    // updat this jobs status to be Sleeping
+    // update this jobs status to be Sleeping
     let mut pipe = redis::pipe();
     pipe.cmd("hset").arg(&key).arg("status").arg(serialize!(&JobStatus::Sleeping));
     // inject in this jobs new checkpoint arg
@@ -567,7 +567,7 @@ pub async fn proceed(
     let mut pipe = redis::pipe();
     // add running job specific commands if our status is running
     if job.status == JobStatus::Running {
-        // inrement progress for this reactions current stage
+        // increment progress for this reactions current stage
         pipe.cmd("hincrby").arg(&reaction_data).arg("current_stage_progress").arg(1)
             // get this reactions current stage length
             .cmd("hget").arg(&reaction_data).arg("current_stage_length")
@@ -618,7 +618,7 @@ pub async fn proceed(
         // check if we should proceed or not
         progress.0 >= progress.1
     } else {
-        // exceute our query
+        // execute our query
         let _: () = pipe.atomic().query_async(conn!(shared)).await?;
         // check if we should proceed or not
         job.status == JobStatus::Sleeping
@@ -690,7 +690,7 @@ pub async fn error<'a>(
 
     // if this job is a generator then remove it from this reactions generators
     if job.generator {
-        // build key to this reactions genrator set
+        // build key to this reactions generator set
         let gen_key = ReactionKeys::generators(&job.group, &job.reaction, shared);
         pipe.cmd("srem").arg(gen_key).arg(&job.id.to_string());
     }
@@ -745,7 +745,7 @@ pub async fn find_in_running(stream: &str, uuids: &HashSet<&Uuid>, shared: &Shar
                 }
             }
         }
-        // if less then 10k items are returned then this stream has been exhuasted
+        // if less than 10k items are returned then this stream has been exhausted
         if chunk_len < 10_000 {
             break 'outer;
         }
@@ -785,7 +785,7 @@ pub async fn bulk_reset(
     for job in &jobs.details {
         // cast the id for this job to a string
         let job_id = job.id.to_string();
-        // log that we are reseting this job
+        // log that we are resetting this job
         event!(Level::INFO, job=&job_id, old_status=job.status.to_string());
         // build the status queues keys for non external jobs
         let src = JobKeys::status_queue(&job.group, &job.pipeline, &job.stage, &job.creator, &job.status, shared);
@@ -852,7 +852,7 @@ pub async fn bulk_reset(
     Ok(())
 }
 
-/// Gets details on a list of job ids
+/// Gets details on a list of job IDs
 ///
 /// # Arguments
 ///

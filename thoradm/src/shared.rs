@@ -1,4 +1,4 @@
-//! The shared utilties across thoradm
+//! The shared utilities across thoradm
 
 pub mod monitor;
 pub mod redis;

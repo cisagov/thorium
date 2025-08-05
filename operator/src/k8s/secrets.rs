@@ -183,7 +183,7 @@ pub async fn create_keys(
 /// Create a user password secret
 ///
 /// User password secrets are created when creating a new Thorium user. This helps
-/// the operator track the authentication information for it's admin user account as
+/// the operator track the authentication information for its admin user account as
 /// well as any additional users needed for Thorium operation. If the thorium-operator
 /// account password secret is lost, external action will need to be taken to delete
 /// that user account.

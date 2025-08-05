@@ -50,7 +50,7 @@ impl Reactions {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// A blocking Reactions handler for the Thorium client
@@ -732,7 +732,7 @@ impl Reactions {
         Cursor::new(url, &self.token, &self.client)
     }
 
-    /// Lists sub[`Reaction`] ids for a parent reaction
+    /// Lists sub[`Reaction`] IDs for a parent reaction
     ///
     /// # Arguments
     ///
@@ -751,7 +751,7 @@ impl Reactions {
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
     /// // in a real use case this would be an actual reaction uuid
     /// let reaction = Uuid::new_v4();
-    /// // list up to 50 sub reaction ids from Thorium (limit is weakly enforced)
+    /// // list up to 50 sub reaction IDs from Thorium (limit is weakly enforced)
     /// let reactions = thorium.reactions.list_sub("Corn", &reaction).limit(50).next().await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
@@ -776,7 +776,7 @@ impl Reactions {
         Cursor::new(url, &self.token, &self.client)
     }
 
-    /// Lists sub[`Reaction`] ids for a parent reaction
+    /// Lists sub[`Reaction`] IDs for a parent reaction
     ///
     /// # Arguments
     ///
@@ -795,7 +795,7 @@ impl Reactions {
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
     /// // in a real use case this would be an actual reaction uuid
     /// let reaction = Uuid::new_v4();
-    /// // list up to 50 sub reaction ids from Thorium (limit is weakly enforced)
+    /// // list up to 50 sub reaction IDs from Thorium (limit is weakly enforced)
     /// let reactions = thorium.reactions.list_sub_status("Corn", &reaction, &ReactionStatus::Created)
     ///     .limit(50)
     ///     .next()
@@ -942,7 +942,7 @@ impl Reactions {
     /// # Arguments
     ///
     /// * `group` - The group this reaction is from
-    /// * `id` - The reaction to downlad an ephemeral file for
+    /// * `id` - The reaction to download an ephemeral file for
     /// * `name` - The name of the ephemeral file to download
     ///
     /// # Examples
@@ -955,7 +955,7 @@ impl Reactions {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // download an ephermal file from this reaction
+    /// // download an ephemeral file from this reaction
     /// let reaction = Uuid::parse_str("e0ca2720-50e0-4103-a412-344bbb714240")?;
     /// let file = thorium.reactions.download_ephemeral("Corn", &reaction, "file.txt").await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up

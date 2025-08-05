@@ -1,6 +1,6 @@
 use clap::Parser;
 
-/// The command line args passed to the Thorum API
+/// The command line args passed to the Thorium API
 #[derive(Parser, Debug)]
 #[clap(version, author)]
 pub struct Args {

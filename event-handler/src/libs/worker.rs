@@ -135,7 +135,7 @@ impl EventWorker {
             if !found.is_empty() {
                 filtered.confirmed.push((event_id, found));
             }
-            // add this to our cleared ids list
+            // add this to our cleared IDs list
             filtered.clears.push(event_id);
         }
     }
@@ -179,7 +179,7 @@ impl EventWorker {
                 let req = match &event.data {
                     EventData::NewSample { sample, .. } => req.sample(sample),
                     EventData::NewTags { tag_type, item, .. } => {
-                        // add either a sample dependency or repo dependency basd on tag type
+                        // add either a sample dependency or repo dependency based on tag type
                         match tag_type {
                             TagType::Files => req.sample(item),
                             TagType::Repos => req.repo(RepoDependencyRequest::new(item)),
@@ -200,7 +200,7 @@ impl EventWorker {
         for (username, resp) in &creates {
             // log the reactions we created
             event!(Level::INFO, username, created = resp.created.len());
-            // if any errors occured then log those
+            // if any errors occurred then log those
             for (_, error) in &resp.errors {
                 event!(Level::ERROR, username, error);
             }
@@ -218,7 +218,7 @@ impl EventWorker {
     /// * `filtered` - The events that were filtered in this loop
     #[instrument(name = "EventWorker::clear", skip_all, fields(clears = filtered.clears.len()), err(Debug))]
     async fn clear<'a>(&self, filtered: FilteredEvents<'a>) -> Result<(), Error> {
-        // build the list of event ids to clear
+        // build the list of event IDs to clear
         let mut event_ids = EventIds::from(filtered.clears);
         // add anything still in the potential list
         event_ids
@@ -324,7 +324,7 @@ impl EventWorker {
         // create a data cache object
         let mut data_cache = DataCache::default();
         let mut event_cache = HashMap::with_capacity(1000);
-        // resest any tasks from a previous worker
+        // reset any tasks from a previous worker
         self.thorium.events.reset_all(self.kind).await?;
         // keep looping and handling results
         loop {

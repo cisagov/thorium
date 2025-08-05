@@ -107,7 +107,7 @@ pub async fn delete_node_labels(meta: &ClusterMeta) -> Result<(), Error> {
 /// Cleanup node provision pods
 ///
 /// This deletes node provision pods as part of a ThoriumCluster cleanup. Each node that that
-/// is used by Thorium to schedule reactions will have have a pod run on it to configure host
+/// is used by Thorium to schedule reactions will have a pod run on it to configure host
 /// paths such as /opt/thorium. This method cleans up any pods that have run to provision host
 /// paths.
 ///

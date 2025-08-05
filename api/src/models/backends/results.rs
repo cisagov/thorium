@@ -85,7 +85,7 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
     /// # Arguments
     ///
     /// * `user` - The user that is adding new results
-    /// * `upload` - The mutlipart form containing our results
+    /// * `upload` - The multipart form containing our results
     /// * `form` - The results form to add our multipart entries too
     /// * `shared` - Shared objects in Thorium
     #[instrument(
@@ -154,7 +154,7 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
     /// * `user` - The user that is adding new results
     /// * `kind` - The kind of data we are saving results for
     /// * `key` - The key for the data we are saving results for
-    /// * `upload` - The mutlipart form containing our results
+    /// * `upload` - The multipart form containing our results
     /// * `shared` - Shared objects in Thorium
     #[instrument(
         name = "OutputForm::create_results",
@@ -290,7 +290,7 @@ impl Output {
     ) -> Result<ByteStream, ApiError> {
         // make sure that this user has access to this repo or sample
         kind.authorize(user, key, shared).await?;
-        // authorize this user has access to this result id if we are not an admin
+        // authorize this user has access to this result ID if we are not an admin
         if !user.is_admin() {
             // we are not an admin so make sure we can see this result
             db::results::authorize(kind, &user.groups, key, tool, result_id, shared).await?;
@@ -445,7 +445,7 @@ where
             // try to deserialize our query string
             Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
         } else {
-            bad!("result file query paramter required but was not given".to_string())
+            bad!("result file query parameter required but was not given".to_string())
         }
     }
 }

@@ -87,8 +87,8 @@ pub struct DownloadWorker {
 }
 
 impl DownloadWorker {
-    /// Setup the paths for this repo download based on user provided args
-    async fn setup_organiation(&self, target: &RepoTarget) -> Result<PathBuf, Error> {
+    /// Set up the paths for this repo download based on user provided args
+    async fn setup_organization(&self, target: &RepoTarget) -> Result<PathBuf, Error> {
         // setup any folders needed for the desired organizational structure
         match self.cmd.organization {
             RepoDownloadOrganization::Simple => {
@@ -170,7 +170,7 @@ impl DownloadWorker {
             prune_file!(&mut base, ".gitlab-ci.yml");
             prune_file!(&mut base, ".gitmodules");
             prune_file!(&mut base, ".gitattributes");
-            // check for emtpy dirs
+            // check for empty dirs
             check_empty_dirs = true;
         }
         // crawl over all files and remove any that are not wanted
@@ -187,7 +187,7 @@ impl DownloadWorker {
                     tokio::fs::remove_file(&entry.path()).await?;
                 }
             }
-            // check for emtpy dirs
+            // check for empty dirs
             check_empty_dirs = true;
         }
         // if needed check and delete any empty dirs
@@ -339,7 +339,7 @@ impl Worker for DownloadWorker {
     /// The cmd part of args for this specific worker
     type Cmd = DownloadRepos;
 
-    /// The type of jobs to recieve
+    /// The type of jobs to receive
     type Job = RepoTarget;
 
     /// The global monitor to use
@@ -388,8 +388,8 @@ impl Worker for DownloadWorker {
         self.bar.rename(job.url.clone());
         // set that we are tarring this repository
         self.bar.refresh("", BarKind::UnboundIO);
-        // setup any organizational structure
-        let output = match self.setup_organiation(&job).await {
+        // set up any organizational structure
+        let output = match self.setup_organization(&job).await {
             Ok(output) => output,
             Err(error) => {
                 // log this error

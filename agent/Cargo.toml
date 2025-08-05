@@ -47,6 +47,6 @@ thorium = { version = "1.1.0", path="../api", default-features = false, features
 
 
 [features]
-# Force openssl-sys to staticly link in the openssl library. Necessary when
+# Force openssl-sys to statically link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
 vendored-openssl = ["openssl/vendored"]

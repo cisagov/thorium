@@ -173,7 +173,7 @@ impl Stream {
         end: i64,
         shared: &Shared,
     ) -> Result<StreamDepth, ApiError> {
-        // get depth of stream from Backendd
+        // get depth of stream from Backend
         db::streams::depth(&group.name, namespace, stream, start, end, shared).await
     }
 
@@ -199,9 +199,9 @@ impl Stream {
         split: i64,
         shared: &Shared,
     ) -> Result<Vec<StreamDepth>, ApiError> {
-        // throw an error if we try to retrieve more then 10000 depths
+        // throw an error if we try to retrieve more than 10000 depths
         if at_least!((end - start) / 10, 1) / split > 10_000 {
-            return bad!("cannot retrieve more then 10,000 depths at once".to_owned());
+            return bad!("cannot retrieve more than 10,000 depths at once".to_owned());
         }
 
         // get depths from correct backend
@@ -347,7 +347,7 @@ impl Stream {
         let distant_future = chrono::DateTime::parse_from_rfc3339("9999-07-01T00:00:00-00:00")?
             .with_timezone(&Utc)
             .timestamp();
-        // see how many jobs actaully exist
+        // see how many jobs actually exist
         let total = Self::depth(&group, namespace, stream, past, distant_future, shared).await?;
         // short circuit if no jobs
         if total.depth == 0 {
@@ -355,7 +355,7 @@ impl Stream {
         }
 
         // choose the right mapper based on job count
-        // just map all the jobs if less then 10k
+        // just map all the jobs if less than 10k
         if total.depth < 10_000 {
             let earliest = Self::earliest(&group, namespace, stream, shared).await?;
             let map = Self::mapper(

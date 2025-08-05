@@ -75,7 +75,7 @@ impl<O: OutputSupport> Default for OutputFormBuilder<O> {
 #[derive(Serialize, Deserialize, Debug, DeserializeRow)]
 #[scylla(flavor = "enforce_order", skip_name_checks)]
 pub struct OutputIdRow {
-    /// The id for the result this Id row is tied to
+    /// The id for the result this ID row is tied to
     pub id: Uuid,
     /// The tool or pipeline this result comes from
     pub tool: String,
@@ -92,7 +92,7 @@ pub struct OutputIdRow {
 /// A row from scylla containing a single id + group for a result from a tool
 #[derive(Serialize, Deserialize, Debug)]
 pub struct OutputId {
-    /// The id for the result this Id row is tied to
+    /// The id for the result this ID row is tied to
     pub id: Uuid,
     /// The tool or pipeline this result comes from
     pub tool: String,

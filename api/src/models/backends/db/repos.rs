@@ -352,7 +352,7 @@ pub async fn authorize(
     repos: &Vec<String>,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // if we specified no groups then we do not have acess to this repo
+    // if we specified no groups then we do not have access to this repo
     if groups.is_empty() {
         return unauthorized!();
     }
@@ -418,7 +418,7 @@ async fn get_base(
 ) -> Result<Option<Repo>, ApiError> {
     // build a btree to sort our submissions
     let mut sorted: BTreeMap<DateTime<Utc>, Vec<RepoSubmission>> = BTreeMap::default();
-    // if we have more then 100 groups then chunk it into bathes of 100  otherwise just get our info
+    // if we have more than 100 groups then chunk it into bathes of 100  otherwise just get our info
     if groups.len() > 100 {
         // break our groups into chunks of 100
         for chunk in groups.chunks(100) {
@@ -434,7 +434,7 @@ async fn get_base(
             let query_rows = query.into_rows_result()?;
             // set the type for the rows returned by this query
             let typed_iter = query_rows.rows::<RepoRow>()?;
-            // cast our rows into submisison objects and add them to our btree
+            // cast our rows into submission objects and add them to our btree
             typed_iter
                 .filter_map(|res| log_scylla_err!(res))
                 .for_each(|sub| {
@@ -463,7 +463,7 @@ async fn get_base(
         let query_rows = query.into_rows_result()?;
         // set the type for the rows returned by this query
         let typed_iter = query_rows.rows::<RepoRow>()?;
-        // cast our rows into submisison objects and add them to our btree
+        // cast our rows into submission objects and add them to our btree
         typed_iter
             .filter_map(|res| log_scylla_err!(res))
             .for_each(|sub| {
@@ -624,7 +624,7 @@ pub async fn upload(repo: &str, sha256: &str, shared: &Shared) -> Result<(), Api
 async fn delete_repo_data(repo: &str, hash: &str, shared: &Shared) -> Result<(), ApiError> {
     // delete this object from s3
     shared.s3.repos.delete(hash).await?;
-    // detele this repos data from scylla
+    // delete this repos data from scylla
     shared
         .scylla
         .session
@@ -858,7 +858,7 @@ async fn commitish_details_helper(
     let kind = commitish.kind();
     let key = commitish.key();
     let groups = commitish.groups();
-    // query scylla for this comittishes data
+    // query scylla for this commitishes data
     let query = shared
         .scylla
         .session
@@ -899,7 +899,7 @@ pub async fn commitish_details(
 ) -> Result<Vec<CommitishDetails>, ApiError> {
     // log the number of commits we are getting details for
     event!(Level::INFO, commits = list.len());
-    // build an a details list for our samples
+    // build a details list for our samples
     let mut details: Vec<CommitishDetails> = Vec::with_capacity(list.len());
     // get the commitish details for each of our commitishes
     let mut details_stream = stream::iter(list)
@@ -932,7 +932,7 @@ pub async fn commitish_exists(
     commit: &str,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // if we have more then 100 groups then break them into chunks of 50
+    // if we have more than 100 groups then break them into chunks of 50
     if groups.len() > 100 {
         // cast our hashset to a vector so we can chunk it up
         let group_cast = groups.iter().map(|name| *name).collect::<Vec<&String>>();
@@ -1054,7 +1054,7 @@ async fn is_ambiguous(
             Some(previous_kind) => {
                 if *previous_kind != first_kind {
                     return bad!(format!(
-                        "{} is ambigous please restrict the commitish kind to download",
+                        "{} is ambiguous please restrict the commitish kind to download",
                         commitish
                     ));
                 }
@@ -1070,7 +1070,7 @@ async fn is_ambiguous(
             // check if this kind is different
             if kind != first_kind {
                 return bad!(format!(
-                    "{} is ambigous please restrict the commitish kind to download",
+                    "{} is ambiguous please restrict the commitish kind to download",
                     commitish
                 ));
             }
@@ -1103,7 +1103,7 @@ pub async fn repo_data_hash(
 ) -> Result<String, ApiError> {
     // track our previous kinds across checks
     let mut previous = None;
-    // if we have more then 100 groups then break them into chunks of 50
+    // if we have more than 100 groups then break them into chunks of 50
     if groups.len() > 32 {
         // track the last repo_data hash
         let mut last_repo_data_hash = None;
@@ -1120,7 +1120,7 @@ pub async fn repo_data_hash(
                     (kinds, group_chunk, repo, commitish),
                 )
                 .await?;
-            // check if this commitish is ambigous or not
+            // check if this commitish is ambiguous or not
             let repo_data = is_ambiguous(repo, commitish, &mut previous, query).await?;
             // set our repo data hash
             last_repo_data_hash = Some(repo_data);
@@ -1139,7 +1139,7 @@ pub async fn repo_data_hash(
                 (kinds, groups, repo, commitish),
             )
             .await?;
-        // check if this commitish is ambigous or not
+        // check if this commitish is ambiguous or not
         return is_ambiguous(repo, commitish, &mut previous, query).await;
     }
     not_found!(format!(

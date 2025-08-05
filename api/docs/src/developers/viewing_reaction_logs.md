@@ -20,7 +20,7 @@ If you want to view the logs of a tool that runs within an individual reaction s
     <img width="800" src="./../static_resources/reactions/click-reaction-stage-logs.png">
 </p>
 
-You will see the combined log output of the running tool and the Thorium agent that executes the tool. The agent is responsible for downloading any repos/files needed to run the reaction and then cleaning up after the tool has completed. During this cleanup process any children files and tags will be uploaded to Thorium. In between this setup and cleanup phases, you will see any stderr/stdout that is produced when the tool runs. These logs are also useful for validating the command lines that were passed to the tool when it is run.
+You will see the combined log output of the running tool and the Thorium agent that executes the tool. The agent is responsible for downloading any repos/files needed to run the reaction and then cleaning up after the tool has completed. During this cleanup process any children files and tags will be uploaded to Thorium. In between this set up and cleanup phases, you will see any stderr/stdout that is produced when the tool runs. These logs are also useful for validating the command lines that were passed to the tool when it is run.
 
 <p align="center">
     <img width="800" src="./../static_resources/reactions/reaction-stage-logs.png">

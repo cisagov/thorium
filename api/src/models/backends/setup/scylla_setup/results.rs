@@ -1,11 +1,11 @@
-//! Setup the results tables/prepared statements in Scylla
+//! Set up the results tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for results
+/// The prepared statements for results
 pub struct ResultsPreparedStatements {
     /// Insert a result
     pub insert: PreparedStatement,
@@ -21,7 +21,7 @@ pub struct ResultsPreparedStatements {
     pub get_with_key_and_tool: PreparedStatement,
     /// Get the uploaded timestamps for results
     pub get_uploaded: PreparedStatement,
-    /// Get the ids for results by kind, key, and id (used for counting)
+    /// Get the IDs for results by kind, key, and id (used for counting)
     pub count: PreparedStatement,
     /// Delete a result
     pub delete: PreparedStatement,
@@ -41,10 +41,10 @@ impl ResultsPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the results tables
+        // set up the results tables
         setup_results_table(session, config).await;
         setup_results_stream_table(session, config).await;
-        // setup the results materialized views
+        // set up the results materialized views
         setup_results_auth_mat_view(session, config).await;
         setup_results_auth_id_mat_view(session, config).await;
         // setup our prepared statements
@@ -78,7 +78,7 @@ impl ResultsPreparedStatements {
     }
 }
 
-/// Setup the results stream materialized view
+/// Set up the results stream materialized view
 ///
 /// # Arguments
 ///
@@ -109,7 +109,7 @@ async fn setup_results_stream_table(session: &Session, config: &Conf) {
         .expect("failed to add result stream table");
 }
 
-/// Setup the results table for Thorium
+/// Set up the results table for Thorium
 ///
 /// # Arguments
 ///
@@ -138,7 +138,7 @@ async fn setup_results_table(session: &Session, config: &Conf) {
         .expect("failed to add results table");
 }
 
-/// Setup the results authorization table for Thorium
+/// Set up the results authorization table for Thorium
 ///
 /// # Arguments
 ///
@@ -167,7 +167,7 @@ async fn setup_results_auth_mat_view(session: &Session, config: &Conf) {
         .expect("failed to add results auth materialized view");
 }
 
-/// Setup the results authorization local index for Thorium
+/// Set up the results authorization local index for Thorium
 ///
 /// # Arguments
 ///
@@ -239,7 +239,7 @@ async fn get(session: &Session, config: &Conf) -> PreparedStatement {
 /// * `session` - The scylla session to use
 /// * `config` - The Thorium config
 async fn get_uploaded_by_id(session: &Session, config: &Conf) -> PreparedStatement {
-    // build results get uplopaded timestamp prepared statement
+    // build results get uploaded timestamp prepared statement
     session
         .prepare(format!(
             "SELECT id, uploaded \
@@ -270,14 +270,14 @@ async fn get_id(session: &Session, config: &Conf) -> PreparedStatement {
         .expect("Failed to prepare scylla results auth statement")
 }
 
-/// build the results auth ids prepared statement
+/// build the results auth IDs prepared statement
 ///
 /// # Arguments
 ///
 /// * `session` - The scylla session to use
 /// * `config` - The Thorium config
 async fn get_with_key(session: &Session, config: &Conf) -> PreparedStatement {
-    // build results auth ids prepared statement
+    // build results auth IDs prepared statement
     session
         .prepare(format!(
             "SELECT id, tool, display_type, cmd, group, uploaded \
@@ -289,14 +289,14 @@ async fn get_with_key(session: &Session, config: &Conf) -> PreparedStatement {
         .expect("Failed to prepare scylla results auth ids statement")
 }
 
-/// build the results auth ids restricted by tools prepared statement
+/// build the results auth IDs restricted by tools prepared statement
 ///
 /// # Arguments
 ///
 /// * `session` - The scylla session to use
 /// * `config` - The Thorium config
 async fn get_with_key_and_tool(session: &Session, config: &Conf) -> PreparedStatement {
-    // build results auth ids restricted by tool prepared statement
+    // build results auth IDs restricted by tool prepared statement
     session
         .prepare(format!(
             "SELECT id, tool, display_type, cmd, group, uploaded \

@@ -10,7 +10,7 @@ use thorium_derive::ScyllaStoreJson;
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(ScyllaStoreJson))]
 pub struct PipelineKey {
-    /// The group the pipeline is in
+    /// The group containing the pipeline
     pub group: String,
     /// The pipeline of the image
     pub pipeline: String,

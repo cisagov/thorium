@@ -584,7 +584,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
         [submission.path]: submitRes,
       }));
       allRunReactionsRes.push(...submitRes);
-      // Call the file done after all reactons submitted. We will get here even if
+      // Call the file done after all reactions submitted. We will get here even if
       // there were no reactions to submit.
       if (error) {
         // error result

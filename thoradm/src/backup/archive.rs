@@ -26,7 +26,7 @@ pub struct PartitionArchive {
 impl PartitionArchive {
     /// Create a new partition archive
     ///
-    /// # Argumetns
+    /// # Arguments
     ///
     /// * `start` - What byte this partition archive starts at
     /// * `end` - What byte this partitions archive stops as
@@ -81,7 +81,7 @@ impl ArchiveReader {
         path.push(id);
         // open our archive file
         let data_reader = BufReader::new(File::open(&path).await?);
-        // create a bytesmut obejct for our map info
+        // create a bytesmut object for our map info
         let map_buffer = BytesMut::zeroed(96);
         // create a bytesmut object at least 1MiB big
         let data_buffer = BytesMut::zeroed(1_048_576);
@@ -104,7 +104,7 @@ impl ArchiveReader {
             // if this is the end of the file then we reached the end of the map
             match error.kind() {
                 std::io::ErrorKind::UnexpectedEof => return Ok(None),
-                // some other error occured
+                // some other error occurred
                 _ => return Err(Error::from(error)),
             }
         }
@@ -134,7 +134,7 @@ impl ArchiveReader {
             // if this is the end of the file then we reached the end of the map
             match error.kind() {
                 std::io::ErrorKind::UnexpectedEof => return Ok(None),
-                // some other error occured
+                // some other error occurred
                 _ => return Err(Error::from(error)),
             }
         }

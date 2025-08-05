@@ -148,7 +148,7 @@ impl<S: ScyllaCrawlSupport + Send> ScyllaCrawlController<S> {
         Ok(handle)
     }
 
-    /// Build and spawn all all of our workers
+    /// Build and spawn all of our workers
     ///
     /// # Arguments
     ///

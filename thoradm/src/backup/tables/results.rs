@@ -196,7 +196,7 @@ impl Restore for Output {
                     *rows_restored += 1;
                     // set our current row count progress message
                     progress.set_message(rows_restored.to_string());
-                    // if we have less then 100 future to go then refill our future set
+                    // if we have less than 100 future to go then refill our future set
                     if futures.len() < 100 {
                         break;
                     }
@@ -283,7 +283,7 @@ impl S3Restore for Output {
         // get the sha256 this comment attachment is for
         let result_id = match chunks.next() {
             Some(result_id) => result_id.as_os_str().to_string_lossy(),
-            None => return Err(Error::new("result id is not in path")),
+            None => return Err(Error::new("result ID is not in path")),
         };
         // get the rest of the result file path
         let file_path = chunks.collect::<PathBuf>().into_os_string();
@@ -478,7 +478,7 @@ impl Restore for OutputStream {
                     *rows_restored += 1;
                     // set our current row count progress message
                     progress.set_message(rows_restored.to_string());
-                    // if we have less then 100 future to go then refill our future set
+                    // if we have less than 100 future to go then refill our future set
                     if futures.len() < 100 {
                         break;
                     }

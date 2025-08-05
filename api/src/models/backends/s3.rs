@@ -1,4 +1,4 @@
-//! Handle opartions for s3 id mapping in Scylla
+//! Handle operations for s3 id mapping in Scylla
 
 use uuid::Uuid;
 

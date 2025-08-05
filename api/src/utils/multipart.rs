@@ -100,6 +100,6 @@ impl From<async_zip::error::ZipError> for FormError {
 
 impl From<std::path::StripPrefixError> for FormError {
     fn from(error: std::path::StripPrefixError) -> Self {
-        FormError::new(format!("Path Srip Prefix Error {:#?}", error))
+        FormError::new(format!("Path Strip Prefix Error {:#?}", error))
     }
 }

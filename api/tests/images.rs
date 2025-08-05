@@ -305,7 +305,7 @@ async fn list_details() -> Result<(), Error> {
     let group = generators::groups(1, &client).await?.remove(0).name;
     // setup 20 random images
     let images = generators::images(&group, 20, false, &client).await?;
-    // list theimages we just created
+    // list the images we just created
     let mut cursor = client.images.list(&group).details();
     cursor.next().await?;
     // make sure all the group details we tried to create are in our list
@@ -319,7 +319,7 @@ async fn delete() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -340,7 +340,7 @@ async fn delete_conflict() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -369,7 +369,7 @@ async fn update() -> Result<(), Error> {
         .network_policies
         .create(default_policy.clone())
         .await?;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -482,7 +482,7 @@ async fn update_bad_name() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -515,7 +515,7 @@ async fn update_user() -> Result<(), Error> {
     let user_client = generators::client(&client).await?;
     // Create a group
     let group = generators::groups(1, &user_client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &user_client)
         .await?
         .remove(0);
@@ -554,7 +554,7 @@ async fn update_clear_description() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -578,7 +578,7 @@ async fn update_clear_version() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -632,7 +632,7 @@ async fn update_bad_child_filters() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -655,7 +655,7 @@ async fn update_bans() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -920,7 +920,7 @@ async fn notifications_bans() -> Result<(), Error> {
     let user_client = generators::client(&client).await?;
     // Create a group
     let group = generators::groups(1, &user_client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &user_client)
         .await?
         .remove(0);
@@ -970,7 +970,7 @@ async fn create_notification() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -997,7 +997,7 @@ async fn create_notification_bad() -> Result<(), Error> {
     let user_client = generators::client(&client).await?;
     // Create a group
     let group = generators::groups(1, &user_client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &user_client)
         .await?
         .remove(0);
@@ -1028,7 +1028,7 @@ async fn delete_notification() -> Result<(), Error> {
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &client)
         .await?
         .remove(0);
@@ -1063,7 +1063,7 @@ async fn delete_notification_bad() -> Result<(), Error> {
     let user_client = generators::client(&client).await?;
     // Create a group
     let group = generators::groups(1, &user_client).await?.remove(0).name;
-    // setup a random image
+    // set up a random image
     let image = generators::images(&group, 1, false, &user_client)
         .await?
         .remove(0);

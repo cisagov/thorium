@@ -183,7 +183,7 @@ impl Restore for Commitish {
                     *rows_restored += 1;
                     // set our current row count progress message
                     progress.set_message(rows_restored.to_string());
-                    // if we have less then 100 future to go then refill our future set
+                    // if we have less than 100 future to go then refill our future set
                     if futures.len() < 100 {
                         break;
                     }
@@ -380,7 +380,7 @@ impl Restore for CommitishList {
                     *rows_restored += 1;
                     // set our current row count progress message
                     progress.set_message(rows_restored.to_string());
-                    // if we have less then 100 future to go then refill our future set
+                    // if we have less than 100 future to go then refill our future set
                     if futures.len() < 100 {
                         break;
                     }

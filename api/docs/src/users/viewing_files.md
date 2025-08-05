@@ -14,7 +14,7 @@ full text search which will be discussed more later. To view a files details sim
 </video>
 
 If you want to filter the files that are listed you can do that by changing the filter settings. Currently Thorium
-supports groups, submission date ranges, and a single key/value tag as filters. Tag key/values are case sensitive.
+supports groups, submission date ranges, and a single key/value tag as filters. Tag key/values are case-sensitive.
 Multi-tag filtering of files and tag normalization are both planned features that will improve file browsing.
 
 <p align="center">
@@ -27,7 +27,7 @@ because we haven't run many tools on these files. Running analysis tools on file
 
 ## Thorctl
 ---
- You can also view a list of files in Thorium using Thorctl. To do that that run the following command:
+ You can also view a list of files in Thorium using Thorctl. To do that run the following command:
 
 ```bash
 thorctl files get

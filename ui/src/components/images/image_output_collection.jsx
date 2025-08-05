@@ -164,7 +164,7 @@ const updateCreateRequestOutputCollection = (newOutputCollection, setRequestOutp
     requestOutputCollection.select_auto_tag.forEach((tag) => {
       // tag is empty but rename of key for tag has data entered
       if (tag['key'].trim() == '' && tag['value'].trim().length > 0) {
-        errors['auto_tag'] = 'Tag Names Can Not Be Empty';
+        errors['auto_tag'] = 'Tag Names Cannot Be Empty';
         setHasErrors(true);
       }
 
@@ -259,7 +259,7 @@ const updateEditRequestOutputCollection = (
     requestOutputCollection.select_auto_tag.forEach((tag) => {
       // tag is empty but rename of key for tag has data entered
       if (tag['key'].trim() == '' && tag['value'].trim().length > 0) {
-        errors['auto_tag'] = 'Tag Names Can Not Be Empty';
+        errors['auto_tag'] = 'Tag Names Cannot Be Empty';
         setHasErrors(true);
       }
 

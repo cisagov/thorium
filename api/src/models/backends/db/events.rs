@@ -45,11 +45,11 @@ pub async fn clear(kind: EventType, ids: &[Uuid], shared: &Shared) -> Result<(),
     let queue_key = EventKeys::in_flight_queue(kind, shared);
     // build a redis pipeline
     let mut pipe = redis::pipe();
-    // clear each of these ids
+    // clear each of these IDs
     for id in ids {
         // remove this id from our in flight queue
         pipe.cmd("zrem").arg(&queue_key).arg(id.to_string());
-        // remove it from our our in flight data map as well
+        // remove it from our in flight data map as well
         pipe.cmd("hdel").arg(&map_key).arg(id.to_string());
     }
     // execute this pipeline
@@ -161,7 +161,7 @@ pub async fn reset_all(kind: EventType, shared: &Shared) -> Result<(), ApiError>
 pub async fn get_cache_status(clear: bool, shared: &Shared) -> Result<EventCacheStatus, ApiError> {
     // get our event handler cache key
     let key = EventKeys::cache(shared);
-    // build a redis pipleline
+    // build a redis pipeline
     let mut pipe = redis::pipe();
     // get our cache status
     pipe.atomic().cmd("hget").arg(&key).arg("status");

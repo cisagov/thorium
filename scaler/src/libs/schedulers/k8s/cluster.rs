@@ -18,7 +18,7 @@ impl Cluster {
     ///
     /// # Arguments
     ///
-    /// * `client` - Kuberentes client
+    /// * `client` - Kubernetes client
     /// * `conf` - Thorium Config
     /// * `cluster_name` - The name of this k8s cluster
     /// * `context_name` - The name of this context

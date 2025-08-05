@@ -31,15 +31,15 @@ Explanations for the root fields are:
 | add_tags | The tags to add to this reaction |
 | remove_tags | The tags to remove from this reaction |
 
-The argument update structure is similiar to the normal arguments structure but has
+The argument update structure is similar to the normal arguments structure but has
 slightly different fields.
 
 | key | definition |
 | --- | ---------- |
-| positionals | The positional args to use in place of the original positonal args (optional) |
-| kwargs | The key word arguments to overlay ontop the original keyword arguments |
+| positionals | The positional args to use in place of the original positional args (optional) |
+| kwargs | The key word arguments to overlay on top the original keyword arguments |
 | remove_kwargs | The key word arguments to remove from the original keyword arguments |
 | add_switches | The new switches to add to the original switch arguments |
 | remove_switches | The switch arguments to remove from the original switches |
 
-Positonal arguments replace the original positionals in their entirety and are not additive.
+Positional arguments replace the original positionals in their entirety and are not additive.

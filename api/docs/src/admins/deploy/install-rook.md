@@ -129,7 +129,7 @@ spec:
     # priorityClassName: my-priority-class
   #zone:
   #name: zone-a
-  # service endpoint healthcheck
+  # service endpoint health check
   healthCheck:
     # Configure the pod probes for the rgw daemon
     startupProbe:

@@ -210,8 +210,7 @@ will return an error.
 
 ##### MIME Filters
 
-MIME filters match on the MIME type of a file according to its magic number. Supported MIME types can be found
-[here](https://github.com/bojand/infer/blob/66c1890f7f44f24d3dfa6c4eb966b84942ab9ece/README.md#supported-types).
+MIME filters match on the MIME type of a file according to its magic number. See the list of [Supported MIME types](https://github.com/bojand/infer/blob/66c1890f7f44f24d3dfa6c4eb966b84942ab9ece/README.md#supported-types).
 For example, if you want to match only image MIME types, you can provide the filter `image.*`.
 
 ##### File Name Filters

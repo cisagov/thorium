@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-/// Add the json based serialzie impl
+/// Add the json based serialize impl
 fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {
@@ -26,7 +26,7 @@ fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     })
 }
 
-/// Add the json based serialzie impl
+/// Add the json based serialize impl
 fn add_json_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {
@@ -77,7 +77,7 @@ pub fn derive_scylla_store_json(stream: TokenStream) -> TokenStream {
     output.into()
 }
 
-/// Add the as str based serialzie impl
+/// Add the as str based serialize impl
 fn add_as_str_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {
@@ -96,7 +96,7 @@ fn add_as_str_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     })
 }
 
-/// Add the as str based serialzie impl
+/// Add the as str based serialize impl
 fn add_as_str_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {

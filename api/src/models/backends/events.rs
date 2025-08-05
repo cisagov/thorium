@@ -142,7 +142,7 @@ impl Event {
     ///
     /// * `user` - The user that is getting the event cache status
     /// * `clear` - Whether to clear the event cache statuses or not
-    /// * `shared` - Shared Thorium objectds
+    /// * `shared` - Shared Thorium objects
     #[instrument(name = "Event::get_cache_status", skip(user, shared), err(Debug))]
     pub async fn get_cache_status(
         user: &User,

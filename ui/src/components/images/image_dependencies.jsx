@@ -522,7 +522,7 @@ const updateEditRequestDependencies = (initialDependencies, newDependencies, set
       (value) => !requestDependencies.results.images.includes(value),
     );
   }
-  // filter out all images that were added, these must be new iamges as we ignore duplicates
+  // filter out all images that were added, these must be new images as we ignore duplicates
   if (requestDependencies.results.images.length > 0) {
     requestDependencies.results['add_images'] = requestDependencies.results.images.filter(
       (value) => !initialDependencies.results.images.includes(value),
@@ -1012,10 +1012,10 @@ const EditDependencyFields = ({ initialDependencies, images, setUpdatedDependenc
 const CreateDependencyFields = ({ images, mode, initialDependencies, setCreateDependencies, disabled }) => {
   if (mode && mode == 'Copy') {
     // None, List, Map
-    const kwartOption = initialDependencies.results['kwarg'];
+    const kwargOption = initialDependencies.results['kwarg'];
     // add selectable kwargList
     if (!initialDependencies.results['kwargList']) {
-      initialDependencies.results['kwargList'] = kwartOption == 'None' ? 'None' : Object.keys(initialDependencies.results['kwarg'])[0];
+      initialDependencies.results['kwargList'] = kwargOption == 'None' ? 'None' : Object.keys(initialDependencies.results['kwarg'])[0];
     }
   }
 

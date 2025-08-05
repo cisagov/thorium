@@ -1,4 +1,4 @@
-//! Laucnhes KVM vms for Thorium
+//! Launches KVM vms for Thorium
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
@@ -53,7 +53,7 @@ impl Kvm {
         None
     }
 
-    /// Build the xml to attach an isoi
+    /// Build the xml to attach an iso
     ///
     /// # Arguments
     ///
@@ -109,7 +109,7 @@ impl Kvm {
     /// # Arguments
     ///
     /// * `golden` - The name of the golden image that was used
-    /// * `worker` - The worker we are assining a golden image too
+    /// * `worker` - The worker we are assigning a golden image too
     /// * `span` - The span to log traces under
     pub async fn convert(
         &mut self,

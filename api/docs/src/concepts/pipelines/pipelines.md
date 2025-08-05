@@ -24,7 +24,7 @@ Explanations for these field are:
 
 | key | definition |
 | --- | ---------- |
-| group | The group the pipeline is in |
+| group | The group containing the pipeline |
 | name | The name of the pipeline to create |
 | order | The order stages/images should be executed in this pipeline |
 | sla | How long you can wait for this reaction in this pipeline to complete (optional) |

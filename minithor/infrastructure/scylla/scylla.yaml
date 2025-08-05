@@ -13,7 +13,7 @@
 # The name of the cluster. This is mainly used to prevent machines in
 # one logical cluster from joining another.
 # It is recommended to change the default value when creating a new cluster.
-# You can NOT modify this value for an existing cluster
+# You CANNOT modify this value for an existing cluster
 #cluster_name: 'Test Cluster'
 
 # This defines the number of tokens randomly assigned to this node on the ring
@@ -301,7 +301,7 @@ authorizer: CassandraAuthorizer
 
 # The partitioner is responsible for distributing groups of rows (by
 # partition key) across nodes in the cluster.  You should leave this
-# alone for new clusters.  The partitioner can NOT be changed without
+# alone for new clusters.  The partitioner CANNOT be changed without
 # reloading all data, so when upgrading you should set this to the
 # same partitioner you were already using.
 #
@@ -369,7 +369,7 @@ commitlog_total_space_in_mb: -1
 # tombstones seen in memory so we can return them to the coordinator, which
 # will use them to make sure other replicas also know about the deleted rows.
 # With workloads that generate a lot of tombstones, this can cause performance
-# problems and even exaust the server heap.
+# problems and even exhaust the server heap.
 # (http://www.datastax.com/dev/blog/cassandra-anti-patterns-queues-and-queue-like-datasets)
 # Adjust the thresholds here if you understand the dangers and want to
 # scan more tombstones anyway.  These thresholds may also be adjusted at runtime

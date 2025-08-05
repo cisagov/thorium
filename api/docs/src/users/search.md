@@ -6,7 +6,7 @@ the home page. Thorium uses the [Lucene syntax](https://www.elastic.co/guide/en/
 for search queries.
 
 It's important to note that documents are indexed **per group**. This means that
-for a document to be returned, **all** search parametes must be met by at least
+for a document to be returned, **all** search parameters must be met by at least
 one group (see the below [FAQ](#what-do-groups-have-to-do-with-searching-in-thorium)
 for more details).
 
@@ -136,7 +136,7 @@ If tags contain Lucene keywords (e.g. `AND`, `OR`, etc.), use quotes:
 ##### Why does it take some time for data to become searchable?
 
 It can take some time (usually < 10 seconds) for results to be searchable in
-Thorium because they are indexed asynchronusly by a separate component called
+Thorium because they are indexed asynchronously by a separate component called
 the Thorium `search-streamer`. The time it takes for the `search-streamer`
 to index data depends on how much data has been added/modified/deleted in
 Thorium recently.

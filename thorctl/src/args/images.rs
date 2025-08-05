@@ -62,7 +62,7 @@ pub struct GetImages {
     #[clap(short, long, default_value = "50")]
     pub page_size: u64,
     /// Print the images in alphabetical order rather than by group, then creation date
-    ///     Note: Sorting can require many system resources for large amounts of pipielines
+    ///     Note: Sorting can require many system resources for large amounts of pipelines
     #[clap(short, long, verbatim_doc_comment)]
     pub alpha: bool,
 }

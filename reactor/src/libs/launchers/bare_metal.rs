@@ -87,7 +87,7 @@ fn isolate<P: AsRef<Path>>(raw: P, id: &str) -> Result<String, Error> {
     match path_buf.to_str() {
         Some(path_str) => Ok(path_str.to_owned()),
         None => Err(Error::new(format!(
-            "{:#?} can not be cast to a string",
+            "{:#?} cannot be cast to a string",
             path_buf
         ))),
     }

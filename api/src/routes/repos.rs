@@ -19,10 +19,10 @@ use utoipa::OpenApi;
    handled as Vec<String> into a single String argument that can be
    split on '/' later.
 
-   All functions affected by this are marked with 'TODO_UTOIPA: WIDLCARD'
+   All functions affected by this are marked with 'TODO_UTOIPA: WILDCARD'
    and have their utoipa annotations commented out. The annotations
    should be at least somewhat functional if they were able to be used
-   but have not been tested due to the afforementioned compilation
+   but have not been tested due to the aforementioned compilation
    issue.
 */
 
@@ -77,7 +77,7 @@ async fn create(
 /// * `user` - The user that is uploading sample
 /// * `path` - The path of the repo to get info about
 /// * `shared` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     get,
 //     path = "/api/repos/data/*repo_path",
@@ -110,7 +110,7 @@ async fn get_repo(
 /// * `user` - The user that is updating this repos commit data
 /// * `path` - The path of the repo to add commits too
 /// * `shared` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     post,
 //     path = "/api/repos/data/*repo_path",
@@ -146,7 +146,7 @@ async fn upload(
 /// * `user` - The user that is updating this repos commit data
 /// * `path` - The path containing this urls args
 /// * `shared` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     post,
 //     path = "/api/repos/commitishes/:data/*repo_path",
@@ -185,7 +185,7 @@ async fn update_commitishes(
 /// * `sha256` - The sample to add a tag too
 /// * `state` - Shared Thorium objects
 /// * `tags` - The new tags to apply
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     post,
 //     path = "/api/repos/tags/*repo_path",
@@ -225,7 +225,7 @@ async fn tag(
 /// * `value` - The value of the tag to delete
 /// * `params` - The url query params to use
 /// * `state` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     delete,
 //     path = "/api/repos/tags/*repo_path",
@@ -256,7 +256,7 @@ async fn delete_tags(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// List the commitshes for a repo
+/// List the commitishes for a repo
 ///
 /// # Arguments
 ///
@@ -264,7 +264,7 @@ async fn delete_tags(
 /// * `params` - The params to use when listing commits for this repo
 /// * `repo` - The repo to list commits from
 /// * `shared` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     get,
 //     path = "/api/repos/commitishes/:data/*repo_path",
@@ -280,7 +280,7 @@ async fn delete_tags(
 //         ("basic" = []),
 //     )
 // )]
-#[instrument(name = "routes::repos::commitshes", skip_all, err(Debug))]
+#[instrument(name = "routes::repos::commitishes", skip_all, err(Debug))]
 async fn commitishes(
     user: User,
     params: CommitishListParams,
@@ -307,7 +307,7 @@ async fn commitishes(
 /// * `params` - The params to use when listing commit details for this repo
 /// * `repo` - The repo to list commit details from
 /// * `shared` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     get,
 //     path = "/api/repos/commitish-details/*repo_path",
@@ -323,7 +323,7 @@ async fn commitishes(
 //         ("basic" = []),
 //     )
 // )]
-#[instrument(name = "routes::repos::commitsh_details", skip_all, err(Debug))]
+#[instrument(name = "routes::repos::commitish_details", skip_all, err(Debug))]
 async fn commitish_details(
     user: User,
     params: CommitishListParams,
@@ -346,7 +346,7 @@ async fn commitish_details(
 /// * `user` - The user that is uploading sample
 /// * `repo` - The repo to get info about
 /// * `shared` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     get,
 //     path = "/api/repos/download/*repo_path",
@@ -355,7 +355,7 @@ async fn commitish_details(
 //         ("params" = RepoDownloadOpts, description = "The query params to use with this request"),
 //     ),
 //     responses(
-//         (status = 200, description = "Bytestrean for repo download", body = Vec<u8>),
+//         (status = 200, description = "Bytestream for repo download", body = Vec<u8>),
 //         (status = 401, description = "This user is not authorized to access this route"),
 //     ),
 //     security(
@@ -455,7 +455,7 @@ async fn list_details(
 /// * `path` - The repo path derived from the URL path
 /// * `state` - Shared Thorium objects
 /// * `upload` - The results being submitted
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     post,
 //     path = "/api/repos/results/*repo_path",
@@ -497,7 +497,7 @@ async fn upload_results(
 /// * `path` - The repo path derived from the URL path
 /// * `params` - The query params to use with this request
 /// * `state` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     get,
 //     path = "/api/repos/results/*repo_path",
@@ -536,7 +536,7 @@ async fn get_results(
 /// * `user` - The user submitting these results
 /// * `path_params` - All params in this url path
 /// * `state` - Shared Thorium objects
-// TODO_UTOIPA: WIDLCARD
+// TODO_UTOIPA: WILDCARD
 // #[utoipa::path(
 //     get,
 //     path = "/api/repos/result-files/:tool/:result_id/*repo_path",
@@ -561,13 +561,13 @@ async fn download_result_file(
 ) -> Result<impl IntoResponse, ApiError> {
     // split the path on '/'
     let mut path_split: Vec<&str> = path_params.split('/').collect();
-    // if we have less then 3 path params then return a 404
+    // if we have less than 3 path params then return a 404
     if path_split.len() < 3 {
         return Err(ApiError::new(StatusCode::NOT_FOUND, None));
     }
     // pop the required params
     if let Some(raw_uuid) = path_split.pop() {
-        let result_id = bounder::uuid(raw_uuid, "result id")?;
+        let result_id = bounder::uuid(raw_uuid, "result ID")?;
         if let Some(tool) = path_split.pop() {
             // build our repo path from what's left
             let repo_path = itertools::join(path_split.iter(), "/");
@@ -594,7 +594,7 @@ async fn download_result_file(
 #[derive(OpenApi)]
 #[openapi(
     // TODO_UTOIPA: WILDCARD add these back in once all the wildcard issues are resolved
-    // paths(list, create, list_details, get_repo, upload, commitshes, update_commitishes, commitsh_details, download, tag, delete_tags, get_results, upload_results, download_result_file, bundle_results),
+    // paths(list, create, list_details, get_repo, upload, commitishes, update_commitishes, commitish_details, download, tag, delete_tags, get_results, upload_results, download_result_file, bundle_results),
     paths(list, create, list_details),
     components(schemas(ApiCursor<Repo>, ApiCursor<RepoListLine>, Branch, BranchDetails, BranchRequest, Commit, CommitDetails, Commitish, CommitishDetails, CommitishKinds, CommitishMapRequest, CommitishRequest, CommitRequest, GitTag, GitTagDetails, GitTagRequest, OutputMap, OutputResponse, Repo, RepoCheckout, RepoCreateResponse, RepoDownloadOpts, RepoListParams, RepoDataUploadResponse, RepoRequest, RepoScheme, RepoSubmissionChunk, ResultGetParams, TagDeleteRequest<Repo>, TagRequest<Repo>)),
     modifiers(&OpenApiSecurity),

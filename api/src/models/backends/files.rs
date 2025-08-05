@@ -180,7 +180,7 @@ impl Sample {
     ) -> Result<SampleSubmissionResponse, ApiError> {
         // build a sample form to populate
         let mut form = SampleForm::default();
-        // biuld an option to store our hashes and file_name
+        // build an option to store our hashes and file_name
         let mut hashes_opt = None;
         let mut file_opt = None;
         // begin crawling over our multipart form upload
@@ -285,7 +285,7 @@ impl Sample {
         check: &SampleCheck,
         shared: &Shared,
     ) -> Result<SampleCheckResponse, ApiError> {
-        // check if this submission exists in a group the user can access
+        // check if this submission exists in a group that the user can access
         db::files::exists(user, check, shared).await
     }
 
@@ -534,7 +534,7 @@ impl Sample {
             }
             // make sure we actually have access to all requested groups
             let info = Group::authorize_all(user, &groups, shared).await?;
-            // make sure we have modification privleges in these groups if we are editing data
+            // make sure we have modification privileges in these groups if we are editing data
             if editable {
                 can_create_all!(info, user, shared);
             }
@@ -599,7 +599,7 @@ impl Sample {
             }
             // make sure we actually have access to all requested groups
             let info = Group::authorize_check_allow_all(user, &groups, action, shared).await?;
-            // make sure we have modification privleges in these groups
+            // make sure we have modification privileges in these groups
             can_create_all!(info, user, shared);
         }
         // make sure at least some groups valid
@@ -653,7 +653,7 @@ impl Sample {
             Some(raw) => Origin::deserialize(groups, raw, shared).await?,
             None => Origin::None,
         };
-        // downselect ot just the fields for a subission chunk
+        // downselect to just the fields for a submission chunk
         let chunk = SubmissionChunk {
             id: sub.id,
             name: sub.name,
@@ -685,7 +685,7 @@ impl Sample {
                 Some(raw_origin) => deserialize!(raw_origin),
                 None => Origin::None,
             };
-            // downselect ot just the fields for a rowission chunk
+            // downselect to just the fields for a submission chunk
             let chunk = SubmissionChunk {
                 id: row.id,
                 name: row.name,
@@ -829,7 +829,7 @@ impl CommentSupport for Sample {
         if let Some(comment) = self.comments.iter().find(|com| &com.id == comment) {
             // make sure this attachment is from this comment
             if comment.attachments.iter().any(|(_, id)| attachment == id) {
-                // build the path to this atachment
+                // build the path to this attachment
                 let path = format!("{}/{}/{}", self.sha256, comment.id, attachment);
                 // download and return this attachment
                 return shared.s3.attachments.download(&path).await;
@@ -908,7 +908,7 @@ impl TryFrom<SubmissionRow> for Sample {
             Some(raw_origin) => deserialize!(raw_origin),
             None => Origin::None,
         };
-        // downselect ot just the fields for a rowission chunk
+        // downselect to just the fields for a submission chunk
         let sub = SubmissionChunk {
             id: row.id,
             name: row.name,
@@ -1028,7 +1028,7 @@ impl TryFrom<OriginRequest> for Origin {
     ///
     /// * `req` - The origin request
     fn try_from(req: OriginRequest) -> Result<Self, Self::Error> {
-        // if an origin update was set then validate and serailize it
+        // if an origin update was set then validate and serialize it
         let origin = match req.origin_type.as_ref() {
             "Downloaded" => Origin::Downloaded {
                 url: get!(req.url, "url"),
@@ -1143,9 +1143,9 @@ impl From<SubmissionListRow> for SampleListLine {
     ///
     /// # Arguments
     ///
-    /// * `row` - The submisison row to convert
+    /// * `row` - The submission row to convert
     fn from(row: SubmissionListRow) -> Self {
-        // build our intitial group set
+        // build our initial group set
         let mut groups = HashSet::with_capacity(1);
         // ad this group
         groups.insert(row.group);
@@ -1166,7 +1166,7 @@ impl From<TagListRow> for SampleListLine {
     ///
     /// * `row` - The tag row to convert
     fn from(row: TagListRow) -> Self {
-        // build our intitial group set
+        // build our initial group set
         let mut groups = HashSet::with_capacity(1);
         // ad this group
         groups.insert(row.group);
@@ -1232,7 +1232,7 @@ impl CursorCore for SampleListLine {
         params: &Self::Params,
         shared: &Shared,
     ) -> Result<(DateTime<Utc>, DateTime<Utc>), ApiError> {
-        // get our end timestmap
+        // get our end timestamp
         let end = params.end(shared)?;
         Ok((params.start, end))
     }
@@ -1340,7 +1340,7 @@ impl CursorCore for SampleListLine {
     }
 }
 
-// implement cursor for our our files list
+// implement cursor for our files list
 #[async_trait::async_trait]
 impl ScyllaCursorSupport for SampleListLine {
     /// The intermediate list row to use

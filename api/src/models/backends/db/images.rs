@@ -85,7 +85,7 @@ pub async fn create(user: &User, request: ImageRequest, shared: &Shared) -> Resu
     build(&mut pipe, &cast, shared)?;
     // save image to backend
     let status: Vec<bool> = pipe.query_async(conn!(shared)).await?;
-    // check if any errors occured in all commands except for the final one as
+    // check if any errors occurred in all commands except for the final one as
     // hset will return 0 if the key already exists regardless of if we updated the value
     if status[..status.len() - 1].iter().any(|x|!x) {
         conflict!(
@@ -523,7 +523,7 @@ pub async fn delete_all(group: &Group, shared: &Shared) -> Result<(), ApiError> 
                 pipe.cmd("del").arg(ImageKeys::data(&group.name, name, shared))
                     .cmd("del").arg(ImageKeys::used_by(&group.name, name, shared)))
             .exec_async(conn!(shared)).await?;
-        // delete all of the objects the images own
+        // delete all of the objects owned by the images
         let mut images = images.details(group, shared).await?;
         for image in images.details.drain(..) {
             let image_key = ImageKey::new(&group.name, &image.name);

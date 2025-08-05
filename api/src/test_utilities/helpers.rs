@@ -164,7 +164,7 @@ macro_rules! is_desc {
     ($values:expr) => {{
         // get the first value of our list
         if let Some(last) = $values.get(0) {
-            // get the the timestamp for this value
+            // get the timestamp for this value
             let mut last_ts = last.uploaded;
             for value in $values.iter() {
                 // if our lst timestamp came after this one then error

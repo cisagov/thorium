@@ -18,7 +18,7 @@ impl ConfigMaps {
     ///
     /// # Arguments
     ///
-    /// * `client` - kuberentes client
+    /// * `client` - kubernetes client
     pub fn new(client: &kube::Client) -> Self {
         // get ConfigMap api
         let api: Api<ConfigMap> = Api::all(client.clone());
@@ -120,7 +120,7 @@ impl ConfigMaps {
         Ok(())
     }
 
-    /// Setup a users passwd config map in Thorium
+    /// Set up a users passwd config map in Thorium
     ///
     /// # Arguments
     ///

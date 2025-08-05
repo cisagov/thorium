@@ -20,7 +20,7 @@ use crate::utils::{ApiError, Shared};
 /// * `params` - The params to use when creating the notification
 /// * `req` - The notification request that was sent
 #[instrument(
-    name = "routes::shared::notificaitons::create_notification",
+    name = "routes::shared::notifications::create_notification",
     skip_all,
     err(Debug)
 )]

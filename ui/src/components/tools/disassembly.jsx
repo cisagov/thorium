@@ -25,7 +25,7 @@ const Disassembly = ({ result, sha256, tool }) => {
         <Row>
           <center>
             <Alert variant="warning">
-              {`The rendered dissassembly has been truncated
+              {`The rendered disassembly has been truncated
                 due to its large size: ${totalCodeSize} bytes`}
             </Alert>
           </center>

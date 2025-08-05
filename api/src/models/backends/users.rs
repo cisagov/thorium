@@ -185,7 +185,7 @@ async fn basic_auth_ldap(
 ) -> Result<ldap3::Ldap, ApiError> {
     if let Some(ldap_conf) = &shared.config.thorium.auth.ldap {
         //  build an ldap connection
-        //  we do this on demand instead of having it in shared because it nees to be mutable
+        //  we do this on demand instead of having it in shared because it needs to be mutable
         let (conn, mut ldap) = ldap!(ldap_conf).await?;
         ldap3::drive!(conn);
         // try to bind to ldap with this users creds
@@ -288,7 +288,7 @@ pub async fn bind_to_ldap_system_user(
 
 /// Pull the unix info about a user from ldap
 ///
-/// # Argumens
+/// # Arguments
 ///
 /// * `username` - The username to get info
 /// * `conf` - The Thorium Ldap config
@@ -317,7 +317,7 @@ async fn get_unix_info(
         let group = conf.group_unix_id.attr.get(&mut entry);
         // build UnixInfo object if they exist or error out
         if let (Some(user), Some(group)) = (user, group) {
-            // cast our user and group ids
+            // cast our user and group IDs
             let user = conf.user_unix_id.cast.cast(user)?;
             let group = conf.group_unix_id.cast.cast(group)?;
             return Ok(UnixInfo { user, group });
@@ -476,7 +476,7 @@ impl User {
         }
         // if ldap is configured then authenticated against ldap and pull unix info
         let (password, unix) = match (&shared.config.thorium.auth.ldap, req.local) {
-            // ldap config is setup and a local account was not requested
+            // ldap config is set up and a local account was not requested
             (Some(conf), false) => {
                 // authenticate against ldap
                 let mut ldap = basic_auth_ldap(&req.username, &req.password, shared).await?;
@@ -580,7 +580,7 @@ impl User {
         client.send(&self.email, subject, body).await
     }
 
-    /// Verify an email for a useri
+    /// Verify an email for a user
     ///
     /// # Arguments
     ///
@@ -606,7 +606,7 @@ impl User {
 
     /// Get a [`User`] by username
     ///
-    /// This should only be used when absolutely neccasary as it bypasses all authentication checks
+    /// This should only be used when absolutely necessary as it bypasses all authentication checks
     ///
     /// # Arguments
     ///
@@ -946,7 +946,7 @@ impl User {
                 return Ok(());
             }
             // no groups were provided so get 10000 groups
-            // this is a bit of a hack and means if theres more then 10000 groups we silently miss things
+            // this is a bit of a hack and means if theres more than 10000 groups we silently miss things
             // TODO: Fix this
             let mut list = db::groups::list(0, 10000, shared).await?;
             // extend our groups list
@@ -987,7 +987,7 @@ impl User {
             for user in self.list_details(shared).await? {
                 // if we don't have a password set then assume ldap and update our unix info
                 let unix = if user.local {
-                    // this is a local user so just use our default unix ids
+                    // this is a local user so just use our default unix IDs
                     shared.config.thorium.auth.local_user_ids.clone()
                 } else {
                     // this is an ldap based user so get updated info instead

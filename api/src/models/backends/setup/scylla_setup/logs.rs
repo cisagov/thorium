@@ -1,11 +1,11 @@
-//! Setup the stage logs tables/prepared statements in Scylla
+//! Set up the stage logs tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for tags
+/// The prepared statements for tags
 pub struct LogsPreparedStatements {
     /// Insert a log line
     pub insert: PreparedStatement,
@@ -21,7 +21,7 @@ impl LogsPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the logs tables
+        // set up the logs tables
         setup_log_table(session, config).await;
         // setup our prepared statements
         let insert = insert(session, config).await;
@@ -31,7 +31,7 @@ impl LogsPreparedStatements {
     }
 }
 
-/// Setup a log table for Thorium
+/// Set up a log table for Thorium
 ///
 /// # Arguments
 ///

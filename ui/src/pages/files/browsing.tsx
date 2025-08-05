@@ -8,7 +8,7 @@ import { getUniqueSubmissionGroups, useAuth } from '@utilities';
 import { listFiles } from '@thorpi';
 import { Filters } from '@models';
 
-// get files using filters and and an optional cursor
+// get files using filters and an optional cursor
 const getFiles = async (filters: Filters, existingCursor: string | null) => {
   // get files list from API
   const { files, cursor } = await listFiles(

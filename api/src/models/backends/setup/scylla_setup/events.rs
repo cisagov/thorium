@@ -1,11 +1,11 @@
-//! Setup the events tables/prepared statements in Scylla
+//! Set up the events tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for events
+/// The prepared statements for events
 pub struct EventsPreparedStatements {
     /// Insert an event
     pub insert: PreparedStatement,
@@ -25,7 +25,7 @@ impl EventsPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the events tables
+        // set up the events tables
         setup_events(session, config).await;
         // setup our prepared statements
         let insert = insert(session, config).await;
@@ -42,7 +42,7 @@ impl EventsPreparedStatements {
     }
 }
 
-/// Setup the event table
+/// Set up the event table
 ///
 /// A table to tracks events in Thorium.
 ///

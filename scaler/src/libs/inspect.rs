@@ -22,7 +22,7 @@ where
 /// The docker config from skopeo
 #[derive(Debug, Deserialize, Clone)]
 pub struct DockerConfig {
-    /// All enivronment variables set in the container
+    /// All environment variables set in the container
     #[allow(dead_code)]
     #[serde(rename = "Env", default)]
     pub env: Option<Vec<String>>,
@@ -83,7 +83,7 @@ impl DockerInfo {
         // cast both stdout and stderr to strings
         let raw = String::from_utf8_lossy(&output.stdout);
         let err = String::from_utf8_lossy(&output.stderr);
-        // Throw an erorr if stdout has text
+        // Throw an error if stdout has text
         if !err.is_empty() {
             return Err(Error::new(format!("Error while inspecting image {}", err)));
         }

@@ -1,21 +1,21 @@
-//! Setup the notifications tables/prepared statements in Scylla
+//! Set up the notifications tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for notifications
+/// The prepared statements for notifications
 pub struct NotificationsPreparedStatements {
     /// Insert a new notification
     pub insert: PreparedStatement,
     /// Insert a new notification that doesn't expire
     pub insert_no_expire: PreparedStatement,
-    /// Get all notications for a specific entity
+    /// Get all notifications for a specific entity
     pub get: PreparedStatement,
     /// Delete a notification
     pub delete: PreparedStatement,
-    /// Delete all notications for a specific entity
+    /// Delete all notifications for a specific entity
     pub delete_all: PreparedStatement,
 }
 
@@ -27,7 +27,7 @@ impl NotificationsPreparedStatements {
     /// * `sessions` - The scylla session to use
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
-        // setup the notifications table
+        // set up the notifications table
         setup_notifications_table(session, config).await;
         // setup our prepared statements
         let insert = insert(session, config).await;
@@ -46,7 +46,7 @@ impl NotificationsPreparedStatements {
     }
 }
 
-/// Setup a notifications table for Thorium
+/// Set up a notifications table for Thorium
 ///
 /// # Arguments
 ///

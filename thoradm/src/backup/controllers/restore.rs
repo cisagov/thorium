@@ -262,7 +262,7 @@ impl<R: Restore> TableRestore<R> {
         self.wait_for_workers().await?;
         // tell our monitor to finish
         self.updates_tx.send(MonitorUpdate::Finished).await?;
-        // wait for our ntracker monitor finish
+        // wait for our tracker monitor finish
         handle.await?;
         Ok(())
     }
@@ -358,11 +358,11 @@ impl<R: S3Restore> S3RestoreController<R> {
 
     /// Start our global progress tracker
     pub fn start_monitor(&mut self) -> JoinHandle<Result<(), Error>> {
-        // get a handle to our update recieve channel
+        // get a handle to our update receive channel
         let update_rx = self.updates_rx.clone();
         // build the style for our progress bar
         let bar_style = ProgressStyle::with_template(
-            "{spinner:.green} {elapsed_precise} Total Restored S3 Obejcts: {msg} {bytes} {binary_bytes_per_sec}",
+            "{spinner:.green} {elapsed_precise} Total Restored S3 Objects: {msg} {bytes} {binary_bytes_per_sec}",
         )
         .unwrap()
         .tick_strings(&[
@@ -500,7 +500,7 @@ pub struct RestoreController {
     ctl_conf: CtlConf,
     /// The samples list table
     samples_list: TableRestore<SamplesList>,
-    /// The s3 ids table
+    /// The s3 IDs table
     s3_ids: TableRestore<S3Id>,
     /// The comments table
     comments: TableRestore<Comment>,
@@ -596,13 +596,13 @@ impl RestoreController {
         for node in &config.scylla.nodes {
             println!("  - {node}");
         }
-        // log the buckets we will be overwritting
+        // log the buckets we will be overwriting
         println!("Buckets:");
         println!("  Files: {}", config.thorium.files.bucket);
         println!("  Repos: {}", config.thorium.repos.bucket);
         println!("  Attachments: {}", config.thorium.attachments.bucket);
         println!("  Results: {}", config.thorium.results.bucket);
-        // ask the user for pemission
+        // ask the user for permission
         let response = dialoguer::Confirm::new()
             .with_prompt("Do you want to restore data to the above databases:")
             .interact()?;
@@ -655,7 +655,7 @@ impl RestoreController {
     /// * `path` - The path to the data to restore
     pub async fn restore(&mut self, path: &Path) -> Result<(), Error> {
         let path = path.to_path_buf();
-        // restore our redis clsuter
+        // restore our redis cluster
         self.restore_redis(path.clone()).await?;
         // restore our tables
         self.samples_list.restore(path.clone()).await?;
@@ -680,7 +680,7 @@ impl RestoreController {
     }
 }
 
-/// Handle a restore sub comamnd
+/// Handle a restore sub command
 ///
 /// # Arguments
 ///

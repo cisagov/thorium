@@ -263,7 +263,7 @@ impl SecurityContextUpdate {
     pub fn update(mut self, user: &User, image: &mut Image) -> Result<(), ApiError> {
         // only admins can update security contexts
         is_admin!(user);
-        // upate security_context settings if its set
+        // update security_context settings if its set
         update_opt!(image.security_context.user, self.user);
         update_opt!(image.security_context.group, self.group);
         // update privilege escalation if its set
@@ -480,7 +480,7 @@ impl CleanupUpdate {
 }
 
 impl KvmUpdate {
-    /// Updates an images kvm settigns
+    /// Updates an images kvm settings
     ///
     /// # Arguments
     ///
@@ -957,7 +957,7 @@ impl Image {
         if let Some(args) = update.args.take() {
             args.update(&mut self);
         }
-        // upate security_context settings if its set
+        // update security_context settings if its set
         if let Some(security_context) = update.security_context.take() {
             security_context.update(user, &mut self)?;
         }
@@ -1019,7 +1019,7 @@ impl Image {
     /// * `shared` - Shared objects in Thorium
     #[instrument(name = "Image::runtimes_update", skip_all, err(Debug))]
     pub async fn update_runtimes(user: &User, shared: &Shared) -> Result<(), ApiError> {
-        // only admins can upate the runtimes for all images
+        // only admins can update the runtimes for all images
         is_admin!(user);
         // iterate over all groups and images
         let mut cursor = 0;

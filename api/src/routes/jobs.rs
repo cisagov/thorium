@@ -252,7 +252,7 @@ async fn checkpoint(
 ///
 /// # Arguments
 ///
-/// * `user` - The user that is reseting these jobs
+/// * `user` - The user that is resetting these jobs
 /// * `state` - Shared Thorium objects
 /// * `resets` - The jobs to reset
 #[utoipa::path(
@@ -335,7 +335,7 @@ async fn read_deadlines(
 /// # Arguments
 ///
 /// * `user` - The user that is listing jobs
-/// * `scaler` - The scaler to get running jbos for
+/// * `scaler` - The scaler to get running jobs for
 /// * `start` - The starting timestamp in epoch time to list from
 /// * `end` - The ending timestamp in epoch time to list to
 /// * `params` - The query params to use for this request
@@ -344,7 +344,7 @@ async fn read_deadlines(
     get,
     path = "/api/jobs/bulk/running/:scaler/:start/:end",
     params(
-        ("scalar" = ImageScaler, Path, description = "The scaler to get running jbos for"),
+        ("scalar" = ImageScaler, Path, description = "The scaler to get running jobs for"),
         ("start" = i64, Path, description = "The starting timestamp in epoch time to list from"),
         ("end" = i64, Path, description = "The ending timestamp in epoch time to list to"),
         ("params" = JobListOpts, Query, description = "The query params to use for this request"),

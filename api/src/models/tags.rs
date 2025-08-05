@@ -39,7 +39,7 @@ impl TagType {
 impl FromStr for TagType {
     type Err = InvalidEnum;
 
-    /// Conver this str to an [`EventType`]
+    /// Convert this str to an [`EventType`]
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         match raw {
             "Files" => Ok(TagType::Files),

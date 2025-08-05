@@ -23,7 +23,7 @@ pub struct Login {
     pub invalid_hostnames: Option<bool>,
     /// The path to any certificate authorities to trust
     #[clap(long)]
-    pub certificate_authorites: Option<Vec<PathBuf>>,
+    pub certificate_authorities: Option<Vec<PathBuf>>,
     /// Clear any existing Thorctl settings in the config file given by `--config` and start from scratch
     #[clap(long)]
     pub clear_settings: bool,

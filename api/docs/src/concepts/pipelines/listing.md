@@ -7,7 +7,7 @@ group by sending a GET request to this endpoint:
 ```
 
 This will then return you a list of all pipelines that are in that group. The
-cursor field is optional and will not exist if there are no more piplines to
+cursor field is optional and will not exist if there are no more pipelines to
 return. The response should be in this format:
 ```json
 {

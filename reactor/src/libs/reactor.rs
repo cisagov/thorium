@@ -1,7 +1,7 @@
 //! Handles spawning containers directly for windows nodes
 //!
 //! This support could likely be extended to linux k8s and baremetal nodes but
-//! for k8s nodes would come at the cost of everthing k8s buys us.
+//! for k8s nodes would come at the cost of everything k8s buys us.
 
 use chrono::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -98,7 +98,7 @@ impl Reactor {
         let refresh = RefreshKind::default()
             .with_cpu(CpuRefreshKind::everything())
             .with_memory(MemoryRefreshKind::everything());
-        // setup a system poller
+        // set up a system poller
         let system = System::new_with_specifics(refresh);
         // build our launcher
         let launcher = launchers::new(&args);
@@ -133,7 +133,7 @@ impl Reactor {
             // spawn or execute this task
             match task {
                 Tasks::Resources => {
-                    // update this nodes resourcse in Thorium
+                    // update this nodes resource in Thorium
                     tasks::update_resources(
                         &self.cluster,
                         &self.name,
@@ -195,11 +195,11 @@ impl Reactor {
         Ok(workers)
     }
 
-    /// Make sure that the the keys for our target workers are loaded
+    /// Make sure that the keys for our target workers are loaded
     ///
     /// # Arguments
     ///
-    /// * `chages` - The changes to the current workers to apply this loop
+    /// * `changes` - The changes to the current workers to apply this loop
     /// * `span` - The span to log traces under
     async fn setup_keys(&mut self, changes: &mut HashMap<String, Worker>, span: &Span) {
         // start our reactor check loop

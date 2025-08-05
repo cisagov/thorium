@@ -29,7 +29,7 @@ pub struct Args {
     /// The number of workers to use
     #[clap(short, long, default_value = "10")]
     pub workers: usize,
-    /// The sub command for to execute
+    /// The sub command to execute
     #[clap(subcommand)]
     pub cmd: SubCommands,
     /// The path to the config for the Thorium cluster to backup
@@ -52,7 +52,7 @@ pub enum SubCommands {
     /// Provision Thorium resources including nodes
     #[clap(subcommand)]
     Provision(ProvisionSubCommands),
-    /// Censuse commands in Thorium
+    /// Census commands in Thorium
     #[clap(subcommand)]
     Census(CensusSubCommands),
 }
@@ -169,13 +169,13 @@ pub struct SettingsOpts {
     /// The amount of ephemeral storage to reserve for things outside of Thorium
     #[clap(long)]
     pub reserved_storage: Option<String>,
-    /// The amount of millicpu to use in the fairshare pass if possible
+    /// The amount of millicpu to use in the fair share pass if possible
     #[clap(long)]
     pub fairshare_cpu: Option<String>,
-    /// The amount of memory to use in the fairshare pass if possible
+    /// The amount of memory to use in the fair share pass if possible
     #[clap(long)]
     pub fairshare_memory: Option<String>,
-    /// The amount of ephemeral storage to use in the fairshare pass if possible
+    /// The amount of ephemeral storage to use in the fair share pass if possible
     #[clap(long)]
     pub fairshare_storage: Option<String>,
     /// A list host paths to add to the host path whitelist

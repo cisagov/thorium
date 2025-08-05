@@ -1,11 +1,11 @@
-//! Setup the samples tables/prepared statements in Scylla
+//! Set up the samples tables/prepared statements in Scylla
 
 use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 
 use crate::Conf;
 
-/// The prepared statments for Samples
+/// The prepared statements for Samples
 pub struct SamplesPreparedStatements {
     /// Insert a sample
     pub insert: PreparedStatement,
@@ -19,7 +19,7 @@ pub struct SamplesPreparedStatements {
     pub delete: PreparedStatement,
     /// Delete a submission id from many groups
     pub delete_multiple_groups: PreparedStatement,
-    /// Get the basic sumbmission info for a specific sha256
+    /// Get the basic submission info for a specific sha256
     pub get_basic_submission_info: PreparedStatement,
     /// List the ties for a sample cursor
     pub list_ties: PreparedStatement,
@@ -64,7 +64,7 @@ impl SamplesPreparedStatements {
     }
 }
 
-/// Setup the samples table for Thorium
+/// Set up the samples table for Thorium
 ///
 /// This is the ground truth table for all samples
 ///
@@ -245,7 +245,7 @@ async fn delete_multiple_groups(session: &Session, config: &Conf) -> PreparedSta
         .expect("Failed to prepare scylla sample delete groups statement")
 }
 
-/// Get the submissions with the given sha256, including ids, groups, and submitters
+/// Get the submissions with the given sha256, including IDs, groups, and submitters
 ///
 /// This is primarily used to prune unnecessary metadata after a submission is deleted
 ///

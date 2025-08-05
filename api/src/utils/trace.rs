@@ -123,7 +123,7 @@ fn setup_local(
     tracing_subscriber::fmt::layer().with_filter(conf.level.to_filter())
 }
 
-/// Setup the correct tracer
+/// Set up the correct tracer
 ///
 /// # Arguments
 ///
@@ -139,7 +139,7 @@ pub fn setup(name: &str, trace_conf: &Tracing) -> Option<SdkTracerProvider> {
     if let Some(external) = &trace_conf.external {
         // send traces to an external application and get a provider
         let provider = match external {
-            // setup the correct external tracer
+            // set up the correct external tracer
             TracingServices::Grpc { endpoint, level } => {
                 setup_grpc(name, endpoint, *level, registry)
             }
@@ -155,7 +155,7 @@ pub fn setup(name: &str, trace_conf: &Tracing) -> Option<SdkTracerProvider> {
     }
 }
 
-/// Setup the correct tracer from a stand alone config file
+/// Set up the correct tracer from a stand alone config file
 ///
 /// # Arguments
 ///

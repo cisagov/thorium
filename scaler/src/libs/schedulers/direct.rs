@@ -316,7 +316,7 @@ impl Scheduler for Direct {
             match thorium.system.update_worker(&worker.name, &update).await {
                 Ok(_) => self.scaled_down.push(worker),
                 Err(error) => {
-                    // log that an error occured
+                    // log that an error occurred
                     event!(Level::ERROR, error = true, error_msg = error.to_string());
                     // add this delete to be retried later
                     self.retry.push(worker);

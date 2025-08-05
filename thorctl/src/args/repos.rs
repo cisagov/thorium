@@ -728,7 +728,7 @@ pub struct ContributorsRepos {
 /// A command to list the commitishes for a repo in Thorium
 #[derive(Parser, Debug)]
 pub struct ListCommits {
-    /// The repo we're listing commitshes for
+    /// The repo we're listing commitishes for
     pub repo: String,
     /// The kinds of commitishes to list (e.g. `--kinds branch,tag`) [default: all]
     #[clap(short, long, value_delimiter = ',')]

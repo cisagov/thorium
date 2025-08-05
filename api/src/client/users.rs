@@ -46,7 +46,7 @@ impl Users {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
+// only include blocking structs if the sync feature is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         /// users handler for the Thorium client
@@ -103,7 +103,7 @@ impl Users {
     /// * `host` - The host (starting with http:// or https://) to reach Thorium at
     /// * `blueprint` - User creation blueprint
     /// * `key` - The secret key to use in order to add an admin
-    /// * `settings` - The setttings for this client
+    /// * `settings` - The settings for this client
     ///
     /// # Examples
     ///
@@ -247,7 +247,7 @@ impl Users {
         send_build!(client, req, AuthResponse)
     }
 
-    /// Gets info on a specfic [`User`]
+    /// Gets info on a specific [`User`]
     ///
     /// # Arguments
     ///

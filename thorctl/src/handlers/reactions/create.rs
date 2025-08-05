@@ -101,7 +101,7 @@ impl CreateLine {
 
     /// Print a log line for a created reaction
     pub fn created(reqs: &[ReactionRequest], creates: &BulkReactionResponse) {
-        // track what index we are at for created reaction ids
+        // track what index we are at for created reaction IDs
         let mut ok_index = 0;
         // crawl over the reaction requests we tried to create
         for (index, req) in reqs.iter().enumerate() {
@@ -124,7 +124,7 @@ impl CreateLine {
 
     /// Print a log line for a created reaction in dry-run mode
     pub fn created_dry_run(reqs: &[ReactionRequest]) {
-        // print out the pipelines an samples/repos:commitishes from each request
+        // print out the pipelines and samples/repos:commitishes from each request
         for req in reqs {
             // print samples if there are any
             create_print_samples!("-", req.pipeline, req.samples, "-", "-");
@@ -363,7 +363,7 @@ async fn get_args_info(
         .await
         .into_iter()
         .collect::<Result<Vec<Pipeline>, Error>>()
-        .map_err(|err| Error::new(format!("Error retreiving info on pipelines: {err}")))?;
+        .map_err(|err| Error::new(format!("Error retrieving info on pipelines: {err}")))?;
     let pipelines_images: HashMap<String, HashSet<String>> = pipelines
         .into_iter()
         .map(|pipeline| {

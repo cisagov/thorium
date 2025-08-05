@@ -21,7 +21,7 @@ npm run dev
 
 - Files in `public/static` e.g. `public/static/file.ext` are accessible in source files using `/static/file.ext`
 - `src/` is the root directory of all React source files
-  - `src/components/` contains reusuable React components with accompanying stylesheets written in SCSS
+  - `src/components/` contains reusable React components with accompanying stylesheets written in SCSS
   - `src/pages/` contains React source files for each page
   - `src/styles` contains stylesheets for required pages. Contains stylesheets which define color and typography variables
   - `main.js` main entrypoint for React app. Associated stylesheet (for whole app) which handles all includes: `main.scss`

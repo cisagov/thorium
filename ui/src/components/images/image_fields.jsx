@@ -369,7 +369,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
 
   return (
     <Fragment>
-      {/* Creator can not be edited */}
+      {/* Creator cannot be edited */}
       <Row>
         <Col className="field-name-col mb-2">
           <OverlayTipRight tip={ImageFieldsToolTips.creator}>
@@ -380,7 +380,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
           <FieldBadge field={initialImage['creator']} color={'#305ef2'} />
         </Col>
       </Row>
-      {/* Group can not be edited */}
+      {/* Group cannot be edited */}
       <Row>
         <Col className="field-name-col">
           <OverlayTipRight tip={ImageFieldsToolTips.group}>
@@ -522,7 +522,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
           </Col>
         </Row>
       )}
-      {/* Runtime can not be edited */}
+      {/* Runtime cannot be edited */}
       <Row className="mb-1">
         <Col className="field-name-col">
           <OverlayTipRight tip={ImageFieldsToolTips.runtime}>
@@ -626,7 +626,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
           </div>
         </Col>
       </Row>
-      {/* Used By can not be edited */}
+      {/* Used By cannot be edited */}
       <Row>
         <Col className="field-name-col">
           <OverlayTipRight tip={ImageFieldsToolTips.used_by}>

@@ -53,7 +53,7 @@ struct EditableImage {
     /// How long this image takes to execute on average in seconds (defaults to
     /// 10 minutes on image creation).
     pub runtime: f64,
-    /// Any volumes to bind in to this container
+    /// Any volumes to bind into this container
     pub volumes: Vec<Volume>,
     /// The arguments to add to this images jobs
     pub args: ImageArgs,
@@ -422,7 +422,7 @@ fn calculate_tags_dependencies_update(
 /// * `old_dependencies` - The old dependencies settings
 /// * `new_dependencies` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
-fn calculate_childen_dependencies_update(
+fn calculate_child_dependencies_update(
     mut old_dependencies: ChildrenDependencySettings,
     mut new_dependencies: ChildrenDependencySettings,
 ) -> ChildrenDependencySettingsUpdate {
@@ -467,7 +467,7 @@ fn calculate_dependencies_update(
         ),
         repos: calculate_repo_dependencies_update(old_dependencies.repos, new_dependencies.repos),
         tags: calculate_tags_dependencies_update(old_dependencies.tags, new_dependencies.tags),
-        children: calculate_childen_dependencies_update(
+        children: calculate_child_dependencies_update(
             old_dependencies.children,
             new_dependencies.children,
         ),

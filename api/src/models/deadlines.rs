@@ -43,7 +43,7 @@ impl From<&RawJob> for Deadline {
     ///
     /// # Arguments
     ///
-    /// * `job` - A refernce to a RawJob
+    /// * `job` - A reference to a RawJob
     fn from(job: &RawJob) -> Self {
         Deadline {
             group: job.group.to_owned(),
