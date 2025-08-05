@@ -4,8 +4,8 @@ metadata:
   name: dev
   namespace: thorium
 spec:
-  registry: "<registry.domain:port/path/to/thorium/image>"
-  version: "<VERSION_TAG>" 
+  registry: "ghcr.io/cisagov/thorium/infrastructure/thorium"
+  version: "latest"
   registry_auth:
     "<registry.domain:port/path/to/thorium/image>": "REGISTRY_TOKEN"
   image_pull_policy: Always

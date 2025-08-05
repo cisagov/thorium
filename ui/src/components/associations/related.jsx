@@ -439,7 +439,7 @@ const Related = ({ sha256, results, details }) => {
         <p className="mx-3">
           Relationships between nodes can be direct or indirect. Ancestor or descendant files are direct relations of a sample. These
           relationships are created when an ancestor unpacks or is transformed (ie is patched) to produce a child sample. Indirect
-          relationships come in the form of samples that share a similar characteristic. 
+          relationships come in the form of samples that share a similar characteristic.
         </p>
         <hr />
       </div>

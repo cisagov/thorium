@@ -121,7 +121,7 @@ md-5 = { version = "0.10", optional = true }
 data-encoding = { version = "2.9", optional = true }
 aws-types = {version = "1.3", optional = true }
 aws-sdk-s3 = { version = "1.90", features = ["rt-tokio", "behavior-version-latest"], optional = true }
-aws-smithy-http = { version = "0.62", featues = ["rt-tokio", "event-stream"], optional = true }
+aws-smithy-http = { version = "0.62", features = ["rt-tokio", "event-stream"], optional = true }
 aws-credential-types = { version = "1.2", optional = true }
 anyhow = { version = "1", optional = true }
 elasticsearch = { version = "9.0.0-alpha.1", optional = true }

@@ -7,5 +7,6 @@ to facilitate file analysis. The core components are:
 - Scaler
 - Agent
 - Reactor
-- Thorctl
+- Event Handler
+- Search Streamer
 - Tracing/Logging

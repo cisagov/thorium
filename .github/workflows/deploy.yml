@@ -4,9 +4,8 @@ on:
   push:
     branches:
       - main
-    #tags:
-    #  - '[0-9]+.[0-9]+.[0-9]+*'
-
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*'
 jobs:
   build-mdbook-docs:
     runs-on: ubuntu-latest
@@ -37,6 +36,8 @@ jobs:
         run: |
           cd ui
           npm install
+          set -e
+          npm run validate-style
           npm run build
       - name: Upload UI Bundle Artifact
         uses: actions/upload-artifact@v4
@@ -55,9 +56,9 @@ jobs:
           rustup default nightly
           lscpu
           # build binaries
-          cargo --config edition="2024" build --release --features vendored-openssl
+          cargo build --release --features vendored-openssl
           # build the developer docs
-          cargo --config edition="2024" doc --no-deps
+          cargo doc --no-deps
           # make a glibc dir
           mkdir glibc
           # copy artifacts to the a glibc dir
@@ -90,12 +91,9 @@ jobs:
           - os-name: Linux-x86_64
             runs-on: ubuntu-24.04
             target: x86_64-unknown-linux-musl
-          # - os-name: Linux-aarch64
-          #   runs-on: ubuntu-24.04
-          #   target: aarch64-unknown-linux-musl
-          # - os-name: Windows-x86_64
-          #   runs-on: windows-latest
-          #   target: x86_64-pc-windows-msvc
+          #- os-name: Linux-aarch64
+          #  runs-on: ubuntu-24.04
+          #  target: aarch64-unknown-linux-musl
           - os-name: macOS-x86_64
             runs-on: macOS-latest
             target: x86_64-apple-darwin
@@ -126,7 +124,47 @@ jobs:
           name: ${{ matrix.platform.target }}-binaries
           path: target/${{ matrix.platform.target }}/release
 
+  build-windows-cross-binaries:
+    name: Build Thorium Cross - Windows ${{ matrix.build-target.name }}
+    strategy:
+      matrix:
+        build-target:
+          - path: "./agent"
+            name: agent
+          - path: "./thorctl"
+            name: thorctl
+          - path: "./reactor"
+            name: reactor
+    # This needs to run on Ubuntu or agent builds fail
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C target-feature=+aes,+sse2"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bindgen-cli
+        run: |
+          sudo apt update && sudo apt install gcc gcc-mingw-w64-x86-64 build-essential libssl-dev pkg-config libclang-dev clang-15 musl-tools cmake libvirt-dev jq memstat sysstat -y
+          rustup target add x86_64-pc-windows-gnu
+          cargo install --target=x86_64-pc-windows-gnu --force --locked bindgen-cli
+      - name: Build Windows Cross ${{ matrix.build-target.name }} Binary
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: build
+          target: x86_64-pc-windows-gnu
+          toolchain: nightly
+          args: "--features vendored-openssl --release"
+          strip: true
+          working-directory: ${{ matrix.build-target.path }}
+      - name: Upload ${{ matrix.build-target.name }} x86_64-pc-windows-gnu binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-pc-windows-gnu-${{ matrix.build-target.name }}
+          path: target/x86_64-pc-windows-gnu/release
+
   build-core-container:
+    if: |
+      (github.ref_type == 'branch' && github.ref == 'refs/heads/main') ||
+      github.ref_type == 'tag'
     needs:
       - build-mdbook-docs
       - build-ui-bundle
@@ -138,6 +176,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Download UI Bundle Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -163,16 +203,26 @@ jobs:
         with:
           name: x86_64-unknown-linux-musl-binaries
           path: musl
-      # - name: Download Thorium Linux aarch64 Binary artifacts
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: aarch64-unknown-linux-musl-binaries
-      #     path: windows
-      # - name: Download Thorium Windows Binary artifacts
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: x86_64-pc-windows-msvc-binaries
-      #     path: aarch64
+      #- name: Download Thorium Linux aarch64 Binary artifacts
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: aarch64-unknown-linux-musl-binaries
+      #    path: aarch
+      - name: Download Thorium Windows Agent Artifact
+        uses: actions/download-artifact@v4
+        with:
+           name: x86_64-pc-windows-gnu-agent
+           path: windows/agent
+      - name: Download Thorium Windows Thorctl Artifact
+        uses: actions/download-artifact@v4
+        with:
+           name: x86_64-pc-windows-gnu-thorctl
+           path: windows/thorctl
+      - name: Download Thorium Windows Reactor Artifact
+        uses: actions/download-artifact@v4
+        with:
+           name: x86_64-pc-windows-gnu-reactor
+           path: windows/reactor
       - name: Download Thorium macos x86_64 Binary Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -201,33 +251,46 @@ jobs:
           mv glibc/* target/release/.
           mv musl/* target/x86_64-unknown-linux-musl/release/.
           # mv aarch64/* target/aarch64-unknown-linux-musl/release/.
-          # mv windows/* target/x86_64-pc-windows-gnu/release/.
+          mv windows/agent/thorium-agent.exe target/x86_64-pc-windows-gnu/release/
+          mv windows/thorctl/thorctl.exe target/x86_64-pc-windows-gnu/release/
+          mv windows/reactor/thorium-reactor.exe target/x86_64-pc-windows-gnu/release/
           mv macos/x86_64/* target/x86_64-apple-darwin/release/.
           mv macos/aarch64/* target/aarch64-apple-darwin/release/.
       - name: Build Thorium Container Image
         run: |
-          IMAGE_NAME=${{ github.repository }}
-          IMAGE_PATH=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
-          BASE_IMAGE_PATH=$(echo $IMAGE_PATH | tr '[A-Z]' '[a-z]')
-          IMAGE=$BASE_IMAGE_PATH:latest
+          IMAGE_PATH=ghcr.io/${{ github.repository }}/infrastructure/thorium
+          LOWER_IMAGE_PATH=$(echo $IMAGE_PATH | tr '[A-Z]' '[a-z]')
           # Build base docker image
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+          elif [[ "${{ github.ref_type }}" == "branch" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            TAG=main
+          fi
+          IMAGE=$LOWER_IMAGE_PATH:$TAG
           docker build --file ./Dockerfile --tag $IMAGE --label "runnumber=${GITHUB_RUN_ID}" .
           docker push $IMAGE
-          #echo "BASE_IMAGE=$IMAGE" >> $GITHUB_OUTPUT
+          # now check if tag is latest so can build correct latest tag
+          LATEST_TAG=$(git tag | sort --version-sort | grep -E "[0-9]+\.[0-9]+\.[0-9]+$" | tail -n1)
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" == $LATEST_TAG ]]; then
+            echo "Pushing latest release image"
+            docker tag $IMAGE $LOWER_IMAGE_PATH:latest
+            docker push $LOWER_IMAGE_PATH:latest
+          fi
 
   # Deploy the updated mdbook docs to github pages
   # We only deploy docs if the container images build successfully
   deploy-updated-pages:
+    if: ${{ github.ref_type == 'branch' && github.ref == 'refs/heads/main'}}
     needs:
      - build-mdbook-docs
      - build-core-container
+    runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

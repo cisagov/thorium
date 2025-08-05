@@ -32,7 +32,7 @@ CaRT is a file format for the safe and secure transfer of malware samples and wa
 files are neutered and encrypted to prevent accidental execution or quarantine by antivirus software when downloaded
 from Thorium. All files are CaRTed by the Thorium API upon upload and must be unCaRTed by the user after they are
 downloaded. You can use the Thorium CLI tool (Thorctl) to unCaRT your downloaded file. For more info about Thorctl
-see our setup [instructions](../architecture/thorctl.md).
+see our setup [instructions](../getting_started/thorctl.md).
 
 
 ## Tools

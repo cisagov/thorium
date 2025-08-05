@@ -2,7 +2,7 @@
 
 The Thorium admin role is responsible for curating and maintaining resources in Thorium. As such, an Admin can view,
 modify, or delete any resource within Thorium without restriction. An admin may use the Web UI,
-[Thorctl](../architecture/thorctl.md), or a third party API client (Insomnia, Postman, etc) to interact with Thorium.
+[Thorctl](../getting_started/thorctl.md), or a third party API client (Insomnia, Postman, etc) to interact with Thorium.
 Not all functionality that has been implemented in the restful API is supported via the Web UI or Thorctl. As such,
 admins may need to use an an API client to make direct web requests to the API.
 

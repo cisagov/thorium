@@ -9,6 +9,7 @@
     "fix": "node_modules/eslint/bin/eslint.js src --fix",
     "build": "tsc && vite build --mode production",
     "build-preview": "vite build --mode preview",
+    "validate-style": "prettier src --check",
     "dev": "vite",
     "format": "prettier src --write",
     "preview": "vite preview"
@@ -84,5 +85,10 @@
     "typescript-eslint": "^8.38.0",
     "vite": "^6.3.5",
     "vite-plugin-eslint": "^1.8.1"
+  },
+  "overrides": {
+    "react-syntax-highlighter": {
+      "prismjs": "1.30.0"
+    }
   }
 }
