@@ -1,0 +1,6 @@
+name = "pharos-callanalyzer"
+type = "image"
+config_from = "pharos-callanalyzer.json"
+build_path = "./"
+image_name = "tools/github.com/cmu-sei/pharos-callanalyzer"
+version = "latest"

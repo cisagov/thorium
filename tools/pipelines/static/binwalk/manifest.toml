@@ -1,0 +1,9 @@
+
+name = "binwalk"
+type = "pipeline"
+description = "https://github.com/ReFirmLabs/binwalk"
+version = "latest"
+config_from = "binwalk.json"
+
+[images.binwalk]
+version = "latest"

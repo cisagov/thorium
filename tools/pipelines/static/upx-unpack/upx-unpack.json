@@ -1,0 +1,26 @@
+{
+  "group": "static",
+  "name": "upx-unpack",
+  "order": [
+    [
+      "upx-unpack"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnUpxPacked": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "Detections": [
+            "UPX"
+          ]
+        },
+        "not": {}
+      }
+    }
+  },
+  "description": "Unpack a UPX packed file"
+}

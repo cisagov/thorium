@@ -16,6 +16,9 @@ if [[ $SHELL == *"zsh"* ]] && ! grep -q "alias kubectl=\"minikube kubectl --\"" 
     echo "alias kubectl=\"minikube kubectl --\"" >> ~/.zshrc
     source ~/.zshrc
 fi
+# add any certs needed to pull images to minikube directory
+mkdir -p ~/.minikube/files/etc/ssl/certs/
+cp ./.certs/*.crt  ~/.minikube/files/etc/ssl/certs/
 # start of k8s cluster
 minikube start --cni calico
 # add required plugins

@@ -1,0 +1,22 @@
+{
+  "group": "static",
+  "name": "strings",
+  "order": [
+    [
+      "xorstrings",
+      "floss",
+      "stringsifter",
+      "quantumstrand",
+      "strings",
+      "strings-16be",
+      "strings-16le",
+      "strings-32be",
+      "strings-32le"
+    ]
+  ],
+  "sla": 640800,
+ "triggers": {
+    "RunOnNewSamples": "NewSample"
+  },
+  "description": null
+}

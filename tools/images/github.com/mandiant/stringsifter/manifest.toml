@@ -1,0 +1,6 @@
+name = "stringsifter"
+type = "image"
+config_from = "stringsifter.json"
+build_path = "./"
+image_name = "tools/github.com/mandiant/stringsifter"
+version = "latest"

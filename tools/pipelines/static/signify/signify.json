@@ -1,0 +1,39 @@
+{
+  "group": "static",
+  "name": "signify",
+  "order": [
+    [
+      "signify"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnDll": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileTypeExtension": [
+            "dll"
+          ]
+        },
+        "not": {}
+      }
+    },
+    "RunOnExe": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileTypeExtension": [
+            "exe"
+          ]
+        },
+        "not": {}
+      }
+    }
+  },
+  "description": null
+}

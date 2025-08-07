@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "blint",
+  "order": [
+    [
+      "blint"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": "---\n`BLint` is a Binary Linter that checks the security properties and capabilities of your executables. It is powered by lief. Since version 2, `blint` can also generate Software Bill-of-Materials (SBOM) for supported binaries.\n\n---\n##### Usage\n\nUse may run `blint` on executables with the following binary formats:\n\n - Android (apk, aab)\n - ELF (GNU, musl)\n - PE (exe, dll)\n - Mach-O (x64, arm64)\n\n---\n##### Status\n\n`BLint` is actively maintained and the project receives monthly updates.\n\n---\n##### Documentation\n\n[https://github.com/owasp-dep-scan/blint](https://github.com/owasp-dep-scan/blint)\n\n---\n##### License\n\nMIT License\n\n&nbsp;\n\nCopyright (c) OWASP Foundation\n\n---"
+}

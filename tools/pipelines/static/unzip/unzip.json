@@ -1,0 +1,26 @@
+{
+  "group": "static",
+  "name": "unzip",
+  "order": [
+    [
+      "unzip"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnZips": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileType": [
+            "ZIP"
+          ]
+        },
+        "not": {}
+      }
+    }
+  },
+  "description": null
+}

@@ -1,0 +1,6 @@
+name = "unzip"
+type = "image"
+config_from = "unzip.json"
+build_path = "./"
+image_name = "tools/salsa.debian.org/pkg-security-team/fcrackzip-unzip"
+version = "latest"

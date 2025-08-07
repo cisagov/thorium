@@ -1,0 +1,6 @@
+name = "dump-symbols"
+type = "image"
+config_from = "dump-symbols.json"
+build_path = "./"
+image_name = "tools/gnu.org/binutils/dump-symbols"
+version = "latest"

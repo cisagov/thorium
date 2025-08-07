@@ -1,0 +1,52 @@
+{
+  "group": "static",
+  "name": "capa",
+  "order": [
+    [
+      "capa"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnElf": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileTypeExtension": [
+            "so"
+          ]
+        },
+        "not": {}
+      }
+    },
+    "RunOnExe": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileTypeExtension": [
+            "exe"
+          ]
+        },
+        "not": {}
+      }
+    },
+    "RunOnDll": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileTypeExtension": [
+            "dll"
+          ]
+        },
+        "not": {}
+      }
+    }
+  },
+  "description": null
+}

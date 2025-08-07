@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  labels:
+    app: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+          app: operator
+    spec:
+      serviceAccountName: thorium
+      automountServiceAccountToken: true
+      containers:
+        - name: operator
+          image: ghcr.io/cisagov/thorium/infrastructure/thorium:latest 
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: 0
+              cpu: 0
+            limits:
+              memory: 1Gi
+              cpu: 256m
+          env:
+            - name: "http_proxy"
+            - name: "https_proxy"
+            - name: "HTTP_PROXY"
+            - name: "HTTPS_PROXY"
+      imagePullSecrets:
+      - name: registry-token

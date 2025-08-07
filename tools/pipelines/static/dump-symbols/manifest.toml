@@ -1,0 +1,9 @@
+
+name = "dump-symbols"
+type = "pipeline"
+description = "Dump symbols from a binary if present using binutils"
+version = "latest"
+config_from = "dump-symbols.json"
+
+[images.dump-symbols]
+version = "latest"

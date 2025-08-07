@@ -1,0 +1,9 @@
+
+name = "upx-unpack"
+type = "pipeline"
+description = "Unpack binaries that are UPX packed"
+version = "latest"
+config_from = "upx-unpack.json"
+
+[images.upx-unpack]
+version = "latest"

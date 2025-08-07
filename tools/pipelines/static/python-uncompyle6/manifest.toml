@@ -1,0 +1,9 @@
+
+name = "python-uncompyle6"
+type = "pipeline"
+description = "https://github.com/rocky/python-uncompyle6"
+version = "latest"
+config_from = "python-uncompyle6.json"
+
+[images.python-uncompyle6]
+version = "latest"

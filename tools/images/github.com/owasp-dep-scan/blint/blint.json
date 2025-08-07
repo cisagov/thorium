@@ -1,0 +1,93 @@
+{
+  "group": "static",
+  "name": "blint",
+  "scaler": "K8s",
+  "image": "",
+  "timeout": 300,
+  "resources": {
+    "cpu": "2000m",
+    "memory": "8192Mi",
+    "ephemeral_storage": "0Mi",
+    "nvidia_gpu": 0,
+    "amd_gpu": 0
+  },
+  "spawn_limit": "Unlimited",
+  "volumes": [],
+  "env": {},
+  "args": {
+    "entrypoint": null,
+    "command": null,
+    "reaction": null,
+    "repo": null,
+    "commit": null,
+    "output": "None"
+  },
+  "description": "---\n`BLint` is a Binary Linter that checks the security properties and capabilities of your executables. It is powered by lief. Since version 2, `blint` can also generate Software Bill-of-Materials (SBOM) for supported binaries.\n\n---\n##### Usage\n\nUse may run `blint` on executables with the following binary formats:\n\n - Android (apk, aab)\n - ELF (GNU, musl)\n - PE (exe, dll)\n - Mach-O (x64, arm64)\n\n---\n##### Status\n\n`BLint` is actively maintained and the project receives monthly updates.\n\n---\n##### Documentation\n\n[https://github.com/owasp-dep-scan/blint](https://github.com/owasp-dep-scan/blint)\n\n---\n##### License\n\nMIT License\n\n&nbsp;\n\nCopyright (c) OWASP Foundation\n\n---",
+  "security_context": {
+    "user": null,
+    "group": null,
+    "allow_privilege_escalation": false
+  },
+  "collect_logs": true,
+  "generator": false,
+  "dependencies": {
+    "samples": {
+      "location": "/tmp/thorium/samples",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "ephemeral": {
+      "location": "/tmp/thorium/ephemeral",
+      "kwarg": null,
+      "strategy": "Paths",
+      "names": []
+    },
+    "results": {
+      "images": [],
+      "location": "/tmp/thorium/prior-results",
+      "kwarg": "None",
+      "strategy": "Paths",
+      "names": []
+    },
+    "repos": {
+      "location": "/tmp/thorium/repos",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "tags": {
+      "enabled": false,
+      "location": "/tmp/thorium/prior-tags",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "children": {
+      "enabled": false,
+      "images": [],
+      "location": "/tmp/thorium/prior-children",
+      "kwarg": null,
+      "strategy": "Paths"
+    }
+  },
+  "display_type": "HTML",
+  "output_collection": {
+    "handler": "Files",
+    "files": {
+      "results": "/tmp/thorium/results",
+      "result_files": "/tmp/thorium/result-files",
+      "tags": "/tmp/thorium/tags",
+      "names": []
+    },
+    "children": "/tmp/thorium/children",
+    "auto_tag": {},
+    "groups": []
+  },
+  "child_filters": {
+    "mime": [],
+    "file_name": [],
+    "file_extension": [],
+    "submit_non_matches": false
+  },
+  "clean_up": null,
+  "kvm": null,
+  "network_policies": []
+}

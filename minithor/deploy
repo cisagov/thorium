@@ -29,7 +29,7 @@ kubectl create -f infrastructure/scylla/operator.yaml
 kubectl wait --for condition=established crd/scyllaclusters.scylla.scylladb.com
 kubectl -n scylla-operator rollout status deployment.apps/scylla-operator -w
 sleep 30
-kubectl apply -f infrastructure/scylla/cluster.yaml
+kubectl create -f infrastructure/scylla/cluster.yaml
 sleep 30
 kubectl rollout status --watch --timeout=600s statefulset/scylla-us-east-1-us-east-1a -n scylla
 kubectl create cm scylla-config --from-file infrastructure/scylla/scylla.yaml -n scylla
@@ -56,8 +56,8 @@ kubectl apply -k infrastructure/minio
 # create our namespace
 kubectl create namespace jaeger
 # deploy jaeger
-kubectl apply -f infrastructure/jaeger/service.yml -n jaeger
-kubectl apply -f infrastructure/jaeger/deployment.yml -n jaeger
+kubectl create -f infrastructure/jaeger/service.yml -n jaeger
+kubectl create -f infrastructure/jaeger/deployment.yml -n jaeger
 
 ####### Kubegres
 kubectl create -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml
@@ -65,8 +65,8 @@ kubectl rollout status --watch --timeout=600s deployment.apps/kubegres-controlle
 
 ####### Quickwit
 kubectl create ns quickwit
-kubectl apply -f infrastructure/quickwit/postgres-secret.yml
-kubectl apply -f infrastructure/quickwit/postgres-cluster.yml
+kubectl create -f infrastructure/quickwit/postgres-secret.yml
+kubectl create -f infrastructure/quickwit/postgres-cluster.yml
 sleep 30
 kubectl rollout status --watch --timeout=600s statefulset/postgres-1 -n quickwit
 sleep 30
@@ -112,14 +112,38 @@ curl -k -X POST -u elastic:$ESPASS "https://localhost:9200/_security/user/thoriu
 '
 EOF
 
+##### Create Quickwit Bucket for tracing
+if command -v s3cmd &> /dev/null; then
+
+    cat <<EOF > .s3cfg
+[default]
+access_key = INSECURE_DEV_MINIO_ACCESS_KEY
+secret_key = INSECURE_DEV_MINIO_SECRET_KEY
+host_base = http://localhost:9000
+host_bucket = http://localhost:9000/%(bucket)
+bucket_location = us-east-1
+use_https = False
+EOF
+
+    kubectl.docker port-forward svc/minio -n minio 9000 &
+    PORT_FORWARD_PID=$!
+    sleep 4
+    s3cmd -c .s3cfg mb s3://quickwit
+    kill $PORT_FORWARD_PID
+else
+    echo "WARNING: s3cmd not installed, cannot create 'quickwit' bucket."
+    echo "         Traces will not be stored and Thorium components will log errors"
+fi
+
 ###### Thorium
 kubectl create ns thorium
 kubectl create cm banner --from-file=../ui/src/assets/banner.txt -n thorium
-if [ ! -f ".dockerconfigjson" ]; then
-   cp .dockerconfigjson.empty .dockerconfigjson
-fi
-kubectl create secret docker-registry registry-token -n thorium --from-file=".dockerconfigjson=.dockerconfigjson"
 kubectl apply -f infrastructure/thorium/rbac.yml
-kubectl apply -f infrastructure/thorium/operator.yml -n thorium
+if [ -f ".dockerconfigjson" ]; then
+   kubectl create secret docker-registry registry-token -n thorium --from-file=".dockerconfigjson=.dockerconfigjson"
+   kubectl apply -f infrastructure/thorium/operator-reg-auth.yml -n thorium
+else
+   kubectl apply -f infrastructure/thorium/operator.yml -n thorium
+fi
 kubectl apply -f infrastructure/thorium/ingress.yml -n thorium
 kubectl rollout status --watch --timeout=600s deployment.apps/operator -n thorium

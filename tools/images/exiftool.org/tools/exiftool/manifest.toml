@@ -1,0 +1,6 @@
+name = "exiftool"
+type = "image"
+config_from = "exiftool.json"
+build_path = "./"
+image_name = "tools/exiftool.org/tools/exiftool"
+version = "latest"

@@ -1,0 +1,60 @@
+name: Analysis Tool Builds
+
+on:
+  schedule:
+  - cron: '0 0 * * *'
+  push:
+    branches:
+      - '*' 
+      #- main
+
+concurrency:
+  group: tool-build-group
+
+jobs:
+  generate-tool-builds:
+    if: github.ref_type == 'branch' && github.ref == 'refs/heads/tool-builds'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      matrix: ${{ steps.generate-tool-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        #with:
+        #  ref: 'refs/heads/main'
+      - name: list images to build
+        id: generate-tool-matrix
+        run: |
+          MATRIX=$(python3 tools/scripts/build-actions-matrix.py tools/toolbox.json)
+          #MATRIX_JSON="{ \"matrix\": $MATRIX}"
+          #echo $MATRIX_JSON | jq .
+          echo "matrix=$(echo $MATRIX | jq -c .)" >> $GITHUB_OUTPUT
+        
+  build-tools:
+    name: Build Thorium Tool Image - #${{ matrix.tool.image_name }}
+    if: github.repository == 'gabaker/thorium'
+    needs: generate-tool-builds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        tool: ${{ fromJson(needs.generate-tool-builds.outputs.matrix) }}
+    steps:
+      #- run: echo ${{ needs.generate-tool-builds.outputs.matrix }}
+      - uses: actions/checkout@v4
+        #with:
+        #  ref: 'refs/heads/main'
+      - name: Login to Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build Tool Container Image
+        run: |
+          IMAGE=${{ matrix.tool.image_name}}
+          BUILD_PATH=tools/${{ matrix.tool.build_path}}
+          docker build --file ${BUILD_PATH}/Dockerfile --tag $IMAGE --label "runnumber=${GITHUB_RUN_ID}" ${BUILD_PATH}
+          docker push $IMAGE

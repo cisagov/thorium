@@ -1,0 +1,6 @@
+name = "xortool"
+type = "image"
+config_from = "xortool.json"
+build_path = "./"
+image_name = "tools/github.com/hellman/xortool"
+version = "latest"

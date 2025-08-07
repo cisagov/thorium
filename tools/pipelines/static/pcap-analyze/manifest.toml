@@ -1,0 +1,18 @@
+
+name = "pcap-analyze"
+type = "pipeline"
+description = "Analyze packet captures and extract files"
+version = "latest"
+config_from = "pcap-analyze.json"
+
+[images.zeek-dump]
+version = "latest"
+
+[images.prads]
+version = "latest"
+
+[images.tshark]
+version = "latest"
+
+[images.suricata]
+version = "latest"

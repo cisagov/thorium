@@ -1,0 +1,6 @@
+name = "capa"
+type = "image"
+config_from = "capa.json"
+build_path = "./"
+image_name = "tools/github.com/mandiant/capa"
+version = "latest"

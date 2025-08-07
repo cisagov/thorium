@@ -1,0 +1,29 @@
+{
+  "group": "static",
+  "name": "pdf-analyze",
+  "order": [
+    [
+      "pdf-preview"
+    ],
+    [
+      "pdf2text"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnPDF": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileType": [
+            "PDF"
+          ]
+        },
+        "not": {}
+      }
+    }
+  },
+  "description": "Analyze PDF files"
+}

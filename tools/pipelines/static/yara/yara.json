@@ -1,0 +1,14 @@
+{
+  "group": "static",
+  "name": "yara",
+  "order": [
+    [
+      "yara"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnNewSamples": "NewSample"
+  },
+  "description": null
+}

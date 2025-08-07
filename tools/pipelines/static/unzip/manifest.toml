@@ -1,0 +1,9 @@
+
+name = "unzip"
+type = "pipeline"
+description = "Unzip encrypted (or unencrypted) archive"
+version = "latest"
+config_from = "unzip.json"
+
+[images.unzip]
+version = "latest"

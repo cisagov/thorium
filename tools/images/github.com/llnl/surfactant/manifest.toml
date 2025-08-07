@@ -1,0 +1,6 @@
+name = "surfactant"
+type = "image"
+config_from = "surfactant.json"
+build_path = "./"
+image_name = "tools/github.com/llnl/surfactant"
+version = "latest"

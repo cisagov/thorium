@@ -1,0 +1,15 @@
+{
+  "group": "static",
+  "name": "pcap-analyze",
+  "order": [
+    [
+      "zeek-dump",
+      "prads",
+      "tshark",
+      "suricata"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

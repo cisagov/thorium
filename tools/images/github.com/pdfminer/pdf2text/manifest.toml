@@ -1,0 +1,6 @@
+name = "pdf2text"
+type = "image"
+config_from = "pdf2text.json"
+build_path = "./"
+image_name = "tools/github.com/pdfminer/pdf2text"
+version = "latest"

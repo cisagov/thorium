@@ -1,0 +1,6 @@
+name = "zeek-dump"
+type = "image"
+config_from = "zeek-dump.json"
+build_path = "./"
+image_name = "tools/github.com/zeek/zeek-dump"
+version = "latest"

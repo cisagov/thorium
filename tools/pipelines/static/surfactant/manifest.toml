@@ -1,0 +1,9 @@
+
+name = "surfactant"
+type = "pipeline"
+description = "https://github.com/LLNL/Surfactant"
+version = "latest"
+config_from = "surfactant.json"
+
+[images.surfactant]
+version = "latest"

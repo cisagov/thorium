@@ -1,0 +1,6 @@
+name = "yara"
+type = "image"
+config_from = "yara.json"
+build_path = "./"
+image_name = "tools/github.com/virustotal/yara"
+version = "latest"

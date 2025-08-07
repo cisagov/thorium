@@ -1,0 +1,6 @@
+name = "bulk-extractor"
+type = "image"
+config_from = "bulk-extractor.json"
+build_path = "./"
+image_name = "tools/github.com/simsong/bulk-extractor"
+version = "latest"

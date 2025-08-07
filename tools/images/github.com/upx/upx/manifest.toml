@@ -1,0 +1,6 @@
+name = "upx-unpack"
+type = "image"
+config_from = "upx-unpack.json"
+build_path = "./"
+image_name = "tools/github.com/upx/upx-unpack"
+version = "latest"

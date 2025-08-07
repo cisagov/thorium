@@ -1,0 +1,6 @@
+name = "trid"
+type = "image"
+config_from = "trid.json"
+build_path = "./"
+image_name = "tools/mark0.net/software/trid"
+version = "latest"

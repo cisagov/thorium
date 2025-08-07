@@ -1,0 +1,6 @@
+name = "pharos-ooanalyzer"
+type = "image"
+config_from = "pharos-ooanalyzer.json"
+build_path = "./"
+image_name = "tools/github.com/cmu-sei/pharos-ooanalyzer"
+version = "latest"

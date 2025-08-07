@@ -1,0 +1,26 @@
+{
+  "group": "static",
+  "name": "email-parser",
+  "order": [
+    [
+      "email-parser"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnEmails": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "FileTypeMatch": [
+            "E-Mail message (Var. 2)"
+          ]
+        },
+        "not": {}
+      }
+    }
+  },
+  "description": "Parses emails"
+}

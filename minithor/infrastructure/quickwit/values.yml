@@ -6,7 +6,7 @@ image:
   #tag: v0.6.4
 
 config:
-  default_index_root_uri: s3://quickwit-dev/quickwit-indexes
+  default_index_root_uri: s3://quickwit/quickwit-indexes
   metastore_uri: postgres://postgres:INSECURE_DEV_PASSWORD@postgres.quickwit.svc.cluster.local:5432/quickwit-metastore
 
   storage:

@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "cwe-checker",
+  "order": [
+    [
+      "cwe-checker"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

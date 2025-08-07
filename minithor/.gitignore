@@ -1,2 +1,4 @@
 *.secret
 .dockerconfigjson
+.certs/*
+.s3cfg

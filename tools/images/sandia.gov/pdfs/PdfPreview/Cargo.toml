@@ -1,0 +1,8 @@
+[package]
+name = "pdf-preview"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hayro = "0.4"
+hayro-interpret = "0.4"

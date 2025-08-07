@@ -1,0 +1,6 @@
+name = "magika"
+type = "image"
+config_from = "magika.json"
+build_path = "./"
+image_name = "tools/github.com/google/magika"
+version = "latest"

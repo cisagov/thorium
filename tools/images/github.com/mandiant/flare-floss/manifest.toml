@@ -1,0 +1,6 @@
+name = "floss"
+type = "image"
+config_from = "floss.json"
+build_path = "./"
+image_name = "tools/github.com/mandiant/floss"
+version = "latest"

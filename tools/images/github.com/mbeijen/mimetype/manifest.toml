@@ -1,0 +1,6 @@
+name = "mimetype"
+type = "image"
+config_from = "mimetype.json"
+build_path = "./"
+image_name = "tools/github.com/mbeijen/mimetype"
+version = "latest"

@@ -1,0 +1,9 @@
+
+name = "pefile"
+type = "pipeline"
+description = "https://github.com/erocarrera/pefile"
+version = "latest"
+config_from = "pefile.json"
+
+[images.pefile]
+version = "latest"

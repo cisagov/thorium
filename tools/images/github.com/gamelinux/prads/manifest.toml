@@ -1,0 +1,6 @@
+name = "prads"
+type = "image"
+config_from = "prads.json"
+build_path = "./"
+image_name = "tools/github.com/gamelinux/prads"
+version = "latest"

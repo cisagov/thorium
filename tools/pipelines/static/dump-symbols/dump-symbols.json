@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "dump-symbols",
+  "order": [
+    [
+      "dump-symbols"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

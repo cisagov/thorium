@@ -1,0 +1,9 @@
+
+name = "email-parser"
+type = "pipeline"
+description = "Parse emails"
+version = "latest"
+config_from = "email-parser.json"
+
+[images.email-parser]
+version = "latest"

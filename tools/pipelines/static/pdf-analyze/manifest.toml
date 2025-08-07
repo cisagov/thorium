@@ -1,0 +1,12 @@
+
+name = "pdf-analyze"
+type = "pipeline"
+description = "Analyze PDF files"
+version = "latest"
+config_from = "pdf-analyze.json"
+
+[images.pdf2text]
+version = "latest"
+
+[images.pdf-preview]
+version = "latest"

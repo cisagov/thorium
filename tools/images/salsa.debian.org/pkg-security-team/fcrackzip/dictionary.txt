@@ -1,0 +1,12 @@
+infected
+Infected
+INFECTED
+malware
+Malware
+MALWARE
+malicious
+Malicious
+MALICIOUS
+Password
+password
+Password1!

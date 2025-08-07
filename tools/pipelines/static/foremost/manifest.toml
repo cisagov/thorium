@@ -1,0 +1,9 @@
+
+name = "foremost"
+type = "pipeline"
+description = "https://salsa.debian.org/rul/foremost/tree/debian/sid"
+version = "latest"
+config_from = "foremost.json"
+
+[images.foremost]
+version = "latest"

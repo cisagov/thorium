@@ -1,0 +1,27 @@
+
+name = "identify-files"
+type = "pipeline"
+description = "Identify file type info using an ensemble of tools"
+version = "latest"
+config_from = "identify-files.json"
+
+[images.exiftool]
+version = "latest"
+
+[images.file-linux]
+version = "latest"
+
+[images.magika]
+version = "latest"
+
+[images.peid]
+version = "latest"
+
+[images.mimetype]
+version = "latest"
+
+[images.trid]
+version = "latest"
+
+[images.polyfile]
+version = "latest"

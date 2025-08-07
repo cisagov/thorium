@@ -5,11 +5,23 @@ Minithor utilizes Minikube to provide a local Kubernetes instance with minimal c
 
 ### Requirements and "Disclosures"
 
-To deploy Minithor, you will need a container runtime such as that provided by the docker engine. Minithor also requires a relatively beefy machine, with > 12 GiB of memory, 8+ CPUs, and 100GiB of local storage.
+To deploy Minithor, you will need a container runtime such as that provided by the docker engine. Minithor also requires a relatively beefy machine, with > 12 GiB of memory, 8+ CPUs, and 100GiB of local storage. You will also need to install s3cmd if it is not already installed on the host system, this enables deployment of a s3 bucket for storing traces pushed to Quickwit.
+
+On a Mac using brew:
+
+```bash
+brew install s3cmd
+```
+
+On Linux:
+
+```bash
+apt install s3cmd
+```
 
 ### Deploy Minikube
 
-Install and start minikube and any nessesary plugins.
+Install and start minikube and any necessary plugins.
 
 ```bash
 ./install-linux

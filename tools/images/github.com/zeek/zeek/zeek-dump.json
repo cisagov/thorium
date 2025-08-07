@@ -1,0 +1,93 @@
+{
+  "group": "static",
+  "name": "zeek-dump",
+  "scaler": "K8s",
+  "image": "",
+  "timeout": 1200,
+  "resources": {
+    "cpu": "1000m",
+    "memory": "8192Mi",
+    "ephemeral_storage": "0Mi",
+    "nvidia_gpu": 0,
+    "amd_gpu": 0
+  },
+  "spawn_limit": "Unlimited",
+  "volumes": [],
+  "env": {},
+  "args": {
+    "entrypoint": null,
+    "command": null,
+    "reaction": null,
+    "repo": null,
+    "commit": null,
+    "output": "None"
+  },
+  "description": null,
+  "security_context": {
+    "user": null,
+    "group": null,
+    "allow_privilege_escalation": false
+  },
+  "collect_logs": true,
+  "generator": false,
+  "dependencies": {
+    "samples": {
+      "location": "/tmp/thorium/samples",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "ephemeral": {
+      "location": "/tmp/thorium/ephemeral",
+      "kwarg": null,
+      "strategy": "Paths",
+      "names": []
+    },
+    "results": {
+      "images": [],
+      "location": "/tmp/thorium/prior-results",
+      "kwarg": "None",
+      "strategy": "Paths",
+      "names": []
+    },
+    "repos": {
+      "location": "/tmp/thorium/repos",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "tags": {
+      "enabled": false,
+      "location": "/tmp/thorium/prior-tags",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "children": {
+      "enabled": false,
+      "images": [],
+      "location": "/tmp/thorium/prior-children",
+      "kwarg": null,
+      "strategy": "Paths"
+    }
+  },
+  "display_type": "HTML",
+  "output_collection": {
+    "handler": "Files",
+    "files": {
+      "results": "/tmp/thorium/results",
+      "result_files": "/tmp/thorium/result-files",
+      "tags": "/tmp/thorium/tags",
+      "names": []
+    },
+    "children": "/tmp/thorium/children",
+    "auto_tag": {},
+    "groups": []
+  },
+  "child_filters": {
+    "mime": [],
+    "file_name": [],
+    "file_extension": [],
+    "submit_non_matches": false
+  },
+  "clean_up": null,
+  "kvm": null,
+  "network_policies": []
+}

@@ -1,0 +1,6 @@
+name = "tcpflow"
+type = "image"
+config_from = "tcpflow.json"
+build_path = "./"
+image_name = "tools/github.com/simsong/tcpflow"
+version = "latest"

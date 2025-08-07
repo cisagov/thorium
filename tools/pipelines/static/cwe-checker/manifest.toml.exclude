@@ -1,0 +1,9 @@
+
+name = "cwe-checker"
+type = "pipeline"
+description = "https://github.com/fkie-cad/cwe_checker"
+version = "latest"
+config_from = "cwe-checker.json"
+
+[images.cwe-checker]
+version = "latest"

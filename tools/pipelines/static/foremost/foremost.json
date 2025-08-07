@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "foremost",
+  "order": [
+    [
+      "foremost"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

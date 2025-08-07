@@ -1,0 +1,9 @@
+
+name = "blint"
+type = "pipeline"
+description = "https://github.com/owasp-dep-scan/blint"
+version = "latest"
+config_from = "blint.json"
+
+[images.blint]
+version = "latest"

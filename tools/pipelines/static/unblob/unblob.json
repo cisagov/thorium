@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "unblob",
+  "order": [
+    [
+      "unblob"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

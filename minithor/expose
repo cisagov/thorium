@@ -4,5 +4,6 @@
 shopt -s expand_aliases
 alias kubectl="minikube kubectl --"
 
-sudo minikube kubectl -- port-forward svc/ingress-nginx-controller --address 0.0.0.0 -n ingress-nginx 80:80
+#sudo minikube kubectl -- port-forward svc/ingress-nginx-controller --address 0.0.0.0 -n ingress-nginx 80:80
+sudo minikube kubectl -- port-forward svc/thorium-api --address 0.0.0.0 -n thorium 80:80
 #minikube tunnel

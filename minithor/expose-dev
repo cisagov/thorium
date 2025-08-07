@@ -20,5 +20,6 @@ sleep 10
 kubectl port-forward svc/scylla-us-east-1-us-east-1a-0 -n scylla 9042 9142 9160 19042 19142 &
 # Tunnel frontend and api ingress to localhost
 # This command will block
-sudo kubectl port-forward svc/ingress-nginx-controller -n ingress-nginx 80:80
+#sudo kubectl port-forward svc/ingress-nginx-controller -n ingress-nginx 80:80
+sudo minikube kubectl -- port-forward svc/thorium-api --address 0.0.0.0 -n thorium 80:80
 #minikube tunnel

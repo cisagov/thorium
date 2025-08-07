@@ -1,0 +1,8 @@
+
+name = "strings-32be"
+type = "image"
+build = false
+config_from = "strings-32be.json"
+build_path = "./"
+image_name = "tools/gnu.org/binutils/strings"
+version = "latest"

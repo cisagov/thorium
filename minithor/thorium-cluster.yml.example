@@ -48,8 +48,6 @@ spec:
           level: "Info"
       cors:
         insecure: true
-      tags:
-        partition_size: 3600
       files:
         bucket: "thorium-files"
         earliest: 1610596807
@@ -69,6 +67,8 @@ spec:
         access_key: "INSECURE_DEV_MINIO_ACCESS_KEY"
         secret_token: "INSECURE_DEV_MINIO_SECRET_KEY"
         endpoint: "http://minio.minio.svc.cluster.local:9000"
+        region: "us-east-1"
+        use_path_style: true
       auth:
       scaler:
         crane:

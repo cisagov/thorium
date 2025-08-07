@@ -1,0 +1,33 @@
+
+name = "strings"
+type = "pipeline"
+description = "Scan for strings within a file or binary using an ensemble of tools"
+version = "latest"
+config_from = "strings.json"
+
+[images.xorstrings]
+version = "latest"
+
+[images.floss]
+version = "latest"
+
+[images.stringsifter]
+version = "latest"
+
+[images.quantumstrand]
+version = "latest"
+
+[images.strings]
+version = "latest"
+
+[images.strings-16be]
+version = "latest"
+
+[images.strings-16le]
+version = "latest"
+
+[images.strings-32be]
+version = "latest"
+
+[images.strings-32le]
+version = "latest"

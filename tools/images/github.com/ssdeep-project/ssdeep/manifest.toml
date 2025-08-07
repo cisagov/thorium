@@ -1,0 +1,6 @@
+name = "ssdeep"
+type = "image"
+config_from = "ssdeep.json"
+build_path = "./"
+image_name = "tools/github.com/ssdeep-project/ssdeep"
+version = "latest"

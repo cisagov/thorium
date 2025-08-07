@@ -1,0 +1,6 @@
+name = "detect-it-easy"
+type = "image"
+config_from = "detect-it-easy.json"
+build_path = "./"
+image_name = "tools/github.com/horsicq/detect-it-easy"
+version = "latest"

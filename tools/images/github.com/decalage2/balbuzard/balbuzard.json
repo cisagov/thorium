@@ -1,0 +1,93 @@
+{
+  "group": "static",
+  "name": "balbuzard",
+  "scaler": "K8s",
+  "image": "",
+  "timeout": 900,
+  "resources": {
+    "cpu": "1000m",
+    "memory": "4096Mi",
+    "ephemeral_storage": "0Mi",
+    "nvidia_gpu": 0,
+    "amd_gpu": 0
+  },
+  "spawn_limit": "Unlimited",
+  "volumes": [],
+  "env": {},
+  "args": {
+    "entrypoint": null,
+    "command": null,
+    "reaction": null,
+    "repo": null,
+    "commit": null,
+    "output": "None"
+  },
+  "description": "---\n\n`Balbuzard` is an older open source tool used to extract patterns of interest from suspicious files including IP addresses, domain names, headers, and strings. It is part of a package of tools with the same name (Balbuzzard) and was written by Philippe Lagadec.\n\n---\n##### Usage\n\nRun `balbuzard` on any binary executable to extract embedded strings and headers. \n\n---\n##### Status\n\nThis tool last received updates to its open source code repository 6 years ago.\n\n---\n##### Documentation\n\n[https://github.com/decalage2/balbuzard](https://github.com/decalage2/balbuzard)\n\n---\n##### License: \n\nThis license applies to the whole Balbuzard package including balbuzard, bbcrack, bbharvest and bbtrans, apart from the thirdparty and plugins folders which contain third-party files published with their own license.\n\nThe Balbuzard package is copyright (c) 2007-2019, Philippe Lagadec (http://www.decalage.info) All rights reserved.\n\nRedistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:\n\n - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.\n - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.\n\n---",
+  "security_context": {
+    "user": null,
+    "group": null,
+    "allow_privilege_escalation": false
+  },
+  "collect_logs": true,
+  "generator": false,
+  "dependencies": {
+    "samples": {
+      "location": "/tmp/thorium/samples",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "ephemeral": {
+      "location": "/tmp/thorium/ephemeral",
+      "kwarg": null,
+      "strategy": "Paths",
+      "names": []
+    },
+    "results": {
+      "images": [],
+      "location": "/tmp/thorium/prior-results",
+      "kwarg": "None",
+      "strategy": "Paths",
+      "names": []
+    },
+    "repos": {
+      "location": "/tmp/thorium/repos",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "tags": {
+      "enabled": false,
+      "location": "/tmp/thorium/prior-tags",
+      "kwarg": null,
+      "strategy": "Paths"
+    },
+    "children": {
+      "enabled": false,
+      "images": [],
+      "location": "/tmp/thorium/prior-children",
+      "kwarg": null,
+      "strategy": "Paths"
+    }
+  },
+  "display_type": "String",
+  "output_collection": {
+    "handler": "Files",
+    "files": {
+      "results": "/tmp/thorium/results",
+      "result_files": "/tmp/thorium/result-files",
+      "tags": "/tmp/thorium/tags",
+      "names": []
+    },
+    "children": "/tmp/thorium/children",
+    "auto_tag": {},
+    "groups": []
+  },
+  "child_filters": {
+    "mime": [],
+    "file_name": [],
+    "file_extension": [],
+    "submit_non_matches": false
+  },
+  "clean_up": null,
+  "kvm": null,
+  "network_policies": []
+}

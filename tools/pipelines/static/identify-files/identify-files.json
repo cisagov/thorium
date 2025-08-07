@@ -1,0 +1,21 @@
+{
+  "group": "static",
+  "name": "identify-files",
+  "order": [
+    [
+      "exiftool",
+      "detect-it-easy",
+      "file-linux",
+      "peid",
+      "mimetype",
+      "trid",
+      "polyfile",
+      "magika"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnNewSamples": "NewSample"
+  },
+  "description": null
+}
