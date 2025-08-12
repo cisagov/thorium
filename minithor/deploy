@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# Needed for non-interactive environments
+shopt -s expand_aliases
 alias kubectl="minikube kubectl --"
 
 ##### Helm
@@ -11,18 +14,18 @@ rm ./get_helm.sh
 kubectl apply -k ./infrastructure/redis
 
 ###### Elastic
-kubectl apply -f https://download.elastic.co/downloads/eck/2.13.0/crds.yaml
-kubectl apply -f https://download.elastic.co/downloads/eck/2.13.0/operator.yaml
+kubectl create -f https://download.elastic.co/downloads/eck/2.16.0/crds.yaml
+kubectl create -f https://download.elastic.co/downloads/eck/2.16.0/operator.yaml
 kubectl rollout status --watch --timeout=600s statefulset/elastic-operator -n elastic-system
 kubectl apply -k infrastructure/elastic
 
 ####### Scylla
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.0/cert-manager.yaml
+kubectl create -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
 kubectl wait --for condition=established crd/certificates.cert-manager.io crd/issuers.cert-manager.io
 sleep 30
 kubectl -n cert-manager rollout status deployment.apps/cert-manager-webhook -w
 sleep 30
-kubectl apply -f infrastructure/scylla/operator.yaml
+kubectl create -f infrastructure/scylla/operator.yaml
 kubectl wait --for condition=established crd/scyllaclusters.scylla.scylladb.com
 kubectl -n scylla-operator rollout status deployment.apps/scylla-operator -w
 sleep 30
@@ -57,7 +60,7 @@ kubectl apply -f infrastructure/jaeger/service.yml -n jaeger
 kubectl apply -f infrastructure/jaeger/deployment.yml -n jaeger
 
 ####### Kubegres
-kubectl apply -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.18/kubegres.yaml
+kubectl create -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml
 kubectl rollout status --watch --timeout=600s deployment.apps/kubegres-controller-manager -n kubegres-system
 
 ####### Quickwit
@@ -112,6 +115,9 @@ EOF
 ###### Thorium
 kubectl create ns thorium
 kubectl create cm banner --from-file=../ui/src/assets/banner.txt -n thorium
+if [ ! -f ".dockerconfigjson" ]; then
+   cp .dockerconfigjson.empty .dockerconfigjson
+fi
 kubectl create secret docker-registry registry-token -n thorium --from-file=".dockerconfigjson=.dockerconfigjson"
 kubectl apply -f infrastructure/thorium/rbac.yml
 kubectl apply -f infrastructure/thorium/operator.yml -n thorium

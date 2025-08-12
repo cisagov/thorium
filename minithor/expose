@@ -1,3 +1,8 @@
 #!/bin/bash
-sudo kubectl port-forward svc/ingress-nginx-controller --address 0.0.0.0 -n ingress-nginx 80:80
+
+# Needed for non-interactive environments
+shopt -s expand_aliases
+alias kubectl="minikube kubectl --"
+
+sudo minikube kubectl -- port-forward svc/ingress-nginx-controller --address 0.0.0.0 -n ingress-nginx 80:80
 #minikube tunnel

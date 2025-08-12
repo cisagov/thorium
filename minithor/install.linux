@@ -5,8 +5,17 @@ sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-a
 # set resources for VM
 minikube config set cpus 8
 minikube config set memory 15976
-# alias kubectl command to minikube subcommand
-alias kubectl="minikube kubectl --"
+# alias kubectl command to minikube subcommand and add to .bashrc/rshrc
+touch ~/.bashrc
+if [[ $SHELL == *"bash"* ]] && ! grep -q "alias kubectl=\"minikube kubectl --\"" ~/.bashrc; then
+    echo "alias kubectl=\"minikube kubectl --\"" >> ~/.bashrc
+    source ~/.bashrc
+fi
+touch ~/.zshrc
+if [[ $SHELL == *"zsh"* ]] && ! grep -q "alias kubectl=\"minikube kubectl --\"" ~/.zshrc; then
+    echo "alias kubectl=\"minikube kubectl --\"" >> ~/.zshrc
+    source ~/.zshrc
+fi
 # start of k8s cluster
 minikube start --cni calico
 # add required plugins

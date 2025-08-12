@@ -3,7 +3,7 @@
   "description": "Web UI for Thorium 1.x",
   "type": "module",
   "private": true,
-  "version": "1.104.4",
+  "version": "1.1.0",
   "scripts": {
     "lint": "node_modules/eslint/bin/eslint.js src",
     "fix": "node_modules/eslint/bin/eslint.js src --fix",
@@ -72,6 +72,7 @@
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@types/json-bigint": "^1.0.4",
+    "@types/node": "^24.2.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.7.0",

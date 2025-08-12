@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Needed for non-interactive environments
+shopt -s expand_aliases
+alias kubectl="minikube kubectl --"
+
 # Elastic API
 kubectl port-forward svc/elastic-es-http -n elastic-system 9200 &
 sleep 10
@@ -18,4 +22,3 @@ kubectl port-forward svc/scylla-us-east-1-us-east-1a-0 -n scylla 9042 9142 9160 
 # This command will block
 sudo kubectl port-forward svc/ingress-nginx-controller -n ingress-nginx 80:80
 #minikube tunnel
-

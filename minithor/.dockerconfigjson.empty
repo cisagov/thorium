@@ -1,0 +1,5 @@
+{
+        "auths": {
+            "<registry.domain:port>": "<REGISTRY_TOKEN>"
+	}
+}

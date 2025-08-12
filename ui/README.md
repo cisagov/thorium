@@ -19,15 +19,20 @@ npm run dev
 
 ## Project Structure
 
-- Files in `public/static` e.g. `public/static/file.ext` are accessible in source files using `/static/file.ext`
-- `src/` is the root directory of all React source files
-  - `src/components/` contains reusuable React components with accompanying stylesheets written in SCSS
-  - `src/pages/` contains React source files for each page
-  - `src/styles` contains stylesheets for required pages. Contains stylesheets which define color and typography variables
-  - `main.js` main entrypoint for React app. Associated stylesheet (for whole app) which handles all includes: `main.scss`
-  - `app.js` contains source code of `App` which is loaded by `main.js`. Contains React Router and maintains routes, sidebar and OUO banner. Loads different pages based on specified route
-  - `index.html` is the HTML entrypoint of the webapp. `main.js` mounts a container using `#mount` in `index.html`
-
+- [index.html](./index.html): Entrypoint HTML file for the Thorium web application
+- [public](./public): Files that are hosted from the root path of the site (e.g. `/ferris-scientist.png`)
+- [src/](./src): Project source code and imported assets
+  - [assets](./src/assets): Static assets imported by site components
+  - [components](./src/components): All non-page UI components
+  - [main.tsx](./src/main.tsx): Entrypoint for the React app. This loads global styles and an instance of <Thorium/>.
+  - [models](./src/models): Thorium data structures as Typescript interfaces, types, and enums
+  - [pages](./src/pages): Thorium Site pages
+  - [styles](./src/styles): Global styles including theme colors, spacing, and bootstrap component overrides for the theme.
+  - [thorium.tsx](./src/thorium.tsx): Root site component that includes routes, global error handling and auth
+  - [thorpi](./src/thorpi): Thorium API client
+  - [utilities](./src/utilities): Typescript utility functions
+- [vite.config.ts](vite.config.ts): Vite project configuration including import aliases (`@pages`)
+- [mitre_tags](mitre_tags): Static MBC and ATT&CK tags list used for Tag select options dropdowns and associated crawl scripts
 
 ## Formatting and Testing
 

@@ -3,4 +3,4 @@ minikube start --cni calico
 # wait a bit for things to come online
 sleep 30
 # try force cleanup of non-running pods if they don't come back automatically
-kubectl get pods -A | grep -v Running | grep -v NAMESPACE | awk '{print $1" "$2}' | xargs -L 1 kubectl delete pods -n
+kubectl -- get pods -A | grep -v Running | grep -v NAMESPACE | awk '{print $1" "$2}' | xargs -L 1 minikube kubectl -- delete pods -n

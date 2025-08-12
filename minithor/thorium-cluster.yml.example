@@ -7,7 +7,7 @@ spec:
   registry: "ghcr.io/cisagov/thorium/infrastructure/thorium"
   version: "latest"
   registry_auth:
-    "<registry.domain:port/path/to/thorium/image>": "REGISTRY_TOKEN"
+    "registry.domain:port": "dGhvcml1bTpjb3JuCg==" # "thorium:corn"
   image_pull_policy: Always
   components:
     api:
@@ -37,8 +37,6 @@ spec:
         - "/conf/thorium.yml"
         - "--keys"
         - "/keys/keys.yml"
-        - "--workers"
-        - "1"
     event_handler:
       resources:
         cpu: 0
@@ -101,4 +99,9 @@ spec:
       node: "https://elastic-es-http.elastic-system.svc.cluster.local:9200"
       username: "thorium"
       password: "INSECURE_DEV_PASSWORD"
-      results: "results"
+      results:
+        repos: thorium_repo_results
+        samples: thorium_sample_results
+      tags:
+        repos: thorium_repo_tags
+        samples: thorium_sample_tags

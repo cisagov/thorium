@@ -18,10 +18,8 @@ spec:
       automountServiceAccountToken: true
       containers:
         - name: operator
-          image: <OPERATOR IMAGE>
+          image: ghcr.io/cisagov/thorium/infrastructure/thorium:latest
           imagePullPolicy: Always
-          #command: ["/bin/bash", "-c"]
-          #args: ["sleep 1000"]
           resources:
             requests:
               memory: 0

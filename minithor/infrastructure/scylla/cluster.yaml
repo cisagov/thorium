@@ -15,9 +15,8 @@ metadata:
   name: scylla
   namespace: scylla
 spec:
-  #version: 5.4.7
-  version: 6.1.5
-  agentVersion: 3.2.8
+  version: 6.2.3
+  agentVersion: 3.4.2
   developerMode: true
   datacenter:
     name: us-east-1

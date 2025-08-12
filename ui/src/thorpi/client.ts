@@ -29,7 +29,12 @@ function getCookie(cname: string): string {
 // was used to navigate to the frontend
 let apiURL = '';
 if (window.location.hostname == 'localhost' || window.location.hostname == '127.0.0.1') {
-  apiURL = `${process.env.REACT_APP_API_URL}`;
+  // Used in when running local dev instance and pointed to a remote API
+  if (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL !== '') {
+    apiURL = `${process.env.REACT_APP_API_URL}`;
+  } else {
+    apiURL = `${window.location.protocol}//${window.location.hostname}/api`;
+  }
 } else {
   apiURL = `${window.location.protocol}//${window.location.hostname}/api`;
 }

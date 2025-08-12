@@ -55,8 +55,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      'process.env.REACT_APP_API_URL': env && env.REACT_APP_API_URL ? JSON.stringify(env.REACT_APP_API_URL) : JSON.stringify("http://127.0.0.1:80"),
-      'process.env.VERSION': JSON.stringify(env.npm_package_version),
+      'process.env.REACT_APP_API_URL': env && env.REACT_APP_API_URL ? JSON.stringify(env.REACT_APP_API_URL) : undefined,
     }
   };
 });
