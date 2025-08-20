@@ -15,7 +15,7 @@ serde = "1.0"
 serde_json = "1.0"
 serde_yaml = "0.9"
 serde_derive = "1.0"
-thorium = { version = "1.1.0", path = "../api", default-features=false, features = ["client", "kanal-err", "dialoguer-err"]}
+thorium = { version = "1.1.1", path = "../api", default-features=false, features = ["client", "kanal-err", "dialoguer-err"]}
 colored = "3"
 owo-colors = "4"
 http = "1.3"

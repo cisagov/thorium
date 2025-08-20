@@ -146,6 +146,12 @@ macro_rules! bad_internal {
     ($($msg:tt)+) => {$crate::utils::ApiError::new(axum::http::status::StatusCode::BAD_REQUEST, Some($($msg)+))}
 }
 
+/// 429 rate limit
+#[macro_export]
+macro_rules! too_many_requests{
+    ($($msg:tt)+) => {$crate::utils::ApiError::new(axum::http::status::StatusCode::TOO_MANY_REQUESTS, Some($($msg)+))}
+}
+
 impl fmt::Display for ApiError {
     /// Cast this error to either a string based on the message or the code
     ///

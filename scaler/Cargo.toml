@@ -14,7 +14,7 @@ test-utilities = []
 vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
-thorium = {version= "1.1.0", path="../api", default-features = false, features = ["client", "k8s", "trace"] }
+thorium = {version= "1.1.1", path="../api", default-features = false, features = ["client", "k8s", "trace"] }
 reqwest = { version = "0.12", features = ["json"]}
 tokio = { version = "1.45", features = ["full"] }
 async-trait = "0.1"
@@ -43,5 +43,5 @@ hashbrown = "0.15"
 
 [dev-dependencies]
 thorium-scaler = { path = ".", features = ["test-utilities"]}
-thorium = {version= "1.1.0", path="../api", default-features = false, features = ["client", "k8s", "trace", "test-utilities"] }
+thorium = {version= "1.1.1", path="../api", default-features = false, features = ["client", "k8s", "trace", "test-utilities"] }
 serial_test = "3"

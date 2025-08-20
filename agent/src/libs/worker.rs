@@ -1,9 +1,9 @@
 use futures::{poll, task::Poll};
 use std::time::Duration;
-use thorium::models::{StageLogsAdd, WorkerStatus};
 use thorium::Error;
 use thorium::Thorium;
-use tracing::{event, instrument, span, Level};
+use thorium::models::{StageLogsAdd, WorkerStatus};
+use tracing::{Level, event, instrument, span};
 
 use super::agents::{self, Agent};
 use super::{CurrentTarget, Lifetime, Target};

@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{ stream, stream, stream, stream};
 use thorium::models::{
     ArgStrategy, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, CleanupUpdate,
     DependenciesUpdate, DependencyPassStrategy, DependencySettingsUpdate,
@@ -16,7 +16,7 @@ use thorium::models::{
     SystemSettingsUpdateParams, Volume, VolumeTypes,
 };
 use thorium::test_utilities::{self, generators};
-use thorium::{contains, fail, is, is_in, unwrap_variant, vec_in_vec, Error};
+use thorium::{Error, Error, Error, Error, contains, fail, is, is_in, unwra};
 use uuid::Uuid;
 
 #[tokio::test]

@@ -105,6 +105,7 @@ async fn initial_settings_consistency_scan(
         settings: crate::models::UserSettings::default(),
         verified: bool::default(),
         verification_token: None,
+        verification_sent: None,
     };
     // do a scan for consistency according to current settings
     settings.consistency_scan(&fake_admin, &shared).await?;
@@ -130,7 +131,7 @@ fn build_app(
     use std::time::Duration;
     use tower_http::set_header::SetResponseHeaderLayer;
     use tower_http::trace::{DefaultMakeSpan, TraceLayer};
-    use tracing::{event, Level, Span};
+    use tracing::{Level, Span, event};
 
     use crate::utils::trace;
 

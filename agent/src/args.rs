@@ -2,7 +2,7 @@ use clap::Parser;
 use serde_derive::Deserialize;
 use thorium::models::ImageScaler;
 use thorium::{Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use crate::libs::Target;
 
@@ -37,6 +37,9 @@ pub struct Args {
     /// The keys to use when authenticating to Thorium
     #[clap(short, long, default_value = "keys.yml")]
     pub keys: String,
+    /// How long should this agent sit limbo before exiting without a job to work on
+    #[clap(short, long, default_value = "30")]
+    pub limbo: usize,
 }
 
 impl Args {
@@ -103,7 +106,7 @@ impl Args {
                         return Err(Error::new(format!(
                             "Failed to get hostname with {:#?}",
                             err
-                        )))
+                        )));
                     }
                 }
             }

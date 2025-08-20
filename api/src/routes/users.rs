@@ -1,8 +1,8 @@
+use axum::Router;
 use axum::extract::{Json, Path, State};
 use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum::routing::{delete, get, post};
-use axum::Router;
 use axum_extra::TypedHeader;
 use tracing::instrument;
 use utoipa::OpenApi;

@@ -1004,7 +1004,7 @@ impl
 macro_rules! build_filter {
     ($arr:expr, $key:expr, $target:expr) => {
         for item in $arr.iter() {
-            $target.insert(format!("({}={})", $key, item));
+            $target.insert(format!("({}={})", $key, ldap3::ldap_escape(item)));
         }
     };
 }

@@ -510,6 +510,7 @@ impl User {
             settings: req.settings,
             verified: false,
             verification_token: None,
+            verification_sent: None,
         };
         // send a verification email if needed
         match (req.skip_verification, &shared.email) {
@@ -559,6 +560,9 @@ impl User {
             Some(email_conf) => email_conf,
             None => return unavailable!("Email verification is not enabled".to_owned()),
         };
+        // make sure this user has not recently sent a verification email
+        // this helps prevent using Thorium to spam unverified users
+        email_conf.can_send_verification(self)?;
         // generate a special token for our email verification
         let verification_token = token!();
         // save this verification token to redis
@@ -570,6 +574,7 @@ impl User {
         );
         // update our user object
         self.verification_token = Some(verification_token);
+        self.verification_sent = Some(Utc::now());
         // build the subject for email verification email
         let subject = "🦀🎉 Welcome to Thorium 🎉🦀".to_owned();
         // build a body with our verification email
@@ -836,7 +841,12 @@ impl User {
                 let key = &shared.config.thorium.secret_key;
                 // hash password and set a new token
                 self.password = Some(hash_pw!(password, key));
+                // get our old token
+                let old_token = self.token.clone();
+                // generate a new token
                 self.gen_token(shared);
+                // save this users token to the db
+                db::users::save_token(&self, &old_token, shared).await?;
             } else {
                 return unavailable!("Cannot update password when ldap is enabled".to_string());
             }
@@ -879,6 +889,9 @@ impl User {
                 let key = &shared.config.thorium.secret_key;
                 // hash password and set a new token
                 target.password = Some(hash_pw!(password, key));
+                // get our old token
+                let old_token = target.token.clone();
+                // generate a new token
                 target.gen_token(shared);
             } else {
                 return unavailable!("Cannot update password when ldap is enabled".to_string());

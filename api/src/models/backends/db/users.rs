@@ -1,4 +1,5 @@
 use bb8_redis::redis::cmd;
+use chrono::prelude::*;
 use std::collections::{HashMap, HashSet};
 use tracing::instrument;
 
@@ -116,6 +117,7 @@ pub(super) fn cast(
         settings: deserialize_ext!(raw, "settings", UserSettings::default()),
         verified: helpers::extract_bool_default(&mut raw, "verified", true)?,
         verification_token: helpers::extract_opt(&mut raw, "verification_token"),
+        verification_sent: deserialize_opt!(&mut raw, "verification_sent"),
     };
     Ok(user)
 }
@@ -426,7 +428,8 @@ pub async fn set_verification_token(username: &str, verification_token: &str, sh
     // build a redis pipeline
     let mut pipe = redis::pipe();
     // set our updated verification token
-    pipe.cmd("hset").arg(&data_key).arg("verification_token").arg(verification_token);
+    pipe.cmd("hset").arg(&data_key).arg("verification_token").arg(verification_token)
+        .cmd("hset").arg(&data_key).arg("verification_sent").arg(serialize!(&Utc::now()));
     // save user into redis
     let _: () = pipe.atomic()
         .query_async(conn!(shared))

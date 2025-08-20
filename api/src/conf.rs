@@ -278,17 +278,9 @@ pub struct Ldap {
     pub credentials: Option<LdapCreds>,
 }
 
-/// Helps serde default the default user token expiration to 90
-fn default_token_expire() -> u32 {
-    90
-}
-
-/// Helps serde default the local user/group ids to a sane default
-fn default_local_user_ids() -> UnixInfo {
-    UnixInfo {
-        user: 1_879_048_192,
-        group: 1_879_048_192,
-    }
+/// Help serde default the email rate limit to 10 minutes
+fn default_email_rate_limit() -> u64 {
+    600
 }
 
 /// The email settings to use for verification emails
@@ -304,6 +296,54 @@ pub struct EmailVerification {
     pub password: String,
     /// The email regexes to restrict users too
     pub approved_emails: Vec<String>,
+    /// The time to require between verification emails in seconds
+    #[serde(default = "default_email_rate_limit")]
+    pub rate_limit: u64,
+}
+
+impl EmailVerification {
+    /// Check if a user has recently sent a verification email
+    ///
+    /// This will return an error if we can't send a verification email yet.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that we might send a verification email too
+    #[cfg(feature = "api")]
+    pub fn can_send_verification(
+        &self,
+        user: &crate::models::User,
+    ) -> Result<(), crate::utils::ApiError> {
+        // get the last time an email was sent if it was
+        if let Some(sent) = user.verification_sent {
+            // calculate the time at which our rate limit no longer applies
+            let limit_ts = chrono::Utc::now() - chrono::Duration::seconds(self.rate_limit as i64);
+            // a previous verification email was sent so check our rate limit
+            if sent > limit_ts {
+                // calculate when we can next send a verification email
+                let wait_time = sent - limit_ts;
+                // return a 429
+                return Err(crate::too_many_requests!(format!(
+                    "Cannot send verificaiton for another {} seconds",
+                    wait_time.num_seconds()
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Helps serde default the default user token expiration to 90
+fn default_token_expire() -> u32 {
+    90
+}
+
+/// Helps serde default the local user/group ids to a sane default
+fn default_local_user_ids() -> UnixInfo {
+    UnixInfo {
+        user: 1_879_048_192,
+        group: 1_879_048_192,
+    }
 }
 
 /// Authentication settings

@@ -296,6 +296,8 @@ pub struct User {
     pub verified: bool,
     /// The verification token to check against if one has been set
     pub verification_token: Option<String>,
+    /// When a verification email was last sent
+    pub verification_sent: Option<DateTime<Utc>>,
 }
 
 /// A user within Thorium that does not have its password
