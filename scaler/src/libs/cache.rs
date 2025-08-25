@@ -10,12 +10,12 @@ use thorium::models::{
     Image, ImageScaler, NetworkPolicy, NetworkPolicyListOpts, ScrubbedUser, SystemSettings,
 };
 use thorium::{Error, Keys, Thorium};
-use tracing::{event, span, Level, Span};
+use tracing::{Level, Span, event, span};
 use uuid::Uuid;
 
 use crate::{raw_entry_map_insert, raw_entry_vec_push};
 
-use super::{tasks::TaskResult, DockerInfo};
+use super::{DockerInfo, tasks::TaskResult};
 
 /// Hashmap of vectors of image info by group
 pub type ImageInfoCache = HashMap<String, HashMap<String, Image>>;
@@ -97,7 +97,7 @@ pub struct NetworkPolicyInfoCache {
 /// the API.
 pub struct Cache {
     /// The Thorium config
-    conf: Conf,
+    pub conf: Conf,
     /// A client for Thorium
     thorium: Arc<Thorium>,
     /// System settings for Thorium

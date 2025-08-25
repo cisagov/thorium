@@ -419,16 +419,6 @@ fn default_max_sway() -> u64 {
     50
 }
 
-/// Helps serde default the dwell for the scaler to 5
-fn default_dwell() -> u64 {
-    5
-}
-
-/// Helps serde default the fair share divisor to return the entire cluster every 10 mins
-fn default_fair_share_divisor() -> u64 {
-    1
-}
-
 /// The settings for a single k8s cluster
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct K8sCluster {
@@ -486,6 +476,21 @@ impl Default for K8sCluster {
     }
 }
 
+/// Helps serde default the dwell for the scaler to 5
+fn default_dwell() -> u64 {
+    5
+}
+
+/// Helps serde default the limbo for agents to 5 seconds
+fn default_limbo() -> usize {
+    5
+}
+
+/// Helps serde default the fair share divisor to return the entire cluster every 10 mins
+fn default_fair_share_divisor() -> u64 {
+    1
+}
+
 /// The settings for all k8s clusters used by Thorium
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct K8s {
@@ -498,6 +503,9 @@ pub struct K8s {
     /// How long at minimum to wait between scale attempts in seconds
     #[serde(default = "default_dwell")]
     pub dwell: u64,
+    /// How long an agent should sit in limbo without a job
+    #[serde(default = "default_limbo")]
+    pub limbo: usize,
     /// The settings to use when calculating fairshare costs
     #[serde(default = "FairShareWeights::default")]
     pub fair_share: FairShareWeights,
@@ -513,6 +521,7 @@ impl Default for K8s {
             clusters: BTreeMap::default(),
             ignored_contexts: HashSet::default(),
             dwell: default_dwell(),
+            limbo: default_limbo(),
             fair_share: FairShareWeights::default(),
             fair_share_divisor: default_fair_share_divisor(),
         }

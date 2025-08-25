@@ -2,12 +2,12 @@ use k8s_openapi::api::core::v1::{Container, EnvVar, SecurityContext};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use serde_json::json;
 use std::collections::BTreeMap;
-use thorium::models::{Image, Resources, ScrubbedUser};
 use thorium::Error;
+use thorium::models::{Image, Resources, ScrubbedUser};
 
 use super::MountGen;
-use crate::libs::schedulers::Spawned;
 use crate::libs::Cache;
+use crate::libs::schedulers::Spawned;
 use crate::serialize;
 
 // used when casting to a quantity
@@ -157,6 +157,8 @@ impl Containers {
                 &Some(format!("/home/{}", &spawn.req.user)),
             ));
         }
+        // get our limbo as a string
+        let limbo = cache.conf.thorium.scaler.k8s.limbo.to_string();
         // build container json
         let raw = json!({
             "name": &spawn.req.stage,
@@ -180,11 +182,13 @@ impl Containers {
                 &spawn.name,
                 "--keys",
                 "/opt/thorium-keys/keys.yml",
+                "--limbo",
+                limbo,
                 "k8s",
                 "--entrypoint",
                 entrypoint,
                 "--cmd",
-                cmd
+                cmd,
             ],
             "resources": {
                 "requests": Self::request_conv(&image.resources)?,

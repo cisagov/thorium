@@ -243,6 +243,8 @@ impl Worker {
         self.needs_update().await?;
         // tell Thorium we are running
         self.target.update_worker(WorkerStatus::Running).await?;
+        // track how long this work should sit in limbo before exiting without a job to claim
+        let mut limbo = self.args.limbo;
         loop {
             // check if any of our spawned jobs have completed
             self.check_jobs().await;
@@ -252,8 +254,15 @@ impl Worker {
             if !self.claim_jobs().await {
                 // check if we have any active jobs or not
                 if self.target.active.is_none() {
-                    event!(Level::INFO, active = false);
-                    break;
+                    event!(Level::INFO, active = false, limbo_left = limbo);
+                    // if we have no more limbo left then exit
+                    if limbo == 0 {
+                        break;
+                    }
+                    // otherwise decrement our limbo
+                    limbo -= 1;
+                    // sleep for 1 second before looking for another job
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             } else {
                 // if we claimed a job then skip our sleep

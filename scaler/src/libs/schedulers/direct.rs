@@ -1,13 +1,13 @@
 //! Directly schedules jobs onto nodes with reactors
 
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashSet};
 use hashbrown::HashMap;
+use std::collections::{BTreeMap, HashSet};
 use thorium::models::{
     ImageScaler, Node, NodeListParams, SystemSettings, WorkerStatus, WorkerUpdate,
 };
 use thorium::{Conf, Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use super::{
     Allocatable, AllocatableUpdate, NodeAllocatableUpdate, Scheduler, Spawned, WorkerDeletion,
@@ -348,15 +348,12 @@ impl Scheduler for Direct {
     ) -> Result<(), Error> {
         // get a list of the currently spawned workers
         let spawned = allocatable.spawn_names();
-        println!("clusters -> {:#?}", allocatable.clusters);
-        println!("spawned -> {:#?}", spawned);
         // build our node list params
         let params = NodeListParams::default().scaler(self.scaler).limit(500);
         // build a cursor over our current nodes
         let mut cursor = thorium.system.list_node_details(&params).await?;
         // keep crawling nodes until we have scanned them all
         while !cursor.data.is_empty() {
-            println!("workers -> {:#?}", cursor.data);
             // condense our list of workers to a flat iter
             let workers = cursor.data.drain(..).flat_map(|node| node.workers);
             // prune any jobs that we know still exist
