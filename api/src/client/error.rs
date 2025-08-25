@@ -531,3 +531,17 @@ impl From<dialoguer::Error> for Error {
         Error::Dialoguer(error)
     }
 }
+
+#[cfg(feature = "api")]
+impl From<Error> for rmcp::ErrorData {
+    fn from(error: Error) -> Self {
+        // get our message or set a default
+        let message = error.msg().unwrap_or_else(|| "Unknown Error".to_owned());
+        // build our rmcp error
+        rmcp::ErrorData {
+            code: rmcp::model::ErrorCode::INTERNAL_ERROR,
+            message: message.into(),
+            data: None,
+        }
+    }
+}

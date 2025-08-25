@@ -8,6 +8,7 @@ use bytes::Bytes;
 use cart_rs::UncartStream;
 use chrono::prelude::*;
 use indicatif::ProgressBar;
+use schemars::JsonSchema;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
@@ -1279,7 +1280,7 @@ impl OriginRequest {
 }
 
 /// The types of network protocols used in a packet capture
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum PcapNetworkProtocol {
     /// The TCP protocol
@@ -1331,7 +1332,7 @@ impl FromStr for PcapNetworkProtocol {
 }
 
 /// The types of files a samples can be carved from
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum CarvedOrigin {
     /// The sample was carved from a packet capture
@@ -1356,7 +1357,7 @@ pub enum CarvedOrigin {
 }
 
 /// The different origin relationships for files
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "api", schema(example = json!(
     {
@@ -1950,7 +1951,7 @@ impl PartialEq<SubmissionUpdate> for Sample {
 
 /// A cut down version of a submission object contain just unique info
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema, JsonSchema))]
 #[cfg_attr(feature = "api", schema(example = json!(
 	{
 		"id": "f085b909-a4b5-48d6-96da-5ed0b6a2a1e8",
@@ -1992,7 +1993,7 @@ pub type TagMap = HashMap<String, HashMap<String, HashSet<String>>>;
 
 /// A request for a comment about a specific sample
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema, JsonSchema))]
 #[cfg_attr(feature = "api", schema(example = json!(
     {
 		"groups": [
@@ -2067,7 +2068,7 @@ pub struct CommentResponse {
 ///
 /// User will largely only know/use sample structs over Submission.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema, JsonSchema))]
 #[cfg_attr(feature = "api", schema(example = json!({
 	"sha256": "a08a865e1b926ca5bbf5d6ee9e75d6e5cb11ee834a1397296ea9186f4d7331d8",
 	"sha1": "cf7b6f343ac2e89cabbfbe70670aca19ac8b8be6",

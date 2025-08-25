@@ -14,8 +14,8 @@ use std::str::FromStr;
 use tracing::instrument;
 use uuid::Uuid;
 
-use super::db::{self, CursorCore, ScyllaCursorSupport};
 use super::CommentSupport;
+use super::db::{self, CursorCore, ScyllaCursorSupport};
 use crate::models::{
     ApiCursor, CarvedOrigin, CarvedOriginTypes, Comment, CommentForm, CommentResponse, CommentRow,
     DeleteCommentParams, DeleteSampleParams, FileListParams, Group, GroupAllowAction, Origin,
@@ -1105,7 +1105,7 @@ impl TryFrom<OriginRequest> for Origin {
             _ => {
                 return bad!(
                     "unknown origin type (does it start with a capital letter?)".to_string()
-                )
+                );
             }
         };
         Ok(origin)

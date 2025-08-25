@@ -1795,9 +1795,6 @@ pub struct S3 {
     /// Force path style bucket adressing
     #[serde(default)]
     pub use_path_style: bool,
-    /// Whether the operator should skip bucket creation or not
-    #[serde(default)]
-    pub skip_bucket_auto_create: bool,
 }
 
 /// Helps serde default the max size an incoming json body can be in mebibytes

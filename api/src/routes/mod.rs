@@ -11,6 +11,7 @@ mod routes_reexport {
     pub mod groups;
     pub mod images;
     pub mod jobs;
+    pub mod mcp;
     pub mod network_policies;
     pub mod pipelines;
     pub mod reactions;

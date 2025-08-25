@@ -26,7 +26,7 @@ kube = { version = "1.1", features = ["rustls-tls", "derive", "config", "client"
 kube-derive = { version = "1.1" }
 rustls = "0.23.27"
 k8s-openapi = { version = "0.25", default-features = false, features = ["v1_30"] }
-schemars = { version = "0.8.0" }
+schemars = { version = "1.0.4" }
 bytestring = { version = "1.4" }
 rand = { version = "0.9" }
 base64 = { version = "0.22" }
