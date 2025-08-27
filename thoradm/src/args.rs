@@ -77,7 +77,6 @@ fn default_backup_components() -> Vec<BackupComponents> {
 }
 
 /// The tables that can be backed up
-// JEHAMZA_TODO: wish this was dynamic...
 #[derive(Debug, Clone, Copy, strum::Display, ValueEnum, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "kebab-case")]
 pub enum BackupComponents {

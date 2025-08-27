@@ -16,7 +16,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.2.0"
+version = "1.3.0"
 authors = ["mcarson <mcarson@sandia.gov>", "gmbaker <gmbaker@sandia.gov>", "jehamza <jehamza@sandia.gov>"]
 edition = "2024"
 

@@ -17,8 +17,7 @@ pub enum BarKind {
     /// An unbounded IO bar
     UnboundIO,
     /// An IO bar
-    #[allow(dead_code)]
-    IO,
+    IO(u64),
 }
 
 impl BarKind {
@@ -58,11 +57,25 @@ impl BarKind {
                 // start this bars progress at 0
                 bar.set_position(0);
             }
-            BarKind::UnboundIO | BarKind::IO => {
+            BarKind::UnboundIO => {
                 // build our style string
                 let style = format!(
                     "[{{elapsed_precise}}] {name} {{msg}} {{bytes}} {{binary_bytes_per_sec}}"
                 );
+                // set the style for our bar
+                bar.set_style(ProgressStyle::with_template(&style).unwrap());
+                // start this bars progress at 0
+                bar.set_position(0);
+            }
+            BarKind::IO(bound) => {
+                // build our style string
+                let style = format!(
+                    "[{{elapsed_precise}}] {name} {{msg}} {{bytes}}/{{total_bytes}} {{binary_bytes_per_sec}}"
+                );
+                // set this bars length
+                bar.set_length(bound);
+                // start this bars progress at 0
+                bar.set_position(0);
                 // set the style for our bar
                 bar.set_style(ProgressStyle::with_template(&style).unwrap());
             }
@@ -289,6 +302,11 @@ impl Bar {
         kind.setup(&self.name, &self.bar);
         // set our new message
         self.bar.set_message(msg);
+    }
+
+    /// Finish the bar, leaving its message displayed
+    pub fn finish(&self) {
+        self.bar.finish();
     }
 
     /// Finish this bar with an updated message

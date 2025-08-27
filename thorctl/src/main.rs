@@ -37,6 +37,7 @@ async fn main() {
         SubCommands::Run(run) => handlers::run::handle(&args, run).await,
         SubCommands::Update => handlers::update::update(&args).await,
         SubCommands::Config(config) => handlers::config::config(&args, config),
+        SubCommands::Toolbox(toolbox) => handlers::toolbox::handle(&args, toolbox).await,
     } {
         // print the error
         eprintln!("{err}");

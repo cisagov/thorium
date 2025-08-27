@@ -21,7 +21,7 @@ use self::{
     tags::Tags,
     uncart::Uncart,
 };
-use crate::utils::repos::validate_repo_url;
+use crate::{args::toolbox::Toolbox, utils::repos::validate_repo_url};
 
 pub mod cart;
 pub mod clusters;
@@ -37,6 +37,7 @@ pub mod repos;
 pub mod results;
 pub mod run;
 pub mod tags;
+pub mod toolbox;
 mod traits;
 pub mod uncart;
 
@@ -137,6 +138,9 @@ pub enum SubCommands {
     /// Modify the Thorctl config file indicated by `--config`
     #[clap(version, author)]
     Config(Config),
+    /// Perform toolbox related tasks
+    #[clap(version, author, subcommand)]
+    Toolbox(Toolbox),
 }
 
 /// The mode our command is in
