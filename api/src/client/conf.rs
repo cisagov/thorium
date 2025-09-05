@@ -66,6 +66,17 @@ pub fn default_default_editor() -> String {
     "vi".to_string()
 }
 
+/// The settings to use when using AI
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AISettings {
+    /// The endpoint to talk to an AI model at
+    pub endpoint: String,
+    /// The API key to use when talking to our AI model
+    pub api_key: String,
+    /// The model to use
+    pub model: String,
+}
+
 /// A config for running Thorctl in user mode
 ///
 /// This will not give the user the ability to deploy clusters/agents
@@ -88,6 +99,8 @@ pub struct CtlConf {
     /// The default editor Thorctl will use
     #[serde(default = "default_default_editor")]
     pub default_editor: String,
+    /// The settings to use when using AI
+    pub ai: Option<AISettings>,
 }
 
 impl CtlConf {
@@ -105,6 +118,7 @@ impl CtlConf {
             client: ClientSettings::default(),
             skip_insecure_warning: None,
             default_editor: default_default_editor(),
+            ai: None,
         }
     }
 

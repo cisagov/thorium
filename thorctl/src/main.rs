@@ -32,6 +32,7 @@ async fn main() {
         SubCommands::NetworkPolicies(network_policies) => {
             handlers::network_policies::handle(&args, network_policies).await
         }
+        SubCommands::AI(ai) => handlers::ai::handle(&args, ai).await,
         SubCommands::Cart(cart) => handlers::cart::handle(&args, cart).await,
         SubCommands::Uncart(uncart) => handlers::uncart::handle(&args, uncart).await,
         SubCommands::Run(run) => handlers::run::handle(&args, run).await,

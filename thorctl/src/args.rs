@@ -6,6 +6,7 @@ use thorium::models::NotificationLevel;
 use uuid::Uuid;
 
 use self::{
+    ai::Ai,
     cart::Cart,
     clusters::{Clusters, Login},
     config::Config,
@@ -23,6 +24,7 @@ use self::{
 };
 use crate::{args::toolbox::Toolbox, utils::repos::validate_repo_url};
 
+pub mod ai;
 pub mod cart;
 pub mod clusters;
 pub mod config;
@@ -123,6 +125,9 @@ pub enum SubCommands {
     /// Perform network policy related tasks
     #[clap(version, author, subcommand, visible_alias = "netpols")]
     NetworkPolicies(NetworkPolicies),
+    /// Use AI to perform tasks in Thorium
+    #[clap(version, author, subcommand)]
+    AI(Ai),
     /// Cart files locally
     #[clap(version, author)]
     Cart(Cart),

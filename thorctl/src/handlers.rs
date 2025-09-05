@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod cart;
 pub mod clusters;
 pub mod config;

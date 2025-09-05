@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use rmcp::ErrorData;
 use rmcp::handler::server::tool::Extension as RmcpExtension;
-use rmcp::handler::server::tool::Parameters;
+use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::{tool, tool_router};
 use schemars::JsonSchema;
@@ -46,9 +46,10 @@ impl ThoriumMCP {
         let serialized = serde_json::to_value(&sample).unwrap();
         // build our result
         let result = CallToolResult {
-            content: Some(vec![Content::json(&sample)?]),
+            content: vec![Content::json(&sample)?],
             structured_content: Some(serialized),
             is_error: Some(false),
+            meta: None,
         };
         Ok(result)
     }
@@ -83,9 +84,10 @@ impl ThoriumMCP {
         let serialized = serde_json::to_value(&nicer).unwrap();
         // build our result
         let result = CallToolResult {
-            content: Some(vec![Content::json(&nicer)?]),
+            content: vec![Content::json(&nicer)?],
             structured_content: Some(serialized),
             is_error: Some(false),
+            meta: None,
         };
         Ok(result)
     }

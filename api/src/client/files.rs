@@ -547,7 +547,7 @@ impl Files {
     )]
     pub async fn list_details(&self, opts: &FileListOpts) -> Result<Cursor<Sample>, Error> {
         // build the url for listing files
-        let url = format!("{}/api/files/details", self.host);
+        let url = format!("{}/api/files/details/", self.host);
         // get the correct page size if our limit is smaller then our page_size
         let page_size = opts.limit.map_or_else(
             || opts.page_size,

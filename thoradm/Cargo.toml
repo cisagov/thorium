@@ -14,14 +14,14 @@ vendored-openssl = ["openssl/vendored"]
 
 
 [dependencies]
-thorium-api = { version= "1.3.2", path="../api", default-features = false, features = ["scylla-utils", "rkyv-support", "client"] }
-tokio = { version = "1.45", features = ["full"] }
+thorium-api = { workspace = true, features = ["scylla-utils", "rkyv-support", "client"] }
+tokio = { workspace = true }
 tokio-util = { version = "0.7", features = ["io"] }
 scylla = { version = "1.2", features = ["chrono-04"] }
 futures = { version = "0.3.31" }
 async-trait = "0.1"
 itertools = { version = "0.14" }
-chrono = { version = "0.4", features = ["serde", "rkyv", "rkyv-validation"] }
+chrono = { workspace = true, features = ["serde", "rkyv", "rkyv-validation"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 ahash = "0.8"
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"]}
@@ -30,14 +30,14 @@ kanal = "0.1.1"
 indicatif = { version = "0.17", features = ["tokio"] }
 num-format = "0.4"
 bytecheck = "=0.6.11"
-clap = { version = "4", features = ["derive", "wrap_help", "string"] }
+clap = { workspace = true }
 config = { version = "0.15", features = ["yaml"] }
 dialoguer = "0.11"
 sha2 = "0.10"
 data-encoding = "2.9"
 openssl = "*"
-serde = "1.0"
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 aws-types = "1.3"
 aws-sdk-s3 = { version = "1.90", features = ["rt-tokio", "behavior-version-latest"] }
 aws-smithy-http = "0.62"

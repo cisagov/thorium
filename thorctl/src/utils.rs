@@ -214,7 +214,7 @@ pub fn convert_size_to_bytes(raw: &str) -> Result<u64, Error> {
         Err(error) => {
             return Err(Error::new(format!(
                 "Failed to parse amount: {raw} - {error:#?}"
-            )))
+            )));
         }
     };
     // convert to bytes
