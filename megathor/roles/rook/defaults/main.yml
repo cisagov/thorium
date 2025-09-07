@@ -1,0 +1,28 @@
+
+# Rook Operator
+rook_enabled: false
+rook_namespace: "rook-ceph"
+rook_container_registry: "docker.io"
+rook_image: "rook/ceph"
+rook_helm_chart_version: "v1.18.1"
+rook_provisioner_replicas: 2
+
+# Ceph Cluster
+ceph_container_registry: "quay.io"
+ceph_image: "ceph/ceph"
+ceph_csi_image: "cephcsi/ceph-csi-operator"
+ceph_version: "v19.2.3"
+ceph_failure_domain: "host" # osd
+ceph_allow_multiple_per_node: true # true
+ceph_mon_replicas: 3
+ceph_mgr_replicas: 2 # 1
+ceph_block_replicas: 3
+ceph_object_metadata_replicas: 3
+ceph_object_ec_data_chunks: 3
+ceph_object_ec_coding_chunks: 2
+ceph_rgw_memory_limits: "16Gi"
+ceph_rgw_cpu_limits: "4" 
+ceph_rgw_memory_requests:  "4Gi"
+ceph_rgw_cpu_requests: "1"
+ceph_ignore_health_errors: false
+ceph_health_check_retries: 6

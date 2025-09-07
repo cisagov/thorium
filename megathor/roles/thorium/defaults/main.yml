@@ -1,0 +1,20 @@
+thorium_enabled: true
+thorium_deployment_name: "dev"
+thorium_namespace: "thorium"
+thorium_container_registry: "ghcr.io"
+thorium_image: "cisagov/thorium/infrastructure/thorium"
+thorium_version: "latest"
+thorium_operator_memory_limits: "512Mi"
+thorium_operator_cpu_limits: "512m"
+thorium_operator_memory_requests: "256Mi"
+thorium_operator_cpu_requests: "256m"
+# Pull secret value is just a stub placeholder base64(thorium:corn)
+thorium_image_pull_secret: {}
+# thorium_image_pull_secret:
+#  auths:
+#    "registry.domain:port":
+#      auth: "dGhvcml1bTpjb3JuCg=="
+thorium_ui_banner: |
+  Welcome to Thorium. <Please place you banner here>
+# thorium_ingress_hostname: "localhost"
+# thorium_tls_cert_secret_name: "api-certs

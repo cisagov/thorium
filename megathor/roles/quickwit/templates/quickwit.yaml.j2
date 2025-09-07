@@ -1,0 +1,45 @@
+image:
+  repository: "{{ quickwit_container_registry }}/{{ quickwit_image }}"
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  #tag: v0.6.4
+
+config:
+  default_index_root_uri: s3://{{ quickwit_bucket }}/quickwit-indexes
+  metastore_uri: "postgres://postgres:{{ quickwit_postgres_super_password }}@{{ quickwit_postgres_host }}/quickwit-metastore"
+
+  storage:
+    s3:
+      flavor: "{{ s3_flavor }}"
+      region: "{{ s3_region }}"
+      endpoint: "{{ s3_endpoint }}" 
+      force_path_style_access: true
+      access_key_id: "{{ s3_access_key }}"
+      secret_access_key: "{{ s3_secret_key }}"
+
+retention:
+  duration: "30 day"
+  schedule: daily
+
+metastore:
+  replicaCount: {{ quickwit_metastore_replica_count }}
+  extraEnv:
+    QW_DISABLE_TELEMETRY: "1"
+
+searcher:
+  replicaCount: {{ quickwit_searcher_replica_count }}
+  extraEnv:
+    QW_DISABLE_TELEMETRY: "1"
+
+janitor:
+  extraEnv:
+    QW_DISABLE_TELEMETRY: "1"
+
+indexer:
+  extraEnv:
+    QW_DISABLE_TELEMETRY: "1"
+
+control_plane:
+  extraEnv:
+    QW_DISABLE_TELEMETRY: "1"
+

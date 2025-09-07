@@ -1,0 +1,35 @@
+---
+
+- name: Create s3cmd configuration
+  template:
+    src: s3cmd.conf.j2
+    dest: ./artifacts/s3cmd.cfg
+
+- name: Create S3 buckets with Ansible aws module
+  amazon.aws.s3_bucket:
+    name: "{{ item }}"
+    state: present
+    force: true
+    encryption: none
+    region: "{{ s3_region }}"
+    endpoint_url: "{{ s3_endpoint }}"
+    access_key: "{{ s3_access_key }}"
+    secret_key: "{{ s3_secret_key }}"
+    validate_certs: "{{ s3_validate_certs }}"
+    ceph: "{{ rook_enabled | bool or minio_enabled | bool }}"
+  loop:
+    - "{{ quickwit_bucket }}"
+  environment:
+    HTTP_PROXY: ""
+    http_proxy: ""
+    HTTPS_PROXY: ""
+    https_proxy: ""
+  no_log: false
+  ignore_errors: true
+
+- name: Create S3 Buckets with s3cmd
+  command: "s3cmd mb -c ./artifacts/s3cmd.cfg s3://{{ item }}"
+  ignore_errors: true
+  loop:
+    - "{{ quickwit_bucket }}"
+

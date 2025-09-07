@@ -1,0 +1,120 @@
+apiVersion: sandia.gov/v1
+kind: ThoriumCluster
+metadata:
+  name: "{{ thorium_deployment_name }}"
+  namespace: "{{ thorium_namespace }}"
+spec:
+  registry: "{{ thorium_container_registry }}/{{ thorium_image }}"
+  version: "{{ thorium_version }}" 
+{% if thorium_image_pull_secret is defined and thorium_image_pull_secret.auths is defined %}
+  registry_auth:
+{% for registry, auth in thorium_image_pull_secret.auths.items() %}
+    {{ registry }}: "{{ auth.auth }}"
+{% endfor %}
+{% endif %}
+  image_pull_policy: Always
+  components:
+    api:
+      replicas: 1
+      resources:
+        cpu: 0
+        memory: 0
+{% if thorium_ingress_hostname is defined %}
+      urls:
+      - "{{ thorium_ingress_hostname }}"
+{% else %}
+      urls: []
+{% endif %}
+      ports:
+      - 80
+      - 443
+    scaler:
+      service_account: true
+      resources:
+        cpu: 0
+        memory: 0
+    #baremetal_scaler: {}
+    search_streamer:
+      resources:
+        cpu: 0
+        memory: 0
+      cmd:
+        - "/app/thorium-search-streamer"
+      args:
+        - "--config"
+        - "/conf/thorium.yml"
+        - "--keys"
+        - "/keys/keys.yml"
+    event_handler:
+      resources:
+        cpu: 0
+        memory: 0
+  config: 
+    thorium:
+      secret_key: "{{ thorium_secret }}"
+      tracing:
+        external:
+          Grpc:
+            endpoint: "{{ quickwit_host }}"
+            level: "Info"
+        local:
+          level: "Info"
+      cors:
+        insecure: true
+      tags:
+        partition_size: 3600
+      files:
+        bucket: "thorium-files"
+        earliest: 1610596807
+        partition_size: 3600
+      repos:
+        bucket: "thorium-repos"
+        partition_size: 3600
+      attachments:
+        bucket: "thorium-attachments"
+      results:
+        bucket: "thorium-results"
+        earliest: 1610596807
+        partition_size: 3600
+      ephemeral:
+        bucket: "thorium-ephemeral"
+      s3:
+        access_key: "{{ s3_access_key }}"
+        secret_token: "{{ s3_secret_key }}"
+        endpoint: "{{ s3_endpoint }}"
+      auth:
+      scaler:
+        crane:
+          insecure: true
+        k8s:
+          clusters:
+            kubernetes-admin@cluster.local:
+              alias: "{{ thorium_deployment_name }}"
+              nodes:
+{% for item in thorium_nodes %}
+                - "{{ item}}"
+{% endfor %}
+    redis:
+      host: "{{ redis_host }}"
+      port: {{ redis_port }}
+      password: "{{ redis_password }}"
+    scylla:
+      nodes:
+{% for item in scylla_nodes %}
+       - "{{ item }}"
+{% endfor %}
+      replication: {{ scylla_replication_factor }}
+      auth:
+        username: "{{ scylla_username }}"
+        password: "{{ scylla_password }}"
+    elastic:
+      node: "{{ elastic_url }}"
+      username: "{{ elastic_username }}"
+      password: "{{ elastic_password }}"
+      results:
+        repos: thorium_repo_results
+        samples: thorium_sample_results
+      tags:
+        repos: thorium_repo_tags
+        samples: thorium_sample_tags
+

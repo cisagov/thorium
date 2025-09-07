@@ -1,0 +1,49 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jaeger
+  labels:
+    app: jaeger
+spec:
+  serviceName: jaeger
+  replicas: {{ jaeger_replicas }}
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+          app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: "{{ jaeger_container_registry }}/{{ jaeger_image }}:{{ jaeger_version }}"
+          imagePullPolicy: Always
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: "grpc"
+            - name: GRPC_STORAGE_SERVER
+              value: "quickwit-searcher.quickwit.svc.cluster.local.:7281"
+          resources:
+            requests:
+              cpu: "{{ jaeger_cpu_requests }}"
+              memory: "{{ jaeger_memory_requests }}"
+            limits:
+              cpu: "{{ jaeger_cpu_limits }}"
+              memory: "{{ jaeger_memory_limits }}"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+  - name: jaeger
+    port: 16686
+    targetPort: 16686
+

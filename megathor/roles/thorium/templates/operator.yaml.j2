@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  labels:
+    app: operator
+  namespace: "{{ thorium_namespace }}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+          app: operator
+    spec:
+      serviceAccountName: thorium
+      automountServiceAccountToken: true
+      containers:
+        - name: operator
+          image: "{{ thorium_container_registry }}/{{ thorium_image }}:{{ thorium_version }}"
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "{{ thorium_operator_memory_requests }}"
+              cpu: "{{ thorium_operator_cpu_requests }}"
+            limits:
+              memory: "{{ thorium_operator_memory_limits }}"
+              cpu: "{{ thorium_operator_cpu_limits }}"
+          env:
+            - name: "http_proxy"
+            - name: "https_proxy"
+            - name: "HTTP_PROXY"
+            - name: "HTTPS_PROXY"
+{% if thorium_image_pull_secret is defined %}
+      imagePullSecrets:
+        - name: registry-token
+{% endif %}

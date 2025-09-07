@@ -1,0 +1,89 @@
+# Rook Operator
+rook_provisioner_replicas: 1
+
+# Rook Cluster (single node with multiple >= 3 raw disks)
+ceph_failure_domain: "osd"
+ceph_allow_multiple_per_node: true
+ceph_mon_replicas: 1
+ceph_mgr_replicas: 1
+ceph_block_replicas: 2
+ceph_object_metadata_replicas: 2
+ceph_object_ec_data_chunks: 1
+ceph_object_ec_coding_chunks: 1
+ceph_rgw_memory_requests:  "4Gi"
+ceph_rgw_cpu_requests: "1"
+ceph_rgw_memory_limits: "8Gi"
+ceph_rgw_cpu_limits: "2"
+
+# Elasticsearch
+elastic_search_node_count: 1
+elastic_search_volume_size: "32Gi"
+elastic_search_cpu_requests: "1"
+elastic_search_cpu_limits: "1"
+elastic_search_memory_requests: "2G" 
+elastic_search_memory_limits: "2G"
+kibana_cpu_requests: "1" 
+kibana_cpu_limits: "1"
+kibana_memory_requests: "1G"
+kibana_memory_limits: "1G" 
+
+# Redis
+redis_volume_size: "8Gi"
+redis_cpu_requests: "512m"
+redis_memory_requests: "512Mi"
+redis_cpu_limits: "1"
+redis_memory_limits: "1Gi"
+
+# Minio
+minio_replicas: 1
+minio_cpu_requests: "256m"
+minio_memory_requests: "512Mi"
+minio_cpu_limits: "1"
+minio_memory_limits: "1Gi"
+minio_volume_size: "32Gi"
+
+# Jaeger
+jaeger_replicas: 1
+jaeger_cpu_requests: "512m"
+jaeger_memory_requests: "512Mi"
+jaeger_cpu_limits: "1"
+jaeger_memory_limits: "1G"
+
+# Quickwit
+quickwit_metastore_replica_count: 1
+quickwit_searcher_replica_count: 1
+quickwit_postgress_storage_size: "16G"
+quickwit_postgres_memory_requests: "1Gi"
+quickwit_postgres_cpu_requests: "1"
+quickwit_postgres_memory_limits: "2Gi"
+quickwit_postgres_cpu_limits: "2"
+
+# Traefik
+traefik_replicas: 1
+traefik_external_ips:
+ - < IP 1>
+ - < IP 2>
+ - < IP 3>
+
+# Scylla Operator
+scylla_operator_replicas: 1
+
+# Scylla Cluster
+scylla_members: 1
+scylla_replication_factor: 1
+scylla_storage_size: "32Gi"
+scylla_cpu_requests: "1"
+scylla_memory_requests: "2Gi"
+scylla_cpu_limits: "2"
+scylla_memory_limits: "4Gi"
+
+# Thorium
+thorium_operator_memory_limits: "512Mi"
+thorium_operator_cpu_limits: "512m"
+thorium_operator_memory_requests: "256Mi"
+thorium_operator_cpu_requests: "256m"
+thorium_nodes:
+  - <thorium node 1>
+  - <thorium node 2>
+  - <thorium node 3>
+

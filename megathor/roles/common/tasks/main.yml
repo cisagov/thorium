@@ -1,0 +1,19 @@
+---
+- name: Create artifacts directory
+  file:
+    path: ./artifacts
+    state: directory
+
+# Install Python dependencies
+#- name: Install Python pip
+#  package:
+#    name: python3-pip
+#    state: present
+#
+#- name: Install Ansible pip dependencies
+#  pip:
+#    name: "{{ item }}"
+#    state: present
+#  loop:
+#    - kubernetes
+#    - boto3

@@ -1,0 +1,74 @@
+---
+
+- name: Create namespace
+  kubernetes.core.k8s:
+    name: "{{ thorium_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Create registry-token for service account
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: registry-token
+        namespace: "{{ thorium_namespace }}"
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ thorium_image_pull_secret | to_json | ansible.builtin.b64encode }}"
+
+- name: Create UI Banner 
+  kubernetes.core.k8s:
+    name: banner
+    state: present
+    namespace: "{{ thorium_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: banner
+      data:
+        banner.txt: "{{ thorium_ui_banner }}"
+
+- name: Create Service Account and rbac
+  kubernetes.core.k8s:
+    namespace: "{{ thorium_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'rbac.yaml.j2') }}"
+
+- name: Create operator deployment
+  kubernetes.core.k8s:
+    namespace: "{{ thorium_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'operator.yaml.j2') }}"
+
+- name: Wait for Operator to be available
+  kubernetes.core.k8s:
+    api_version: apps/v1
+    kind: Deployment
+    name: operator
+    namespace: "{{ thorium_namespace }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+    wait_sleep: 5
+
+- name: Create Traefik ingress and TLS configurations
+  kubernetes.core.k8s:
+    namespace: "{{ thorium_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'traefik.yaml.j2') }}"
+
+- name: Create ThoriumCluster
+  kubernetes.core.k8s:
+    namespace: "{{ thorium_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'thorium-cluster.yaml.j2') }}"

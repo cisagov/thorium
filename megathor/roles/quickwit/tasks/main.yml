@@ -1,0 +1,60 @@
+---
+
+- name: Create Quickwit namespace
+  kubernetes.core.k8s:
+    name: "{{ quickwit_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Create Kubegres Postgres secrets
+  kubernetes.core.k8s:
+    namespace: "{{ quickwit_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'postgres/kubegres/secret.yaml.j2') }}"
+  when: kubegres_enabled | bool
+
+- name: Create Kubegres Postgres cluster
+  kubernetes.core.k8s:
+    namespace: "{{ quickwit_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'postgres/kubegres/cluster.yaml.j2') }}"
+  when: kubegres_enabled | bool
+
+- name: Wait for postgres to be created
+  ansible.builtin.pause:
+    seconds: 30
+  when: kubegres_enabled | bool
+
+- name: Wait for Kubegres Postgres to be rolled out
+  shell: /bin/bash -c "kubectl rollout status --watch --timeout=600s statefulset/postgres-1 -n {{ quickwit_namespace }}"
+
+- name: Create index in postgres
+  shell: 'kubectl -n {{ quickwit_namespace }} exec -it pod/postgres-1-0 -- /bin/bash -c "PGPASSWORD={{ quickwit_postgres_super_password }} su postgres -c \"createdb quickwit-metastore\""'
+  ignore_errors: true
+
+- name: Add helm Quickwit repo (online only)
+  kubernetes.core.helm_repository:
+    name: "quickwit"
+    repo_url: "https://helm.quickwit.io" 
+  when: offline == false
+
+- name: Deploy helm Quickwit chart with values (online)
+  kubernetes.core.helm:
+    name: "quickwit" 
+    chart_ref: "quickwit/quickwit"
+    release_namespace: "{{ quickwit_namespace }}"
+    chart_version: "{{ quickwit_helm_chart_version }}"
+    values: "{{ lookup('template', 'quickwit.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == false
+
+- name: Deploy helm Quickwit chart with values (offline)
+  kubernetes.core.helm:
+    name: "quickwit" 
+    chart_ref: "{{ playbook_dir }}/files/quickwit-{{ quickwit_helm_chart_version }}.tgz"
+    release_namespace: "{{ quickwit_namespace }}"
+    values: "{{ lookup('template', 'quickwit.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == true

@@ -1,0 +1,36 @@
+
+# Cert Manager
+cert_manager_enabled: true
+cert_manager_version: "v1.18.2"
+cert_manager_container_registry: "quay.io"
+cert_manager_cainjector_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-cainjector:{{ cert_manager_version }}"
+cert_manager_controller_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-controller:{{ cert_manager_version }}"
+cert_manager_webhook_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-webhook:{{ cert_manager_version }}"
+cert_manager_acme_solver_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-acmesolver:{{ cert_manager_version }}"
+
+# Scylla:
+scylla_enabled: true
+
+# Scylla Operator
+scylla_operator_replicas: 1
+scylla_container_registry: "docker.io"
+scylla_base_image: "scylladb"
+scylla_agent_image: "scylladb/scylla-manager-agent"
+scylla_helm_chart_version: "v1.16.3"
+scylla_operator_namespace: "scylla-operator"
+
+# Scylla Cluster
+scylla_members: 3
+scylla_replication_factor: 3
+scylla_namespace: "scylla"
+scylla_version: "6.2.3"
+scylla_agent_version: "3.4.2"
+scylla_developer_mode: "false"
+scylla_storage_size: "32Gi"
+scylla_cpu_requests: "0"
+scylla_memory_requests: "0"
+scylla_cpu_limits: "4"
+scylla_memory_limits: "16Gi"
+scylla_nodes:
+  - "scylla-client.scylla.svc.cluster.local" 
+scylla_username: "thorium"

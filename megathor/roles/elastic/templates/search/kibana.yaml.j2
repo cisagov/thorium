@@ -1,0 +1,21 @@
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: elastic
+  namespace: {{ elastic_namespace }} 
+spec:
+  version: {{ elastic_search_version }} 
+  count: 1
+  elasticsearchRef:
+    name: elastic
+  podTemplate:
+    spec:
+      containers:
+      - name: kibana
+        resources:
+          requests:
+            cpu:  {{ kibana_cpu_requests }}
+            memory: "{{ kibana_memory_requests }}"
+          limits:
+            cpu: {{ kibana_cpu_limits }}
+            memory: "{{ kibana_memory_limits }}"

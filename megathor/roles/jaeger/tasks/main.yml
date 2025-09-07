@@ -1,0 +1,15 @@
+---
+
+- name: Create Jaeger namespace
+  kubernetes.core.k8s:
+    name: "{{ jaeger_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Create jaeger deployment and service
+  kubernetes.core.k8s:
+    namespace: "{{ jaeger_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'deployment.yaml.j2') }}"
+

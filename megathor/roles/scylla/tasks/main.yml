@@ -1,0 +1,91 @@
+---
+
+- name: Deploy Cert Manager
+  kubernetes.core.k8s:
+    namespace: "cert-manager"
+    state: present
+    #apply: true
+    definition: "{{ lookup('template', 'cert-manager/{{ cert_manager_version }}/cert-manager.yaml.j2') }}"
+
+- name: Add Helm Scylla repo (online only)
+  kubernetes.core.helm_repository:
+    name: "scylla"
+    repo_url: "https://scylla-operator-charts.storage.googleapis.com/stable" 
+  when: offline == false
+
+- name: Deploy Helm Scylla operator chart with values (online)
+  kubernetes.core.helm:
+    name: "scylla" 
+    chart_ref: "scylla/scylla-operator"
+    create_namespace: true
+    release_namespace: "{{ scylla_operator_namespace }}"
+    chart_version: "{{ scylla_helm_chart_version }}"
+    values: "{{ lookup('template', 'scylla/operator/{{ scylla_helm_chart_version }}/operator.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == false
+
+- name: Deploy Helm Scylla operator chart with values (offline)
+  kubernetes.core.helm:
+    name: "scylla" 
+    chart_ref: "{{ playbook_dir }}/files/scylla-operator-{{ scylla_helm_chart_version }}.tgz"
+    create_namespace: true
+    release_namespace: "{{ scylla_operator_namespace }}"
+    values: "{{ lookup('template', 'scylla/operator/{{ scylla_helm_chart_version }}/operator.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == true
+
+- name: Create Scylla namespace
+  kubernetes.core.k8s:
+    name: "{{ scylla_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Create Scylla config file
+  kubernetes.core.k8s:
+    name: scylla-config
+    state: present
+    namespace: "{{ scylla_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: scylla-config
+      data:
+        scylla.yaml: "{{ lookup('template', 'scylla/cluster/scylla.yaml.j2') }}"
+
+- name: Wait for Scylla operator rollout to complete
+  shell: /bin/bash -c "kubectl rollout status --watch deployment/scylla-operator -n scylla-operator --timeout={{ service_wait_timeout }}s"
+
+- name: Wait for Scylla operator to be listeng to API
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: Create Scylla cluster
+  kubernetes.core.k8s:
+    namespace: "{{ scylla_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'scylla/cluster/cluster.yaml.j2') }}"
+
+- name: Wait for Scylla cluster to start deploying
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: Wait for cluster to be ready
+  shell: /bin/bash -c "kubectl rollout status --watch statefulset/scylla-us-east-1-us-east-1a -n {{ scylla_namespace }} --timeout={{ service_wait_timeout }}s"
+
+- name: Configure Database User and Replication Factor
+  kubernetes.core.k8s_exec:
+    namespace: scylla
+    pod: scylla-us-east-1-us-east-1a-0
+    command: >
+      /bin/bash -c "
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e \"CREATE ROLE admin WITH SUPERUSER = true\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e \"CREATE ROLE {{ scylla_username }} WITH PASSWORD = '{{ scylla_password }}' AND LOGIN = true\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e \"GRANT admin TO thorium\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e \"CREATE KEYSPACE IF NOT EXISTS thorium WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': {{ scylla_replication_factor }}}\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e \"GRANT ALL ON KEYSPACE thorium TO {{ scylla_username }}\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e \"GRANT CREATE ON ALL KEYSPACES TO {{ scylla_username }}\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u {{ scylla_username }} -p {{ scylla_password }} -e \"DROP ROLE cassandra\" || true &&
+      cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u {{ scylla_username }} -p {{ scylla_password }} -e \"LIST USERS\"
+      "

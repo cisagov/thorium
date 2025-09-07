@@ -1,0 +1,33 @@
+---
+
+- name: Create traefik namespace
+  kubernetes.core.k8s:
+    name: "{{ traefik_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Add helm traefik repo
+  kubernetes.core.helm_repository:
+    name: "traefik"
+    repo_url: "https://helm.traefik.io/traefik" 
+  when: offline == false
+
+- name: Deploy helm chart with values (online)
+  kubernetes.core.helm:
+    name: "traefik" 
+    chart_ref: "traefik/traefik"
+    release_namespace: "{{ traefik_namespace }}"
+    chart_version: "{{ traefik_helm_chart_version }}"
+    values: "{{ lookup('template', 'traefik.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == false
+
+- name: Deploy helm chart with values (offline only)
+  kubernetes.core.helm:
+    name: "traefik" 
+    chart_ref: "{{ playbook_dir }}/files/traefik-{{ traefik_helm_chart_version }}.tgz"
+    release_namespace: "{{ traefik_namespace }}"
+    values: "{{ lookup('template', 'traefik.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == true
+

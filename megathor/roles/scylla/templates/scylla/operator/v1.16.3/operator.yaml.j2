@@ -1,0 +1,84 @@
+# Operator replicas use leader election. Setting to 1 will disable pdb creation
+# and won't be HA; creations or updates of Scylla CRs will fail during operator
+# upgrades or disruptions
+replicas: {{ scylla_operator_replicas }}
+
+# Allows to customize Scylla Operator image
+image:
+  repository: "{{ scylla_container_registry }}/{{ scylla_base_image }}"
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+# Scylla Operator log level, 0-9 (higher number means more detailed logs)
+logLevel: 2
+# Resources allocated to Scylla Operator pods
+resources:
+  requests:
+    cpu: 100m
+    memory: 20Mi
+# Node selector for Scylla Operator pods
+nodeSelector: { }
+
+# Tolerations for Scylla Operator pods
+tolerations: [ ]
+
+# Affinity for Scylla Operator pods
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: scylla-operator
+            app.kubernetes.io/instance: scylla-operator
+        topologyKey: kubernetes.io/hostname
+
+webhook:
+  # Specifies whether a self signed certificate should be created using cert-manager
+  createSelfSignedCertificate: true
+  # Name of a secret containing custom certificate
+  # If not set and createSelfSignedCertificate is true, a name is generated using fullname
+  certificateSecretName: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+## SecurityContext holds pod-level security attributes and common container settings.
+securityContext: {}
+
+# Replicas for Webhook Server. Setting to 1 will disable pdb creation and
+# won't be HA; it won't react during operator upgrades or disruptions.
+webhookServerReplicas: 2
+
+# Resources allocated to Webhook Server pods
+webhookServerResources:
+  requests:
+    cpu: 10m
+    memory: 20Mi
+
+# Node selector for Webhook Server pods
+webhookServerNodeSelector: { }
+
+# Tolerations for Webhook Server pods
+webhookServerTolerations: [ ]
+
+# Affinity for Webhook Server pods
+webhookServerAffinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: webhook-server
+            app.kubernetes.io/instance: webhook-server
+        topologyKey: kubernetes.io/hostname
+

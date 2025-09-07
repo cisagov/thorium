@@ -1,0 +1,5 @@
+jaeger_enabled: true
+jaeger_namespace: "jaeger"
+jaeger_container_registry: "docker.io"
+jaeger_image: "jaegertracing/jaeger-query"
+jaeger_version: "latest"

@@ -1,0 +1,19 @@
+---
+
+- name: Create Minio namespace
+  kubernetes.core.k8s:
+    name: "{{ minio_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Create Minio deployment and service
+  kubernetes.core.k8s:
+    namespace: "{{ minio_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'deployment.yaml.j2') }}"
+    wait: true
+    #wait_condition:
+    #  type: Ready
+    #  status: "True"
+

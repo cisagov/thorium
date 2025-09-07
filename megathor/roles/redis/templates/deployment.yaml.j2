@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+          app: redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ redis_container_registry }}/{{ redis_image }}:{{ redis_version }}" 
+          imagePullPolicy: Always
+          command: ["redis-server", "/var/lib/redis/redis.conf"]
+          resources:
+            requests:
+              cpu: "{{ redis_cpu_requests }}"
+              memory: "{{ redis_memory_requests }}"
+            limits:
+              cpu: "{{ redis_cpu_limits }}"
+              memory: "{{ redis_memory_limits }}"
+          volumeMounts:
+            - mountPath: "/data"
+              name: redis-data
+            - mountPath: "/var/lib/redis/"
+              name: redis-conf
+      volumes:
+        - name: redis-conf
+          secret:
+            secretName: conf
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-persistent-storage-claim
+

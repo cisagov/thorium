@@ -1,0 +1,35 @@
+apiVersion: kubegres.reactive-tech.io/v1
+kind: Kubegres
+metadata:
+  name: postgres
+  namespace: "{{ quickwit_namespace }}"
+
+spec:
+   replicas: {{ quickwit_postgres_replicas }}
+   image: "{{ quickwit_postgres_container_registry }}/{{ quickwit_postgres_image }}:{{ quickwit_postgres_version }}"
+
+   database:
+      storageClassName: "{{ storage_class }}" 
+      size: "{{ quickwit_postgress_storage_size }}"
+
+   resources:
+      requests:
+         memory: "{{ quickwit_postgres_memory_requests }}"
+         cpu: "{{ quickwit_postgres_cpu_requests }}"
+      limits:
+         memory: "{{ quickwit_postgres_memory_limits }}"
+         cpu: "{{ quickwit_postgres_cpu_limits }}"
+
+   env:
+      - name: POSTGRES_PASSWORD
+        valueFrom:
+           secretKeyRef:
+              name: postgres-cluster-auth
+              key: superUserPassword
+
+      - name: POSTGRES_REPLICATION_PASSWORD
+        valueFrom:
+           secretKeyRef:
+              name: postgres-cluster-auth
+              key: replicationUserPassword
+

@@ -1,0 +1,58 @@
+---
+- name: Download Helm Charts locally for use during offline deployments
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Ensure Helm is installed
+      command: helm version
+      register: helm_version
+      ignore_errors: yes
+
+    - name: Install Helm if not present
+      command: curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+      when: helm_version.rc != 0
+
+    - name: Add Helm Traefik repo
+      kubernetes.core.helm_repository:
+        name: "traefik"
+        repo_url: "https://helm.traefik.io/traefik"
+
+    - name: Pull the Traefik Helm chart
+      command: helm pull traefik/traefik --version {{ traefik_helm_chart_version }} --destination ./files/
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Add Helm Quickwit repo
+      kubernetes.core.helm_repository:
+        name: "quickwit"
+        repo_url: "https://helm.quickwit.io" 
+
+    - name: Pull the Quickwit Helm chart
+      command: helm pull quickwit/quickwit --version {{ quickwit_helm_chart_version }} --destination ./files/
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Add Helm Scylla repo
+      kubernetes.core.helm_repository:
+        name: "scylla"
+        repo_url: "https://scylla-operator-charts.storage.googleapis.com/stable" 
+
+    - name: Pull the Scylla Operator Helm chart
+      command: helm pull scylla/scylla-operator --version {{ scylla_helm_chart_version }} --destination ./files/
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Add Helm Rook repo
+      kubernetes.core.helm_repository:
+        name: "rook-release"
+        repo_url: "https://charts.rook.io/release" 
+
+    - name: Pull the Rook Operator Helm chart
+      command: helm pull rook-release/rook-ceph --version {{ rook_helm_chart_version }} --destination ./files/
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Pull the Rook Ceph Cluster Helm chart
+      command: helm pull rook-release/rook-ceph-cluster --version {{ rook_helm_chart_version }} --destination ./files/
+      args:
+        chdir: "{{ playbook_dir }}"

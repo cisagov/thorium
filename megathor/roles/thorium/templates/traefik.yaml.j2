@@ -1,0 +1,47 @@
+
+apiVersion: traefik.io/v1alpha1 
+kind: Middleware
+metadata:
+  name: ui-prefix-prepend
+spec:
+  addPrefix:
+    prefix: /ui
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: thorium-ingress
+spec:
+  entryPoints:
+    - websecure
+  routes:
+{% if thorium_ingress_hostname is defined %}
+  - match: "host(`{{ thorium_ingress_hostname }}`)"
+    kind: Rule
+    services:
+    - name: thorium-api
+      port: 80
+{% else %}
+  - match: "PathPrefix(`/`)"
+    kind: Rule
+    services:
+    - name: thorium-api
+      port: 80
+{% endif %}
+{% if thorium_tls_cert_secret_name is defined %}
+  tls:
+    secretName: {{ thorium_tls_cert_secret_name }} 
+{% endif %}
+
+{% if thorium_tls_cert_secret_name is defined %}
+---
+apiVersion: traefik.io/v1alpha1
+kind: TLSStore
+metadata:
+  name: default
+  namespace: thorium
+spec:
+  defaultCertificate:
+    secretName: {{ thorium_tls_cert_secret_name }}
+{% endif %}

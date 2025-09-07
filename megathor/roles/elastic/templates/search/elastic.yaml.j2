@@ -1,0 +1,38 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elastic
+  namespace: {{ elastic_namespace }}
+spec:
+  version: {{ elastic_search_version }} 
+  volumeClaimDeletePolicy: DeleteOnScaledownOnly
+  nodeSets:
+  - name: default
+    count: {{ elastic_search_node_count }}
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          #env:
+          #- name: ES_JAVA_OPTS
+          #  value: -Xms1g -Xmx1g
+          resources:
+            requests:
+              cpu: {{ elastic_search_cpu_requests }}
+              memory: {{ elastic_search_memory_requests }}
+            limits:
+              cpu: {{ elastic_search_cpu_limits }}
+              memory: {{ elastic_search_memory_limits }}
+    volumeClaimTemplates:
+      - metadata:
+          name: elasticsearch-data
+        spec:
+          storageClassName: {{ storage_class }} 
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ elastic_search_volume_size }} 
+    config:
+      node.store.allow_mmap: true
+      http.max_content_length: 1024mb

@@ -1,0 +1,8 @@
+elastic_enabled: true
+elastic_search_node_count: 1
+elastic_namespace: "elastic-system"
+elastic_container_registry: "docker.elastic.co"
+elastic_url: "https://elastic-es-http.elastic-system.svc.cluster.local:9200"
+elastic_username: "thorium"
+elastic_operator_version: "2.16.0"
+elastic_search_version: "8.19.2"

@@ -1,0 +1,7 @@
+redis_enabled: true
+redis_namespace: "redis"
+redis_container_registry: "docker.io"
+redis_image: "redis"
+redis_version: "7"
+redis_host: "redis.redis.svc.cluster.local"
+redis_port: 6379

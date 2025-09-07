@@ -1,0 +1,6 @@
+
+# kubegres
+kubegres_enabled: true
+kubegres_container_registry: "docker.io"
+kubegres_image: "reactivetechio/kubegres"
+kubegres_version: "1.19"

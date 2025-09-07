@@ -1,0 +1,108 @@
+---
+
+- name: Add Helm repo (online only)
+  kubernetes.core.helm_repository:
+    name: "rook-release"
+    repo_url: "https://charts.rook.io/release" 
+  when: offline == false
+
+- name: Deploy Helm operator chart with values (online)
+  kubernetes.core.helm:
+    release_name: "rook-release"
+    chart_ref: "rook-release/rook-ceph"
+    create_namespace: true
+    release_namespace: "{{ rook_namespace }}"
+    chart_version: "{{ rook_helm_chart_version }}"
+    values: "{{ lookup('template', 'operator.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == false
+
+- name: Deploy Helm operator chart with values (offline)
+  kubernetes.core.helm:
+    release_name: "rook-release"
+    chart_ref: "{{ playbook_dir }}/files/rook-ceph-{{ rook_helm_chart_version }}.tgz"
+    create_namespace: true
+    release_namespace: "{{ rook_namespace }}"
+    values: "{{ lookup('template', 'operator.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == true
+
+- name: Deploy Helm Ceph cluster chart with values (online)
+  kubernetes.core.helm:
+    release_name: "rook-ceph-cluster"
+    chart_ref: "rook-release/rook-ceph-cluster"
+    create_namespace: true
+    release_namespace: "{{ rook_namespace }}"
+    chart_version: "{{ rook_helm_chart_version }}"
+    values: "{{ lookup('template', 'cluster.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == false
+
+- name: Deploy Helm Ceph cluster chart with values (offline)
+  kubernetes.core.helm:
+    release_name: "rook-ceph-cluster" 
+    chart_ref: "{{ playbook_dir }}/files/rook-ceph-cluster-{{ rook_helm_chart_version }}.tgz"
+    create_namespace: true
+    release_namespace: "{{ rook_namespace }}"
+    values: "{{ lookup('template', 'cluster.yaml.j2') | from_yaml }}"
+    wait: true
+  when: offline == true
+
+- name: Wait for Ceph cluster pods to be running
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ rook_namespace }}"
+    label_selectors:
+      - app=rook-ceph-mon
+    wait: yes
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: "{{ service_wait_timeout }}"
+
+- name: Wait for Ceph Rados Gateway (rgw) pods to be running
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ rook_namespace }}"
+    label_selectors:
+      - app=rook-ceph-rgw
+    wait: yes
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: "{{ service_wait_timeout }}"
+
+- name: Verify cluster is healthy using Ceph tool box
+  ansible.builtin.shell: |
+    kubectl -n {{ rook_namespace }} exec -it deploy/rook-ceph-tools -- ceph status
+  register: ceph_status_output
+  until: "'HEALTH_OK' in ceph_status_output.stdout"
+  retries: "{{ ceph_health_check_retries }}"
+  delay: 10
+  ignore_errors: "{{ ceph_ignore_health_errors }}"
+
+- name: Create S3 user using radosgw-admin
+  shell: "kubectl -n {{ rook_namespace }} exec -it deploy/rook-ceph-tools -- radosgw-admin user create  --rgw-realm thorium-s3 --uid=thorium-s3-user --display-name='Thorium S3 User'"
+  ignore_errors: true
+
+- name: Get S3 user using radosgw-admin
+  shell: "kubectl -n {{ rook_namespace }} exec -it deploy/rook-ceph-tools -- radosgw-admin user info  --rgw-realm thorium-s3 --uid=thorium-s3-user"
+  register: s3_user_create
+
+- name: save s3 access and secret keys
+  set_fact:
+    s3_access_key: "{{ s3_user_create.stdout | from_json | json_query('keys[0].access_key') }}"
+    s3_secret_key: "{{ s3_user_create.stdout | from_json | json_query('keys[0].secret_key') }}"
+
+#- name: Get k8s service IP address (to override s3_endpoint)
+#  ansible.builtin.shell: |
+#    {% raw %}
+#    kubectl get service -n rook-ceph rook-ceph-rgw-thorium-s3 --template='{{.spec.clusterIP}}'
+#    {% endraw %}
+#  register: rgw_service_ip
+#
+#- name: Override s3_endpoint with rgw service IP
+#  set_fact:
+#    s3_endpoint: "http://{{ rgw_service_ip.stdout }}"

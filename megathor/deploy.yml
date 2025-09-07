@@ -1,0 +1,34 @@
+---
+
+- name: deploy Thorium and its dependencies
+  hosts: localhost
+  gather_facts: no
+  roles:
+    - role: common
+    # rook must go first because s3 user keys get set by Ceph
+    - role: rook
+      when: rook_enabled | bool
+    - role: secrets
+    # minio must be deployed after secrets get read/setup
+    - role: minio
+      when: minio_enabled | bool
+    # bucket creation must happen after minio or rook are deployed
+    - role: s3
+    # Databases/Tracing
+    - role: elastic
+      when: elastic_enabled | bool
+    - role: redis
+      when: redis_enabled | bool
+    - role: jaeger
+      when: jaeger_enabled | bool
+    - role: kubegres
+      when: kubegres_enabled | bool
+    - role: quickwit
+      when: quickwit_enabled | bool
+    - role: scylla
+      when: scylla_enabled | bool
+    - role: traefik
+      when: traefik_enabled | bool
+    # Thorium Operator/Cluster
+    - role: thorium
+      when: thorium_enabled | bool

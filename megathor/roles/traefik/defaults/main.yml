@@ -1,0 +1,8 @@
+traefik_enabled: true
+traefik_helm_chart_version: "37.1.0"
+traefik_namespace: "traefik"
+traefik_replicas: 1
+traefik_container_registry: "docker.io"
+traefik_image: "traefik"
+traefik_external_ips:
+  - "0.0.0.0" 

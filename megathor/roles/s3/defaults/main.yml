@@ -1,0 +1,5 @@
+#s3_endpoint: "http://rook-ceph-rgw-thorium-s3.rook-ceph.svc.cluster.local.:80"
+s3_endpoint: "http://minio.minio.svc.cluster.local.:9000"
+s3_region: "default" # default or thorium-s3 when using rook
+s3_flavor: "minio" # leave s3 as minio for rook/ceph
+s3_validate_certs: true

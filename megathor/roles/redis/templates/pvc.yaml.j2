@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-persistent-storage-claim
+spec:
+  storageClassName: "{{ storage_class }}"
+  resources:
+    requests:
+      storage: "{{ redis_volume_size }}"
+  accessModes:
+  - ReadWriteOnce
+

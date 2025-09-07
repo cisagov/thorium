@@ -1,0 +1,72 @@
+offline: true
+use_proxy: false
+# replace this IP:PORT with the IP/Hostname:port of your private registry
+offline_registry: "10.0.0.1:5000"
+
+k8s_registry: "{{ offline_registry }}"
+
+# Elastic
+elastic_container_registry: "{{ offline_registry }}"
+# elastic_operator_version: "2.16.0"
+# elastic_search_version: "8.19.2"
+
+# Redis
+redis_container_registry: "{{ offline_registry }}"
+# redis_image: "redis"
+# redis_version: "7"
+
+# Minio
+minio_registry: "{{ offline_registry }}"
+# minio_image: "minio/minio"
+# minio_version: "latest"
+
+# Rook Operator
+rook_container_registry: "{{ offline_registry }}"
+# rook_image: "rook/ceph"
+# rook_helm_chart_version: "v1.18.1"
+
+# Rook Ceph Cluster
+ceph_container_registry: "{{ offline_registry }}"
+# ceph_image: "ceph/ceph"
+# ceph_version: "v19.2.3"
+
+# Jaeger
+jaeger_container_registry: "{{ offline_registry }}"
+# jaeger_image: "jaegertracing/jaeger-query"
+# jaeger_version: "latest"
+
+# Kubegres
+kubegres_container_registry: "{{ offline_registry }}"
+# kubegres_image: "reactivetechio/kubegres:1.19"
+# kubegres_version: "1.19"
+
+# Quickwit
+quickwit_container_registry: "{{ offline_registry }}"
+# quickwit_image: "quickwit/quickwit"
+quickwit_postgres_container_registry: "{{ offline_registry }}"
+# quickwit_postgres_image: "postgres"
+# quickwit_postgres_version: "17"
+
+# Traefik
+traefik_container_registry: "{{ offline_registry }}"
+# traefik_image: "traefik"
+# traefik_helm_chart_version: "37.1.0"
+
+# Cert Manager
+cert_manager_container_registry: "{{ offline_registry }}"
+cert_manager_cainjector_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-cainjector:{{ cert_manager_version }}"
+cert_manager_controller_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-controller:{{ cert_manager_version }}"
+cert_manager_webhook_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-webhook:{{ cert_manager_version }}"
+cert_manager_acme_solver_image: "{{ cert_manager_container_registry }}/jetstack/cert-manager-acmesolver:{{ cert_manager_version }}"
+# cert_manager_version: "v1.18.2"
+
+# Scylla Operator
+scylla_container_registry: "{{ offline_registry }}"
+# scylla_base_image: "scylladb"
+# scylla_agent_image: "scylladb/scylla-manager-agent"
+# scylla_helm_chart_version: "v1.16.3"
+
+# Thorium Operator
+thorium_container_registry: "{{ offline_registry }}"
+# thorium_image: "cisagov/thorium/infrastructure/thorium"
+# thorium_version: "latest"

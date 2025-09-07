@@ -1,0 +1,8 @@
+production.yml
+*venv
+kubespray
+files/*
+!files/.gitkeep
+production.yml
+artifacts/*
+secrets*

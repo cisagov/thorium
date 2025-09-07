@@ -1,0 +1,40 @@
+---
+
+# Simple Scylla Cluster
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: scylla
+  namespace: "{{ scylla_namespace }}"
+spec:
+  agentRepository: "{{ scylla_container_registry }}/{{ scylla_agent_image}}"
+  version: "{{ scylla_version }}"
+  agentVersion: "{{ scylla_agent_version }}"
+  developerMode: "{{ scylla_developer_mode }}"
+  datacenter:
+    name: us-east-1
+    racks:
+      - name: us-east-1a
+        scyllaConfig: "scylla-config"
+        scyllaAgentConfig: "scylla-agent-config"
+        members: {{ scylla_members }}
+        storage:
+          capacity: "{{ scylla_storage_size }}"
+          storageClassName: "{{ storage_class }}"
+        resources:
+          requests:
+            cpu: "{{ scylla_cpu_requests }}"
+            memory: "{{ scylla_memory_requests }}"
+          limits:
+            cpu: "{{ scylla_cpu_limits }}"
+            memory: "{{ scylla_memory_limits }}"
+        volumes:
+          - name: coredumpfs
+            hostPath:
+              path: /tmp/coredumps
+        volumeMounts:
+          - mountPath: /tmp/coredumps
+            name: coredumpfs
+

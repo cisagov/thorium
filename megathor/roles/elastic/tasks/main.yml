@@ -1,0 +1,106 @@
+---
+
+- name: Create Custom Resource Definitions (CRDs)
+  kubernetes.core.k8s:
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'operator/' + elastic_operator_version + '/crds.yaml.j2') }}"
+
+- name: Create Elastic Operator
+  kubernetes.core.k8s:
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'operator/' + elastic_operator_version + '/operator.yaml.j2') }}"
+
+- name: Wait for Elastic operator rollout to complete
+  shell: /bin/bash -c "kubectl rollout status --watch --timeout=600s statefulset/elastic-operator -n {{ elastic_namespace }}"
+
+- name: Create Elastic resource from template
+  kubernetes.core.k8s:
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'search/elastic.yaml.j2') }}"
+
+- name: Create Kibana resource from template
+  kubernetes.core.k8s:
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'search/kibana.yaml.j2') }}"
+
+- name: Wait for elastic pods to be created
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: Wait for Elastic to be running
+  shell: kubectl wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' pods/elastic-es-default-{{ item }} -n {{ elastic_namespace }} --timeout={{ service_wait_timeout }}s
+  loop: "{{ range( elastic_search_node_count ) | list }}"
+
+- name: Get Elastic admin user password from secret
+  shell: "kubectl get secret -n {{ elastic_namespace }} elastic-es-elastic-user -o=jsonpath='{.data.elastic}' | base64 --decode"
+  register: elastic_admin_pass
+
+- name: Create Thorium index in Elastic
+  uri:
+    url: "{{ elastic_url }}/{{ item }}"
+    method: PUT
+    use_proxy: "{{ use_proxy }}"
+    user: "elastic"
+    password: "{{ elastic_admin_pass.stdout }}"
+    validate_certs: no
+    status_code: 200
+  ignore_errors: yes
+  register: create_index_response
+  loop:
+    - "thorium"
+    - "thorium_repo_results"
+    - "thorium_file_results"
+    - "thorium_repo_tags"
+    - "thorium_file_tags"
+
+- name: Create Thorium role in Elastic
+  uri:
+    url: "{{ elastic_url }}/_security/role/thorium"
+    use_proxy: "{{ use_proxy }}"
+    method: POST
+    user: "elastic"
+    password: "{{ elastic_admin_pass.stdout }}"
+    validate_certs: no
+    body_format: json
+    body: >
+      {
+        "indices": [
+          {
+            "names": ["thorium*"],
+            "privileges": ["all"]
+          }
+        ]
+      }
+    status_code: 200
+  register: create_role_response
+
+- name: Create Thorium user in Elastic
+  uri:
+    url: "{{ elastic_url }}/_security/user/{{ elastic_username }}"
+    method: POST
+    use_proxy: "{{ use_proxy }}"
+    user: "elastic"
+    password: "{{ elastic_admin_pass.stdout }}"
+    validate_certs: no
+    body_format: json
+    body: >
+      {
+        "password": "{{ elastic_password }}",
+        "roles": ["thorium"],
+        "full_name": "Thorium",
+        "email": "thorium@sandia.gov"
+      }
+    status_code: 200
+  ignore_errors: yes
+  register: create_user_response
+
+- name: Show Elastic API configuration responses
+  debug:
+    msg:
+      - "Index creation response: {{ create_index_response }}"
+      - "Role creation response: {{ create_role_response }}"
+      - "User creation response: {{ create_user_response }}"

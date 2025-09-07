@@ -1,0 +1,42 @@
+---
+
+- name: Create Redis namespace
+  kubernetes.core.k8s:
+    name: "{{ redis_namespace }}"
+    state: present
+    kind: Namespace
+
+- name: Create Redis service
+  kubernetes.core.k8s:
+    namespace: "{{ redis_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'service.yaml.j2') }}"
+
+- name: Create Redis PVC
+  kubernetes.core.k8s:
+    namespace: "{{ redis_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'pvc.yaml.j2') }}"
+
+- name: Create Redis secret config file
+  kubernetes.core.k8s:
+    name: conf
+    state: present
+    namespace: "{{ redis_namespace }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: conf 
+      type: Opaque
+      data:
+        redis.conf: "{{ lookup('template', 'redis.conf.j2') | ansible.builtin.b64encode }}"
+
+- name: Create Redis Deployment
+  kubernetes.core.k8s:
+    namespace: "{{ redis_namespace }}"
+    state: present
+    apply: true
+    definition: "{{ lookup('template', 'deployment.yaml.j2') }}"
