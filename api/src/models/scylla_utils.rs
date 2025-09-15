@@ -5,9 +5,12 @@
 #[cfg(feature = "scylla-utils")]
 #[path = "scylla_utils"]
 mod scylla_utils_reexport {
+    pub mod associations;
+    pub mod entities;
     pub mod errors;
     pub mod events;
     pub mod files;
+    pub mod graphics;
     pub mod network_policies;
     pub mod repos;
     pub mod results;

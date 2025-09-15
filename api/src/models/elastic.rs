@@ -11,10 +11,13 @@ use strum::{EnumIter, IntoEnumIterator};
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "api", derive(EnumIter))]
 pub enum ElasticIndex {
+    // Result-related indexes
     /// The results for jobs on samples
     SampleResults,
     /// The results for jobs on repos
     RepoResults,
+
+    // Tag-related indexes
     /// The tags on samples
     SampleTags,
     /// The tags on repos
@@ -59,9 +62,8 @@ impl ElasticIndex {
             ElasticIndex::SampleResults | ElasticIndex::RepoResults => {
                 shared.config.thorium.results.earliest
             }
-            ElasticIndex::SampleTags | ElasticIndex::RepoTags => {
-                shared.config.thorium.tags.earliest
-            }
+            ElasticIndex::SampleTags => shared.config.thorium.tags.files.earliest,
+            ElasticIndex::RepoTags => shared.config.thorium.tags.repos.earliest,
         }
     }
 

@@ -38,7 +38,7 @@ use crate::utils::{ApiError, AppState};
         ("basic" = []),
     )
 )]
-#[instrument(name = "routes::gstreams::depth", skip_all, err(Debug))]
+#[instrument(name = "routes::streams::depth", skip_all, err(Debug))]
 pub async fn depth(
     user: User,
     Path((group, namespace, stream, start, end)): Path<(String, String, String, i64, i64)>,
@@ -73,7 +73,7 @@ pub async fn depth(
         ("stream" = String, Path, description = "The name of the stream to count objects in"),
         ("start" = i64, Path, description = "The starting point in an epoch timestamp to count objects at"),
         ("end" = i64, Path, description = "The ending point in an epoch timestamp to count objects at"),
-        ("split" = u64, Path, description = "How many seconds each chunk should cover"),
+        ("split" = i64, Path, description = "How many seconds each chunk should cover"),
     ),
     responses(
         (status = 200, description = "The number of objects in the stream between start and end time in specified chunks", body = Vec<StreamDepth>),

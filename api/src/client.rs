@@ -25,6 +25,7 @@ mod search;
 mod streams;
 mod system;
 mod traits;
+mod trees;
 mod updates;
 mod users;
 mod utils;
@@ -43,13 +44,14 @@ pub use network_policies::NetworkPolicies;
 pub use pipelines::Pipelines;
 pub use reactions::Reactions;
 pub use repos::Repos;
+pub use search::Search;
 pub use search::events::results::ResultSearchEvents;
 pub use search::events::tags::TagSearchEvents;
 pub use search::events::{SearchEvents, SearchEventsClient};
-pub use search::Search;
 pub use streams::Streams;
 pub use system::System;
 pub use traits::ResultsClient;
+pub use trees::Trees;
 pub use updates::Updates;
 pub use users::Users;
 
@@ -69,6 +71,7 @@ cfg_if::cfg_if! {
         pub use system::SystemBlocking;
         pub use users::UsersBlocking;
         pub use events::EventsBlocking;
+        pub use trees::TreesBlocking;
     }
 }
 
@@ -240,6 +243,7 @@ impl ThoriumClientBuilder {
         let updates = Updates::new(&self.host, &auth_str, &client);
         let events = Events::new(&self.host, &auth_str, &client);
         let network_policies = NetworkPolicies::new(&self.host, &auth_str, &client);
+        let trees = Trees::new(&self.host, &auth_str, &client);
         // build Thorium client
         let client = Thorium {
             basic,
@@ -256,6 +260,7 @@ impl ThoriumClientBuilder {
             repos,
             events,
             network_policies,
+            trees,
             host: self.host,
             auth_str,
             expires,
@@ -314,6 +319,7 @@ impl ThoriumClientBuilder {
         let repos = ReposBlocking::new(&self.host, &auth_str, &client);
         let events = EventsBlocking::new(&self.host, &auth_str);
         let network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str);
+        let trees = TreesBlocking::new(&self.host, &auth_str, &client);
         // build Thorium client
         let client = ThoriumBlocking {
             basic,
@@ -330,6 +336,7 @@ impl ThoriumClientBuilder {
             repos,
             events,
             network_policies,
+            trees,
             host: self.host,
             auth_str,
             expires,
@@ -372,6 +379,8 @@ pub struct Thorium {
     pub events: Events,
     /// Handles network policies routes in Thorium
     pub network_policies: NetworkPolicies,
+    /// Handles tree routes in Thorium
+    pub trees: Trees,
     /// The host/url to reach Thorium at
     pub host: String,
     /// The auth str to use when reverting from a masquerade
@@ -414,6 +423,8 @@ pub struct ThoriumBlocking {
     pub events: EventsBlocking,
     /// Handles network policies routes in Thorium
     pub network_policies: NetworkPoliciesBlocking,
+    /// Handles tree routes in Thorium
+    pub trees: TreesBlocking,
     /// The host/url to reach Thorium at
     pub host: String,
     /// The auth str to use when reverting from a masquerade
@@ -672,6 +683,8 @@ impl Thorium {
         self.files = Files::new(&self.host, &auth_str, &self.client);
         self.repos = Repos::new(&self.host, &auth_str, &self.client);
         self.events = Events::new(&self.host, &auth_str, &self.client);
+        self.network_policies = NetworkPolicies::new(&self.host, &auth_str, &self.client);
+        self.trees = Trees::new(&self.host, &auth_str, &self.client);
         Ok(())
     }
 
@@ -698,6 +711,8 @@ impl Thorium {
         self.files = Files::new(&self.host, &auth_str, &self.client);
         self.repos = Repos::new(&self.host, &auth_str, &self.client);
         self.events = Events::new(&self.host, &auth_str, &self.client);
+        self.network_policies = NetworkPolicies::new(&self.host, &auth_str, &self.client);
+        self.trees = Trees::new(&self.host, &auth_str, &self.client);
     }
 
     /// Revert back to our original user from a masquerade
@@ -715,6 +730,8 @@ impl Thorium {
         self.files = Files::new(&self.host, &self.auth_str, &self.client);
         self.repos = Repos::new(&self.host, &self.auth_str, &self.client);
         self.events = Events::new(&self.host, &self.auth_str, &self.client);
+        self.network_policies = NetworkPolicies::new(&self.host, &self.auth_str, &self.client);
+        self.trees = Trees::new(&self.host, &self.auth_str, &self.client);
     }
 }
 
@@ -792,6 +809,8 @@ impl ThoriumBlocking {
         self.files = FilesBlocking::new(&self.host, &auth_str, &self.client);
         self.repos = ReposBlocking::new(&self.host, &auth_str, &self.client);
         self.events = EventsBlocking::new(&self.host, &auth_str, &self.client);
+        self.network_policies = NetworkPolicies::new(&self.host, &auth_str, &self.client);
+        self.trees = TreesBlocking::new(&self.host, &auth_str, &self.client);
         Ok(())
     }
 
@@ -818,6 +837,8 @@ impl ThoriumBlocking {
         self.files = FilesBlocking::new(&self.host, &auth_str, &self.client);
         self.repos = ReposBlocking::new(&self.host, &auth_str, &self.client);
         self.events = EventsBlocking::new(&self.host, &auth_str, &self.client);
+        self.network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str, &self.client);
+        self.trees = TreesBlocking::new(&self.host, &auth_str, &self.client);
     }
 
     /// Revert back to our original user from a masquerade
@@ -835,5 +856,7 @@ impl ThoriumBlocking {
         self.files = FilesBlocking::new(&self.host, &self.auth_str, &self.client);
         self.repos = ReposBlocking::new(&self.host, &self.auth_str, &self.client);
         self.events = EventsBlocking::new(&self.host, &self.auth_str, &self.client);
+        self.network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str, &self.client);
+        self.trees = TreesBlocking::new(&self.host, &auth_str, &self.client);
     }
 }

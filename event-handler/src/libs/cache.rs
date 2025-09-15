@@ -227,12 +227,14 @@ impl DataCacheFuture {
         match &event.data {
             EventData::NewTags { tag_type, item, .. } => {
                 // get all info on this item
-                let wrapped = match tag_type {
+                match tag_type {
                     // get info on this file
-                    TagType::Files => Self::Files(thorium.files.get(item).await?),
-                    TagType::Repos => Self::Repos(thorium.repos.get(item).await?),
-                };
-                Ok(Some(wrapped))
+                    TagType::Files => Ok(Some(Self::Files(thorium.files.get(item).await?))),
+                    TagType::Repos => Ok(Some(Self::Repos(thorium.repos.get(item).await?))),
+                    _ => Err(Error::new(format!(
+                        "Events are not supported for tag type '{tag_type}'"
+                    ))),
+                }
             }
             _ => Ok(None),
         }
@@ -372,6 +374,9 @@ impl DataCache {
                         // check against all the tags for this repo
                         Event::check_all_tag_trigger(&user.groups, &repo.tags, required, not)
                     }
+                    // this is an unsupported tag type; we shouldn't get here because we error
+                    // if it's unsupported when getting the event's data, so just return false
+                    _ => false,
                 }
             }
             (EventData::NewTags { .. }, EventTrigger::NewSample) => false,

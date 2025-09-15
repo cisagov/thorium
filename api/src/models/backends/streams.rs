@@ -282,6 +282,7 @@ impl Stream {
         // we could use the unsafe function here safely but I am choosing not too since an unwrap
         // is low cost and easy
         let split = NonZeroU64::new(split.try_into()?).unwrap();
+        // get the maps for our stream
         let mut maps =
             Self::depth_range(group, namespace, stream, start, end, split, shared).await?;
         // check if any of the depths have over 10k jobs in them

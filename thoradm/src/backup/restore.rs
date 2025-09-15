@@ -29,8 +29,8 @@ pub struct RestoreWorker<R: Restore> {
     progress: ProgressBar,
     /// Track the total number of rows restored
     rows_restored: usize,
-    /// The partition size to use for this table
-    partition_size: u16,
+    /// The partition config to use for this table
+    partition_conf: R::PartitionConf,
 }
 
 impl<R: Restore> RestoreWorker<R> {
@@ -53,7 +53,7 @@ impl<R: Restore> RestoreWorker<R> {
         // get our prepared statement
         let prepared = R::prepared_statement(&scylla, namespace).await?;
         // get our partition size
-        let partition_size = R::partition_size(conf);
+        let partition_conf = R::partition_conf(conf);
         // build our restore worker
         let worker = RestoreWorker {
             scylla: scylla.clone(),
@@ -62,7 +62,7 @@ impl<R: Restore> RestoreWorker<R> {
             updates,
             progress,
             rows_restored: 0,
-            partition_size,
+            partition_conf,
         };
         Ok(worker)
     }
@@ -97,7 +97,7 @@ impl<R: Restore> RestoreWorker<R> {
                 R::restore(
                     restore_slice,
                     &self.scylla,
-                    self.partition_size,
+                    &self.partition_conf,
                     &mut self.rows_restored,
                     &mut self.progress,
                     &self.prepared,
@@ -126,6 +126,9 @@ impl<R: Restore> RestoreWorker<R> {
 
 #[async_trait::async_trait]
 pub trait Restore: Utils + std::fmt::Debug + 'static + Send + Archive {
+    /// The type that contains a partition size or sizes depending on the data/table/row
+    type PartitionConf: Send;
+
     /// The steps to once run before restoring data
     async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError>;
 
@@ -140,13 +143,13 @@ pub trait Restore: Utils + std::fmt::Debug + 'static + Send + Archive {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_size(config: &Conf) -> u16;
+    fn partition_conf(config: &Conf) -> Self::PartitionConf;
 
     /// Restore a single partition
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        partition_size: u16,
+        partition_conf: &Self::PartitionConf,
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,

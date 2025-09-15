@@ -18,6 +18,9 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use super::{OnDiskFile, TreeSupport};
+#[cfg(feature = "api")]
+use crate::models::Tree;
+use crate::models::{TreeBranch, TreeRelationships};
 use crate::{matches_adds, matches_removes, matches_update_opt, same};
 
 // api only imports
@@ -35,7 +38,7 @@ cfg_if::cfg_if! {
         use tokio::fs::{File, OpenOptions};
         use tokio::io::BufReader;
         use crate::client::Error;
-        use crate::{multipart_file, multipart_list, multipart_list_conv, multipart_text, multipart_text_to_string};
+        use crate::{multipart_file, multipart_list, multipart_list_conv, multipart_text, multipart_text_to_string, multipart_set};
     }
 }
 
@@ -507,8 +510,6 @@ impl SampleRequest {
     #[cfg(feature = "client")]
     pub async fn to_form(mut self) -> Result<reqwest::multipart::Form, Error> {
         // build the form we are going to send
-
-        use crate::multipart_set;
         // disable percent encoding, as the API natively supports UTF-8
         let form = reqwest::multipart::Form::new().percent_encode_noop();
         let form = multipart_text!(form, "description", self.description);
@@ -1278,7 +1279,7 @@ impl OriginRequest {
 }
 
 /// The types of network protocols used in a packet capture
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum PcapNetworkProtocol {
     /// The TCP protocol
@@ -1330,7 +1331,7 @@ impl FromStr for PcapNetworkProtocol {
 }
 
 /// The types of files a samples can be carved from
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum CarvedOrigin {
     /// The sample was carved from a packet capture
@@ -1355,7 +1356,7 @@ pub enum CarvedOrigin {
 }
 
 /// The different origin relationships for files
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "api", schema(example = json!(
     {
@@ -1479,6 +1480,14 @@ macro_rules! opt_tag {
             $tags.entry($key.to_owned()).or_default().insert(value);
         }
     };
+}
+
+/// Whether something is a file or repo
+enum FileOrRepo<'a> {
+    /// This is a sha256 for a file
+    File(&'a String),
+    /// This is a url to a repo
+    Repo(&'a String),
 }
 
 impl Origin {
@@ -1622,22 +1631,69 @@ impl Origin {
         }
     }
 
-    /// Determine if this origins parent is a specific sha256
+    /// Determine if this origins parent is a specific sha256 or repo url
     ///
     /// # Arguments
     ///
-    /// * `sha256` - The sha256 of the parent to check
-    pub fn is_child_of(&self, sha256: &str) -> bool {
+    /// * `check` - The sha256 or repo url of the parent to check
+    pub fn is_child_of(&self, check: &str) -> bool {
         match self {
             Origin::Downloaded { .. } => false,
-            Origin::Unpacked { parent, .. } => parent == sha256,
-            Origin::Transformed { parent, .. } => parent == sha256,
+            Origin::Unpacked { parent, .. } => parent == check,
+            Origin::Transformed { parent, .. } => parent == check,
             Origin::Wire { .. } => false,
             Origin::Incident { .. } => false,
-            Origin::MemoryDump { parent, .. } => parent == sha256,
-            Origin::Source { .. } => false,
-            Origin::Carved { parent, .. } => parent == sha256,
+            Origin::MemoryDump { parent, .. } => parent == check,
+            Origin::Source { repo, .. } => repo == check,
+            Origin::Carved { parent, .. } => parent == check,
             Origin::None => false,
+        }
+    }
+
+    /// Determine if this origins parent is in a set of sha25s or repo urls
+    ///
+    /// # Arguments
+    ///
+    /// * `check` - The sha256 or repo url of the parent to check
+    pub fn is_child_of_any(&self, check: &HashMap<&String, u64>) -> Option<u64> {
+        // get the found parent if it exists
+        let found = match self {
+            Origin::Downloaded { .. } => None,
+            Origin::Unpacked { parent, .. } => check.get(parent),
+            Origin::Transformed { parent, .. } => check.get(parent),
+            Origin::Wire { .. } => None,
+            Origin::Incident { .. } => None,
+            Origin::MemoryDump { parent, .. } => check.get(parent),
+            Origin::Source { repo, .. } => check.get(repo),
+            Origin::Carved { parent, .. } => check.get(parent),
+            Origin::None => None,
+        };
+        // deref our found parent if we found one
+        found.map(|hash| *hash)
+    }
+
+    /// Get a parent sha256 for this sample if it exists
+    pub fn get_parent_sha256_or_repo<'a>(&'a self) -> Option<FileOrRepo<'a>> {
+        match self {
+            Origin::Downloaded { .. } => None,
+            Origin::Unpacked { parent, .. } => Some(FileOrRepo::File(parent)),
+            Origin::Transformed { parent, .. } => Some(FileOrRepo::File(parent)),
+            Origin::Wire { .. } => None,
+            Origin::Incident { .. } => None,
+            Origin::MemoryDump { parent, .. } => Some(FileOrRepo::File(parent)),
+            Origin::Source { repo, .. } => Some(FileOrRepo::Repo(repo)),
+            Origin::Carved { parent, .. } => Some(FileOrRepo::File(parent)),
+            Origin::None => None,
+        }
+    }
+
+    /// Check if this origin has a dangling parent
+    pub fn is_dangling_parent(&self) -> bool {
+        match self {
+            Origin::Unpacked { dangling, .. } => *dangling,
+            Origin::Transformed { dangling, .. } => *dangling,
+            Origin::Carved { dangling, .. } => *dangling,
+            _ => false,
         }
     }
 }
@@ -2248,7 +2304,7 @@ impl TagSupport for Sample {
     /// * `shared` - Shared Thorium objects
     #[tracing::instrument(name = "TagSupport<Sample>::get_tags", skip_all, fields(sha256 = self.sha256), err(Debug))]
     #[cfg(feature = "api")]
-    async fn get_tags(&mut self, groups: &Vec<String>, shared: &Shared) -> Result<(), ApiError> {
+    async fn get_tags(&mut self, groups: &[String], shared: &Shared) -> Result<(), ApiError> {
         // get the requested tags
         super::backends::db::tags::get(TagType::Files, groups, &self.sha256, &mut self.tags, shared)
             .await
@@ -2392,16 +2448,26 @@ impl PartialEq<SampleRequest> for Sample {
 }
 
 impl TreeSupport for Sample {
+    /// The data used to generate this types tree hash
+    type HashType<'a> = &'a String;
+
     /// Hash this child object
+    fn tree_hash(&self) -> u64 {
+        Self::tree_hash_direct(&self.sha256)
+    }
+
+    /// Hash a child object directly by its identifying info
     ///
     /// # Arguments
     ///
-    /// * `seed` - The seed to set the hasher to use
-    fn tree_hash(&self, seed: i64) -> u64 {
+    /// * `input` - The data needed to generate this nodes tree hash
+    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64 {
+        // get our hash seed
+        let seed = Self::tree_seed();
         // build a hasher
         let mut hasher = gxhash::GxHasher::with_seed(seed);
         // hash this samples sha
-        hasher.write(self.sha256.as_bytes());
+        hasher.write(input.as_bytes());
         // finalize our hasher
         let hash = hasher.finish();
         hash
@@ -2413,54 +2479,146 @@ impl TreeSupport for Sample {
         user: &User,
         query: &crate::models::TreeQuery,
         shared: &crate::utils::Shared,
-    ) -> Result<Vec<super::TreeNodeData>, crate::utils::ApiError> {
+    ) -> Result<Vec<super::TreeNode>, crate::utils::ApiError> {
         // build a list of initial data
         let mut initial = Vec::with_capacity(query.samples.len());
         // get all our intial sample data
-        // TODO do this in parallel
+        // TODO do this in parallel and for specific groups
         for sha256 in &query.samples {
             // get this samples data
             let sample = Sample::get(user, sha256, shared).await?;
             // wrap this node in a tree node data object
-            let node_data = super::TreeNodeData::Sample(sample);
+            let node_data = super::TreeNode::Sample(sample);
             // add this tree node data object to our list
             initial.push(node_data);
         }
         Ok(initial)
     }
 
+    /// Gather any parents for this child node
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is building this tree
+    /// * `tree` - The tree to build
+    /// * `ring` - The current growth ring for this tree
+    /// * `shared` - Shared Thorium objects
+    #[cfg(feature = "api")]
+    #[allow(async_fn_in_trait)]
+    async fn gather_parents(
+        &self,
+        user: &super::User,
+        tree: &Tree,
+        ring: &crate::models::backends::trees::TreeRing,
+        shared: &crate::utils::Shared,
+    ) -> Result<(), crate::utils::ApiError> {
+        // step over our submissions and find any parents
+        for sub in &self.submissions {
+            // check if this is a dangling parent
+            if sub.origin.is_dangling_parent() {
+                // this parent is dangling so just skip it for now
+                // TODO: in the future we should have a dangling node
+                continue;
+            }
+            // get our parent sha256 or repo if it exists
+            let (tree_hash, node) = match sub.origin.get_parent_sha256_or_repo() {
+                Some(FileOrRepo::File(sha256)) => {
+                    // calculate this samples tree hash
+                    let tree_hash = Sample::tree_hash_direct(sha256);
+                    // skip this node if its already in our tree
+                    if !ring.contains(tree, tree_hash) {
+                        // get this files data
+                        let sample = Sample::get(user, sha256, shared).await?;
+                        // wrap this sample in a tree node
+                        let node = super::TreeNode::Sample(sample);
+                        // return our noe and its hash
+                        (tree_hash, node)
+                    } else {
+                        continue;
+                    }
+                }
+                Some(FileOrRepo::Repo(url)) => {
+                    // calculate this repos tree hash
+                    let tree_hash = crate::models::Repo::tree_hash_direct(url);
+                    // skip this node if its already in our tree
+                    if !ring.contains(tree, tree_hash) {
+                        // get this repos data
+                        let repo = crate::models::Repo::get(user, url, shared).await?;
+                        // wrap this sample in a tree node
+                        let node = super::TreeNode::Repo(repo);
+                        // return our noe and its hash
+                        (tree_hash, node)
+                    } else {
+                        continue;
+                    }
+                }
+                None => continue,
+            };
+            // get the hash of our current node
+            let node_hash = self.tree_hash();
+            // add this node to the ring
+            ring.add_node(node);
+            // build the relationship for this node
+            let relationship = TreeRelationships::Origin(sub.origin.clone());
+            // wrap our relationship in a branch
+            let branch = TreeBranch::new(tree_hash, relationship);
+            // get an entry to this parent nodes relationships
+            let entry = ring.relationships.entry(node_hash).or_default();
+            // insert our relationship
+            entry.insert(branch);
+        }
+        Ok(())
+    }
+
     /// Gather any children for this child node
     #[cfg(feature = "api")]
     async fn gather_children(
         &self,
-        user: &User,
+        _user: &User,
+        tree: &Tree,
+        ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
-    ) -> Result<Vec<super::TreeNode>, crate::utils::ApiError> {
-        // build the opts to get everything tagged with this parent hash
-        let opts = FileListOpts::default().tag("Parent", &self.sha256);
-        // gather the children for this sample
-        let sha256s = Sample::list(user, opts, true, shared).await?;
-        // convert this to a details list
-        let mut cursor = sha256s.details(user, shared).await?;
-        // build a list of related children
-        let mut children = Vec::with_capacity(cursor.data.len());
-        // wrap these samples in a tree node
-        for sample in cursor.data.drain(..) {
-            // get the origins that are related to our parent
-            let relationships = sample
-                .submissions
-                .iter()
-                .filter(|sub| sub.origin.is_child_of(&self.sha256))
-                .map(|sub| super::TreeRelationships::Origin(sub.origin.clone()))
-                .collect();
-            // wrap this sample in a node data object
-            let data = super::TreeNodeData::Sample(sample);
-            // build the tree node for this child sample
-            let node = super::TreeNode::new(relationships, data);
-            // add this to our list of children nodes
-            children.push(node);
+    ) -> Result<(), crate::utils::ApiError> {
+        // get any children of this sample
+        ring.gather_files_from_parent(tree, "Parent", &self.sha256, shared)
+            .await
+    }
+
+    /// Find relationships by checking origin info for a node
+    ///
+    /// # Arguments
+    ///
+    /// * `parents` - The parents to check against
+    #[cfg(feature = "api")]
+    fn check_origins(
+        &self,
+        parents: &HashMap<&String, u64>,
+        relationships: &dashmap::DashMap<u64, dashmap::DashSet<TreeBranch>>,
+    ) {
+        // get our current nodes hash
+        let hash = self.tree_hash();
+        // check the origins this sample to see if we have any relationships that need to be added
+        for sub in &self.submissions {
+            // get parents for this submission origin if they exist
+            if let Some(parent_hash) = sub.origin.is_child_of_any(parents) {
+                // build the relationship for this origin
+                let relationship = TreeRelationships::Origin(sub.origin.clone());
+                // wrap our relationship in a branch
+                let branch = TreeBranch::new(hash, relationship);
+                // get an entry to this parent nodes relationships
+                let entry = relationships.entry(parent_hash).or_default();
+                // insert our relationship
+                entry.insert(branch);
+            }
         }
-        Ok(children)
+    }
+
+    /// Build an association target column for an object
+    #[cfg(feature = "api")]
+    fn build_association_target_column(&self) -> Option<super::AssociationTargetColumn> {
+        // build a target for this file
+        let target = super::AssociationTargetColumn::File(self.sha256.clone());
+        Some(target)
     }
 }
 

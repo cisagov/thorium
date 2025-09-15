@@ -3,16 +3,17 @@
 use chrono::prelude::*;
 use indicatif::ProgressBar;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hasher;
 use std::path::Path;
 use std::path::PathBuf;
 use uuid::Uuid;
 
 use super::CommitishKinds;
-use crate::models::{KeySupport, TagMap};
+use crate::models::{KeySupport, TagMap, TreeBranch, TreeSupport};
 
 // api only imports
 #[cfg(feature = "api")]
-use crate::models::TagDeleteRequest;
+use crate::models::{TagDeleteRequest, Tree, TreeNode, TreeQuery};
 
 // api/client imports
 cfg_if::cfg_if! {
@@ -525,7 +526,7 @@ impl TagSupport for Repo {
     #[tracing::instrument(name = "TagSupport<Repo>::get_tags", skip_all, fields(repo = self.url), err(Debug))]
     async fn get_tags(
         &mut self,
-        groups: &Vec<String>,
+        groups: &[String],
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
         // get the requested tags
@@ -605,6 +606,80 @@ impl OutputSupport for Repo {
         )
         .await?;
         Ok(())
+    }
+}
+
+impl TreeSupport for Repo {
+    /// The data used to generate this types tree hash
+    type HashType<'a> = &'a String;
+
+    /// Hash this child object
+    fn tree_hash(&self) -> u64 {
+        Self::tree_hash_direct(&self.url)
+    }
+
+    /// Hash a child object directly by its identifying info
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The data needed to generate this nodes tree hash
+    /// * `seed` - The seed to set the hasher to use
+    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64 {
+        // get our hash seed
+        let seed = Self::tree_seed();
+        // build a hasher
+        let mut hasher = gxhash::GxHasher::with_seed(seed);
+        // hash this samples sha
+        hasher.write(input.as_bytes());
+        // finalize our hasher
+        let hash = hasher.finish();
+        hash
+    }
+
+    /// Gather any initial nodes for a tree
+    #[cfg(feature = "api")]
+    #[allow(async_fn_in_trait)]
+    async fn gather_initial(
+        user: &crate::models::User,
+        query: &TreeQuery,
+        shared: &crate::utils::Shared,
+    ) -> Result<Vec<TreeNode>, crate::utils::ApiError> {
+        // build a list of initial data
+        let mut initial = Vec::with_capacity(query.repos.len());
+        // get all our intial repo data
+        // TODO do this in parallel
+        for url in &query.repos {
+            // get this repos data
+            let repo = Repo::get(user, url, shared).await?;
+            // wrap this node in a tree node data object
+            let node_data = TreeNode::Repo(repo);
+            // add this tree node data object to our list
+            initial.push(node_data);
+        }
+        Ok(initial)
+    }
+
+    /// Gather any children for this child node
+    #[cfg(feature = "api")]
+    #[allow(async_fn_in_trait)]
+    async fn gather_children(
+        &self,
+        _user: &crate::models::User,
+        tree: &Tree,
+        ring: &crate::models::backends::trees::TreeRing,
+        shared: &crate::utils::Shared,
+    ) -> Result<(), crate::utils::ApiError> {
+        // get any children of this sample
+        ring.gather_files_from_parent(tree, "Repo", &self.url, shared)
+            .await
+    }
+
+    /// Build an association target column for an object
+    #[cfg(feature = "api")]
+    fn build_association_target_column(&self) -> Option<crate::models::AssociationTargetColumn> {
+        // build a target for this file
+        let target = crate::models::AssociationTargetColumn::Repo(self.url.clone());
+        Some(target)
     }
 }
 
@@ -1188,6 +1263,19 @@ impl RepoListOpts {
         self
     }
 
+    /// List repos that match a specific tag by ref
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The tag key to match against
+    /// * `value` - The tag value to match against
+    pub fn tag_ref<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+        // get an entry into this tags value list
+        let entry = self.tags.entry(key.into()).or_default();
+        // add this tags value
+        entry.push(value.into());
+    }
+
     /// Set for matching on tags to be case-insensitive
     #[must_use]
     pub fn tags_case_insensitive(mut self) -> Self {
@@ -1252,6 +1340,21 @@ impl RepoListParams {
                     shared.config.thorium.repos.earliest
                 )),
             },
+        }
+    }
+}
+
+impl From<RepoListOpts> for RepoListParams {
+    /// Convert `RepoListOpts` into `RepoListParams`
+    fn from(opts: RepoListOpts) -> Self {
+        RepoListParams {
+            groups: opts.groups,
+            start: opts.start.unwrap_or_else(|| Utc::now()),
+            end: opts.end,
+            tags: opts.tags,
+            cursor: opts.cursor,
+            limit: opts.limit.unwrap_or_else(|| default_list_limit()),
+            tags_case_insensitive: opts.tags_case_insensitive,
         }
     }
 }

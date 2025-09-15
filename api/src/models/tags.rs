@@ -4,8 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use super::InvalidEnum;
 use super::backends::TagSupport;
+use super::InvalidEnum;
 
 /// The different types of tags
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Hash, Eq)]
@@ -24,14 +24,38 @@ pub enum TagType {
     Files,
     /// This operation is working on repo tags
     Repos,
+    /// This operation is working on entity tags
+    Entities,
 }
 
 impl TagType {
     /// Cast our tag type to a str
+    #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
             TagType::Files => "Files",
             TagType::Repos => "Repos",
+            TagType::Entities => "Entities",
+        }
+    }
+
+    /// Returns whether the tag type supports events
+    #[cfg(feature = "api")]
+    #[must_use]
+    pub fn supports_events(&self) -> bool {
+        match self {
+            TagType::Files | TagType::Repos => true,
+            TagType::Entities => false,
+        }
+    }
+
+    /// Returns whether the tag type supports search events
+    #[cfg(feature = "api")]
+    #[must_use]
+    pub fn supports_search_events(&self) -> bool {
+        match self {
+            TagType::Files | TagType::Repos => true,
+            TagType::Entities => false,
         }
     }
 }
@@ -39,11 +63,12 @@ impl TagType {
 impl FromStr for TagType {
     type Err = InvalidEnum;
 
-    /// Conver this str to an [`EventType`]
+    /// Parse the [`TagType`] from a [`str`]
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         match raw {
             "Files" => Ok(TagType::Files),
             "Repos" => Ok(TagType::Repos),
+            "Entities" => Ok(TagType::Entities),
             _ => Err(InvalidEnum(format!("Unknown TagType: {raw}"))),
         }
     }
@@ -52,9 +77,10 @@ impl FromStr for TagType {
 impl std::fmt::Display for TagType {
     /// Allow tag kinds to be displayed
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            &Self::Files => write!(f, "Files"),
-            &Self::Repos => write!(f, "Repos"),
+        match *self {
+            Self::Files => write!(f, "Files"),
+            Self::Repos => write!(f, "Repos"),
+            Self::Entities => write!(f, "Entities"),
         }
     }
 }

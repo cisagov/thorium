@@ -3,11 +3,11 @@
 use aws_sdk_s3::primitives::ByteStream;
 use axum::extract::multipart::Field;
 use axum::extract::{FromRequestParts, Multipart};
-use axum::http::request::Parts;
 use axum::http::StatusCode;
+use axum::http::request::Parts;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::{instrument, Span};
+use tracing::{Span, instrument};
 use uuid::Uuid;
 
 use super::db::{self};
@@ -17,7 +17,7 @@ use crate::models::{
     OutputCollectionUpdate, OutputDisplayType, OutputForm, OutputFormBuilder, OutputKind,
     OutputMap, OutputRow, Repo, ResultGetParams, Sample, User,
 };
-use crate::utils::{ApiError, Shared};
+use crate::utils::{ApiError, Shared, bounder};
 use crate::{bad, deserialize, update, update_clear, update_opt};
 
 impl<O: OutputSupport> OutputFormBuilder<O> {
@@ -111,11 +111,9 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
                 if data_field.content_type().is_none() {
                     return bad!("A content type must be set for the data form entry!".to_owned());
                 }
-                // try to get the name for this file
-                let file_name = data_field.file_name().map_or_else(
-                    || Uuid::new_v4().to_string(),
-                    std::borrow::ToOwned::to_owned,
-                );
+                // validate our file name for this field if we have one
+                // if we don't then just use a random uuid
+                let file_name = bounder::multipart_path(&data_field, "Result File")?;
                 // build the path to save this attachment at in s3
                 let s3_path = format!("{}/{}", &result_id, file_name);
                 // cart and stream this file into s3

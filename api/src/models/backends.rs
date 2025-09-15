@@ -5,10 +5,11 @@
 #[cfg(feature = "api")]
 #[path = "backends"]
 mod backends_reexport {
+    pub mod associations;
     pub mod comments;
     pub mod db;
     pub mod deadlines;
-    pub mod elastic;
+    pub mod entities;
     pub mod events;
     pub mod files;
     pub mod groups;
@@ -46,6 +47,9 @@ mod backends_reexport_client {
     pub use support::NotificationSupport;
     pub use support::OutputSupport;
     pub use support::TagSupport;
+
+    #[cfg(feature = "api")]
+    pub(crate) use support::GraphicSupport;
 }
 
 #[cfg(any(feature = "api", feature = "client"))]

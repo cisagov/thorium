@@ -122,7 +122,6 @@ where
                     .source
                     .bundle_event(compacted_event, &self.scylla)
                     .await?;
-                // send the bundles to the search store
                 self.send_docs(index_type, bundles).await?;
             }
             // the item was deleted, so delete it in all its groups
@@ -135,7 +134,7 @@ where
                     .collect::<Vec<_>>();
                 // delete the documents with those id's
                 self.store
-                    .delete(index_type.map_index(), &store_ids)
+                    .delete(index_type.map_index()?, &store_ids)
                     .await?;
             }
         }
@@ -161,10 +160,11 @@ where
     ) -> Result<(), Error> {
         // get the current timestamp
         let now = Utc::now();
+        let index = index_type.map_index()?;
         // serialize the bundles to JSON values to stream
         let values = D::to_values(&bundles, &index_type, now)?;
         // send this data to our search store
-        self.store.create(index_type.map_index(), values).await?;
+        self.store.create(index, values).await?;
         Ok(())
     }
 

@@ -102,6 +102,10 @@ impl Scrub for Output {}
 /// Implement restore support for the samples list table
 #[async_trait::async_trait]
 impl Restore for Output {
+    // The partition size is constant, so the partition config is just
+    // the size itself
+    type PartitionConf = u16;
+
     /// The steps to once run before restoring data
     async fn prep(_scylla: &Session, _ns: &str) -> Result<(), ExecutionError> {
         Ok(())
@@ -133,7 +137,7 @@ impl Restore for Output {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_size(config: &Conf) -> u16 {
+    fn partition_conf(config: &Conf) -> u16 {
         config.thorium.results.partition_size
     }
 
@@ -150,7 +154,7 @@ impl Restore for Output {
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        _partition_size: u16,
+        _partition_size: &u16,
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,
@@ -381,6 +385,10 @@ impl Scrub for OutputStream {}
 /// Implement restore support for the samples list table
 #[async_trait::async_trait]
 impl Restore for OutputStream {
+    // The partition size is constant, so the partition config is just
+    // the size itself
+    type PartitionConf = u16;
+
     /// The steps to once run before restoring data
     async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
@@ -415,7 +423,7 @@ impl Restore for OutputStream {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_size(config: &Conf) -> u16 {
+    fn partition_conf(config: &Conf) -> u16 {
         config.thorium.results.partition_size
     }
 
@@ -432,7 +440,7 @@ impl Restore for OutputStream {
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        partition_size: u16,
+        partition_size: &u16,
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,
@@ -449,7 +457,7 @@ impl Restore for OutputStream {
             // deserialize this rows uploaded timestamp
             let uploaded = row.uploaded.deserialize(&mut rkyv::Infallible)?;
             // calculate the new bucket
-            let bucket = thorium::utils::helpers::partition(uploaded, row.year, partition_size);
+            let bucket = thorium::utils::helpers::partition(uploaded, row.year, *partition_size);
             // restore this row to scylla
             let query = scylla.execute_unpaged(
                 prepared,

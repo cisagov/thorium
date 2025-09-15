@@ -391,10 +391,10 @@ impl IndexMapping<Elastic> for OutputKind {
         vec![ElasticIndex::SampleResults, ElasticIndex::RepoResults]
     }
 
-    fn map_index(&self) -> ElasticIndex {
+    fn map_index(&self) -> Result<ElasticIndex, Error> {
         match self {
-            OutputKind::Files => ElasticIndex::SampleResults,
-            OutputKind::Repos => ElasticIndex::RepoResults,
+            OutputKind::Files => Ok(ElasticIndex::SampleResults),
+            OutputKind::Repos => Ok(ElasticIndex::RepoResults),
         }
     }
 }

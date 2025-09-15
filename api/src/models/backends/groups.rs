@@ -3,7 +3,7 @@
 
 use ldap3::{Scope, SearchEntry};
 use std::collections::{HashMap, HashSet};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use super::db;
 use super::db::groups::{MembersLists, RawGroupData};
@@ -13,7 +13,7 @@ use crate::models::{
     GroupRequest, GroupStats, GroupUpdate, GroupUsersRequest, GroupUsersUpdate, ImageScaler,
     Pipeline, User,
 };
-use crate::utils::{bounder, ApiError, Shared};
+use crate::utils::{ApiError, Shared, bounder};
 use crate::{
     bad, conflict, deserialize_ext, deserialize_opt, ldap, not_found, unauthorized, unavailable,
     update, update_clear, update_opt_empty,
@@ -21,6 +21,19 @@ use crate::{
 
 // Only build in when DB features are enabled
 impl GroupRequest {
+    /// validate all of our metagroup names
+    ///
+    /// This ensures that ldap injection is not possible through metagroup names.
+    /// Only alphanumeric + '-' + '_' are allowed in metagroup names.
+    pub fn validate_metagroups(&self) -> Result<(), ApiError> {
+        // check all of the metagroups for all group roles
+        bounder::ldap_metagroups(&self.owners.metagroups)?;
+        bounder::ldap_metagroups(&self.managers.metagroups)?;
+        bounder::ldap_metagroups(&self.users.metagroups)?;
+        bounder::ldap_metagroups(&self.monitors.metagroups)?;
+        Ok(())
+    }
+
     /// Cast a GroupRequest to a Group
     ///
     /// # Arguments
@@ -30,6 +43,8 @@ impl GroupRequest {
     pub async fn cast(mut self, user: &User, shared: &Shared) -> Result<Group, ApiError> {
         // bounds check string and ensure its alphanumeric and lowercase
         bounder::string_lower(&self.name, "group['name']", 1, 50)?;
+        // bounds check our metagroups
+        self.validate_metagroups()?;
         // make sure all users exist
         User::exists_many(&self.owners.direct, shared).await?;
         User::exists_many(&self.managers.direct, shared).await?;
@@ -121,11 +136,18 @@ impl GroupUsersUpdate {
     /// # Arguments
     ///
     /// * `group` - The group to apply updates too
-    pub fn update_metagroups(&mut self, role: &mut GroupUsers) {
-        // update our metagroups
-        role.metagroups.extend(self.metagroups_add.drain());
+    pub fn update_metagroups(&mut self, role: &mut GroupUsers) -> Result<(), ApiError> {
+        // make sure all of our new metagroup names are valid and sanitized
+        for metagroup in self.metagroups_add.drain() {
+            // check this metagroup
+            bounder::ldap_metagroup(&metagroup)?;
+            // add this metagroup
+            role.metagroups.insert(metagroup);
+        }
+        // remove any metagroups we no longer want
         role.metagroups
             .retain(|name| !self.metagroups_remove.contains(name));
+        Ok(())
     }
 }
 
@@ -145,6 +167,7 @@ impl GroupAllowedUpdate {
         update!(group.allowed.reactions, self.reactions);
         update!(group.allowed.results, self.results);
         update!(group.allowed.comments, self.comments);
+        update!(group.allowed.entities, self.entities);
     }
 }
 
@@ -609,25 +632,33 @@ impl Group {
         Ok(groups)
     }
 
-    /// Authorize a user as part of all of these group with the required permissions and all groups
-    /// allow this action
+    /// Authorize a user as part of all of these group with the required permissions based on
+    /// the given role check function and all groups allow the given action
     ///
     /// Arguments
     ///
     /// * `user` - The user to authorize
     /// * `name` - The names of the groups to authorize for
+    /// * `role_check` - The role check to run on each group
+    /// * `role_check_name` - The name of the role check to display in the logs (e.g. 'view', 'edit', etc.)
+    /// * `action` - The action the group must allow if one is given
     /// * `shared` - Shared objects in Thorium
     #[instrument(
         name = "Group::authorize_check_allow_all",
-        skip(user, shared),
+        skip(user, role_check, shared),
         err(Debug)
     )]
-    pub async fn authorize_check_allow_all(
+    pub async fn authorize_check_allow_all<F>(
         user: &User,
         names: &[String],
-        action: GroupAllowAction,
+        role_check: F,
+        role_check_name: &str,
+        action: Option<GroupAllowAction>,
         shared: &Shared,
-    ) -> Result<Vec<Group>, ApiError> {
+    ) -> Result<Vec<Group>, ApiError>
+    where
+        F: Fn(&Group, &User) -> Result<(), ApiError>,
+    {
         // bypass member check if we are an admin
         // make sure user is apart of this group
         if !user.is_admin() && !names.iter().all(|name| user.groups.contains(name)) {
@@ -637,21 +668,12 @@ impl Group {
         // get group object from backend
         // error if it doesn't exist
         let groups = db::groups::list_details(names.iter(), shared).await?;
-        // make sure the user has some role in this group
-        if !user.is_admin() {
-            for group in groups.iter() {
-                // make sure this user can see this group
-                group.viewable(user)?;
-                // make sure this group can perform this action
-                group.allowable(action)?;
-            }
-            // log that this user is authorized to view group
-            let msg = format!("{} authorized to view {:?}", user.username, names);
-            event!(Level::INFO, msg);
-        } else {
-            // make sure all groups can perform this action even for admins
-            for group in groups.iter() {
-                group.allowable(action)?;
+        if user.is_admin() {
+            if let Some(action) = action {
+                // make sure all groups can perform this action even for admins
+                for group in &groups {
+                    group.allowable(action)?;
+                }
             }
             // if we are an admin we need to do a second call to make sure these groups exist
             // this is because non existent groups will still return empty user lists
@@ -659,6 +681,26 @@ impl Group {
                 // one or more of the groups don't exist throw an error
                 return not_found!(format!("all of {:?} groups must exist", names));
             }
+        } else {
+            if let Some(action) = action {
+                for group in &groups {
+                    // make sure this user can see this group
+                    role_check(group, user)?;
+                    // make sure this group can perform this action
+                    group.allowable(action)?;
+                }
+            } else {
+                for group in &groups {
+                    // make sure this user can see this group
+                    role_check(group, user)?;
+                }
+            }
+            // log that this user is authorized for this group
+            let msg = format!(
+                "{} authorized to {} {:?}",
+                user.username, role_check_name, names
+            );
+            event!(Level::INFO, msg);
         }
         Ok(groups)
     }
@@ -764,10 +806,10 @@ impl Group {
         self.users.combined.clear();
         self.monitors.combined.clear();
         // apply the updates for this groups metagroups
-        update.owners.update_metagroups(&mut self.owners);
-        update.managers.update_metagroups(&mut self.managers);
-        update.users.update_metagroups(&mut self.users);
-        update.monitors.update_metagroups(&mut self.monitors);
+        update.owners.update_metagroups(&mut self.owners)?;
+        update.managers.update_metagroups(&mut self.managers)?;
+        update.users.update_metagroups(&mut self.users)?;
+        update.monitors.update_metagroups(&mut self.monitors)?;
         // get the ldap info for this group if we have any ldap info
         if self.metagroup_enabled() {
             // get the ldap info for this groups metagroups

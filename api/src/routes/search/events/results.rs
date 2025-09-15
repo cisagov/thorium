@@ -1,9 +1,9 @@
 //! Routes for result search events
 
-use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::patch;
-use axum::{Json, extract::State};
+use axum::Router;
+use axum::{extract::State, Json};
 use tracing::instrument;
 use utoipa::OpenApi;
 
@@ -126,7 +126,10 @@ pub struct ResultSearchEventApiDocs;
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     let url = ResultSearchEvent::url();
     router
-        .route(&format!("/search/events/{url}/pop/"), patch(pop))
-        .route(&format!("/search/events/{url}/status/"), patch(status))
-        .route(&format!("/search/events/{url}/reset/"), patch(reset_all))
+        .route(&format!("/api/search/events/{url}/pop/"), patch(pop))
+        .route(&format!("/api/search/events/{url}/status/"), patch(status))
+        .route(
+            &format!("/api/search/events/{url}/reset/"),
+            patch(reset_all),
+        )
 }

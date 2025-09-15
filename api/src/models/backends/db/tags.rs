@@ -42,7 +42,7 @@ pub async fn create<T: TagSupport>(
     // get the type of tag we are creating
     let kind = T::tag_kind();
     // get the chunk size for Thorium tags
-    let chunk = shared.config.thorium.tags.partition_size;
+    let chunk = shared.config.thorium.tags.map_type(&kind).partition_size;
     // build a redis pipe to update our tag counts
     let mut pipe = redis::pipe();
     // crawl over the groups we are submitting tags for
@@ -120,18 +120,24 @@ pub async fn create<T: TagSupport>(
     }
     // execute our redis pipeline
     let _:() = pipe.query_async(conn!(shared)).await?;
-    // create our tag event
-    let event = Event::new_tag(user, key.clone(), req.clone());
-    // save our event
-    super::events::create(&event, shared).await?;
-    // create a search event that we modified tags
-    let search_event = TagSearchEvent::modified::<T>(key, req.groups);
-    if let Err(err) = super::search::events::create(search_event, shared).await {
-        return internal_err!(format!(
-            "Failed to create result search event! {}",
-            err.msg
-                .unwrap_or_else(|| "An unknown error occurred".to_string())
-        ));
+    // create an event if this tag type supports it
+    if kind.supports_events() {
+        // create our tag event
+        let event = Event::new_tag(user, key.clone(), req.clone());
+        // save our event
+        super::events::create(&event, shared).await?;
+    }
+    // create a search event if this tag type supports it
+    if kind.supports_search_events() {
+        // create a search event that we modified tags
+        let search_event = TagSearchEvent::modified::<T>(key, req.groups);
+        if let Err(err) = super::search::events::create(search_event, shared).await {
+            return internal_err!(format!(
+                "Failed to create result search event! {}",
+                err.msg
+                    .unwrap_or_else(|| "An unknown error occurred".to_string())
+            ));
+        }
     }
     Ok(())
 }
@@ -162,7 +168,7 @@ pub async fn create_owned<T: TagSupport>(
     // get the type of tag we are creating
     let kind = T::tag_kind();
     // get the chunk size for Thorium tags
-    let chunk = shared.config.thorium.tags.partition_size;
+    let chunk = shared.config.thorium.tags.map_type(&kind).partition_size;
     // build a redis pipe to update our tag counts
     let mut pipe = redis::pipe();
     // crawl over the groups we are submitting tags for
@@ -249,19 +255,25 @@ pub async fn create_owned<T: TagSupport>(
     }
     // execute our redis pipeline
     let _: () = pipe.query_async(conn!(shared)).await?;
-    // create our tag event
-    let event = Event::new_tag(user, key.clone(), req.clone());
-    // save our event
-    super::events::create(&event, shared).await?;
-    // create a search event that we edited tags
-    let search_event = TagSearchEvent::modified::<T>(key, req.groups);
-    // save our search event
-    if let Err(err) = super::search::events::create(search_event, shared).await {
-        return internal_err!(format!(
-            "Failed to create result search event! {}",
-            err.msg
-                .unwrap_or_else(|| "An unknown error occurred".to_string())
-        ));
+    // create an event if this tag type supports it
+    if kind.supports_events() {
+        // create our tag event
+        let event = Event::new_tag(user, key.clone(), req.clone());
+        // save our event
+        super::events::create(&event, shared).await?;
+    }
+    // create a search event if this tag type supports it
+    if kind.supports_search_events() {
+        // create a search event that we edited tags
+        let search_event = TagSearchEvent::modified::<T>(key, req.groups);
+        // save our search event
+        if let Err(err) = super::search::events::create(search_event, shared).await {
+            return internal_err!(format!(
+                "Failed to create result search event! {}",
+                err.msg
+                    .unwrap_or_else(|| "An unknown error occurred".to_string())
+            ));
+        }
     }
     Ok(())
 }
@@ -453,7 +465,8 @@ pub async fn delete<T: TagSupport>(
     }
     // execute our redis pipeline
     let _: () = pipe.query_async(conn!(shared)).await?;
-    if !groups_deleted.is_empty() {
+    // create a search event if this tag type supports it
+    if kind.supports_search_events() && !groups_deleted.is_empty() {
         // if we deleted tags from at least one group, create a search event that we edited tags
         let search_event = TagSearchEvent::modified::<T>(
             key.to_string(),
@@ -484,7 +497,7 @@ pub async fn delete<T: TagSupport>(
 #[instrument(name = "db::tags::get", skip(shared), err(Debug))]
 pub async fn get(
     tag_type: TagType,
-    groups: &Vec<String>,
+    groups: &[String],
     item: &str,
     map: &mut TagMap,
     shared: &Shared,

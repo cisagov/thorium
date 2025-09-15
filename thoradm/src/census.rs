@@ -1,7 +1,7 @@
 //! Census commands in thoradm
 
-use bb8_redis::bb8::Pool;
 use bb8_redis::RedisConnectionManager;
+use bb8_redis::bb8::Pool;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use kanal::{AsyncReceiver, AsyncSender};
@@ -9,17 +9,17 @@ use scylla::client::session::Session;
 use scylla::statement::prepared::PreparedStatement;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use thorium::Conf;
 use thorium::models::backends::TagSupport;
 use thorium::models::{
     CensusSupport, Commitish, Repo, Sample, TagCensusCaseInsensitive, TagRequest,
 };
-use thorium::Conf;
 
+use crate::Error;
 use crate::args::{Args, CensusKinds, CensusSubCommands, NewCensus};
 use crate::backup::Utils;
 use crate::shared::monitor::MonitorUpdate;
 use crate::shared::scylla::{ScyllaCrawlController, ScyllaCrawlSupport};
-use crate::Error;
 
 pub struct CensusWorker<T: CensusSupport> {
     /// The keyspace/namespace for this worker
@@ -31,7 +31,6 @@ pub struct CensusWorker<T: CensusSupport> {
     /// The prepared statement to use
     prepared: PreparedStatement,
     /// The kanal channel workers should send backup updates over
-    #[allow(dead_code)]
     updates: AsyncSender<MonitorUpdate>,
     /// The current number of partitions this worker has counted
     partitions_counted: u64,
@@ -230,7 +229,8 @@ impl<T: CensusSupport + Utils> ScyllaCrawlSupport for CensusWorker<T> {
 
     /// Start crawling data in scylla
     async fn start(self, rx: AsyncReceiver<(i64, i64)>) -> Result<Self, Error> {
-        self.start(rx).await
+        // TODO do this better
+        Ok(self.start(rx).await.unwrap())
     }
 
     /// Shutdown this worker
@@ -259,7 +259,7 @@ async fn new_tags(args: &Args, dry_run: bool) -> Result<(), Error> {
         args.workers,
     )?;
     // start taking a census of tag data
-    controller.start(1000, dry_run).await?;
+    controller.start(100000, dry_run).await?;
     Ok(())
 }
 
@@ -385,7 +385,7 @@ async fn new_commitishes(args: &Args, dry_run: bool) -> Result<(), Error> {
         args.workers,
     )?;
     // start taking a census of tag data
-    controller.start(1000, dry_run).await?;
+    controller.start(100000, dry_run).await?;
     Ok(())
 }
 

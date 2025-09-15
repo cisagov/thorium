@@ -374,6 +374,136 @@ macro_rules! update_clear {
     };
 }
 
+/// Set a value to None if clear is Some and true
+#[doc(hidden)]
+#[macro_export]
+macro_rules! update_clear_opt {
+    ($orig:expr, $clear:expr) => {
+        if $clear.is_some_and(|clear| clear) {
+            $orig = None;
+        }
+    };
+}
+
+/// Update a list with lists of items to be added/removed and return
+/// errors if items to be added are already in the list or items to be
+/// removed are not in the list
+///
+/// Does not maintain the order of the original list
+#[doc(hidden)]
+#[macro_export]
+macro_rules! update_add_rem {
+    ($orig:expr, $add:expr, $remove:expr, $type:literal, $name:literal) => {{
+        // make a set to check for things existing more easily
+        let mut set: std::collections::HashSet<_> = $orig.drain(..).collect();
+        // get the things that are already added/removed
+        let already_added: Vec<_> = $add.iter().filter(|add| set.contains(*add)).collect();
+        let already_removed: Vec<_> = $remove
+            .iter()
+            .filter(|remove| !set.contains(*remove))
+            .collect();
+        // return errors if needed
+        if !already_added.is_empty() {
+            bad!(format!(
+                "{} already contains {}: '{:?}'",
+                $type, $name, already_added
+            ))
+        } else if !already_removed.is_empty() {
+            bad!(format!(
+                "{} does not contain {} to be removed: '{:?}'",
+                $type, $name, already_removed
+            ))
+        } else {
+            // add the new things
+            set.extend($add.iter().cloned());
+            // remove things
+            for remove in &$remove {
+                set.remove(remove);
+            }
+            // set the original field
+            $orig = set.into_iter().collect();
+            Ok(())
+        }
+    }};
+}
+
+/// Update a list with lists of items to be added/removed and return
+/// errors if items to be removed are not in the list
+///
+/// Maintains the order of the original list
+///
+/// Uses owned lists to avoid cloning
+#[doc(hidden)]
+#[macro_export]
+macro_rules! update_add_rem_ordered_owned {
+    ($orig:expr, $add:expr, $remove:expr, $type:literal, $name:literal) => {{
+        // make a set to check for things existing more easily
+        let set: std::collections::HashSet<_> = $orig.iter().collect();
+        // get the things that are already added/removed
+        let already_added: Vec<_> = $add.iter().filter(|add| set.contains(*add)).collect();
+        let already_removed: Vec<_> = $remove
+            .iter()
+            .filter(|remove| !set.contains(*remove))
+            .collect();
+        // return errors if needed
+        if !already_added.is_empty() {
+            bad!(format!(
+                "{} already contains {}: '{:?}'",
+                $type, $name, already_added
+            ))
+        } else if !already_removed.is_empty() {
+            bad!(format!(
+                "{} does not contain {} to be removed: '{:?}'",
+                $type, $name, already_removed
+            ))
+        } else {
+            // add the new things
+            $orig.extend($add);
+            // remove things, preserving the order
+            $orig.retain(|o| !$remove.contains(o));
+            Ok(())
+        }
+    }};
+}
+
+/// Update a set with owned lists of items to be added/removed and return
+/// errors if items to be added are already in the set or items to be
+/// removed are not in the set
+///
+/// Use this with owned lists to avoid cloning
+#[doc(hidden)]
+#[macro_export]
+macro_rules! update_add_rem_set_owned {
+    ($orig:expr, $add:expr, $remove:expr, $type:literal, $name:literal) => {{
+        // get the things that are already added/removed
+        let already_added: Vec<_> = $add.iter().filter(|add| $orig.contains(*add)).collect();
+        let already_removed: Vec<_> = $remove
+            .iter()
+            .filter(|remove| !$orig.contains(*remove))
+            .collect();
+        // return errors if needed
+        if !already_added.is_empty() {
+            bad!(format!(
+                "{} already contains {}: '{:?}'",
+                $type, $name, already_added
+            ))
+        } else if !already_removed.is_empty() {
+            bad!(format!(
+                "{} does not contain {} to be removed: '{:?}'",
+                $type, $name, already_removed
+            ))
+        } else {
+            // add the new things
+            $orig.extend($add);
+            // remove things
+            for remove in $remove {
+                $orig.remove(&remove);
+            }
+            Ok(())
+        }
+    }};
+}
+
 /// Logs an error that would normally be lost by an iterator filter
 ///
 /// # Arguments

@@ -106,6 +106,10 @@ impl Scrub for SamplesList {}
 /// Implement restore support for the samples list table
 #[async_trait::async_trait]
 impl Restore for SamplesList {
+    // The partition size is constant, so the partition config is just
+    // the size itself
+    type PartitionConf = u16;
+
     /// The steps to once run before restoring data
     async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
@@ -139,7 +143,7 @@ impl Restore for SamplesList {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_size(config: &Conf) -> u16 {
+    fn partition_conf(config: &Conf) -> u16 {
         config.thorium.files.partition_size
     }
 
@@ -153,7 +157,7 @@ impl Restore for SamplesList {
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        partition_size: u16,
+        partition_size: &u16,
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,
@@ -167,7 +171,7 @@ impl Restore for SamplesList {
             // deserialize this rows uploaded timestamp
             let uploaded = row.uploaded.deserialize(&mut rkyv::Infallible)?;
             // calculate the new bucket
-            let bucket = thorium::utils::helpers::partition(uploaded, row.year, partition_size);
+            let bucket = thorium::utils::helpers::partition(uploaded, row.year, *partition_size);
             let query = scylla.execute_unpaged(
                 prepared,
                 (

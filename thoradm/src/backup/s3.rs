@@ -1,18 +1,18 @@
 //! Backup/Restore data in S3
 
 use aws_credential_types::provider::SharedCredentialsProvider;
+use aws_sdk_s3::Client;
 use aws_sdk_s3::config::Credentials;
 use aws_sdk_s3::primitives::{ByteStream, SdkBody};
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
-use aws_sdk_s3::Client;
 use bytes::{Buf, BytesMut};
-use futures::stream::FuturesOrdered;
 use futures::StreamExt;
+use futures::stream::FuturesOrdered;
 use indicatif::ProgressBar;
 use kanal::{AsyncReceiver, AsyncSender};
 use num_format::{Locale, ToFormattedString};
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::Archive;
+use rkyv::validation::validators::DefaultValidator;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use thorium::Conf;
@@ -21,8 +21,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
-use crate::args::BackupComponents;
 use crate::Error;
+use crate::args::BackupComponents;
 
 use super::{ArchiveReader, MonitorUpdate, Utils};
 
@@ -215,7 +215,7 @@ impl<S: S3Backup> S3BackupWorker<S> {
             .endpoint_url(&s3_conf.endpoint)
             .region(aws_types::region::Region::new(s3_conf.region.clone()))
             .credentials_provider(SharedCredentialsProvider::new(creds))
-            .force_path_style(true)
+            .force_path_style(s3_conf.force_path_style)
             .build();
         // build our s3 client
         let s3 = Client::from_conf(s3_config);

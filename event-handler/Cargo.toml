@@ -3,8 +3,6 @@ name = "thorium-event-handler"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-description = "Triggers actions based on events in Thorium."
-license-file = "../LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

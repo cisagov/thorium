@@ -96,6 +96,10 @@ impl Scrub for Comment {}
 /// Implement restore support for the samples list table
 #[async_trait::async_trait]
 impl Restore for Comment {
+    // The partition size is constant, so the partition config is just
+    // the size itself
+    type PartitionConf = u16;
+
     /// The steps to once run before restoring data
     async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
@@ -129,7 +133,7 @@ impl Restore for Comment {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_size(_config: &Conf) -> u16 {
+    fn partition_conf(_config: &Conf) -> u16 {
         0
     }
 
@@ -146,7 +150,7 @@ impl Restore for Comment {
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        _partition_size: u16,
+        _partition_size: &u16,
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,

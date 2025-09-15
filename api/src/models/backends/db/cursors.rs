@@ -16,14 +16,14 @@ use std::cmp::{Ord, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::elastic::{self, ElasticResponse};
 use super::keys::{cursors, tags};
 use crate::models::{ApiCursor, CensusKeys, CensusSupport, ElasticDoc, TagListRow};
 use crate::models::{ElasticSearchParams, TagType};
-use crate::utils::{helpers, ApiError, Shared};
+use crate::utils::{ApiError, Shared, helpers};
 use crate::{
     bad, conn, deserialize, internal_err, internal_err_unwrapped, log_scylla_err, not_found, query,
     serialize,
@@ -733,11 +733,15 @@ where
             // get the years this cursor should start and end in
             let year = start.year();
             let end_year = end.year();
-            // get data for tags from our params
+            // get the retain info for tags if this a tag based cursor
             let tags_retain = Self::get_tags_retain(&mut params);
-            let chunk = if tags_retain.is_some() {
+            // get our tag filters
+            let tags = D::get_tag_filters(&mut params);
+            // get our partition size
+            // tag based cursors have a different chunk size
+            let chunk = if let Some((tag_type, _)) = &tags {
                 // this is a tag based cursor so use our tag partition size
-                shared.config.thorium.tags.partition_size
+                shared.config.thorium.tags.map_type(tag_type).partition_size
             } else {
                 // this is not a tag based query so use our types partitions size
                 D::partition_size(shared)
@@ -812,11 +816,15 @@ where
             // get the years this cursor should start and end in
             let year = start.year();
             let end_year = end.year();
-            // get data for tags from our params
+            // get the retain info for tags if this a tag based cursor
             let tags_retain = Self::get_tags_retain(&mut params);
-            let chunk = if tags_retain.is_some() {
+            // get our tag filters
+            let tags = D::get_tag_filters(&mut params);
+            // get our partition size
+            // tag based cursors have a different chunk size
+            let chunk = if let Some((tags, _)) = &tags {
                 // this is a tag based cursor so use our tag partition size
-                shared.config.thorium.tags.partition_size
+                shared.config.thorium.tags.map_type(tags).partition_size
             } else {
                 // this is not a tag based query so use our types partitions size
                 D::partition_size(shared)
@@ -881,12 +889,21 @@ where
                 // try to deseruialize this cursors retained data
                 let retain: ScyllaCursorRetain<D> = deserialize!(&data);
                 // tag based cursors have a different chunk size
-                let chunk = if retain.tags_retain.is_some() {
-                    shared.config.thorium.tags.partition_size
+                let chunk = if let Some(tag_retain) = &retain.tags_retain {
+                    // get the type of tag this cursor is for
+                    let tag_type = &tag_retain.tag_type;
+                    // get the right chunk size based on the type of tags this is
+                    shared
+                        .config
+                        .thorium
+                        .tags
+                        .map_type(&tag_type)
+                        .partition_size
                 } else {
                     // this is not a tag based query so use our types partitions size
                     D::partition_size(shared)
                 };
+
                 // determin our current year and our end year
                 let year = retain.start.year();
                 let end_year = retain.end.year();
@@ -1099,6 +1116,7 @@ where
     #[instrument(name = "ScyllaCursor::filter_bucket_intersection", skip_all)]
     fn filter_bucket_intersection(
         &self,
+        group_by: &Vec<D::GroupBy>,
         tags: &HashMap<String, Vec<String>>,
         tags_required: usize,
         pre_filter: Vec<Vec<i32>>,
@@ -1117,7 +1135,7 @@ where
         // get each tag key we are going to be querying for
         for (key, values) in tags {
             // check for census info for each group
-            for _ in &self.retain.group_by {
+            for _ in group_by {
                 // get all the buckets that contain data for each value
                 for value in values {
                     // get this values buckets
@@ -1184,6 +1202,7 @@ where
     #[instrument(name = "ScyllaCursor::tags_find_buckets", skip_all, err(Debug))]
     async fn tags_find_buckets(
         &self,
+        group_by: &Vec<D::GroupBy>,
         tags_retain: &TagsRetain,
         shared: &Shared,
     ) -> Result<Vec<i32>, ApiError> {
@@ -1208,7 +1227,7 @@ where
         // get each tag key we are going to be querying for
         for (key, values) in &tags_retain.tags {
             // check for census info for each group
-            for group in &self.retain.group_by {
+            for group in group_by {
                 // get all the buckets that contain data for each value
                 for value in values {
                     // build the key for this tags bucket stream
@@ -1244,7 +1263,7 @@ where
             }
             // get the intersection of all buckets that all tags are in
             let intersection =
-                self.filter_bucket_intersection(&tags_retain.tags, tags_retain.tags_required, pre_intersection, &mut oldest_first, &mut possible);
+                self.filter_bucket_intersection(group_by, &tags_retain.tags, tags_retain.tags_required, pre_intersection, &mut oldest_first, &mut possible);
             // if we have intersecting buckets or an intersection is not possible for this year then return
             if !intersection.is_empty() || !possible {
                 return Ok(intersection);
@@ -1253,7 +1272,7 @@ where
     }
 
     /// Check if this cursor has been exhausted
-    pub fn exhausted(&mut self) -> bool {
+    pub fn exhausted(&self) -> bool {
         // check if we have any more mapped values and our buckets are exhausted
         self.buckets_exhausted && self.mapped == 0
     }
@@ -1372,8 +1391,8 @@ where
         &self,
         tags_retain: &mut TagsRetain,
         mapping: &mut HashMap<String, TagMapping>,
-        shared: &Shared,
         prepared: &PreparedStatement,
+        shared: &Shared,
     ) -> Result<(), ApiError> {
         // calculate the number of futures we will be spawning
         let capacity = tags_retain.ties.len() * tags_retain.tags_required;
@@ -1420,10 +1439,11 @@ where
     #[instrument(name = "ScyllaCursor::tag_query", skip_all, err(Debug))]
     async fn tag_query(
         &mut self,
+        group_by: &Vec<D::GroupBy>,
         tags_retain: &TagsRetain,
         mapping: &mut HashMap<String, TagMapping>,
-        shared: &Shared,
         prepared: &PreparedStatement,
+        shared: &Shared,
     ) -> Result<(), ApiError> {
         // calculate the size of the futures were about to spawn
         let capacity = tags_retain.tags_required * self.retain.group_by.len();
@@ -1432,13 +1452,15 @@ where
         // loop until we have found enough data to return
         loop {
             // get the next 100 buckets that contain data
-            let buckets = self.tags_find_buckets(tags_retain, shared).await?;
+            let buckets = self
+                .tags_find_buckets(group_by, tags_retain, shared)
+                .await?;
             // query for each tag key/value
             for (key, values) in &tags_retain.tags {
                 // query for each value for this tag key
                 for value in values {
                     // build this query for each group
-                    for group in &self.retain.group_by {
+                    for group in group_by {
                         // chunk our buckets into groups of 100
                         for bucket_chunk in buckets.chunks(100) {
                             // execute the query to get this group/tag/key combos rows
@@ -1471,8 +1493,17 @@ where
             parse_tag_queries(queries, mapping).await?;
             // only retain mappings that matched on all of the required tags
             mapping.retain(|_, mapped| mapped.tags.len() == tags_retain.tags_required);
+            // add our mapped data to our sorted items
+            D::sort_tags(
+                mapping,
+                &tags_retain.tags,
+                &mut self.sorted,
+                &mut self.mapped,
+            )?;
+            // consume our sorted data and return if needed
+            self.consume_sorted();
             // if we have enough data to return then return
-            if mapping.len() >= self.limit {
+            if self.mapped >= self.limit {
                 break;
             }
             // update our bucket counter correctly
@@ -1539,6 +1570,9 @@ where
         mut tags_retain: TagsRetain,
         shared: &Shared,
     ) -> Result<TagsRetain, ApiError> {
+        // get the group by  this cusrsor will use
+        // put it back when were done with the refs to avoid cloning
+        let group_by = std::mem::take(&mut self.retain.group_by);
         // keep a mapping of the tags data we retrieved
         let mut mapping = HashMap::with_capacity(tags_retain.tags_required * self.limit);
         // get the right prepared statements depending on if this cursor is case insensitive
@@ -1556,12 +1590,9 @@ where
         // check if we have any current ties
         if !tags_retain.ties.is_empty() {
             // get any tie data
-            self.tag_ties(&mut tags_retain, &mut mapping, shared, ties_prepared)
+            self.tag_ties(&mut tags_retain, &mut mapping, ties_prepared, shared)
                 .await?;
         }
-        // get tag data using normal queries
-        self.tag_query(&tags_retain, &mut mapping, shared, query_prepared)
-            .await?;
         // add our mapped data to our sorted items
         D::sort_tags(
             &mut mapping,
@@ -1569,9 +1600,22 @@ where
             &mut self.sorted,
             &mut self.mapped,
         )?;
-        // consume our sorted data and return if needed
+        // consume our sorted data
         self.consume_sorted();
-        // return the modified retained tags data
+        // only query for more data if we don't have enough to return
+        if self.mapped < self.limit {
+            // get tag data using normal queries
+            self.tag_query(
+                &group_by,
+                &tags_retain,
+                &mut mapping,
+                query_prepared,
+                shared,
+            )
+            .await?;
+        }
+        // put our group by back
+        self.retain.group_by = group_by;
         Ok(tags_retain)
     }
 
@@ -1582,6 +1626,15 @@ where
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "ScyllaCursor::next", skip_all, err(Debug))]
     pub async fn next(&mut self, shared: &Shared) -> Result<(), ApiError> {
+        // if we have more already sorted rows then return those first
+        if self.mapped > 0 {
+            // consume our remaining sorted values
+            self.consume_sorted();
+            // if we have enough data then return
+            if self.data.len() >= self.limit {
+                return Ok(());
+            }
+        }
         // crawl over the tags table if we have tag filters
         match self.retain.tags_retain.take() {
             // we have tags to filter on

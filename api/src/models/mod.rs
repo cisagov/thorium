@@ -1,10 +1,12 @@
 //! Wrappers for all objects within Thorium
 
+mod associations;
 mod bans;
 pub mod conversions;
 pub mod cursors;
 pub mod deadlines;
 pub mod elastic;
+pub mod entities;
 mod errors;
 pub mod events;
 pub mod files;
@@ -30,8 +32,20 @@ pub mod users;
 mod version;
 mod volumes;
 
+pub use associations::{
+    Association, AssociationKind, AssociationListOpts, AssociationListParams, AssociationRequest,
+    AssociationSupport, AssociationTarget,
+};
 pub use deadlines::Deadline;
 pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchParams};
+pub use entities::countries::Country;
+pub use entities::devices::{DeviceEntity, DeviceEntityRequest};
+pub use entities::shared::CriticalSector;
+pub use entities::vendors::{VendorEntity, VendorEntityRequest};
+pub use entities::{
+    Entity, EntityKinds, EntityListLine, EntityListParams, EntityMetadata, EntityResponse,
+    EntityUpdate,
+};
 pub use errors::InvalidEnum;
 pub use events::{
     Event, EventCacheStatus, EventCacheStatusOpts, EventData, EventIds, EventMarks, EventPopOpts,
@@ -111,15 +125,15 @@ pub use system::{
     WorkerUpdate,
 };
 pub use trees::{
-    Tree, TreeGrowQuery, TreeNode, TreeNodeData, TreeParams, TreeQuery, TreeRelationships,
-    TreeSupport,
+    Tree, TreeBranch, TreeGrowQuery, TreeNode, TreeOpts, TreeParams, TreeQuery, TreeRelatedQuery,
+    TreeRelationships, TreeSupport,
 };
 pub use users::{
     AuthResponse, Key, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings,
     UserSettingsUpdate, UserUpdate,
 };
 pub use version::{Arch, Component, Os, Version};
-pub use volumes::{ConfigMap, HostPath, HostPathTypes, Secret, Volume, VolumeTypes, NFS};
+pub use volumes::{ConfigMap, HostPath, HostPathTypes, NFS, Secret, Volume, VolumeTypes};
 
 // optional imports
 pub mod backends;
@@ -139,6 +153,7 @@ cfg_if::cfg_if! {
         pub use cursors::ApiCursor;
         pub use reactions::{RawGenericJobArgs, RawReactionRequest};
         pub use files::{SampleForm, OriginForm, CommentForm};
+        pub use entities::{EntityForm, EntityMetadataUpdateForm, EntityUpdateForm,EntityMetadataForm};
         pub use git::RepoDataForm;
         pub use jobs::JobReactionIds;
         pub use backends::results::ResultFileDownloadParams;
@@ -162,10 +177,13 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "scylla-utils")] {
         mod census;
 
+        pub use scylla_utils::associations::{AssociationListRow, AssociationTargetColumn, ListableAssociation};
         pub use scylla_utils::repos::{
             CommitishRow, CommitishListRow, RepoTagRow, FullRepoTagRow, RepoRow,
             RepoListRow, CommitData, BranchData, GitTagData,
         };
+        pub use scylla_utils::graphics::GraphicInfoRow;
+        pub use scylla_utils::entities::{EntityListRow, EntityListSupplementRow, EntityRow};
         pub use scylla_utils::files::{SubmissionListRow, SubmissionRow, CommentRow};
         pub use scylla_utils::results::{OutputId, OutputIdRow, OutputRow, OutputFormBuilder, OutputForm};
         pub use scylla_utils::system::{WorkerRow, NodeRow, WorkerName};

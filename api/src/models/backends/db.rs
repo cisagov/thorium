@@ -1,6 +1,8 @@
+pub mod associations;
 pub mod census;
 pub mod cursors;
 pub mod elastic;
+pub mod entities;
 mod errors;
 pub mod events;
 pub mod files;

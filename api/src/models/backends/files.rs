@@ -218,11 +218,15 @@ impl Sample {
             ));
         }
         // make sure we actually have access to all requested groups
-        let groups =
-            Group::authorize_check_allow_all(user, &form.groups, GroupAllowAction::Files, shared)
-                .await?;
-        // make sure we have the roles to upload samples in all of these groups
-        can_create_all!(groups, user, shared);
+        let _ = Group::authorize_check_allow_all(
+            user,
+            &form.groups,
+            Group::editable,
+            "edit",
+            Some(GroupAllowAction::Files),
+            shared,
+        )
+        .await?;
         // set our file name if one was found
         form.file_name = file_opt;
         // determine if this file already exists in s3
@@ -396,15 +400,23 @@ impl Sample {
             update_opt!(sub.description, update.description);
             // make sure we aren't adding any groups multiple times
             disjoint!([&sub.groups, &update.add_groups]);
-            // validate this user can upload samples to all new groups
-            Group::authorize_check_allow_all(
+            // validate this user can upload/remove samples in all groups
+            let edit_groups = update
+                .add_groups
+                .iter()
+                .chain(update.remove_groups.iter())
+                .cloned()
+                .collect::<Vec<_>>();
+            let _ = Group::authorize_check_allow_all(
                 user,
-                &update.add_groups,
-                GroupAllowAction::Files,
+                &edit_groups,
+                Group::editable,
+                "edit",
+                Some(GroupAllowAction::Files),
                 shared,
             )
             .await?;
-            // this user is apart of all new groups so add them to this submission
+            // this user is apart of all added/removed groups so add groups to this submission
             sub.groups.append(&mut update.add_groups);
             // remove any requested groups
             sub.groups
@@ -552,7 +564,7 @@ impl Sample {
     ///
     /// * `user` - The use that is validating this samples is in some groups
     /// * `groups` - The user specified groups to check against
-    /// * `editable` - Whether to check if data in this groups is editable as well
+    /// * `action` - The action to check for each group (in this case, whether samples are allowed)
     /// * `shared` - Shared objects in Thorium
     #[instrument(
         name = "Sample::validate_check_allow_groups",
@@ -597,10 +609,16 @@ impl Sample {
             {
                 return unauthorized!(format!("{} is not in all specified groups", self.sha256));
             }
-            // make sure we actually have access to all requested groups
-            let info = Group::authorize_check_allow_all(user, &groups, action, shared).await?;
-            // make sure we have modification privleges in these groups
-            can_create_all!(info, user, shared);
+            // make sure we actually have edit access in all requested groups
+            let _ = Group::authorize_check_allow_all(
+                user,
+                &groups,
+                Group::editable,
+                "edit",
+                Some(action),
+                shared,
+            )
+            .await?;
         }
         // make sure at least some groups valid
         if groups.is_empty() {

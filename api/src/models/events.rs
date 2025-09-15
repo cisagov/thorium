@@ -2,7 +2,6 @@
 
 use chrono::prelude::*;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -17,9 +16,9 @@ pub enum EventType {
     ReactionTrigger,
 }
 
-impl fmt::Display for EventType {
+impl std::fmt::Display for EventType {
     /// Cleanly print an event type
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             EventType::ReactionTrigger => write!(f, "ReactionTrigger"),
         }

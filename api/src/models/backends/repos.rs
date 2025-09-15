@@ -145,12 +145,16 @@ impl Repo {
         if req.groups.is_empty() {
             return bad!("At least one group must be specified!".to_owned());
         }
-        // authorize the user is apart of these groups
-        let groups =
-            Group::authorize_check_allow_all(user, &req.groups, GroupAllowAction::Repos, shared)
-                .await?;
-        // make sure we have the roles to upload samples in all of these groups
-        can_create_all!(groups, user, shared);
+        // authorize the user can edit in all of these groups
+        let _ = Group::authorize_check_allow_all(
+            user,
+            &req.groups,
+            Group::editable,
+            "edit",
+            Some(GroupAllowAction::Repos),
+            shared,
+        )
+        .await?;
         // add this repo to scylla
         db::repos::create(user, req, shared).await
     }
@@ -280,10 +284,16 @@ impl Repo {
             if !groups.iter().all(|group| repo_groups.contains(group)) {
                 return unauthorized!(format!("{} is not in all specified groups", self.url));
             }
-            // make sure we actually have access to all requested groups
-            let info = Group::authorize_check_allow_all(user, &groups, action, shared).await?;
-            // make sure we have modification privleges in these groups
-            can_create_all!(info, user, shared);
+            // make sure we have edit access in all requested groups
+            let _ = Group::authorize_check_allow_all(
+                user,
+                &groups,
+                Group::editable,
+                "edit",
+                Some(action),
+                shared,
+            )
+            .await?;
         } else {
             // this user specified no groups so default to the ones we can edit
             // cast our repo groups to a vec
@@ -362,12 +372,16 @@ impl Repo {
             Some(sha256) => sha256,
             None => return bad!(format!("Data entry must be set!")),
         };
-        // make sure we actually have access to all requested groups
-        let groups =
-            Group::authorize_check_allow_all(user, &form.groups, GroupAllowAction::Repos, shared)
-                .await?;
-        // make sure we have the roles to upload repos in all of these groups
-        can_create_all!(groups, user, shared);
+        // make sure we actually have edit access in all requested groups
+        let _ = Group::authorize_check_allow_all(
+            user,
+            &form.groups,
+            Group::editable,
+            "edit",
+            Some(GroupAllowAction::Repos),
+            shared,
+        )
+        .await?;
         // build the path to uniquely identify this repos data
         let path = format!("{}/{}", self.url, sha256);
         // determine if this file already exists in s3
@@ -576,11 +590,13 @@ impl Repo {
     /// * `shared` - Shared objects in Thorium
     /// * `span` - The span to log traces under
     #[instrument(name = "Repo::list", skip(user, shared), err(Debug))]
-    pub async fn list(
+    pub async fn list<P: Into<RepoListParams> + std::fmt::Debug>(
         user: &User,
-        mut params: RepoListParams,
+        mut params: P,
         shared: &Shared,
     ) -> Result<ApiCursor<RepoListLine>, ApiError> {
+        // convert our params if needed
+        let mut params = params.into();
         // authorize the groups to list files from
         user.authorize_groups(&mut params.groups, shared).await?;
         // get a chunk of the repos list
@@ -1003,7 +1019,9 @@ impl ScyllaCursorSupport for Commitish {
             // build a key for each kind we are searching
             for kind in &extra.0 {
                 // build the key for this commitish kinds census stream
-                let key = super::db::keys::repos::census_stream(group, year, shared);
+                let key = super::db::keys::commitishes::census_stream(
+                    *kind, group, &extra.1, year, shared,
+                );
                 // add this key to our keys
                 keys.push((group, key, bucket as i32));
             }

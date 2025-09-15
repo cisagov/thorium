@@ -131,8 +131,8 @@ fn build_app(
     use axum::http::header::{HeaderName, HeaderValue};
     use axum::{http::Request, response::Response};
     use routes::{
-        basic, binaries, docs, events, files, groups, images, jobs, network_policies, pipelines,
-        reactions, repos, search, streams, system, trees, ui, users,
+        associations, basic, binaries, docs, entities, events, files, groups, images, jobs,
+        network_policies, pipelines, reactions, repos, search, streams, system, trees, ui, users,
     };
     use std::time::Duration;
     use tower_http::set_header::SetResponseHeaderLayer;
@@ -148,8 +148,10 @@ fn build_app(
         // disable the fallback for api routes
         .fallback(disable_fallback);
     // add all of our api routes to our api router
+    api_router = associations::mount(api_router);
     api_router = basic::mount(api_router);
     api_router = binaries::mount(api_router, conf);
+    api_router = entities::mount(api_router);
     api_router = docs::mount(api_router, conf);
     api_router = events::mount(api_router);
     api_router = files::mount(api_router);

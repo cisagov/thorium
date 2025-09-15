@@ -119,5 +119,6 @@ pub async fn create_all_buckets(meta: &ClusterMeta) -> Result<(), Error> {
     create_bucket(s3, &client, &config.attachments.bucket).await?;
     create_bucket(s3, &client, &config.results.bucket).await?;
     create_bucket(&s3, &client, &config.ephemeral.bucket).await?;
+    create_bucket(&s3, &client, &config.graphics.bucket).await?;
     Ok(())
 }

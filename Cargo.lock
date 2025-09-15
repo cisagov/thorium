@@ -456,9 +456,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-s3"
-version = "1.114.0"
+version = "1.115.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78edf6479709a671b85f628ea705491d30e7e9c2897289545396794891d3ef2c"
+checksum = "fdaa0053cbcbc384443dd24569bd5d1664f86427b9dc04677bd0ab853954baec"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -3926,6 +3926,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "isocountry"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ea1dc4bf0fb4904ba83ffdb98af3d9c325274e92e6e295e4151e86c96363e04"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6064,6 +6074,7 @@ dependencies = [
  "schemars_derive",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -7031,6 +7042,7 @@ dependencies = [
  "http 1.3.1",
  "http-body 1.0.1",
  "indicatif",
+ "isocountry",
  "itertools 0.14.0",
  "k8s-openapi",
  "kanal",
@@ -7039,6 +7051,7 @@ dependencies = [
  "ldap3",
  "lettre",
  "md-5",
+ "mime",
  "once_cell",
  "openssl",
  "opentelemetry 0.30.0",
@@ -7060,6 +7073,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "serde_qs",
+ "serde_with",
  "serde_yaml",
  "serial_test",
  "sha-1",

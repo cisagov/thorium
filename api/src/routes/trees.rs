@@ -1,35 +1,37 @@
 //! The route for building a relationship tree out of data in Thorium
 
+use axum::Router;
 use axum::extract::{Json, Path, State};
 use axum::routing::{patch, post};
-use axum::Router;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::models::{Tree, TreeGrowQuery, TreeParams, TreeQuery, User};
 use crate::utils::{ApiError, AppState};
 
-/// Get info on a specific sample by sha256
+/// Start building a tree of data in Thorium from some starting points
 ///
 /// # Arguments
 ///
-/// * `user` - The user that is getting info for a specific sha256
-/// * `sha256` - The sha256 to get info about
+/// * `user` - The user that is building a tree
+/// * `params` - The params for building this tree
 /// * `state` - Shared Thorium objects
-//#[utoipa::path(
-//    get,
-//    path = "/api/files/sample/:sha256",
-//    params(
-//        ("sha256" = String, Path, description = "Sha256 of the sample to get info on")
-//    ),
-//    responses(
-//        (status = 200, description = "Return a sample in Thorium", body = Sample),
-//        (status = 401, description = "This user is not authorized to access this route"),
-//    ),
-//    security(
-//        ("basic" = []),
-//    )
-//)]
+/// * `query` - The query to use to start this tree
+#[utoipa::path(
+    post,
+    path = "/api/trees/",
+    params(
+        ("params" = TreeParams, description = "The params for starting a new tree"),
+        ("query" = TreeQuery, description = "The query to use to start a new tree")
+    ),
+    responses(
+        (status = 200, description = "A new tree", body = Tree),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
 #[instrument(name = "routes::trees::start_tree", skip_all, err(Debug))]
 async fn start_tree(
     user: User,
@@ -43,13 +45,37 @@ async fn start_tree(
     tree.grow(&user, &params, &state.shared).await?;
     // save this tree
     tree.save(&user, &state.shared).await?;
-    // empty our sent vec
-    tree.sent.clear();
+    // clear any non user facing info
+    tree.clear_non_user_facing();
     // return our built tree
     Ok(Json(tree))
 }
 
 /// Continue to grow a tree based on some growable nodes
+/// Start building a tree of data in Thorium from some starting points
+///
+/// # Arguments
+///
+/// * `user` - The user that is building a tree
+/// * `params` - The params for building this tree
+/// * `state` - Shared Thorium objects
+/// * `query` - The query to use to start this tree
+#[utoipa::path(
+    patch,
+    path = "/api/trees/:cursor",
+    params(
+        ("cursor" = Uuid, description = "The id of an existing tree to grow"),
+        ("params" = TreeParams, description = "The params for growing an existing tree"),
+        ("query" = TreeGrowQuery, description = "The query to use to grow an existing tree")
+    ),
+    responses(
+        (status = 200, description = "A tree grown from an existing tree", body = Tree),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
 #[instrument(name = "routes::trees::grow_tree", skip_all, err(Debug))]
 async fn grow_tree(
     user: User,
@@ -61,15 +87,15 @@ async fn grow_tree(
     // load our existing tree
     let mut tree = Tree::load(&user, &cursor, &state.shared).await?;
     // set our growable nodes
-    tree.growable = query.growable;
+    tree.growable = query.growable.clone();
     // grow this tree
     let added = tree.grow(&user, &params, &state.shared).await?;
     // save the latest info on this tree
     tree.save(&user, &state.shared).await?;
     // trim to only the new info for this tree
-    tree.trim(added);
-    // empty our sent vec
-    tree.sent.clear();
+    tree.trim(query.growable, added);
+    // clear any non user facing info
+    tree.clear_non_user_facing();
     Ok(Json(tree))
 }
 

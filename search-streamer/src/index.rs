@@ -1,6 +1,7 @@
 //! Contains logic for search indexes
 
 use crate::stores::SearchStore;
+use thorium::Error;
 
 /// Describes a type that can map to an index of the search store
 pub trait IndexMapping<S: SearchStore> {
@@ -8,7 +9,7 @@ pub trait IndexMapping<S: SearchStore> {
     fn all_indexes() -> Vec<S::Index>;
 
     /// Map a specific instance of the implementor to its index
-    fn map_index(&self) -> S::Index;
+    fn map_index(&self) -> Result<S::Index, Error>;
 }
 
 /// Describes a type that contains a type that can map to an index

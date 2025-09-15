@@ -7,6 +7,7 @@ use scylla::statement::prepared::PreparedStatement;
 use std::fmt::Debug;
 
 /// The census keys for both the count and stream key
+#[derive(Debug, Clone)]
 pub struct CensusKeys {
     /// The count key
     pub count: String,

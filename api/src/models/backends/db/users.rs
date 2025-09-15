@@ -106,7 +106,7 @@ pub(super) fn cast(
     let username = extract!(raw, "username");
     // cast to a User document
     let user = User {
-        email: extract!(raw, "email", format!("{}@unknown.unknown", &username)),
+        email: extract!(raw, "email", format!("{}@sandia.gov", &username)),
         username,
         password: helpers::extract_opt(&mut raw, "password"),
         role: deserialize_ext!(raw, "role"),
@@ -405,7 +405,7 @@ pub async fn update_unix_info(username: &str, info: &UnixInfo, shared: &Shared) 
     let mut pipe = redis::pipe();
     // set our updated unix info
     pipe.cmd("hset").arg(&data_key).arg("unix").arg(serialize!(info))
-        .cmd("hset").arg(&data_key).arg("email").arg(format!("{}@unknown.unknown", username));
+        .cmd("hset").arg(&data_key).arg("email").arg(format!("{}@sandia.gov", username));
     // save user into redis
     let _: () = pipe.atomic()
         .query_async(conn!(shared))

@@ -1,5 +1,5 @@
 [book]
-authors = ["Michael Carson", "Gavin Baker", "Jake Hamzawi"]
+authors = ["Michael Carson"]
 language = "en"
 multilingual = false
 src = "src"

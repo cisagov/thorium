@@ -61,5 +61,5 @@ pub trait TagSupport: KeySupport + Sized {
     /// * `shared` - Shared Thorium objects
     #[cfg(feature = "api")]
     #[allow(async_fn_in_trait)]
-    async fn get_tags(&mut self, groups: &Vec<String>, shared: &Shared) -> Result<(), ApiError>;
+    async fn get_tags(&mut self, groups: &[String], shared: &Shared) -> Result<(), ApiError>;
 }

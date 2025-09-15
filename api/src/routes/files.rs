@@ -13,12 +13,12 @@ use uuid::Uuid;
 use super::OpenApiSecurity;
 use crate::models::backends::{CommentSupport, TagSupport};
 use crate::models::{
-    ApiCursor, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,
-    FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType,
-    OutputFormBuilder, OutputHandler, OutputKind, OutputMap, OutputResponse, PcapNetworkProtocol,
-    ResultFileDownloadParams, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
-    SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest,
-    TagRequest, User, ZipDownloadParams,
+    ApiCursor, Association, AssociationListParams, AssociationTargetColumn, CarvedOrigin, Comment,
+    CommentResponse, DeleteCommentParams, DeleteSampleParams, FileListParams, ImageVersion, Origin,
+    OriginRequest, Output, OutputDisplayType, OutputFormBuilder, OutputHandler, OutputKind,
+    OutputMap, OutputResponse, PcapNetworkProtocol, ResultFileDownloadParams, ResultGetParams,
+    Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse,
+    SubmissionChunk, SubmissionUpdate, TagDeleteRequest, TagRequest, User, ZipDownloadParams,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -541,6 +541,44 @@ async fn list_details(
     Ok(Json(cursor))
 }
 
+/// List this files associations
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing submissions
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/associations/:sha256",
+    params(
+        ("sha256" = String, Path, description = "Sha256 of sample to get associations for"),
+        ("params" = AssociationListParams, description = "Query params to use for this association list request"),
+    ),
+    responses(
+        (status = 200, description = "JSON-formatted cursor response containing the sha256 of a sample, the samples group information, submission uuid, and upload timestamp", body = ApiCursor<SampleListLine>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::files::list_associations", skip_all, err(Debug))]
+async fn list_associations(
+    user: User,
+    params: AssociationListParams,
+    Path(sha256): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<Association>>, ApiError> {
+    // make sure this user get access this file
+    Sample::get(&user, &sha256, &state.shared).await?;
+    // create the source to list associations from
+    let source = AssociationTargetColumn::File(sha256);
+    // get a list of all samples in these groups
+    let cursor = Association::list(&user, params, &source, &state.shared).await?;
+    Ok(Json(cursor))
+}
+
 /// Allow users to upload results for files to Thorium
 ///
 /// # Arguments
@@ -689,6 +727,7 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/files/", get(list).post(upload))
         .route("/files/details/", get(list_details))
+        .route("/files/associations/{sha256}", get(list_associations))
         .route("/files/sample/{sha256}", get(get_sample))
         .route("/files/sample/{sha256}/{submission}", delete(delete_sample))
         .route("/files/exists", post(exists))

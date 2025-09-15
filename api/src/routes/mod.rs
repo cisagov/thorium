@@ -1,9 +1,11 @@
 #[cfg(feature = "api")]
 #[path = ""]
 mod routes_reexport {
+    pub mod associations;
     pub mod basic;
     pub mod binaries;
     pub mod docs;
+    pub mod entities;
     pub mod events;
     pub mod files;
     pub mod groups;

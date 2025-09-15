@@ -2,13 +2,16 @@
 
 use chrono::prelude::*;
 use chrono::Duration;
+use entities::EntitiesPreparedStatements;
 use futures::{poll, task::Poll};
 use scylla::client::session::Session;
 use scylla::client::session_builder::{GenericSessionBuilder, SessionBuilder};
 use std::time::Duration as StdDuration;
 
+mod associations;
 mod comments;
 mod commitishes;
+mod entities;
 mod events;
 mod logs;
 mod network_policies;
@@ -21,6 +24,7 @@ mod samples;
 mod tags;
 mod tools;
 
+use associations::AssociationsPreparedStatements;
 use comments::CommentsPreparedStatements;
 use commitishes::CommitishesPreparedStatements;
 use events::EventsPreparedStatements;
@@ -39,10 +43,14 @@ use crate::{setup, Conf};
 
 /// The diffferent groups of prepared statements for scylla
 pub struct ScyllaPreparedStatements {
+    /// The assocations related prepared statements
+    pub associations: AssociationsPreparedStatements,
     /// The comments related prepared statements
     pub comments: CommentsPreparedStatements,
     /// The commitishes related prepared statements
     pub commitishes: CommitishesPreparedStatements,
+    /// The entities related prepared statements
+    pub entities: EntitiesPreparedStatements,
     /// The events related prepared statements
     pub events: EventsPreparedStatements,
     /// The logs related prepared statements
@@ -74,6 +82,8 @@ impl ScyllaPreparedStatements {
     /// * `config` - The Thorium config
     pub async fn new(session: &Session, config: &Conf) -> Self {
         // setup our preapred statements
+        let associations = AssociationsPreparedStatements::new(session, config).await;
+        let entities = EntitiesPreparedStatements::new(session, config).await;
         let comments = CommentsPreparedStatements::new(session, config).await;
         let commitishes = CommitishesPreparedStatements::new(session, config).await;
         let events = EventsPreparedStatements::new(session, config).await;
@@ -88,6 +98,8 @@ impl ScyllaPreparedStatements {
         let tags = TagsPreparedStatements::new(session, config).await;
         // build our grouped prepared statement object
         ScyllaPreparedStatements {
+            associations,
+            entities,
             comments,
             commitishes,
             events,

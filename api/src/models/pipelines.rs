@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use serde_json::value::Value;
 use uuid::Uuid;
 
-use super::EventTrigger;
 use super::bans::Ban;
+use super::EventTrigger;
 use crate::{
     matches_adds_map, matches_clear, matches_clear_opt, matches_removes_map, matches_update,
     matches_update_opt, same,

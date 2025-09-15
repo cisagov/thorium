@@ -1,29 +1,30 @@
 //! Handles uploading files to s3
 
 use aws_credential_types::provider::SharedCredentialsProvider;
+use aws_sdk_s3::operation::get_object::GetObjectOutput;
 use aws_sdk_s3::primitives::SdkBody;
-use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
+use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
 use aws_sdk_s3::{
-    config::Credentials, operation::head_object::HeadObjectError, primitives::ByteStream, Client,
+    Client, config::Credentials, operation::head_object::HeadObjectError, primitives::ByteStream,
 };
 use axum::extract::multipart::Field;
 use base64::Engine as _;
-use bytes::{buf::Buf, BytesMut};
+use bytes::{BytesMut, buf::Buf};
 use cart_rs::{CartStreamManual, UncartStream};
 use data_encoding::HEXLOWER;
-use generic_array::{typenum::U16, GenericArray};
+use generic_array::{GenericArray, typenum::U16};
 use md5::Md5;
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
 use std::io::Write;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 use zip::unstable::write::FileOptionsExt;
 use zip::write::ZipWriter;
 
 use super::{ApiError, Shared};
 use crate::models::ZipDownloadParams;
-use crate::{bad, unavailable, Conf};
+use crate::{Conf, bad, unavailable};
 
 /// A tuple of hashes (sha256, sha1, md5)
 pub type Hashes = (String, String, String);
@@ -95,6 +96,8 @@ pub struct S3 {
     pub attachments: S3Client,
     /// The s3 bucket for zipped repositories
     pub repos: S3Client,
+    /// s3 clients for graphics
+    pub graphics: S3Client,
 }
 
 impl S3 {
@@ -130,12 +133,20 @@ impl S3 {
             &config.thorium.files.password,
             &config.thorium.s3,
         );
+        // build all of the graphics s3 clients
+        let graphics = S3Client::new(
+            &config.thorium.graphics.bucket,
+            // these aren't password protected so just use the files password
+            &config.thorium.files.password,
+            &config.thorium.s3,
+        );
         S3 {
             files,
             results,
             ephemeral,
             attachments,
             repos,
+            graphics,
         }
     }
 }
@@ -166,7 +177,7 @@ impl S3Client {
             .endpoint_url(&conf.endpoint)
             .region(aws_types::region::Region::new(conf.region.clone()))
             .credentials_provider(SharedCredentialsProvider::new(creds))
-            .force_path_style(true)
+            .force_path_style(conf.force_path_style)
             .build();
         // build our s3 client
         let client = Client::from_conf(s3_config);
@@ -198,6 +209,61 @@ impl S3Client {
                 HeadObjectError::NotFound(_) => Ok(false),
                 err => Err(ApiError::from(err)),
             },
+        }
+    }
+
+    /// List the objects with the given prefix, truncated to 10,000 keys maximum
+    ///
+    /// Returns a list of keys matching the given prefix with a maximum of 10,000
+    ///
+    /// # Caveats
+    ///
+    /// The client will return a maximum of 1000 keys per page, and this function
+    /// will concatenate a maximum of 10 pages, so 10,000 keys total. If there
+    /// are more objects than 10,000, those will not be included
+    ///
+    /// # Arguments
+    ///
+    /// * `prefix` - The prefix to check for objects
+    #[instrument(name = "S3Client::list_truncated", skip(self), err(Debug))]
+    pub async fn list_truncated(&self, prefix: &str) -> Result<Vec<String>, ApiError> {
+        // store a continuation token
+        let mut continuation_token = None;
+        // store our keys
+        let mut keys = Vec::new();
+        // count how many pages we've gotten
+        let mut page: u8 = 1;
+        loop {
+            // list objects with the given prefix
+            let mut resp = self
+                .client
+                .list_objects_v2()
+                .bucket(&self.bucket)
+                // match on the given prefix
+                .prefix(prefix)
+                // explicitly set max keys to 1000 per page
+                .max_keys(1000)
+                // set the token
+                .set_continuation_token(continuation_token)
+                .send()
+                .await?;
+            keys.extend(
+                resp.contents
+                    .take()
+                    .into_iter()
+                    // flatten None to an empty Vec
+                    .flatten()
+                    // get the keys for each object
+                    .filter_map(|object| object.key),
+            );
+            // increment our page count
+            page += 1;
+            // if we've gotten 10 pages or we don't have a next token, return our keys
+            if page > 10 || resp.next_continuation_token.is_none() {
+                return Ok(keys);
+            }
+            // we must have a continuation token, so set it for next loop
+            continuation_token = resp.next_continuation_token;
         }
     }
 
@@ -788,6 +854,60 @@ impl S3Client {
         }
     }
 
+    /// Stream a file into s3 with the given content type
+    ///
+    /// # Arguments
+    ///
+    /// * `s3_id` - The id to use for this object in s3
+    /// * `field` - The field to stream to s3
+    /// * `content_type` - The content type to set for this file
+    #[instrument(
+        name = "S3Client::stream_with-content_type",
+        skip(self, field),
+        err(Debug)
+    )]
+    pub async fn stream_with_content_type<'a>(
+        &self,
+        path: &str,
+        field: Field<'a>,
+        content_type: &str,
+    ) -> Result<(), ApiError> {
+        // ban any paths that might contain traversal attacks
+        if path.contains("..") {
+            return bad!("S3 file names cannot contain '..'".to_owned());
+        }
+        // initiate a multipart upload to s3
+        let init = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.bucket)
+            .key(path)
+            .content_type(content_type)
+            .send()
+            .await?;
+        // get our upload id
+        let upload_id = match init.upload_id() {
+            Some(upload_id) => upload_id,
+            None => return unavailable!("Failed to get multipart upload ID".to_owned()),
+        };
+        // cart and stream this file to s3
+        match self.stream_helper(path, upload_id, field).await {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                // abort this multipart upload
+                self.client
+                    .abort_multipart_upload()
+                    .bucket(&self.bucket)
+                    .key(path)
+                    .upload_id(upload_id)
+                    .send()
+                    .await?;
+                // return our error
+                return Err(err);
+            }
+        }
+    }
+
     /// decodes a base64 stream and uploads it to s3
     ///
     /// # Arguments
@@ -836,6 +956,24 @@ impl S3Client {
             .await?
             .body;
         Ok(body)
+    }
+
+    /// Download an object from s3 with its metadata intact
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to an object in s3
+    #[instrument(name = "S3Client::download_with_metadata", skip(self), err(Debug))]
+    pub async fn download_with_metadata(&self, path: &str) -> Result<GetObjectOutput, ApiError> {
+        // start downloading this file and stream it to the user
+        let output = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .send()
+            .await?;
+        Ok(output)
     }
 
     /// download a file from s3 and convert it to an encrypted zip
@@ -906,5 +1044,110 @@ impl S3Client {
             .send()
             .await?;
         Ok(())
+    }
+
+    /// Delete all objects with the given prefix, truncated to 10,000 keys maximum
+    ///
+    /// Returns a list of keys that were deleted
+    ///
+    /// # Caveats
+    ///
+    /// The client will list a maximum of 1000 keys per page, and this function
+    /// will concatenate a maximum of 10 pages, so 10,000 keys total. If there
+    /// are more objects than 10,000, those will not be deleted
+    ///
+    /// # Arguments
+    ///
+    /// * `prefix` - The prefix to check for objects to delete
+    #[instrument(name = "S3Client::delete_bulk_truncated", skip(self), err(Debug))]
+    pub async fn delete_bulk_truncated(&self, prefix: &str) -> Result<Vec<String>, ApiError> {
+        // store a continuation token
+        let mut continuation_token = None;
+        // store our keys
+        let mut keys = Vec::new();
+        // count how many pages we've gotten
+        let mut page: u8 = 1;
+        loop {
+            // list objects with the given prefix
+            let mut resp = self
+                .client
+                .list_objects_v2()
+                .bucket(&self.bucket)
+                // match on the given prefix
+                .prefix(prefix)
+                // explicitly set max keys to 1000 per page
+                .max_keys(1000)
+                // set the token
+                .set_continuation_token(continuation_token)
+                .send()
+                .await?;
+            // make a list of ObjectIdentifiers for deletion
+            let object_identifiers: Vec<ObjectIdentifier> = resp
+                .contents
+                .take()
+                .into_iter()
+                .flatten()
+                .filter_map(|object| {
+                    object
+                        .key()
+                        // safe to unwrap because we're setting the key
+                        .map(|key| ObjectIdentifier::builder().key(key).build().unwrap())
+                })
+                .collect();
+            if !object_identifiers.is_empty() {
+                // Delete objects in bulk
+                let delete = Delete::builder()
+                    .set_objects(Some(object_identifiers))
+                    .build()
+                    // safe to unwrap because we're setting objects above
+                    .unwrap();
+                // delete the objects
+                let mut delete_resp = self
+                    .client
+                    .delete_objects()
+                    .bucket(&self.bucket)
+                    .delete(delete)
+                    .send()
+                    .await?;
+                // add the deleted keys to our list
+                keys.extend(
+                    delete_resp
+                        .deleted
+                        .take()
+                        .into_iter()
+                        // flatten None to an empty Vec
+                        .flatten()
+                        // get the keys for each object
+                        .filter_map(|object| object.key),
+                );
+            }
+            // increment our page count
+            page += 1;
+            // if we've gotten 10 pages or we don't have a next token, return our keys
+            if page > 10 || resp.next_continuation_token.is_none() {
+                return Ok(keys);
+            }
+            // we must have a continuation token, so set it for next loop
+            continuation_token = resp.next_continuation_token;
+        }
+    }
+}
+
+/// s3 clients pointing to buckets containing graphics
+pub struct GraphicsS3Client {
+    /// The s3 client for graphics
+    pub client: S3Client,
+}
+
+impl GraphicsS3Client {
+    pub fn new(config: &Conf) -> Self {
+        // build all of the graphics s3 clients
+        let client = S3Client::new(
+            &config.thorium.graphics.bucket,
+            // these aren't password protected so just use the files password
+            &config.thorium.files.password,
+            &config.thorium.s3,
+        );
+        Self { client }
     }
 }

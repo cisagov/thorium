@@ -4,8 +4,9 @@ resolver = "2"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-description = "The Thorium API and a client for it."
-license-file = "../LICENSE"
+
+[lib]
+name = "thorium"
 
 [features]
 default = ["api", "client", "trace"]
@@ -15,7 +16,7 @@ api = [
   "scylla", "ldap3", "itertools", "sha-1", "sha2", "md-5", "data-encoding", "anyhow", "elasticsearch", "zip", "async-trait",
   "axum", "http", "tower", "axum-macros", "tower-http", "tokio-stream", "generic-array", "futures-util", "tokio-util", "serde_qs",
   "aws-sdk-s3", "aws-types", "aws-smithy-http", "aws-credential-types", "scylla-utils", "http-body", "axum-extra", "once_cell", "utoipa",
-  "utoipa-swagger-ui", "lettre", "headers"
+  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "mime"
   ]
 
 # include scylla utility functions
@@ -72,6 +73,7 @@ serde = "1.0"
 serde_json = "1.0"
 serde_yaml = "0.9"
 serde_derive = "1.0"
+serde_with = "3.14"
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "=0.4.38", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
@@ -84,7 +86,7 @@ cart-rs = { version = "*", path = "../cart-rs"}
 base64 = { version = "0.22" }
 enum-utils = "0.1"
 url = "2"
-schemars = "0.8"
+schemars = { version = "0.8", "features" = ["uuid1"] }
 semver = { version = "1", features = ["serde"] }
 openssl = "*"
 strum = { version = "0.27", features = ["derive"] }
@@ -92,6 +94,7 @@ indicatif = { version = "0.17", features = ["tokio"] }
 cidr = { version = "0.3", features = ["serde"] }
 ahash = "0.8"
 gxhash = { version = "3.5", features = ["deterministic"] }
+isocountry = "0.3"
 
 # api dependencies
 bb8-redis = { version = "0.24", optional = true }
@@ -139,6 +142,7 @@ lettre = { version = "0.11", features = ["tokio1", "tokio1-rustls-tls", "builder
 thorium-derive = { path = "../thorium-derive", version = "1.3.2", optional = true}
 percent-encoding = { version = "2.3.1", optional = true }
 dashmap = { version = "6.1", optional = true }
+mime = { version = "0.3", optional = true }
 
 # rkyv dependencies
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"], optional = true }
@@ -189,6 +193,3 @@ async_once = "0.2"
 # udeps might think this is unused but its used by our doc tests
 tokio-test = "0.4"
 serial_test = "3"
-
-[lib]
-name = "thorium"

@@ -1,11 +1,12 @@
 //! Bounds checking utilities for user input to Thorium
 
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::str::FromStr;
+
 use axum::extract::multipart::Field;
 use regex::Regex;
 use serde_json::Value;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::str::FromStr;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -27,21 +28,12 @@ pub fn string(input: &str, name: &'static str, min: usize, max: usize) -> Result
     // bounds check length
     let input_len = input.len();
     if input_len < min || input_len > max {
-        return bad!(format!(
-            "{} must be between {} and  {} chars",
-            name, min, max
-        ));
+        return bad!(format!("{name} must be between {min} and  {max} chars",));
     }
 
     // ensure this string is alpha numeric
-    if !input
-        .chars()
-        .all(|chr| char::is_alphanumeric(chr) || chr == '-')
-    {
-        return bad!(format!(
-            "{} must be only alphanumeric or '-' {}",
-            name, input
-        ));
+    if !input.chars().all(|chr| chr.is_alphanumeric() || chr == '-') {
+        return bad!(format!("{name} must be only alphanumeric or '-' {input}",));
     }
     Ok(())
 }
@@ -65,21 +57,53 @@ pub fn string_lower(
     // bounds check length
     let input_len = input.len();
     if input_len < min || input_len > max {
-        return bad!(format!(
-            "{} must be between {} and  {} chars",
-            name, min, max
-        ));
+        return bad!(format!("{name} must be between {min} and  {max} chars",));
     }
 
     // ensure this string is alpha numeric and lowercase or a -
     if !input
         .chars()
-        .all(|chr| char::is_lowercase(chr) || char::is_numeric(chr) || chr == '-')
+        .all(|chr| chr.is_lowercase() || chr.is_numeric() || chr == '-')
     {
         return bad!(format!(
-            "{} must be only lowercase alphanumeric or '-' {}",
-            name, input
+            "{name} must be only lowercase alphanumeric or '-' {input}",
         ));
+    }
+    Ok(())
+}
+
+/// Bounds check a metagroup to make sure its valid for ldap
+///
+/// # Arguments
+///
+/// * `metagroup` - The metagroup name to check
+pub fn ldap_metagroup(metagroup: &str) -> Result<(), ApiError> {
+    // make sure this string is not empty
+    if metagroup.is_empty() {
+        return bad!("Ldap metagroups cannot be empty strings".to_owned());
+    }
+    // make sure this strings characters are alphanumeric or '-' or '_'
+    if !metagroup
+        .chars()
+        .all(|chr| chr.is_alphanumeric() || chr == '-' || chr == '_')
+    {
+        return bad!(format!(
+            "Ldap metagroups must be only alphanumeric or '-' or '_' but is {metagroup}",
+        ));
+    }
+    Ok(())
+}
+
+/// Bounds check a set of metagroups to make sure its valid for ldap
+///
+/// # Arguments
+///
+/// * `metagroups` - The metagroups name to check
+pub fn ldap_metagroups(metagroups: &HashSet<String>) -> Result<(), ApiError> {
+    // check all metagroup names in this list
+    for metagroup in metagroups {
+        // check this metagroup name
+        ldap_metagroup(metagroup)?
     }
     Ok(())
 }
@@ -98,20 +122,19 @@ pub fn file_name(input: &str, name: &'static str, min: usize, max: usize) -> Res
     // bounds check length
     let input_len = input.len();
     if input_len < min || input_len > max {
-        return bad!(format!(
-            "{} must be between {} and  {} chars",
-            name, min, max
-        ));
+        return bad!(format!("{name} must be between {min} and  {max} chars",));
     }
-
-    // ensure this string is alpha numeric
+    // make sure this filename is not just '.'
+    if input.chars().all(|chr| chr == '.') {
+        return bad!(format!("{name} cannot just be '.'s {input}"));
+    }
+    // ensure this string is alphanumeric
     if !input
         .chars()
-        .all(|chr| char::is_alphanumeric(chr) || chr == '-' || chr == '.')
+        .all(|chr| chr.is_alphanumeric() || chr == '-' || chr == '.')
     {
         return bad!(format!(
-            "{} must be only alphanumeric or '-'/'.' {}",
-            name, input
+            "{name} must be only alphanumeric or '-'/'.' {input}",
         ));
     }
     Ok(())
@@ -175,7 +198,7 @@ pub fn string_json_value(
 ) -> Result<String, ApiError> {
     // cast to string string
     if !input.is_string() {
-        return bad!(format!("{} must be a string - {:#?}", name, input));
+        return bad!(format!("{name} must be a string - {input:#?}"));
     }
     let input_str = input.as_str().unwrap_or("");
 
@@ -183,8 +206,7 @@ pub fn string_json_value(
     let input_len = input_str.len();
     if input_len < min || input_len > max {
         return bad!(format!(
-            "{} must be between {} and  {} chars - {}",
-            name, min, max, input
+            "{name} must be between {min} and  {max} chars - {input}",
         ));
     }
     Ok(input_str.to_string())
@@ -203,8 +225,7 @@ pub fn number(input: i64, name: &'static str, min: i64, max: i64) -> Result<i64,
     // bounds check size
     if input < min || input > max {
         return bad!(format!(
-            "{} must be between {} and  {} but is {}",
-            name, min, max, input
+            "{name} must be between {min} and  {max} but is {input}",
         ));
     }
     Ok(input)
@@ -223,10 +244,7 @@ pub fn number(input: i64, name: &'static str, min: i64, max: i64) -> Result<i64,
 pub fn unsigned(input: u64, name: &'static str, min: u64, max: u64) -> Result<u64, ApiError> {
     // bounds check size
     if input < min || input > max {
-        return bad!(format!(
-            "{} must be between {} and  {} - {}",
-            name, min, max, input
-        ));
+        return bad!(format!("{name} must be between {min} and {max} - {input}",));
     }
     Ok(input)
 }
@@ -254,7 +272,7 @@ pub fn image_cpu(raw: &str) -> Result<u64, ApiError> {
         return Ok(millicpu.unwrap());
     }
     // error if all of the cpu handlers failed
-    bad!(format!("Failed to parse cpu value: {}", raw))
+    bad!(format!("Failed to parse cpu value: {raw}"))
 }
 
 /// Bounds checks an image storage value and converts it to mebibytes
@@ -275,7 +293,7 @@ pub fn image_storage(raw: &str) -> Result<u64, ApiError> {
     // find index where unit starts
     let reg = match unit_regex.find(&raw) {
         Some(reg) => reg,
-        None => return bad!(format!("failed to find parse {}", raw)),
+        None => return bad!(format!("failed to find parse {raw}")),
     };
     // split raw based on where unit was found
     let (amt, unit) = raw.split_at(reg.start());
@@ -295,7 +313,7 @@ pub fn image_storage(raw: &str) -> Result<u64, ApiError> {
         "Ti" => (amt as f64 * 1.049e+6).ceil() as u64,
         "Pi" => (amt as f64 * 1.074e+9).ceil() as u64,
         "Ei" => (amt as f64 * 1.1e+12).ceil() as u64,
-        _ => return bad!(format!("Failed to parse storage value: {}", raw)),
+        _ => return bad!(format!("Failed to parse storage value: {raw}")),
     };
     Ok(mebibytes)
 }
@@ -399,7 +417,7 @@ pub fn uuid<'a>(uuid: &'a str, name: &'a str) -> Result<Uuid, ApiError> {
     // throw an error if an invalid uuid was passed
     match Uuid::parse_str(uuid) {
         Ok(valid) => Ok(valid),
-        Err(_) => bad!(format!("{} must be a valid uuidv4", name)),
+        Err(_) => bad!(format!("{name} must be a valid uuidv4")),
     }
 }
 
@@ -417,7 +435,7 @@ pub fn triggers(triggers: &HashMap<String, EventTrigger>) -> Result<(), ApiError
             EventTrigger::Tag { tag_types, .. } => {
                 // make sure we have some tag type set
                 if tag_types.is_empty() {
-                    return bad!(format!("tag triggers must have tag types set: {}", name));
+                    return bad!(format!("tag triggers must have tag types set: {name}"));
                 }
             }
         }

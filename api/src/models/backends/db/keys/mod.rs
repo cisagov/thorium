@@ -1,5 +1,7 @@
+pub mod associations;
 pub mod commitishes;
 pub mod cursors;
+pub mod entities;
 mod events;
 pub mod groups;
 pub mod images;
@@ -16,6 +18,7 @@ pub mod system;
 pub mod tags;
 pub mod users;
 
+pub use entities::VendorKeys;
 pub use events::EventKeys;
 pub use groups::GroupKeys;
 pub use images::ImageKeys;

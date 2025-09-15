@@ -615,9 +615,7 @@ impl Node {
         shared: &Shared,
     ) -> Result<ApiCursor<NodeListLine>, ApiError> {
         // if we don't have any clusters defined then add all known clusters
-        println!("pre_default -> {params:#?}");
         params.default_expand(shared);
-        println!("post_default -> {params:#?}");
         // either list nodes or get just the details for the nodes we have
         if params.nodes.is_empty() {
             // if we have no nodes specified, get a chunk of the node names list
@@ -655,9 +653,7 @@ impl Node {
         shared: &Shared,
     ) -> Result<ApiCursor<Node>, ApiError> {
         // if we don't have any clusters defined then add all known clusters
-        println!("pre_default -> {params:#?}");
         params.default_expand(shared);
-        println!("post_default -> {params:#?}");
         // either list nodes or get just the details for the nodes we have
         if params.nodes.is_empty() {
             // if we don't have nodes, get a chunk of the node details list

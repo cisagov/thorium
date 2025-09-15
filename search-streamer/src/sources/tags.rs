@@ -71,6 +71,11 @@ impl DataSource for Tags {
         let item_label = match data_type {
             TagType::Files => "sha256",
             TagType::Repos => "url",
+            _ => {
+                return Err(Error::new(format!(
+                    "search-streamer does not support tags of type '{data_type}'"
+                )));
+            }
         };
         Ok(bundles.iter().fold(Vec::new(), |mut values, bundle| {
             let tag_pairs: Vec<String> =
@@ -281,10 +286,13 @@ impl IndexMapping<Elastic> for TagType {
         vec![ElasticIndex::SampleTags, ElasticIndex::RepoTags]
     }
 
-    fn map_index(&self) -> ElasticIndex {
+    fn map_index(&self) -> Result<ElasticIndex, Error> {
         match self {
-            TagType::Files => ElasticIndex::SampleTags,
-            TagType::Repos => ElasticIndex::RepoTags,
+            TagType::Files => Ok(ElasticIndex::SampleTags),
+            TagType::Repos => Ok(ElasticIndex::RepoTags),
+            _ => Err(Error::new(format!(
+                "search-streamer does not support tags of type '{self}'"
+            ))),
         }
     }
 }

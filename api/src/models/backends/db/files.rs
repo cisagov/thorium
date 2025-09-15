@@ -4,7 +4,7 @@ use chrono::prelude::*;
 use itertools::Itertools;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::ScyllaCursor;
@@ -16,7 +16,7 @@ use crate::models::{
     TagSearchEvent, User,
 };
 use crate::utils::s3::StandardHashes;
-use crate::utils::{helpers, ApiError, Shared};
+use crate::utils::{ApiError, Shared, helpers};
 use crate::{
     conflict, for_groups, internal_err, log_scylla_err, not_found, same_vec, serialize,
     unauthorized,

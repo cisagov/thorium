@@ -5,8 +5,8 @@ use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Version};
 use axum::extract::{FromRef, FromRequestParts};
-use axum::http::request::Parts;
 use axum::http::StatusCode;
+use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use chrono::prelude::*;
@@ -15,7 +15,7 @@ use ldap3::{Scope, SearchEntry};
 use rand::prelude::*;
 use std::collections::HashSet;
 use std::str;
-use tracing::{event, instrument, Level, Span};
+use tracing::{Level, Span, event, instrument};
 
 use super::db;
 use crate::conf::Ldap;
@@ -24,7 +24,7 @@ use crate::models::{
     UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::shared::EmailClient;
-use crate::utils::{bounder, ApiError, AppState, Shared};
+use crate::utils::{ApiError, AppState, Shared, bounder};
 use crate::{bad, conflict, is_admin, ldap, unauthorized, unavailable};
 
 /// The header name for our secret key
@@ -893,6 +893,8 @@ impl User {
                 let old_token = target.token.clone();
                 // generate a new token
                 target.gen_token(shared);
+                // save this users token to the db
+                db::users::save_token(&target, &old_token, shared).await?;
             } else {
                 return unavailable!("Cannot update password when ldap is enabled".to_string());
             }

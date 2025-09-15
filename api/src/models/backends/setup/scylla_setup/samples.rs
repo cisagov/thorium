@@ -95,7 +95,7 @@ async fn setup_samples_list_table(session: &Session, config: &Conf) {
     session
         .query_unpaged(table_create, &[])
         .await
-        .expect("failed to add samples table");
+        .expect("Failed to add samples table");
 }
 
 /// Create the materialized view for listings samples by group
@@ -121,7 +121,7 @@ async fn setup_samples_mat_view(session: &Session, config: &Conf) {
     session
         .query_unpaged(table_create, &[])
         .await
-        .expect("failed to add samples group materialized view");
+        .expect("Failed to add samples group materialized view");
 }
 
 /// build the sample insert prepared statement

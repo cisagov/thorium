@@ -1,6 +1,8 @@
+//! Support the files routes in the Thorium client
+
 use cart_rs::UncartStream;
-use futures::stream::StreamExt;
 use futures::TryStreamExt;
+use futures::stream::StreamExt;
 use reqwest::StatusCode;
 use std::path::{Path, PathBuf};
 use tokio::fs::OpenOptions;
@@ -11,8 +13,8 @@ use uuid::Uuid;
 #[cfg(feature = "trace")]
 use tracing::instrument;
 
-use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferProgress};
 use super::Error;
+use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferProgress};
 use crate::models::{
     Attachment, CartedSample, CommentRequest, CommentResponse, Cursor, DeleteCommentParams,
     DownloadedSample, FileDeleteOpts, FileDownloadOpts, FileListOpts, OutputMap, OutputRequest,
@@ -545,7 +547,7 @@ impl Files {
     )]
     pub async fn list_details(&self, opts: &FileListOpts) -> Result<Cursor<Sample>, Error> {
         // build the url for listing files
-        let url = format!("{}/api/files/details/", self.host);
+        let url = format!("{}/api/files/details", self.host);
         // get the correct page size if our limit is smaller then our page_size
         let page_size = opts.limit.map_or_else(
             || opts.page_size,

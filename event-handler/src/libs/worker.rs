@@ -10,7 +10,7 @@ use thorium::models::{
     TagType,
 };
 use thorium::{Error, Thorium};
-use tracing::{Level, event, instrument};
+use tracing::{event, instrument, Level};
 use uuid::Uuid;
 
 use super::cache::{DataCache, FilteredEvents, TriggerCache};
@@ -183,6 +183,13 @@ impl EventWorker {
                         match tag_type {
                             TagType::Files => req.sample(item),
                             TagType::Repos => req.repo(RepoDependencyRequest::new(item)),
+                            // should be impossible to get an unsupported tag type because we error
+                            // when getting the event's data, but handle the error here anyway
+                            _ => {
+                                return Err(Error::new(format!(
+                                    "Events are not supported for tag type '{tag_type}'"
+                                )));
+                            }
                         }
                     }
                 };
@@ -333,7 +340,7 @@ impl EventWorker {
                 .hot_loop(&opts, &mut event_cache, &mut data_cache)
                 .await?;
             // if we got some events then handle them otherwise sleep for 3 seconds
-            if !got_events {
+            if got_events {
                 // sleep for 3 seconds to keep from spamming the API needlessly
                 tokio::time::sleep(Duration::from_secs(3)).await;
                 // restart our loop and check for new events

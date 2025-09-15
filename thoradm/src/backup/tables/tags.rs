@@ -6,19 +6,19 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
+use scylla::DeserializeRow;
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, PrepareError};
 use scylla::statement::prepared::PreparedStatement;
-use scylla::DeserializeRow;
 use std::hash::Hasher;
 use std::sync::Arc;
+use thorium::Conf;
 use thorium::models::backends::TagSupport;
 use thorium::models::{TagRequest, TagType};
-use thorium::Conf;
 
-use crate::args::BackupComponents;
-use crate::backup::{utils, Backup, Restore, Scrub, Utils};
 use crate::Error;
+use crate::args::BackupComponents;
+use crate::backup::{Backup, Restore, Scrub, Utils, utils};
 
 /// A single line of stage logs
 #[derive(Debug, Archive, Serialize, Deserialize, DeserializeRow)]
@@ -101,6 +101,9 @@ impl Scrub for Tag {}
 /// Implement restore support for the tags table
 #[async_trait::async_trait]
 impl Restore for Tag {
+    // The partition config is within the tags config in the Thorium config
+    type PartitionConf = thorium::conf::Tags;
+
     /// The steps to once run before restoring data
     async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
         // drop the materialized views for this table
@@ -135,8 +138,8 @@ impl Restore for Tag {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_size(config: &Conf) -> u16 {
-        config.thorium.tags.partition_size
+    fn partition_conf(config: &Conf) -> Self::PartitionConf {
+        config.thorium.tags.clone()
     }
 
     /// Restore a single partition
@@ -146,13 +149,13 @@ impl Restore for Tag {
     /// * `buffer` - The buffer we should restore data from
     /// * `scylla` - The client to use when talking to scylla
     /// * `rows_restored` - The number of rows that have been restored
-    /// * `partition_size` - The partition size to use when restoring data
+    /// * `partition_conf` - The config defining the partition size to use when restoring data
     /// * `progress` - The bar to report progress with
     /// * `prepared` - The prepared statement to inject data with
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        partition_size: u16,
+        partition_conf: &Self::PartitionConf,
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,
@@ -165,6 +168,8 @@ impl Restore for Tag {
         for row in rows.iter() {
             // deserialize our tag type
             let tag_type: TagType = row.tag_type.deserialize(&mut rkyv::Infallible)?;
+            // get the correct partition size based on tags
+            let partition_size = partition_conf.map_type(&tag_type).partition_size;
             // deserialize this rows uploaded timestamp
             let uploaded = row.uploaded.deserialize(&mut rkyv::Infallible)?;
             // calculate the new bucket

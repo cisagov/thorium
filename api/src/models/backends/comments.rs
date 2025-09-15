@@ -8,9 +8,9 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::db;
+use crate::bad;
 use crate::models::{CommentForm, CommentResponse, Group, GroupAllowAction, User};
 use crate::utils::{ApiError, Shared};
-use crate::{bad, can_create_all};
 
 pub trait CommentSupport {
     /// Creates a new comment
@@ -112,28 +112,17 @@ pub async fn create_comment_helper(
     if form.groups.is_empty() {
         // get the groups we can see this sample in
         form.groups.extend(groups.iter().map(ToString::to_string));
-        // make sure we can actually upload files to all the requested groups
-        let groups = Group::authorize_check_allow_all(
-            user,
-            &form.groups,
-            GroupAllowAction::Comments,
-            shared,
-        )
-        .await?;
-        // make sure we have the roles to upload samples in all of these groups
-        can_create_all!(groups, user, shared);
-    } else {
-        // make sure we can actually upload files to all the requested groups
-        let groups = Group::authorize_check_allow_all(
-            user,
-            &form.groups,
-            GroupAllowAction::Comments,
-            shared,
-        )
-        .await?;
-        // make sure we have the roles to upload samples in all of these groups
-        can_create_all!(groups, user, shared);
     }
+    // make sure we can actually upload files to all the requested groups
+    let _ = Group::authorize_check_allow_all(
+        user,
+        &form.groups,
+        Group::editable,
+        "edit",
+        Some(GroupAllowAction::Comments),
+        shared,
+    )
+    .await?;
     // save the new comment into scylla
     db::files::create_comment(user, key, form, shared).await
 }

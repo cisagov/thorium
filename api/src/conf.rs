@@ -9,7 +9,7 @@ use base64::Engine as _;
 
 use crate::models::{
     Image, ImageScaler, NetworkPolicyCustomK8sRule, NetworkPolicyCustomLabel, NetworkPolicyRuleRaw,
-    NetworkProtocol, UnixInfo,
+    NetworkProtocol, TagType, UnixInfo,
 };
 
 /// Helps serde default a value to false
@@ -1362,7 +1362,7 @@ const fn default_tags_earliest() -> i64 {
 
 /// The settings for saving/listing tags in scylla
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
-pub struct Tags {
+pub struct TagsConfig {
     /// The number of seconds each partition in the database should cover
     #[serde(default = "default_tags_partition_size")]
     pub partition_size: u16,
@@ -1371,11 +1371,62 @@ pub struct Tags {
     pub earliest: i64,
 }
 
-impl Default for Tags {
+impl Default for TagsConfig {
+    // provide a default tags config
     fn default() -> Self {
-        Tags {
+        TagsConfig {
             partition_size: default_tags_partition_size(),
             earliest: default_tags_earliest(),
+        }
+    }
+}
+
+/// Default to different settings for entity tags
+fn default_entity_tags() -> TagsConfig {
+    TagsConfig {
+        // default to a partition size of 10 minutes
+        partition_size: 600,
+        // default to 06/01/2025 for earliest entity tags
+        earliest: 1_748_736_000,
+    }
+}
+
+/// The settings for saving/listing tags in scylla for various
+/// tag types
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct Tags {
+    /// The settings for file tags
+    #[serde(default)]
+    pub files: TagsConfig,
+    /// The settings for repo tags
+    #[serde(default)]
+    pub repos: TagsConfig,
+    /// The settings for entity tags
+    #[serde(default = "default_entity_tags")]
+    pub entities: TagsConfig,
+}
+
+impl Default for Tags {
+    fn default() -> Self {
+        Self {
+            files: TagsConfig::default(),
+            repos: TagsConfig::default(),
+            entities: default_entity_tags(),
+        }
+    }
+}
+
+impl Tags {
+    /// Map a config to a given tag type
+    ///
+    /// # Arguments
+    ///
+    /// * `tag_type` - The tag type to get a config for
+    pub fn map_type(&self, tag_type: &TagType) -> &TagsConfig {
+        match tag_type {
+            TagType::Files => &self.files,
+            TagType::Repos => &self.repos,
+            TagType::Entities => &self.entities,
         }
     }
 }
@@ -1583,9 +1634,84 @@ impl Default for Events {
     }
 }
 
-/// Helps serde default the S3 region
-fn default_s3_region() -> String {
-    String::new()
+/// Helps serde default the entities chunk size to 3 minutes
+fn default_entities_partition_size() -> u16 {
+    180
+}
+
+/// Helps serde default the earliest entities 06/01/2025
+fn default_entities_earliest() -> i64 {
+    1_748_736_000
+}
+
+/// The settings for entities in Thorium
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct Entities {
+    /// The number of seconds each partition in the database should cover
+    #[serde(default = "default_entities_partition_size")]
+    pub partition_size: u16,
+    /// The earliest we'll see an entity as a Unix timestamp
+    #[serde(default = "default_entities_earliest")]
+    pub earliest: i64,
+}
+
+impl Default for Entities {
+    fn default() -> Self {
+        Self {
+            partition_size: default_entities_partition_size(),
+            earliest: default_entities_earliest(),
+        }
+    }
+}
+
+/// Helps serde default the associations chunk size to 3 minutes
+fn default_associations_partition_size() -> u16 {
+    180
+}
+
+/// Helps serde default the earliest associations 06/01/2025
+fn default_associations_earliest() -> i64 {
+    1_748_736_000
+}
+
+/// The settings for Associations in Thorium
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct Associations {
+    /// The number of seconds each partition in the database should cover
+    #[serde(default = "default_associations_partition_size")]
+    pub partition_size: u16,
+    /// The earliest we'll see an entity as a Unix timestamp
+    #[serde(default = "default_associations_earliest")]
+    pub earliest: i64,
+}
+
+impl Default for Associations {
+    fn default() -> Self {
+        Self {
+            partition_size: default_associations_partition_size(),
+            earliest: default_associations_earliest(),
+        }
+    }
+}
+
+/// Helps serde default the graphics bucket
+fn default_graphics_bucket() -> String {
+    "thorium-graphics".to_owned()
+}
+/// Configuration for graphics (image files)
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct Graphics {
+    /// The bucket to write graphics to
+    #[serde(default = "default_graphics_bucket")]
+    pub bucket: String,
+}
+
+impl Default for Graphics {
+    fn default() -> Self {
+        Self {
+            bucket: default_graphics_bucket(),
+        }
+    }
 }
 
 /// The settings for saving/Carting files to the backend
@@ -1598,8 +1724,12 @@ pub struct S3 {
     /// The endpoint S3c should talk to
     pub endpoint: String,
     /// The region our s3 client should use
-    #[serde(default = "default_s3_region")]
     pub region: String,
+    /// Specify the location constraint
+    pub location_constraint: Option<String>,
+    /// Force path style bucket adressing
+    #[serde(default)]
+    pub force_path_style: bool,
     /// Whether the operator should skip bucket creation or not
     #[serde(default)]
     pub skip_bucket_auto_create: bool,
@@ -1870,6 +2000,15 @@ pub struct Thorium {
     /// The settings related to events
     #[serde(default)]
     pub events: Events,
+    /// The settings related to entities
+    #[serde(default)]
+    pub entities: Entities,
+    /// The settings related to associations
+    #[serde(default)]
+    pub associations: Associations,
+    /// The settings related to graphics (image files)
+    #[serde(default)]
+    pub graphics: Graphics,
     /// Base network policies that should be applied to *all* tools in Thorium
     ///
     /// If none are supplied, a default policy will be applied instead (see

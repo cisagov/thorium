@@ -116,8 +116,8 @@ impl NetworkPolicy {
         match for_groups!(db::network_policies::get, user, shared, name, id)? {
             // this network policy exists return it
             Some(network_policy) => Ok(network_policy),
-            // this sample does not exist return a 404
-            None => not_found!(format!("network policy '{}' not found", name)),
+            // this network policy does not exist return a 404
+            None => not_found!(format!("network policy '{name}' not found")),
         }
     }
 

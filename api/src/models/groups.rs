@@ -54,6 +54,8 @@ pub enum GroupAllowAction {
     Results,
     /// Comments actions
     Comments,
+    /// Entities actions
+    Entities,
 }
 
 impl std::fmt::Display for GroupAllowAction {
@@ -68,8 +70,14 @@ impl std::fmt::Display for GroupAllowAction {
             Self::Reactions => write!(f, "Reactions"),
             Self::Results => write!(f, "Results"),
             Self::Comments => write!(f, "Comments"),
+            Self::Entities => write!(f, "Entities"),
         }
     }
+}
+
+/// Helps serde set a default as true
+const fn default_true() -> bool {
+    true
 }
 
 /// The data that is allowed to be added/uploaded to a groupi
@@ -77,23 +85,35 @@ impl std::fmt::Display for GroupAllowAction {
 /// These permission are not retroactive.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct GroupAllowed {
     /// Whether files are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub files: bool,
     /// Whether repos are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub repos: bool,
     /// Whether tags are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub tags: bool,
     /// Whether images are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub images: bool,
     /// Whether pipelines are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub pipelines: bool,
     /// Whether reactions are allowed to be created in this group
+    #[serde(default = "default_true")]
     pub reactions: bool,
     /// Whether results are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub results: bool,
     /// Whether comments are allowed to be added to this group
+    #[serde(default = "default_true")]
     pub comments: bool,
+    /// Whether entities are allowed to be added to this group
+    #[serde(default = "default_true")]
+    pub entities: bool,
 }
 
 impl Default for GroupAllowed {
@@ -109,6 +129,7 @@ impl Default for GroupAllowed {
             reactions: true,
             results: true,
             comments: true,
+            entities: true,
         }
     }
 }
@@ -210,6 +231,18 @@ impl GroupAllowed {
         self
     }
 
+    /// Disable entities being added to a group
+    pub fn disable_entities(mut self) -> Self {
+        self.entities = false;
+        self
+    }
+
+    /// Enable entities being added to a group
+    pub fn enable_entities(mut self) -> Self {
+        self.entities = true;
+        self
+    }
+
     /// Determine if this action is allowed
     pub fn is_allowed(&self, action: GroupAllowAction) -> bool {
         match action {
@@ -221,6 +254,7 @@ impl GroupAllowed {
             GroupAllowAction::Reactions => self.reactions,
             GroupAllowAction::Results => self.results,
             GroupAllowAction::Comments => self.comments,
+            GroupAllowAction::Entities => self.entities,
         }
     }
 }
@@ -261,6 +295,7 @@ pub struct GroupRequest {
     /// Group description
     pub description: Option<String>,
     /// The data that is allowed to be added to this group
+    // TODO: add function to set allowed
     #[serde(default)]
     pub allowed: GroupAllowed,
 }
@@ -581,6 +616,8 @@ pub struct GroupAllowedUpdate {
     pub results: Option<bool>,
     /// Whether comments are allowed to be added to this group
     pub comments: Option<bool>,
+    /// Whether entities are allowed to be added to this group
+    pub entities: Option<bool>,
 }
 
 impl GroupAllowedUpdate {
@@ -680,6 +717,18 @@ impl GroupAllowedUpdate {
         self
     }
 
+    /// Disable entities being added to a group
+    pub fn disable_entities(mut self) -> Self {
+        self.entities = Some(false);
+        self
+    }
+
+    /// Enable entities being added to a group
+    pub fn enable_entities(mut self) -> Self {
+        self.entities = Some(true);
+        self
+    }
+
     /// Check if this update contains any changes
     pub fn is_empty(&self) -> bool {
         self.files.is_none()
@@ -690,6 +739,7 @@ impl GroupAllowedUpdate {
             && self.reactions.is_none()
             && self.results.is_none()
             && self.comments.is_none()
+            && self.entities.is_none()
     }
 }
 
@@ -716,6 +766,7 @@ pub struct GroupUpdate {
     #[serde(default = "default_as_false")]
     pub clear_description: bool,
     /// Update what is allowed in this group
+    // TODO: add function to set allowed
     #[serde(default)]
     pub allowed: GroupAllowedUpdate,
 }
@@ -1071,6 +1122,15 @@ impl Group {
             || !self.managers.metagroups.is_empty()
             || !self.users.metagroups.is_empty()
             || !self.monitors.metagroups.is_empty()
+    }
+
+    /// Check if this user is an owner or manager
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - Ther username to check
+    pub fn is_manager_or_owner(&self, username: &str) -> bool {
+        self.owners.combined.contains(username) || self.managers.combined.contains(username)
     }
 }
 

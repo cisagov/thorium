@@ -86,6 +86,12 @@ macro_rules! not_found {
     ($($msg:tt)+) => {Err($crate::utils::ApiError::new(axum::http::status::StatusCode::NOT_FOUND, Some($($msg)+)))}
 }
 
+/// 404 not found without the Err wrap
+#[macro_export]
+macro_rules! not_found_unwrapped {
+    ($($msg:tt)+) => {$crate::utils::ApiError::new(axum::http::status::StatusCode::NOT_FOUND, Some($($msg)+))}
+}
+
 /// 204 no content
 #[macro_export]
 macro_rules! no_content {
@@ -359,6 +365,12 @@ impl From<SdkError<aws_sdk_s3::operation::head_object::HeadObjectError>> for Api
     }
 }
 
+impl From<SdkError<aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Error>> for ApiError {
+    fn from(error: SdkError<aws_sdk_s3::operation::list_objects_v2::ListObjectsV2Error>) -> Self {
+        internal_err_unwrapped!(format!("Failed to list objects from s3 {:#?}", error))
+    }
+}
+
 impl From<SdkError<aws_sdk_s3::operation::create_multipart_upload::CreateMultipartUploadError>>
     for ApiError
 {
@@ -415,6 +427,12 @@ impl From<SdkError<aws_sdk_s3::operation::delete_object::DeleteObjectError>> for
     }
 }
 
+impl From<SdkError<aws_sdk_s3::operation::delete_objects::DeleteObjectsError>> for ApiError {
+    fn from(error: SdkError<aws_sdk_s3::operation::delete_objects::DeleteObjectsError>) -> Self {
+        internal_err_unwrapped!(format!("Failed to delete objects from s3 {:#?}", error))
+    }
+}
+
 impl From<tokio::task::JoinError> for ApiError {
     fn from(error: tokio::task::JoinError) -> Self {
         bad_internal!(format!("Tokio task failed to join: {:#?}", error))
@@ -433,6 +451,18 @@ impl From<std::net::AddrParseError> for ApiError {
     }
 }
 
+impl From<strum::ParseError> for ApiError {
+    fn from(error: strum::ParseError) -> Self {
+        bad_internal!(format!("Failed to parse variant: {error}"))
+    }
+}
+
+impl From<isocountry::CountryCodeParseErr> for ApiError {
+    fn from(error: isocountry::CountryCodeParseErr) -> Self {
+        bad_internal!(format!("Failed to parse country code: {error}"))
+    }
+}
+
 /// This conversion should never actually happen as its for infallible
 ///
 /// But its better to have this code here then just unwrap in a bunch of places in case
@@ -443,23 +473,5 @@ impl From<std::convert::Infallible> for ApiError {
         bad_internal!(format!(
             "Somehow you got an infallible function to error and get a gold, but sad, star!"
         ))
-    }
-}
-
-impl From<lettre::error::Error> for ApiError {
-    fn from(error: lettre::error::Error) -> Self {
-        bad_internal!(format!("Email error: {error}"))
-    }
-}
-
-impl From<lettre::transport::smtp::Error> for ApiError {
-    fn from(error: lettre::transport::smtp::Error) -> Self {
-        bad_internal!(format!("Email SMTP error: {error}"))
-    }
-}
-
-impl From<lettre::address::AddressError> for ApiError {
-    fn from(error: lettre::address::AddressError) -> Self {
-        bad_internal!(format!("Parsing email error: {error}"))
     }
 }
