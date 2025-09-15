@@ -1,6 +1,7 @@
 use bb8_redis::redis::cmd;
 use chrono::prelude::*;
 use std::cmp::min;
+use std::num::NonZeroU64;
 use tracing::instrument;
 
 use super::keys::streams::StreamKeys;
@@ -176,17 +177,20 @@ pub async fn depth_range(
     stream: &str,
     start: i64,
     end: i64,
-    split: i64,
+    split: NonZeroU64,
     shared: &Shared,
 ) -> Result<Vec<StreamDepth>, ApiError> {
+    // convert our non zero split to a usize and an i64
+    let split_usize = split.get() as usize;
+    let split_i64 = split.get() as i64;
     // build stream keys
     let key = StreamKeys::stream(group, namespace, stream, shared);
     // loop and build tuple of start and end for each depth probe
     // start with start - 1 so we get valid inclusive ranges
     let start = start - 1;
     let depth_pairs: Vec<(i64, i64)> = (start..end)
-        .step_by(split as usize)
-        .map(|start| (start + 1, min(start + split, end)))
+        .step_by(split_usize)
+        .map(|start| (start + 1, min(start + split_i64, end)))
         .collect();
     // build zcount for each part of the stream
     let counts: Vec<i64> = depth_pairs
@@ -235,7 +239,7 @@ pub async fn earliest(
             return internal_err!(format!(
                 "Earliest point in stream does not have a valid timestamp - {}",
                 raw.1
-            ))
+            ));
         }
     }
 }
@@ -269,7 +273,7 @@ pub async fn latest(
             return internal_err!(format!(
                 "Earliest point in stream does not have a valid timestamp - {}",
                 raw.1
-            ))
+            ));
         }
     }
 }

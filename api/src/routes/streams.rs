@@ -1,7 +1,9 @@
+use std::num::NonZeroU64;
+
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::routing::get;
-use axum::Router;
-use tracing::{instrument, Span};
+use tracing::{Span, instrument};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
@@ -71,7 +73,7 @@ pub async fn depth(
         ("stream" = String, Path, description = "The name of the stream to count objects in"),
         ("start" = i64, Path, description = "The starting point in an epoch timestamp to count objects at"),
         ("end" = i64, Path, description = "The ending point in an epoch timestamp to count objects at"),
-        ("split" = i64, Path, description = "How many seconds each chunk should cover"),
+        ("split" = u64, Path, description = "How many seconds each chunk should cover"),
     ),
     responses(
         (status = 200, description = "The number of objects in the stream between start and end time in specified chunks", body = Vec<StreamDepth>),
@@ -90,7 +92,7 @@ pub async fn depth_range(
         String,
         i64,
         i64,
-        i64,
+        NonZeroU64,
     )>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<StreamDepth>>, ApiError> {

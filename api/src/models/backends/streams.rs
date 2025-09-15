@@ -1,9 +1,11 @@
 //! Wrappers for interacting with streams within Thorium with different backends
 //! Currently only Redis is supported
 
+use std::num::NonZeroU64;
+
 use async_recursion::async_recursion;
 use chrono::prelude::*;
-use tracing::{instrument, span, Level, Span};
+use tracing::{Level, Span, instrument, span};
 
 use super::db;
 use crate::models::{Deadline, Group, RawJob, Stream, StreamDepth, StreamObj, User};
@@ -19,13 +21,15 @@ impl From<Deadline> for StreamObj {
     fn from(deadline: Deadline) -> Self {
         // cast deadline data to stream data without timestamp
         // were using a format macro so we get a consistent order
-        let data = format!("{{\"group\":\"{}\",\"pipeline\":\"{}\",\"stage\":\"{}\",\"creator\":\"{}\",\"job_id\":\"{}\",\"reaction\":\"{}\"}}",
+        let data = format!(
+            "{{\"group\":\"{}\",\"pipeline\":\"{}\",\"stage\":\"{}\",\"creator\":\"{}\",\"job_id\":\"{}\",\"reaction\":\"{}\"}}",
             deadline.group,
             deadline.pipeline,
             deadline.stage,
             deadline.creator,
             deadline.job_id,
-            deadline.reaction);
+            deadline.reaction
+        );
 
         // cast to stream object
         StreamObj {
@@ -196,11 +200,13 @@ impl Stream {
         stream: &str,
         start: i64,
         end: i64,
-        split: i64,
+        split: NonZeroU64,
         shared: &Shared,
     ) -> Result<Vec<StreamDepth>, ApiError> {
+        // get our split as an i64
+        let split_i64 = split.get() as i64;
         // throw an error if we try to retrieve more then 10000 depths
-        if at_least!((end - start) / 10, 1) / split > 10_000 {
+        if at_least!((end - start) / 10, 1) / split_i64 > 10_000 {
             return bad!("cannot retrieve more then 10,000 depths at once".to_owned());
         }
 
@@ -271,9 +277,13 @@ impl Stream {
         // assume we can fit the entire range into one map
         // default to breaking it into 10 splits
         let split = at_least!((end - start) / 10, 1);
+        // cast our split to a non zero u64
+        // since this is always going to be at least 1 this unwrap will never fail
+        // we could use the unsafe function here safely but I am choosing not too since an unwrap
+        // is low cost and easy
+        let split = NonZeroU64::new(split.try_into()?).unwrap();
         let mut maps =
             Self::depth_range(group, namespace, stream, start, end, split, shared).await?;
-
         // check if any of the depths have over 10k jobs in them
         // if they do recursively remap them
         let mut remapped = Vec::default();
