@@ -1600,6 +1600,9 @@ pub struct S3 {
     /// The region our s3 client should use
     #[serde(default = "default_s3_region")]
     pub region: String,
+    /// Whether the operator should skip bucket creation or not
+    #[serde(default)]
+    pub skip_bucket_auto_create: bool,
 }
 
 /// Helps serde default the max size an incoming json body can be in mebibytes
