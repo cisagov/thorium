@@ -5,8 +5,8 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use kanal::{AsyncReceiver, AsyncSender};
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::Archive;
+use rkyv::validation::validators::DefaultValidator;
 use scylla::client::session::Session;
 use std::path::Path;
 use std::path::PathBuf;
@@ -17,8 +17,10 @@ use thorium::Thorium;
 use tokio::task::JoinHandle;
 
 use super::utils;
+use crate::Error;
 use crate::args::Args;
 use crate::args::RestoreBackup;
+use crate::backup::tables::NetworkPolicy;
 use crate::backup::tables::{
     Comment, Commitish, CommitishList, Node, Output, OutputStream, RepoData, RepoList, S3Id,
     SamplesList, Tag,
@@ -27,7 +29,6 @@ use crate::backup::{
     Monitor, MonitorUpdate, Restore, RestoreWorker, S3Monitor, S3MonitorUpdate, S3Restore,
     S3RestoreWorker,
 };
-use crate::Error;
 
 /// A singular table restore
 struct TableRestore<R: Restore> {
@@ -520,6 +521,8 @@ pub struct RestoreController {
     commitish_list: TableRestore<CommitishList>,
     /// The nodes table
     nodes: TableRestore<Node>,
+    /// The network policies table
+    network_policies: TableRestore<NetworkPolicy>,
     /// The samples/repos s3 objects
     s3_ids_objects: S3RestoreController<S3Id>,
     /// The comment attachment objects
@@ -557,6 +560,7 @@ impl RestoreController {
         let commits = TableRestore::new(config, scylla, workers);
         let commits_list = TableRestore::new(config, scylla, workers);
         let nodes = TableRestore::new(config, scylla, workers);
+        let network_policies = TableRestore::new(config, scylla, workers);
         // build our s3 restore objects
         let s3_ids_objects = S3RestoreController::new(config, workers);
         let comment_attachments = S3RestoreController::new(config, workers);
@@ -575,6 +579,7 @@ impl RestoreController {
             commitish: commits,
             commitish_list: commits_list,
             nodes,
+            network_policies,
             s3_ids_objects,
             comment_attachments,
             result_files,
@@ -669,6 +674,7 @@ impl RestoreController {
         self.commitish.restore(path.clone()).await?;
         self.commitish_list.restore(path.clone()).await?;
         self.nodes.restore(path.clone()).await?;
+        self.network_policies.restore(path.clone()).await?;
         // restore our s3 objects
         self.s3_ids_objects.restore(path.clone()).await?;
         self.comment_attachments.restore(path.clone()).await?;

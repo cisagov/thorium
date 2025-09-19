@@ -2,6 +2,7 @@
 
 mod comments;
 mod commits;
+mod network_policies;
 mod nodes;
 mod repos;
 mod results;
@@ -11,6 +12,7 @@ mod tags;
 
 pub use comments::Comment;
 pub use commits::{Commitish, CommitishList};
+pub use network_policies::NetworkPolicy;
 pub use nodes::Node;
 pub use repos::{RepoData, RepoList};
 pub use results::{Output, OutputStream};

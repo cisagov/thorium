@@ -12,15 +12,15 @@ use scylla::errors::PrepareError;
 use scylla::statement::prepared::PreparedStatement;
 use sha2::{Digest, Sha256};
 use std::io::IoSlice;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use super::{MonitorUpdate, PartitionArchive, Utils};
-use crate::args::BackupComponents;
 use crate::Error;
+use crate::args::BackupComponents;
 
 /// An archived partition that is ready to be written to disk
 #[derive(Debug)]
@@ -32,9 +32,9 @@ pub struct PendingArchive {
 }
 
 /// Ensure that all bytes in a vectored write are written
-async fn write_all_vectored<'a>(
+async fn write_all_vectored(
     file: &mut File,
-    mut segments: &mut [IoSlice<'a>],
+    mut segments: &mut [IoSlice<'_>],
     mut total: usize,
 ) -> Result<(), Error> {
     while total > 0 {
@@ -84,16 +84,12 @@ impl ArchiveWriter {
     /// * `data_path` - The folder to write archive data too
     /// * `map_path` - The folder to write archive map info too
     /// * `progress` - The progress bar to update
-    pub async fn new(
-        data_path: &PathBuf,
-        map_path: &PathBuf,
-        progress: ProgressBar,
-    ) -> Result<Self, Error> {
+    pub fn new(data_path: &Path, map_path: &Path, progress: ProgressBar) -> Self {
         // build our archive writer
-        let writer = ArchiveWriter {
+        Self {
             name: Uuid::new_v4(),
-            data_path: data_path.clone(),
-            map_path: map_path.clone(),
+            data_path: data_path.to_path_buf(),
+            map_path: map_path.to_path_buf(),
             progress,
             pending: Vec::with_capacity(100),
             pending_maps: Vec::with_capacity(100),
@@ -101,11 +97,12 @@ impl ArchiveWriter {
             written: 0,
             data_file: None,
             map_file: None,
-        };
-        Ok(writer)
+        }
     }
 
     /// Add a partitions archived buffer to our pending buffer vec
+    ///
+    /// Returns whether the buffer has enough bytes to write off to disk
     ///
     /// # Arguments
     ///
@@ -191,8 +188,7 @@ impl ArchiveWriter {
             return Ok(());
         }
         // get our open data file handle
-        let (mut data_file, mut map_file) = match (self.data_file.as_mut(), self.map_file.as_mut())
-        {
+        let (data_file, map_file) = match (self.data_file.as_mut(), self.map_file.as_mut()) {
             (Some(data_file), Some(map_file)) => (data_file, map_file),
             _ => {
                 // open our new file handles
@@ -211,17 +207,17 @@ impl ArchiveWriter {
             .map(|archive| IoSlice::new(&archive.bytes))
             .collect::<Vec<IoSlice>>();
         // write all of our data
-        write_all_vectored(&mut data_file, &mut archive_slices[..], self.pending_bytes).await?;
+        write_all_vectored(data_file, &mut archive_slices[..], self.pending_bytes).await?;
         // build an list of IO slices to write our pending maps
         let mut map_slices = self
             .pending_maps
             .iter()
-            .map(|map| IoSlice::new(&map))
+            .map(|map| IoSlice::new(map))
             .collect::<Vec<IoSlice>>();
         // get the length of our map slices
         let map_len = map_slices.iter().fold(0, |acc, map| acc + map.len());
         // write all of our map info
-        write_all_vectored(&mut map_file, &mut map_slices[..], map_len).await?;
+        write_all_vectored(map_file, &mut map_slices[..], map_len).await?;
         // build and send the updates for all of our written archives
         for archive in self.pending.drain(..) {
             // build the update for our monitor
@@ -288,14 +284,14 @@ impl<T: Backup> BackupWorker<T> {
         scylla: &Arc<Session>,
         namespace: &str,
         updates: AsyncSender<MonitorUpdate>,
-        data_path: &PathBuf,
-        map_path: &PathBuf,
+        data_path: &Path,
+        map_path: &Path,
         progress: ProgressBar,
     ) -> Result<Self, Error> {
         // get our prepared statement
-        let prepared = T::prepared_statement(&scylla, namespace).await?;
+        let prepared = T::prepared_statement(scylla, namespace).await?;
         // build a new archive writer
-        let writer = ArchiveWriter::new(data_path, map_path, progress.clone()).await?;
+        let writer = ArchiveWriter::new(data_path, map_path, progress.clone());
         // build our backup worker
         let worker = BackupWorker {
             scylla: scylla.clone(),
@@ -330,11 +326,10 @@ impl<T: Backup> BackupWorker<T> {
                 // get the number of rows we are archiving
                 let row_count = self.rows.len();
                 // add this archive and check if we have enough pending bytes to write them to disk
-                if flush
-                    || self
-                        .writer
-                        .add(partition, row_count, sha256, archived_bytes)
-                {
+                let ready = self
+                    .writer
+                    .add(partition, row_count, sha256, archived_bytes);
+                if flush || ready {
                     // we have enough pending bytes so write our archived data to disk
                     self.writer.archive(&mut self.updates).await?;
                 }
@@ -347,9 +342,9 @@ impl<T: Backup> BackupWorker<T> {
         Ok(())
     }
 
-    /// Check if we started a new parititon with this row
+    /// Check if we started a new partition with this row
     ///
-    /// This will flush the old partitiont to disk.
+    /// This will flush the old partition to disk.
     ///
     /// # Arguments
     ///
@@ -368,7 +363,7 @@ impl<T: Backup> BackupWorker<T> {
                 // archive our existing partition
                 self.archive(false).await?;
                 // update our partition hash
-                self.partition = Some(hash)
+                self.partition = Some(hash);
             }
         }
         // add our new row
@@ -387,8 +382,7 @@ impl<T: Backup> BackupWorker<T> {
             // get the next message in the queue
             let (start, end) = match orders.recv().await {
                 Ok(path) => path,
-                Err(kanal::ReceiveError::Closed) => break,
-                Err(kanal::ReceiveError::SendClosed) => break,
+                Err(kanal::ReceiveError::Closed | kanal::ReceiveError::SendClosed) => break,
             };
             // build and execute our paged query
             let rows_stream = self
@@ -400,7 +394,7 @@ impl<T: Backup> BackupWorker<T> {
                 Ok(typed_stream) => typed_stream,
                 Err(error) => {
                     // build our error message
-                    let msg = format!("Failed to set type for row stream: with {:#?}", error);
+                    let msg = format!("Failed to set type for row stream: with {error:#?}");
                     // log that we failed to cast this row
                     self.progress.println(msg.clone());
                     // continue to the next row
@@ -414,7 +408,7 @@ impl<T: Backup> BackupWorker<T> {
                     Ok(typed_row) => typed_row,
                     Err(error) => {
                         // build our error message
-                        let msg = format!("Failed to backup row: with {:#?}", error);
+                        let msg = format!("Failed to backup row: with {error:#?}");
                         // log that we failed to cast this row
                         self.progress.println(msg.clone());
                         // continue to the next row

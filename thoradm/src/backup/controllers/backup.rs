@@ -9,8 +9,8 @@ use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use kanal::AsyncReceiver;
 use kanal::AsyncSender;
-use rkyv::validation::validators::DefaultValidator;
 use rkyv::Archive;
+use rkyv::validation::validators::DefaultValidator;
 use scylla::client::session::Session;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -25,15 +25,16 @@ use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
 
 use super::utils;
+use crate::Error;
 use crate::args::Args;
 use crate::args::BackupComponents;
 use crate::args::NewBackup;
+use crate::backup::tables::NetworkPolicy;
 use crate::backup::tables::{
     Comment, Commitish, CommitishList, Node, Output, OutputStream, RepoData, RepoList, S3Id,
     SamplesList, Tag,
 };
 use crate::backup::{Backup, BackupWorker, Monitor, MonitorUpdate, S3Backup, S3BackupWorker};
-use crate::Error;
 
 /// Build the range of tokens to backup
 fn build_token_ranges(chunk_count: u64) -> BTreeMap<u64, (i64, i64)> {
@@ -123,9 +124,9 @@ impl<B: Backup> TableBackup<B> {
     /// * `path` - The path for this worker to store archives at
     async fn spawn_workers(&self, path: &Path) -> Result<(), Error> {
         let path = path.to_path_buf();
-        // nest our archives in a data folder and put the maps in a map folder
-        let data_path = [path.clone(), "data".into()].iter().collect();
-        let map_path = [path.clone(), "maps".into()].iter().collect();
+        // put the archives in a data folder and put the maps in a map folder
+        let data_path = path.join("data");
+        let map_path = path.join("maps");
         // create our data dir
         tokio::fs::create_dir_all(&data_path).await?;
         tokio::fs::create_dir_all(&map_path).await?;
@@ -589,6 +590,8 @@ pub struct BackupController {
     commitish_list: TableBackup<CommitishList>,
     /// The nodes tables
     nodes: TableBackup<Node>,
+    /// The network policies table
+    network_policies: TableBackup<NetworkPolicy>,
     /// The s3 ids S3 backup
     s3_ids_objects: S3BackupController<S3Id>,
     /// The comments S3 backup
@@ -630,6 +633,7 @@ impl BackupController {
         let commits = TableBackup::new(namespace, scylla, workers);
         let commits_list = TableBackup::new(namespace, scylla, workers);
         let nodes = TableBackup::new(namespace, scylla, workers);
+        let network_policies = TableBackup::new(namespace, scylla, workers);
         // build our s3 backups
         let s3_ids_objects = S3BackupController::new(namespace, config, workers);
         let comment_attachments = S3BackupController::new(namespace, config, workers);
@@ -650,6 +654,7 @@ impl BackupController {
             commitish: commits,
             commitish_list: commits_list,
             nodes,
+            network_policies,
             s3_ids_objects,
             comment_attachments,
             result_files,
@@ -698,7 +703,7 @@ impl BackupController {
         let path = path.to_path_buf();
         // backup our redis data to disk
         self.backup_redis(path.clone()).await?;
-        // backup our s3 data
+        // backup our tables
         self.samples_list.backup(&self.components, path.clone(), self.chunks).await?;
         self.s3_ids.backup(&self.components, path.clone(), self.chunks).await?;
         self.comments.backup(&self.components, path.clone(), self.chunks).await?;
@@ -710,6 +715,7 @@ impl BackupController {
         self.commitish.backup(&self.components, path.clone(), self.chunks).await?;
         self.commitish_list.backup(&self.components, path.clone(), self.chunks).await?;
         self.nodes.backup(&self.components, path.clone(), self.chunks).await?;
+        self.network_policies.backup(&self.components, path.clone(), self.chunks).await?;
         // backup our s3 data
         self.s3_ids_objects.backup(&self.components, path.clone()).await?;
         self.comment_attachments.backup(&self.components, path.clone()).await?;

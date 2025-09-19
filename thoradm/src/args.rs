@@ -91,6 +91,7 @@ pub enum BackupComponents {
     RepoList,
     ResultFiles,
     Results,
+    NetworkPolicies,
     ResultsStream,
     S3Ids,
     S3IdsObjects,
