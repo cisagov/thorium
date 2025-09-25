@@ -112,6 +112,12 @@ async fn initial_settings_consistency_scan(
     Ok(())
 }
 
+/// Set a fallback that returns a 404 to disable
+#[cfg(feature = "api")]
+async fn disable_fallback() -> http::StatusCode {
+    http::StatusCode::NOT_FOUND
+}
+
 #[cfg(feature = "api")]
 /// Build the axum app
 fn build_app(
@@ -137,24 +143,32 @@ fn build_app(
 
     // build an axum router
     let mut app = axum::Router::new();
-    app = basic::mount(app);
-    app = binaries::mount(app, conf);
-    app = docs::mount(app, conf);
-    app = events::mount(app);
-    app = files::mount(app);
-    app = groups::mount(app);
-    app = images::mount(app);
-    app = jobs::mount(app);
-    app = pipelines::mount(app);
-    app = network_policies::mount(app);
-    app = reactions::mount(app);
-    app = repos::mount(app);
-    app = search::mount(app);
-    app = streams::mount(app);
-    app = system::mount(app);
+    // build a router for our api routes
+    let mut api_router = axum::Router::new()
+        // disable the fallback for api routes
+        .fallback(disable_fallback);
+    // add all of our api routes to our api router
+    api_router = basic::mount(api_router);
+    api_router = binaries::mount(api_router, conf);
+    api_router = docs::mount(api_router, conf);
+    api_router = events::mount(api_router);
+    api_router = files::mount(api_router);
+    api_router = groups::mount(api_router);
+    api_router = images::mount(api_router);
+    api_router = jobs::mount(api_router);
+    api_router = pipelines::mount(api_router);
+    api_router = network_policies::mount(api_router);
+    api_router = reactions::mount(api_router);
+    api_router = repos::mount(api_router);
+    api_router = search::mount(api_router);
+    api_router = streams::mount(api_router);
+    api_router = system::mount(api_router);
+    api_router = users::mount(api_router);
+    api_router = trees::mount(api_router);
+    // add our api routes
+    app = app.nest("/api", api_router);
+    // create a ui router and mount our ui routes then merge it
     app = ui::mount(app);
-    app = users::mount(app);
-    app = trees::mount(app);
     // setup our tracing
     let trace_provider = trace::setup("ThoriumAPI", &conf.thorium.tracing);
     // build cors middleware for our app

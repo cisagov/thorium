@@ -483,24 +483,21 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/users/", get(list).post(create).patch(update))
+        .route("/users/", get(list).post(create).patch(update))
         .route(
-            "/api/users/resend/verify/email/{username}",
+            "/users/resend/verify/email/{username}",
             get(resend_email_verification),
         )
         .route(
-            "/api/users/verify/{username}/email/{verification_token}",
+            "/users/verify/{username}/email/{verification_token}",
             get(verify_email),
         )
-        .route("/api/users/details/", get(list_details))
-        .route("/api/users/auth", post(auth))
-        .route(
-            "/api/users/user/{username}",
-            get(get_user).patch(update_user),
-        )
-        .route("/api/users/whoami", get(info))
-        .route("/api/users/logout", post(logout))
-        .route("/api/users/logout/{target}", get(logout_user))
-        .route("/api/users/delete/{target}", delete(delete_user))
-        .route("/api/users/sync/ldap", post(sync_ldap))
+        .route("/users/details/", get(list_details))
+        .route("/users/auth", post(auth))
+        .route("/users/user/{username}", get(get_user).patch(update_user))
+        .route("/users/whoami", get(info))
+        .route("/users/logout", post(logout))
+        .route("/users/logout/{target}", get(logout_user))
+        .route("/users/delete/{target}", delete(delete_user))
+        .route("/users/sync/ldap", post(sync_ldap))
 }

@@ -3,6 +3,4 @@ kind: Kustomization
 resources:
 - ingress.yml
 - tls.yml
-- middleware.yml
-- ui-middleware.yml
 - default-cert-traefik.yml

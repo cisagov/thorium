@@ -1,8 +1,8 @@
 //! The routes supporting events in Thorium
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, patch};
-use axum::Router;
 use tracing::instrument;
 use utoipa::OpenApi;
 
@@ -166,8 +166,8 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/events/pop/{kind}/", patch(pop))
-        .route("/api/events/clear/{kind}/", delete(clear))
-        .route("/api/events/reset/{kind}/", patch(reset_all))
-        .route("/api/events/cache/status/", get(get_cache_status))
+        .route("/events/pop/{kind}/", patch(pop))
+        .route("/events/clear/{kind}/", delete(clear))
+        .route("/events/reset/{kind}/", patch(reset_all))
+        .route("/events/cache/status/", get(get_cache_status))
 }

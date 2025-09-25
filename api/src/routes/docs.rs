@@ -1,10 +1,11 @@
-use axum::routing::{get_service, MethodRouter};
 use axum::Router;
+use axum::routing::{MethodRouter, get_service};
 use tower_http::services::{ServeDir, ServeFile};
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_swagger_ui::SwaggerUi;
 
+use super::BasicApiDocs;
 use super::events::EventApiDocs;
 use super::files::FileApiDocs;
 use super::groups::GroupApiDocs;
@@ -14,15 +15,14 @@ use super::network_policies::NetworkPolicyDocs;
 use super::pipelines::PipelineApiDocs;
 use super::reactions::ReactionApiDocs;
 use super::repos::RepoApiDocs;
-use super::search::events::{ResultSearchEventApiDocs, TagSearchEventApiDocs};
 use super::search::SearchApiDocs;
+use super::search::events::{ResultSearchEventApiDocs, TagSearchEventApiDocs};
 use super::streams::StreamApiDocs;
 use super::system::SystemApiDocs;
 use super::users::UserApiDocs;
-use super::BasicApiDocs;
 
 use crate::models::{ResultSearchEvent, SearchEvent, TagSearchEvent};
-use crate::{utils::AppState, Conf};
+use crate::{Conf, utils::AppState};
 
 /// The struct containing our OpenAPI security info
 pub struct OpenApiSecurity;
@@ -73,34 +73,34 @@ fn dev(conf: &Conf) -> MethodRouter {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
     router
-        .nest_service("/api/docs/user", user(conf))
-        .nest_service("/api/docs/dev", dev(conf))
+        .nest_service("/docs/user", user(conf))
+        .nest_service("/docs/dev", dev(conf))
         .merge(
-            SwaggerUi::new("/api/docs/swagger-ui")
-                .url("/api/openapi.json", BasicApiDocs::openapi())
-                .url("/api/events/openapi.json", EventApiDocs::openapi())
-                .url("/api/files/openapi.json", FileApiDocs::openapi())
-                .url("/api/groups/openapi.json", GroupApiDocs::openapi())
-                .url("/api/images/openapi.json", ImageApiDocs::openapi())
-                .url("/api/jobs/openapi.json", JobApiDocs::openapi())
+            SwaggerUi::new("/docs/swagger-ui")
+                .url("/openapi.json", BasicApiDocs::openapi())
+                .url("/events/openapi.json", EventApiDocs::openapi())
+                .url("/files/openapi.json", FileApiDocs::openapi())
+                .url("/groups/openapi.json", GroupApiDocs::openapi())
+                .url("/images/openapi.json", ImageApiDocs::openapi())
+                .url("/jobs/openapi.json", JobApiDocs::openapi())
                 .url(
-                    "/api/networkpolicies/openapi.json",
+                    "/networkpolicies/openapi.json",
                     NetworkPolicyDocs::openapi(),
                 )
-                .url("/api/pipelines/openapi.json", PipelineApiDocs::openapi())
-                .url("/api/reactions/openapi.json", ReactionApiDocs::openapi())
-                .url("/api/repos/openapi.json", RepoApiDocs::openapi())
-                .url("/api/search/openapi.json", SearchApiDocs::openapi())
+                .url("/pipelines/openapi.json", PipelineApiDocs::openapi())
+                .url("/reactions/openapi.json", ReactionApiDocs::openapi())
+                .url("/repos/openapi.json", RepoApiDocs::openapi())
+                .url("/search/openapi.json", SearchApiDocs::openapi())
                 .url(
-                    format!("/api/search/events/{}", ResultSearchEvent::url()),
+                    format!("/search/events/{}", ResultSearchEvent::url()),
                     ResultSearchEventApiDocs::openapi(),
                 )
                 .url(
-                    format!("/api/search/events/{}", TagSearchEvent::url()),
+                    format!("/search/events/{}", TagSearchEvent::url()),
                     TagSearchEventApiDocs::openapi(),
                 )
-                .url("/api/stream/openapi.json", StreamApiDocs::openapi())
-                .url("/api/system/openapi.json", SystemApiDocs::openapi())
-                .url("/api/users/openapi.json", UserApiDocs::openapi()),
+                .url("/stream/openapi.json", StreamApiDocs::openapi())
+                .url("/system/openapi.json", SystemApiDocs::openapi())
+                .url("/users/openapi.json", UserApiDocs::openapi()),
         )
 }

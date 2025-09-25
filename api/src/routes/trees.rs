@@ -80,6 +80,6 @@ async fn grow_tree(
 /// * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/trees/", post(start_tree))
-        .route("/api/trees/{cursor}", patch(grow_tree))
+        .route("/trees/", post(start_tree))
+        .route("/trees/{cursor}", patch(grow_tree))
 }

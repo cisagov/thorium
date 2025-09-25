@@ -5,9 +5,9 @@ metadata:
   namespace: thorium
 spec:
   registry: "ghcr.io/cisagov/thorium/infrastructure/thorium"
-  version: "latest"
-  registry_auth:
-    "registry.domain:port": "dGhvcml1bTpjb3JuCg==" # "thorium:corn"
+  version: "latest" 
+  # registry_auth:
+  #   "registry.domain:port": "dGhvcml1bTpjb3JuCg==" # "thorium:corn"
   image_pull_policy: Always
   components:
     api:
@@ -15,11 +15,6 @@ spec:
       resources:
         cpu: 0
         memory: 0
-      urls:
-      - thorium.localhost
-      ports:
-      - 80
-      - 443
     scaler:
       service_account: true
       resources:

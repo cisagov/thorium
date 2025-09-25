@@ -1,7 +1,7 @@
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, patch, post};
-use axum::Router;
 use tracing::instrument;
 
 use utoipa::OpenApi;
@@ -304,10 +304,10 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/groups/", post(create).get(list))
-        .route("/api/groups/{group}/details", get(get_group))
-        .route("/api/groups/details/", get(list_details))
-        .route("/api/groups/{group}", patch(update).delete(delete_group))
-        .route("/api/groups/sync/ldap", post(sync_ldap))
-        .route("/api/groups/{group}/stats", get(get_stats))
+        .route("/groups/", post(create).get(list))
+        .route("/groups/{group}/details", get(get_group))
+        .route("/groups/details/", get(list_details))
+        .route("/groups/{group}", patch(update).delete(delete_group))
+        .route("/groups/sync/ldap", post(sync_ldap))
+        .route("/groups/{group}/stats", get(get_stats))
 }

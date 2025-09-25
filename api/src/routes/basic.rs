@@ -1,12 +1,11 @@
-use crate::models::backends::system;
 use crate::models::Version;
+use crate::models::backends::system;
 use crate::utils::{ApiError, AppState};
-use axum::extract::Json;
-use axum::extract::State;
+use axum::Router;
+use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum::routing::get;
-use axum::Router;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
@@ -121,8 +120,8 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/", get(identify))
-        .route("/api/banner", get(banner))
-        .route("/api/version", get(version))
-        .route("/api/health", get(health))
+        .route("/", get(identify))
+        .route("/banner", get(banner))
+        .route("/version", get(version))
+        .route("/health", get(health))
 }

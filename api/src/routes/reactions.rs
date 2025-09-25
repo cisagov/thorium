@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::{get, post};
-use axum::Router;
 use axum_extra::body::AsyncReadBody;
-use tracing::{instrument, span, Level, Span};
+use tracing::{Level, Span, instrument, span};
 use utoipa::OpenApi;
 use uuid::Uuid;
 
@@ -56,8 +56,7 @@ async fn create(
         return bad!(format!(
             "The reaction cannot be created because pipeline '{}' in group '{}' has one or more bans! \
             See the pipeline's notifications for more details.",
-            req.pipeline,
-            req.group,
+            req.pipeline, req.group,
         ));
     }
     // build reaction object and inject it into the backend
@@ -1012,60 +1011,57 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/reactions/", post(create))
-        .route("/api/reactions/bulk/", post(create_bulk))
-        .route("/api/reactions/bulk/by/user/", post(create_bulk_by_user))
+        .route("/reactions/", post(create))
+        .route("/reactions/bulk/", post(create_bulk))
+        .route("/reactions/bulk/by/user/", post(create_bulk_by_user))
         .route(
-            "/api/reactions/{group}/{id}",
+            "/reactions/{group}/{id}",
             get(get_reaction).patch(update).delete(delete_reaction),
         )
-        .route("/api/reactions/handle/{group}/{id}/{cmd}", post(handle))
-        .route("/api/reactions/logs/{group}/{id}", get(logs))
+        .route("/reactions/handle/{group}/{id}/{cmd}", post(handle))
+        .route("/reactions/logs/{group}/{id}", get(logs))
         .route(
-            "/api/reactions/logs/{group}/{id}/{stage}",
+            "/reactions/logs/{group}/{id}/{stage}",
             get(stage_logs).post(add_stage_logs),
         )
-        .route("/api/reactions/list/{group}/{pipeline}/", get(list))
+        .route("/reactions/list/{group}/{pipeline}/", get(list))
         .route(
-            "/api/reactions/list/{group}/{pipeline}/details/",
+            "/reactions/list/{group}/{pipeline}/details/",
             get(list_details),
         )
         .route(
-            "/api/reactions/status/{group}/{pipeline}/{status}/",
+            "/reactions/status/{group}/{pipeline}/{status}/",
             get(list_status),
         )
         .route(
-            "/api/reactions/status/{group}/{pipeline}/{status}/details/",
+            "/reactions/status/{group}/{pipeline}/{status}/details/",
             get(list_status_details),
         )
-        .route("/api/reactions/tag/{group}/{tag}/", get(list_tag))
+        .route("/reactions/tag/{group}/{tag}/", get(list_tag))
         .route(
-            "/api/reactions/tag/{group}/{tag}/details/",
+            "/reactions/tag/{group}/{tag}/details/",
             get(list_tag_details),
         )
+        .route("/reactions/group/{group}/{status}/", get(list_group_set))
         .route(
-            "/api/reactions/group/{group}/{status}/",
-            get(list_group_set),
-        )
-        .route(
-            "/api/reactions/group/{group}/{status}/details/",
+            "/reactions/group/{group}/{status}/details/",
             get(list_group_set_details),
         )
-        .route("/api/reactions/sub/{group}/{reaction}/", get(list_sub))
+        .route("/reactions/sub/{group}/{reaction}/", get(list_sub))
         .route(
-            "/api/reactions/sub/{group}/{reaction}/details/",
+            "/reactions/sub/{group}/{reaction}/details/",
             get(list_sub_details),
         )
         .route(
-            "/api/reactions/sub/{group}/{reaction}/{status}/details/",
+            "/reactions/sub/{group}/{reaction}/{status}/details/",
             get(list_sub_status_details),
         )
         .route(
-            "/api/reactions/sub/{group}/{reaction}/{status}/",
+            "/reactions/sub/{group}/{reaction}/{status}/",
             get(list_sub_status),
         )
         .route(
-            "/api/reactions/ephemeral/{group}/{id}/{name}",
+            "/reactions/ephemeral/{group}/{id}/{name}",
             get(download_ephemeral),
         )
 }

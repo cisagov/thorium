@@ -614,28 +614,25 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 /// * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/repos/", get(list).post(create))
-        .route("/api/repos/details/", get(list_details))
-        .route("/api/repos/data/{*repo_path}", get(get_repo).post(upload))
+        .route("/repos/", get(list).post(create))
+        .route("/repos/details/", get(list_details))
+        .route("/repos/data/{*repo_path}", get(get_repo).post(upload))
         .route(
-            "/api/repos/commitishes/{data}/{*repo_path}",
+            "/repos/commitishes/{data}/{*repo_path}",
             get(commitishes).post(update_commitishes),
         )
         .route(
-            "/api/repos/commitish-details/{*repo_path}",
+            "/repos/commitish-details/{*repo_path}",
             get(commitish_details),
         )
-        .route("/api/repos/download/{*repo_path}", get(download))
+        .route("/repos/download/{*repo_path}", get(download))
+        .route("/repos/tags/{*repo_path}", post(tag).delete(delete_tags))
         .route(
-            "/api/repos/tags/{*repo_path}",
-            post(tag).delete(delete_tags),
-        )
-        .route(
-            "/api/repos/results/{*repo_path}",
+            "/repos/results/{*repo_path}",
             get(get_results).post(upload_results),
         )
         .route(
-            "/api/repos/result-files/{*repo_path}",
+            "/repos/result-files/{*repo_path}",
             get(download_result_file),
         )
 }

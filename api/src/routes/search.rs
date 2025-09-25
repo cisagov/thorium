@@ -1,15 +1,15 @@
 //! The search routes for Thorium
 
+use axum::Router;
 use axum::extract::{Json, State};
 use axum::routing::get;
-use axum::Router;
 use tracing::instrument;
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
+use crate::models::ElasticSearchParams;
 use crate::models::backends;
 use crate::models::elastic::ElasticIndex;
-use crate::models::ElasticSearchParams;
 use crate::models::{ApiCursor, ElasticDoc, User};
 use crate::utils::{ApiError, AppState};
 
@@ -64,7 +64,7 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
-    let router = router.route("/api/search/", get(search));
+    let router = router.route("/search/", get(search));
     // mount search events routes
     events::mount(router)
 }

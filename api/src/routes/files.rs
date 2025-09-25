@@ -1,10 +1,10 @@
 //! The files related routes for Thorium
 
+use axum::Router;
 use axum::extract::{Json, Multipart, Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, patch, post};
-use axum::Router;
 use axum_extra::body::AsyncReadBody;
 use tracing::instrument;
 use utoipa::OpenApi;
@@ -687,33 +687,27 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 /// * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/files/", get(list).post(upload))
-        .route("/api/files/details/", get(list_details))
-        .route("/api/files/sample/{sha256}", get(get_sample))
+        .route("/files/", get(list).post(upload))
+        .route("/files/details/", get(list_details))
+        .route("/files/sample/{sha256}", get(get_sample))
+        .route("/files/sample/{sha256}/{submission}", delete(delete_sample))
+        .route("/files/exists", post(exists))
+        .route("/files/sample/{sha256}/download", get(download))
+        .route("/files/sample/{sha256}/download/zip", get(download_as_zip))
+        .route("/files/sample/{sha256}", patch(update))
+        .route("/files/tags/{sha256}", post(tag).delete(delete_tags))
+        .route("/files/comment/{sha256}", post(create_comment))
+        .route("/files/comment/{sha256}/{id}", delete(delete_comment))
         .route(
-            "/api/files/sample/{sha256}/{submission}",
-            delete(delete_sample),
-        )
-        .route("/api/files/exists", post(exists))
-        .route("/api/files/sample/{sha256}/download", get(download))
-        .route(
-            "/api/files/sample/{sha256}/download/zip",
-            get(download_as_zip),
-        )
-        .route("/api/files/sample/{sha256}", patch(update))
-        .route("/api/files/tags/{sha256}", post(tag).delete(delete_tags))
-        .route("/api/files/comment/{sha256}", post(create_comment))
-        .route("/api/files/comment/{sha256}/{id}", delete(delete_comment))
-        .route(
-            "/api/files/comment/download/{sha256}/{comment}/{name}",
+            "/files/comment/download/{sha256}/{comment}/{name}",
             get(download_attachment),
         )
         .route(
-            "/api/files/results/{sha256}",
+            "/files/results/{sha256}",
             get(get_results).post(upload_results),
         )
         .route(
-            "/api/files/result-files/{sha256}/{tool}/{result_id}",
+            "/files/result-files/{sha256}/{tool}/{result_id}",
             get(download_result_file),
         )
 }

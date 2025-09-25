@@ -1,9 +1,9 @@
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::{get, patch, post};
-use axum::Router;
 use tracing::instrument;
 use utoipa::OpenApi;
 use uuid::Uuid;
@@ -401,20 +401,20 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route(
-            "/api/jobs/claim/{group}/{pipeline}/{stage}/{cluster}/{node}/{worker}/{limit}",
+            "/jobs/claim/{group}/{pipeline}/{stage}/{cluster}/{node}/{worker}/{limit}",
             patch(claim),
         )
-        .route("/api/jobs/handle/{id}/proceed/{runtime}", post(proceed))
-        .route("/api/jobs/handle/{id}/error", post(error))
-        .route("/api/jobs/handle/{id}/sleep", post(sleep))
-        .route("/api/jobs/handle/{id}/checkpoint", post(checkpoint))
-        .route("/api/jobs/bulk/reset", post(bulk_reset))
+        .route("/jobs/handle/{id}/proceed/{runtime}", post(proceed))
+        .route("/jobs/handle/{id}/error", post(error))
+        .route("/jobs/handle/{id}/sleep", post(sleep))
+        .route("/jobs/handle/{id}/checkpoint", post(checkpoint))
+        .route("/jobs/bulk/reset", post(bulk_reset))
         .route(
-            "/api/jobs/deadlines/{scaler}/{start}/{end}",
+            "/jobs/deadlines/{scaler}/{start}/{end}",
             get(read_deadlines),
         )
         .route(
-            "/api/jobs/bulk/running/{scaler}/{start}/{end}",
+            "/jobs/bulk/running/{scaler}/{start}/{end}",
             get(bulk_running),
         )
 }

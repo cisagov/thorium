@@ -199,12 +199,12 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route(
-            "/api/streams/depth/{group}/{namespace}/{stream}/{start}/{end}",
+            "/streams/depth/{group}/{namespace}/{stream}/{start}/{end}",
             get(depth),
         )
         .route(
-            "/api/streams/depth/{group}/{namespace}/{stream}/{start}/{end}/{split}",
+            "/streams/depth/{group}/{namespace}/{stream}/{start}/{end}/{split}",
             get(depth_range),
         )
-        .route("/api/streams/map/{group}/{namespace}/{stream}", get(map))
+        .route("/streams/map/{group}/{namespace}/{stream}", get(map))
 }

@@ -1,7 +1,7 @@
 use axum::Router;
 use tower_http::services::ServeDir;
 
-use crate::{utils::AppState, Conf};
+use crate::{Conf, utils::AppState};
 
 /// Serve our binaries
 ///
@@ -21,5 +21,5 @@ fn user(conf: &Conf) -> ServeDir {
 ///
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
-    router.nest_service("/api/binaries", user(conf))
+    router.nest_service("/binaries", user(conf))
 }

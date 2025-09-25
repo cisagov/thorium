@@ -6,28 +6,11 @@ spec:
   entryPoints:
     - websecure
   routes:
-  - match: "Host(`THORIUM.DOMAIN`) && PathPrefix(`/api`)"
-    kind: Rule
-    services:
-    - name: thorium-api
-      port: 80
-  - match: "Host(`THORIUM.DOMAIN`) && PathPrefix(`/assets`)"
-    kind: Rule
-    services:
-    - name: thorium-api
-      port: 80
-  - match: "Host(`THORIUM.DOMAIN) && PathPrefix(`/ui`)"
-    kind: Rule
-    services:
-    - name: thorium-api
-      port: 80
   - match: "Host(`THORIUM.DOMAIN`)"
     kind: Rule
     services:
     - name: thorium-api
       port: 80
-    middlewares:
-      - name: ui-prefix-prepend
   - match: "Host(`REGISTRY.DOMAIN`)"
     kind: Rule
     services:

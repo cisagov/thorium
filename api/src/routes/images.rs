@@ -1,9 +1,9 @@
 use super::shared;
 use crate::is_admin;
+use axum::Router;
 use axum::extract::{Json, Path, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, patch, post};
-use axum::Router;
 use tracing::instrument;
 use utoipa::OpenApi;
 use uuid::Uuid;
@@ -19,12 +19,12 @@ use crate::models::{
     FilesHandlerUpdate, Group, HostPath, HostPathTypes, Image, ImageArgs, ImageArgsUpdate,
     ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageKey, ImageLifetime, ImageList,
     ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate,
-    ImageVersion, Kvm, KvmUpdate, KwargDependency, Notification, NotificationLevel,
+    ImageVersion, Kvm, KvmUpdate, KwargDependency, NFS, Notification, NotificationLevel,
     NotificationParams, NotificationRequest, OutputCollection, OutputCollectionUpdate,
     OutputDisplayType, OutputHandler, RepoDependencySettings, Resources, ResourcesRequest,
     ResourcesUpdate, ResultDependencySettings, ResultDependencySettingsUpdate,
     SampleDependencySettings, Secret, SecurityContext, SecurityContextUpdate, SpawnLimits,
-    TagDependencySettings, TagDependencySettingsUpdate, User, Volume, VolumeTypes, NFS,
+    TagDependencySettings, TagDependencySettingsUpdate, User, Volume, VolumeTypes,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -422,21 +422,21 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/images/", post(create))
-        .route("/api/images/data/{group}/{image}", get(get_image))
-        .route("/api/images/{group}/", get(list))
-        .route("/api/images/{group}/details/", get(list_details))
+        .route("/images/", post(create))
+        .route("/images/data/{group}/{image}", get(get_image))
+        .route("/images/{group}/", get(list))
+        .route("/images/{group}/details/", get(list_details))
         .route(
-            "/api/images/{group}/{image}",
+            "/images/{group}/{image}",
             patch(update).delete(delete_image),
         )
-        .route("/api/images/runtimes/update", post(runtimes_update))
+        .route("/images/runtimes/update", post(runtimes_update))
         .route(
-            "/api/images/notifications/{group}/{image}",
+            "/images/notifications/{group}/{image}",
             get(get_notifications).post(create_notification),
         )
         .route(
-            "/api/images/notifications/{group}/{image}/{id}",
+            "/images/notifications/{group}/{image}/{id}",
             delete(delete_notification),
         )
 }

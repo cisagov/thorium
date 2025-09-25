@@ -1,7 +1,7 @@
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, patch, post};
-use axum::Router;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -393,20 +393,20 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/pipelines/", post(create))
-        .route("/api/pipelines/data/{group}/{pipeline}", get(get_pipeline))
-        .route("/api/pipelines/list/{group}/", get(list))
-        .route("/api/pipelines/list/{group}/details/", get(list_details))
+        .route("/pipelines/", post(create))
+        .route("/pipelines/data/{group}/{pipeline}", get(get_pipeline))
+        .route("/pipelines/list/{group}/", get(list))
+        .route("/pipelines/list/{group}/details/", get(list_details))
         .route(
-            "/api/pipelines/{group}/{pipeline}",
+            "/pipelines/{group}/{pipeline}",
             patch(update).delete(delete_pipeline),
         )
         .route(
-            "/api/pipelines/notifications/{group}/{pipeline}",
+            "/pipelines/notifications/{group}/{pipeline}",
             get(get_notifications).post(create_notification),
         )
         .route(
-            "/api/pipelines/notifications/{group}/{pipeline}/{id}",
+            "/pipelines/notifications/{group}/{pipeline}/{id}",
             delete(delete_notification),
         )
 }

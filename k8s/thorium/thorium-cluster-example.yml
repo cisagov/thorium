@@ -10,11 +10,8 @@ spec:
   components:
     api:
       replicas: 1
-      urls:
-      - "<THORIUM FQDN>"
-      ports:
-      - 80
-      - 443
+      urls: [] # unused
+      ports: [] # unused
     scaler:
       service_account: true
     baremetal_scaler: {}
@@ -71,9 +68,7 @@ spec:
       password: "<PASSWORD>"
     scylla:
       nodes:
-	- <SCYLLA IP 1>
-	- <SCYLLA IP 2>
-	- <SCYLLA IP 3>
+        - "scylla-client.scylla.svc.cluster.local"
       replication: 3
       auth:
         username: "thorium"
@@ -83,6 +78,6 @@ spec:
       username: "thorium"
       password: "<PASSWORD>"
       results: "results"
-  registry_auth:
-    <REGISTRY.DOMAIN: <base64 USERNAME:PASSWORD>
-    <REGISTRY2.DOMAIN: <base64 USERNAME:PASSWORD>
+#  registry_auth: # optional for systems with private tool registries
+#    <REGISTRY.DOMAIN: <base64 USERNAME:PASSWORD>
+#    <REGISTRY2.DOMAIN: <base64 USERNAME:PASSWORD>

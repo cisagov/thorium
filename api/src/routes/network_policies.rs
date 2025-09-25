@@ -1,9 +1,9 @@
 //! API routes for interacting with Thorium network policies
 
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
-use axum::Router;
 use tracing::instrument;
 use utoipa::OpenApi;
 use uuid::Uuid;
@@ -327,14 +327,11 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route(
-            "/api/network-policies/{name}",
+            "/network-policies/{name}",
             get(get_network_policy).patch(update).delete(delete),
         )
-        .route("/api/network-policies", post(create))
-        .route("/api/network-policies/", get(list))
-        .route(
-            "/api/network-policies/default/{group}/",
-            get(get_all_default),
-        )
-        .route("/api/network-policies/details/", get(list_details))
+        .route("/network-policies", post(create))
+        .route("/network-policies/", get(list))
+        .route("/network-policies/default/{group}/", get(get_all_default))
+        .route("/network-policies/details/", get(list_details))
 }

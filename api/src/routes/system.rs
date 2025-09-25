@@ -1,8 +1,8 @@
+use axum::Router;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, patch, post};
-use axum::Router;
-use tracing::{instrument, span, Level};
+use tracing::{Level, instrument, span};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
@@ -14,7 +14,7 @@ use crate::models::{
     DependencyPassStrategy, EphemeralDependencySettings, EventTrigger, FilesHandler, Group,
     GroupAllowed, GroupStats, GroupUsers, HostPath, HostPathTypes, HostPathWhitelistUpdate, Image,
     ImageArgs, ImageBan, ImageBanKind, ImageBanUpdate, ImageLifetime, ImageScaler, ImageVersion,
-    Kvm, KwargDependency, Node, NodeGetParams, NodeHealth, NodeListLine, NodeListParams,
+    Kvm, KwargDependency, NFS, Node, NodeGetParams, NodeHealth, NodeListLine, NodeListParams,
     NodeRegistration, NodeUpdate, OutputCollection, OutputDisplayType, OutputHandler, Pipeline,
     PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineStats, Pools, Reaction,
     RepoDependencySettings, Resources, ResultDependencySettings, SampleDependencySettings,
@@ -22,7 +22,7 @@ use crate::models::{
     SystemSettings, SystemSettingsResetParams, SystemSettingsUpdate, SystemSettingsUpdateParams,
     SystemStats, TagDependencySettings, TagType, Theme, UnixInfo, User, UserRole, UserSettings,
     Volume, VolumeTypes, Worker, WorkerDelete, WorkerDeleteMap, WorkerRegistration,
-    WorkerRegistrationList, WorkerStatus, WorkerUpdate, NFS,
+    WorkerRegistrationList, WorkerStatus, WorkerUpdate,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -767,24 +767,24 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 // * `router` - The router to add routes too
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
-        .route("/api/system/init", post(init))
-        .route("/api/system/", get(info))
-        .route("/api/system/stats", get(stats))
-        .route("/api/system/settings", get(settings).patch(settings_update))
-        .route("/api/system/settings/scan", post(consistency_scan))
-        .route("/api/system/settings/reset", patch(settings_reset))
-        .route("/api/system/cleanup", post(cleanup))
-        .route("/api/system/cache/reset", post(reset_cache))
-        .route("/api/system/backup", get(backup))
-        .route("/api/system/restore", post(restore))
-        .route("/api/system/nodes/", post(register_node).get(list_nodes))
-        .route("/api/system/nodes/details/", get(list_node_details))
+        .route("/system/init", post(init))
+        .route("/system/", get(info))
+        .route("/system/stats", get(stats))
+        .route("/system/settings", get(settings).patch(settings_update))
+        .route("/system/settings/scan", post(consistency_scan))
+        .route("/system/settings/reset", patch(settings_reset))
+        .route("/system/cleanup", post(cleanup))
+        .route("/system/cache/reset", post(reset_cache))
+        .route("/system/backup", get(backup))
+        .route("/system/restore", post(restore))
+        .route("/system/nodes/", post(register_node).get(list_nodes))
+        .route("/system/nodes/details/", get(list_node_details))
         .route(
-            "/api/system/nodes/{cluster}/{node}",
+            "/system/nodes/{cluster}/{node}",
             get(get_node).patch(update_node),
         )
         .route(
-            "/api/system/worker/{scaler_or_name}",
+            "/system/worker/{scaler_or_name}",
             post(register_worker)
                 .delete(delete_workers)
                 .get(get_worker)
