@@ -10,7 +10,7 @@ use thorium::models::{
     TagType,
 };
 use thorium::{Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::cache::{DataCache, FilteredEvents, TriggerCache};
@@ -333,7 +333,7 @@ impl EventWorker {
                 .hot_loop(&opts, &mut event_cache, &mut data_cache)
                 .await?;
             // if we got some events then handle them otherwise sleep for 3 seconds
-            if got_events {
+            if !got_events {
                 // sleep for 3 seconds to keep from spamming the API needlessly
                 tokio::time::sleep(Duration::from_secs(3)).await;
                 // restart our loop and check for new events
