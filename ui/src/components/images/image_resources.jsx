@@ -264,7 +264,7 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
                     <Form.Control
                       type="text"
                       value={resources.cpu}
-                      placeholder={resources.cpu_units == 'mCPU' ? '250' : '1'}
+                      placeholder={resources.cpu_units == 'mCPU' ? '1000' : '1'}
                       onChange={(e) => {
                         const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
                         updateResources('cpu', String(validValue));
@@ -302,7 +302,7 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
                     <Form.Control
                       type="text"
                       value={resources.memory}
-                      placeholder={resources.memory_units == 'Mi' ? '250' : '1'}
+                      placeholder={resources.memory_units == 'Mi' ? '4000' : '1'}
                       onChange={(e) => {
                         const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
                         updateResources('memory', String(validValue));

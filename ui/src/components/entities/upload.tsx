@@ -1584,8 +1584,8 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
             <Col className={(uploadInProgress ? 'disabled ' : '') + 'upload-field'}>
               <SelectInputArray
                 isCreatable={false}
-                options={userInfo?.groups ? userInfo.groups : []}
-                values={selectedGroups}
+                options={userInfo?.groups ? userInfo.groups.sort() : []}
+                values={selectedGroups.sort()}
                 onChange={(groups: string[]) => setSelectedGroups(groups)}
               />
             </Col>

@@ -1083,30 +1083,32 @@ const Groups = () => {
       <LoadingSpinner loading={loading}></LoadingSpinner>
       <Accordion alwaysOpen>
         {groups &&
-          Object.keys(groups).map((group) => (
-            <Accordion.Item key={group} eventKey={group}>
-              <Accordion.Header>
-                <Container className="accordion-list">
-                  <Col className="accordion-item-name mt-2">
-                    <div className="text">{group}</div>
-                  </Col>
-                  <Col className="accordion-item-relation sm-members d-flex justify-content-start mt-2">
-                    <small>
-                      <i>
-                        <GroupMemberCount group={groups[group]} />
-                      </i>
-                    </small>
-                  </Col>
-                  <Col className="accordion-item-ownership d-flex justify-content-center">
-                    <GroupRoleBadge group={groups[group]} user={userInfo} />
-                  </Col>
-                </Container>
-              </Accordion.Header>
-              <Accordion.Body>
-                <GroupInfo group={groups[group]} allUsers={allUsers} />
-              </Accordion.Body>
-            </Accordion.Item>
-          ))}
+          Object.keys(groups)
+            .sort()
+            .map((group) => (
+              <Accordion.Item key={group} eventKey={group}>
+                <Accordion.Header>
+                  <Container className="accordion-list">
+                    <Col className="accordion-item-name mt-2">
+                      <div className="text">{group}</div>
+                    </Col>
+                    <Col className="accordion-item-relation sm-members d-flex justify-content-start mt-2">
+                      <small>
+                        <i>
+                          <GroupMemberCount group={groups[group]} />
+                        </i>
+                      </small>
+                    </Col>
+                    <Col className="accordion-item-ownership d-flex justify-content-center">
+                      <GroupRoleBadge group={groups[group]} user={userInfo} />
+                    </Col>
+                  </Container>
+                </Accordion.Header>
+                <Accordion.Body>
+                  <GroupInfo group={groups[group]} allUsers={allUsers} />
+                </Accordion.Body>
+              </Accordion.Item>
+            ))}
       </Accordion>
     </Page>
   );

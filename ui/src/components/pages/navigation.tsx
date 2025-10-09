@@ -115,8 +115,8 @@ const Sidebar: React.FC<SidebarProps> = ({ userInfo }) => {
           <SidebarItem to="/pipelines" short={<FaSitemap size={25} />} full={'Pipelines'} />
           <SidebarItem to="/images" short={<FaCube size={25} />} full={'Images'} />
           <SidebarItem to="/groups" short={<FaUsers size={25} />} full={'Groups'} />
+          <SidebarItem to="/stats" short={<FaChartLine size={25} />} full={'Stats'} />
           {role == RoleKey.Admin && <SidebarItem to="/users" short={<FaUser size={25} />} full={'Users'} />}
-          {role == RoleKey.Admin && <SidebarItem to="/stats" short={<FaChartLine size={25} />} full={'Stats'} />}
           {role == RoleKey.Admin && <SidebarItem to="/settings" short={<FaCog size={25} />} full={'Settings'} />}
         </Fragment>
       )}

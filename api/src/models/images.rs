@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::bans::Ban;
 use super::{
-    conversions, GenericJob, OutputCollection, OutputCollectionUpdate, OutputDisplayType, Volume,
+    GenericJob, OutputCollection, OutputCollectionUpdate, OutputDisplayType, Volume, conversions,
 };
 use crate::{
     matches_adds, matches_adds_iter, matches_adds_map, matches_clear, matches_clear_opt,
@@ -377,8 +377,8 @@ impl Default for ResourcesRequest {
     /// Create a default resource request with 250m cpu and 256Mi of ram
     fn default() -> Self {
         ResourcesRequest {
-            cpu: "250m".to_owned(),
-            memory: "256Mi".to_owned(),
+            cpu: "1".to_owned(),
+            memory: "4Gi".to_owned(),
             ephemeral_storage: None,
             nvidia_gpu: 0,
             amd_gpu: 0,

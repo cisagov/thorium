@@ -377,8 +377,8 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
               <Row className="mt-2">
                 <Col className="d-flex justify-content-center">
                   <FilterGroups
-                    selected={filters.groups ? filters.groups : []}
-                    options={groups ? groups : []}
+                    selected={filters.groups ? filters.groups.sort() : []}
+                    options={groups ? groups.sort() : []}
                     onChange={(groups) => updateFilters('groups', groups)}
                     disabled={disabled}
                   />

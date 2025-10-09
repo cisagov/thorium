@@ -6801,7 +6801,11 @@ dependencies = [
 
 [[package]]
 name = "thoradm"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
@@ -6841,7 +6845,11 @@ dependencies = [
 
 [[package]]
 name = "thorctl"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "async-trait",
  "async-walkdir",
@@ -6885,6 +6893,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "thorium-agent"
 version = "1.3.2"
 dependencies = [
@@ -6922,6 +6931,10 @@ dependencies = [
 [[package]]
 name = "thorium-api"
 version = "1.3.2"
+=======
+name = "thorium"
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -7028,8 +7041,48 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "thorium-derive"
 version = "1.3.2"
+=======
+name = "thorium-agent"
+version = "1.106.0-0.8.1"
+dependencies = [
+ "async-trait",
+ "bincode 2.0.1",
+ "cart-rs",
+ "cgroups-rs",
+ "chrono",
+ "clap",
+ "config",
+ "controlgroup",
+ "crossbeam",
+ "dirs",
+ "futures 0.3.31",
+ "gethostname",
+ "infer",
+ "itertools 0.14.0",
+ "openssl",
+ "opentelemetry 0.30.0",
+ "path-clean",
+ "regex",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sysinfo",
+ "thorium",
+ "tokio",
+ "tracing",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "thorium-derive"
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "darling 0.20.11",
  "proc-macro2",
@@ -7039,7 +7092,11 @@ dependencies = [
 
 [[package]]
 name = "thorium-event-handler"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "chrono",
  "clap",
@@ -7054,7 +7111,11 @@ dependencies = [
 
 [[package]]
 name = "thorium-operator"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "aws-credential-types",
  "aws-sdk-s3",
@@ -7084,7 +7145,11 @@ dependencies = [
 
 [[package]]
 name = "thorium-reactor"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -7109,7 +7174,11 @@ dependencies = [
 
 [[package]]
 name = "thorium-scaler"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -7143,7 +7212,11 @@ dependencies = [
 
 [[package]]
 name = "thorium-search-streamer"
+<<<<<<< HEAD
 version = "1.3.2"
+=======
+version = "1.106.0-0.8.1"
+>>>>>>> be8d3be4 (feat(ui): Added stats sidebar nav button for users)
 dependencies = [
  "async-trait",
  "bytesize",

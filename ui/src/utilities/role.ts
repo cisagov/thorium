@@ -36,7 +36,7 @@ export function isGroupAdmin(group: Group, userInfo: UserInfo) {
   // user is a group admin if they are a manager, owner or Thorium admin
   return group.owners.combined.includes(userInfo.username) ||
     group.managers.combined.includes(userInfo.username) ||
-    userInfo.role == RoleKey
+    userInfo.role == (RoleKey.Admin as unknown as ThoriumRole)
     ? true
     : false;
 }
