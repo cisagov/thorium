@@ -66,13 +66,12 @@ pub async fn apply(meta: &ClusterMeta, url: Option<String>) -> Result<Action, Er
     // create thorium-kaboom user using operator token
     let (kaboom_password, _) = app::users::create(&meta, &thorium, &host, "thorium-kaboom").await?;
     // create keys.yml secret for thorium user
-    k8s::secrets::create_keys(&meta, "thorium", &thorium_password, true, None).await?;
+    k8s::secrets::create_keys(&meta, "thorium", &thorium_password, None).await?;
     // create keys.yml secret for thorium-kaboom user
     k8s::secrets::create_keys(
         &meta,
         "thorium-kaboom",
         &kaboom_password,
-        false,
         Some("keys-kaboom"),
     )
     .await?;

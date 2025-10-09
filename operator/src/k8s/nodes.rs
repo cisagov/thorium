@@ -167,6 +167,21 @@ pub async fn deploy_provision_pod(
     let pod_name = format!("node-provisioner-{}", node);
     // set default resources for node provision pods
     let resources = serde_json::json!({"cpu": "250m", "memory": "250Mi"});
+    let require_registry_auth = if meta.cluster.spec.registry_auth.is_none() {
+        false
+    } else {
+        true
+    };
+    // only include imagePullSecret if required
+    let image_pull_secrets = if require_registry_auth {
+        serde_json::json!([
+            {
+                "name": "registry-token"
+            }
+        ])
+    } else {
+        serde_json::json!([])
+    };
     let pod_template = serde_json::json!({
         "apiVersion": "v1",
         "kind": "Pod",
@@ -227,11 +242,7 @@ pub async fn deploy_provision_pod(
                     }
                 }
             ],
-            "imagePullSecrets": [
-                {
-                    "name": "registry-token"
-                }
-            ]
+            "imagePullSecrets": image_pull_secrets 
         }
     });
     let pod: Pod = serde_json::from_value(pod_template)?;

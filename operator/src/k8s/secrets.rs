@@ -129,34 +129,15 @@ pub async fn create_thorium_config(meta: &ClusterMeta) -> Result<(), Error> {
 /// * `meta` - Thorium cluster client and metadata
 /// * `username` - Name of user
 /// * `password` - Password for user
-/// * `k8s` - Whether this keys.yml secret will be used by a component inside k8s
 /// * `secret_name` - Optional name of secret
 pub async fn create_keys(
     meta: &ClusterMeta,
     username: &str,
     password: &str,
-    k8s: bool,
     secret_name: Option<&str>,
 ) -> Result<(), Error> {
-    // within k8s use the service hostname
-    let mut host = format!("http://thorium-api.{}.svc.cluster.local", &meta.namespace);
-    // if not in k8s, use the url provided in the CRD
-    if k8s == false {
-        let urls = meta.cluster.get_api_urls();
-        if urls.is_some() && !urls.clone().unwrap().is_empty() {
-            // we take first because we don't know which is correct, really this host field
-            // is just filler and admins will update when they pull the secret for kaboom
-            host = format!(
-                "http://{}",
-                urls.unwrap()
-                    .first()
-                    .expect("expected string but found urls vector empty")
-            )
-            .to_owned();
-        }
-    }
     let template = serde_json::json!({
-        "api": host,
+        "api": format!("http://thorium-api.{}.svc.cluster.local", &meta.namespace),
         "username": username,
         "password": password
     })

@@ -115,10 +115,6 @@ fn default_api_resources() -> Resources {
 pub struct ThoriumApi {
     /// Number of API pods to scale the deployment
     pub replicas: u16,
-    /// External URLs to map to API service
-    pub urls: Option<Vec<String>>,
-    /// Ports to listen from at those external URLs
-    pub ports: Option<Vec<u16>>,
     /// Environment variables to apply to API container
     #[serde(default = "default_envs")]
     pub env: Vec<EnvVar>,
@@ -341,16 +337,6 @@ impl ThoriumCluster {
     pub fn get_api_spec(&self) -> Option<&ThoriumApi> {
         if let Some(spec) = &self.spec.components.api {
             Some(&spec)
-        } else {
-            None
-        }
-    }
-
-    /// Get API urls from component spec
-    pub fn get_api_urls(&self) -> Option<Vec<String>> {
-        let spec = self.get_api_spec();
-        if spec.is_some() {
-            spec.expect("expected api but got none").urls.clone()
         } else {
             None
         }

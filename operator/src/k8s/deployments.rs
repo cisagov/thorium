@@ -3,7 +3,7 @@ use k8s_openapi::api::apps::v1::Deployment;
 use kube::api::{DeleteParams, ListParams, Patch, PatchParams, PostParams};
 use serde_json::Value;
 use std::time;
-use thorium::{client::Basic, Error};
+use thorium::{Error, client::Basic};
 use tokio;
 
 use super::clusters::ClusterMeta;
@@ -16,6 +16,16 @@ use super::crds;
 /// * `meta` - Thorium cluster client and metadata
 async fn api_template(meta: &ClusterMeta) -> Option<Value> {
     let api_spec = meta.cluster.get_api_spec();
+    // only include imagePullSecret if required
+    let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+        serde_json::json!([
+            {
+                "name": "registry-token"
+            }
+        ])
+    } else {
+        serde_json::json!([])
+    };
     match api_spec {
         Some(api_spec) => Some(serde_json::json!({
             "apiVersion": "apps/v1",
@@ -84,11 +94,7 @@ async fn api_template(meta: &ClusterMeta) -> Option<Value> {
                                 }
                             }
                         ],
-                        "imagePullSecrets": [
-                            {
-                                "name": "registry-token"
-                            }
-                        ]
+                        "imagePullSecrets": image_pull_secrets
                     }
                 }
             }
@@ -104,200 +110,124 @@ async fn api_template(meta: &ClusterMeta) -> Option<Value> {
 /// * `meta` - Thorium cluster client and metadata
 async fn scaler_template(meta: &ClusterMeta) -> Option<Value> {
     let scaler_spec = meta.cluster.get_scaler_spec();
-
+    // only include imagePullSecret if required
     match scaler_spec {
         Some(scaler_spec) => {
-            if scaler_spec.service_account {
-                Some(serde_json::json!({
-                    "apiVersion": "apps/v1",
-                    "kind": "Deployment",
-                    "metadata": {
-                        "namespace": meta.cluster.metadata.namespace.clone(),
-                        "name": "scaler",
-                        "labels": {
-                            "app": "scaler",
-                            "version": meta.cluster.get_version(),
-                        }
-                    },
-                    "spec": {
-                        "replicas": 1,
-                        "selector": {
-                            "matchLabels": {
-                                "app": "scaler",
-                            }
-                        },
-                        "template": {
-                            "metadata": {
-                                "labels": {
-                                    "app": "scaler",
-                                    "version": meta.cluster.get_version(),
-                                }
-                            },
-                            "spec": {
-                                "serviceAccountName": "thorium",
-                                "automountServiceAccountToken": true,
-                                "containers": [
-                                    {
-                                        "name": "scaler",
-                                        "image": meta.cluster.get_image(),
-                                        "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
-                                        "command": scaler_spec.cmd.clone(),
-                                        "args": scaler_spec.args.clone(),
-                                        "resources": {
-                                            "resources": {
-                                                "limits": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
-                                                "requests": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
-                                            },
-                                        },
-                                        "env": scaler_spec.env.clone(),
-                                        "volumeMounts": [
-                                            {
-                                                "name": "config",
-                                                "mountPath": "/conf/thorium.yml",
-                                                "subPath": "thorium.yml"
-                                            },
-                                            {
-                                                "name": "keys",
-                                                "mountPath": "/keys/keys.yml",
-                                                "subPath": "keys.yml"
-                                            },
-                                            {
-                                                "name": "docker-skopeo",
-                                                "mountPath": "/root/.docker"
-                                            }
-                                        ]
-                                    }
-                                ],
-                                "volumes": [
-                                    {
-                                        "name": "config",
-                                        "secret": {
-                                            "secretName": "thorium"
-                                        }
-                                    },
-                                    {
-                                        "name": "keys",
-                                        "secret": {
-                                            "secretName": "keys"
-                                        }
-                                    },
-                                    {
-                                        "name": "docker-skopeo",
-                                        "secret": {
-                                            "secretName": "docker-skopeo"
-                                        }
-                                    }
-                                ],
-                                "imagePullSecrets": [
-                                    {
-                                        "name": "registry-token"
-                                    }
-                                ]
-                            }
-                        }
+            let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+                serde_json::json!([
+                    {
+                        "name": "registry-token"
                     }
-                }))
+                ])
             } else {
-                Some(serde_json::json!({
-                    "apiVersion": "apps/v1",
-                    "kind": "Deployment",
-                    "metadata": {
-                        "namespace": meta.cluster.metadata.namespace.clone(),
-                        "name": "scaler",
-                        "labels": {
+                serde_json::json!([])
+            };
+            let mut volumes = serde_json::json!([
+                {
+                    "name": "config",
+                    "secret": {
+                        "secretName": "thorium"
+                    }
+                },
+                {
+                    "name": "keys",
+                    "secret": {
+                        "secretName": "keys"
+                    }
+                }
+            ]);
+            let mut volume_mounts = serde_json::json!([
+                {
+                    "name": "config",
+                    "mountPath": "/conf/thorium.yml",
+                    "subPath": "thorium.yml"
+                },
+                {
+                    "name": "keys",
+                    "mountPath": "/keys/keys.yml",
+                    "subPath": "keys.yml"
+                },
+            ]);
+            // only include skopeo secret when registry auth is configured
+            if !meta.cluster.spec.registry_auth.is_none() {
+                volumes.as_array_mut().unwrap().push(serde_json::json!({
+                    "name": "docker-skopeo",
+                    "secret": {
+                        "secretName": "docker-skopeo"
+                    }
+                }));
+                volume_mounts
+                    .as_array_mut()
+                    .unwrap()
+                    .push(serde_json::json!({
+                        "name": "docker-skopeo",
+                        "mountPath": "/root/.docker"
+                    }));
+            }
+            if !scaler_spec.service_account {
+                // if not using service account we must map in a user created kube-config secret
+                volumes.as_array_mut().unwrap().push(serde_json::json!({
+                    "name": "kube-config",
+                    "secret": {
+                        "secretName": "kube-config"
+                    }
+                }));
+            };
+            Some(serde_json::json!({
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {
+                    "namespace": meta.cluster.metadata.namespace.clone(),
+                    "name": "scaler",
+                    "labels": {
+                        "app": "scaler",
+                        "version": meta.cluster.get_version(),
+                    }
+                },
+                "spec": {
+                    "replicas": 1,
+                    "selector": {
+                        "matchLabels": {
                             "app": "scaler",
-                            "version": meta.cluster.get_version(),
                         }
                     },
-                    "spec": {
-                        "replicas": 1,
-                        "selector": {
-                            "matchLabels": {
+                    "template": {
+                        "metadata": {
+                            "labels": {
                                 "app": "scaler",
+                                "version": meta.cluster.get_version(),
                             }
                         },
-                        "template": {
-                            "metadata": {
-                                "labels": {
-                                    "app": "scaler",
-                                    "version": meta.cluster.get_version(),
-                                }
+                        "spec": {
+                            "serviceAccountName": if scaler_spec.service_account {
+                                Some("thorium")
+                            } else {
+                                None
                             },
-                            "spec": {
-                                "automountServiceAccountToken": false,
-                                "containers": [
-                                    {
-                                        "name": "scaler",
-                                        "image": meta.cluster.get_image(),
-                                        "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
-                                        "command": scaler_spec.cmd.clone(),
-                                        "args": scaler_spec.args.clone(),
+                            "automountServiceAccountToken": scaler_spec.service_account.clone(),
+                            "containers": [
+                                {
+                                    "name": "scaler",
+                                    "image": meta.cluster.get_image(),
+                                    "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
+                                    "command": scaler_spec.cmd.clone(),
+                                    "args": scaler_spec.args.clone(),
+                                    "resources": {
                                         "resources": {
-                                            "resources": {
-                                                "limits": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
-                                                "requests": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
-                                            },
+                                            "limits": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
+                                            "requests": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
                                         },
-                                        "env": scaler_spec.env.clone(),
-                                        "volumeMounts": [
-                                            {
-                                                "name": "config",
-                                                "mountPath": "/conf/thorium.yml",
-                                                "subPath": "thorium.yml"
-                                            },
-                                            {
-                                                "name": "kube-config",
-                                                "mountPath": "/root/.kube/config",
-                                                "subPath": "config"
-                                            },
-                                            {
-                                                "name": "keys",
-                                                "mountPath": "/keys/keys.yml",
-                                                "subPath": "keys.yml"
-                                            },
-                                            {
-                                                "name": "docker-skopeo",
-                                                "mountPath": "root/.docker"
-                                            }
-                                        ]
-                                    }
-                                ],
-                                "volumes": [
-                                    {
-                                        "name": "config",
-                                        "secret": {
-                                            "secretName": "thorium"
-                                        }
                                     },
-                                    {
-                                        "name": "kube-config",
-                                        "secret": {
-                                            "secretName": "kube-config"
-                                        }
-                                    },
-                                    {
-                                        "name": "keys",
-                                        "secret": {
-                                            "secretName": "keys"
-                                        }
-                                    },
-                                    {
-                                        "name": "docker-skopeo",
-                                        "secret": {
-                                            "secretName": "docker-skopeo"
-                                        }
-                                    }
-                                ],
-                                "imagePullSecrets": [
-                                    {
-                                        "name": "registry-token"
-                                    }
-                                ]
-                            }
+                                    "env": scaler_spec.env.clone(),
+                                    "volumeMounts": volume_mounts
+                                }
+                            ],
+                            "volumes": volumes,
+                            "imagePullSecrets": image_pull_secrets
                         }
                     }
-                }))
-            }
+                }
+            }))
         }
         None => None,
     }
@@ -310,6 +240,16 @@ async fn scaler_template(meta: &ClusterMeta) -> Option<Value> {
 /// * `meta` - Thorium cluster client and metadata
 async fn baremetal_scaler_template(meta: &ClusterMeta) -> Option<Value> {
     let scaler_spec = meta.cluster.get_baremetal_scaler_spec();
+    // only include imagePullSecret if required
+    let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+        serde_json::json!([
+            {
+                "name": "registry-token"
+            }
+        ])
+    } else {
+        serde_json::json!([])
+    };
     match scaler_spec {
         Some(scaler_spec) => Some(serde_json::json!({
             "apiVersion": "apps/v1",
@@ -377,11 +317,7 @@ async fn baremetal_scaler_template(meta: &ClusterMeta) -> Option<Value> {
                                 }
                             }
                         ],
-                        "imagePullSecrets": [
-                            {
-                                "name": "registry-token"
-                            }
-                        ]
+                        "imagePullSecrets": image_pull_secrets
                     }
                 }
             }
@@ -397,6 +333,16 @@ async fn baremetal_scaler_template(meta: &ClusterMeta) -> Option<Value> {
 /// * `meta` - Thorium cluster client and metadata
 async fn event_handler_template(meta: &ClusterMeta) -> Option<Value> {
     let handler_spec = meta.cluster.get_event_handler_spec();
+    // only include imagePullSecret if required
+    let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+        serde_json::json!([
+            {
+                "name": "registry-token"
+            }
+        ])
+    } else {
+        serde_json::json!([])
+    };
     match handler_spec {
         Some(handler_spec) => Some(serde_json::json!({
             "apiVersion": "apps/v1",
@@ -464,11 +410,7 @@ async fn event_handler_template(meta: &ClusterMeta) -> Option<Value> {
                                 }
                             }
                         ],
-                        "imagePullSecrets": [
-                            {
-                                "name": "registry-token"
-                            }
-                        ]
+                        "imagePullSecrets": image_pull_secrets
                     }
                 }
             }
@@ -484,6 +426,16 @@ async fn event_handler_template(meta: &ClusterMeta) -> Option<Value> {
 /// * `meta` - Thorium cluster client and metadata
 async fn search_streamer_template(meta: &ClusterMeta) -> Option<Value> {
     let streamer_spec = meta.cluster.get_search_streamer_spec();
+    // only include imagePullSecret if required
+    let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+        serde_json::json!([
+            {
+                "name": "registry-token"
+            }
+        ])
+    } else {
+        serde_json::json!([])
+    };
     match streamer_spec {
         Some(streamer_spec) => Some(serde_json::json!({
             "apiVersion": "apps/v1",
@@ -551,11 +503,7 @@ async fn search_streamer_template(meta: &ClusterMeta) -> Option<Value> {
                                 }
                             }
                         ],
-                        "imagePullSecrets": [
-                            {
-                                "name": "registry-token"
-                            }
-                        ]
+                        "imagePullSecrets": image_pull_secrets
                     }
                 }
             }
