@@ -251,7 +251,7 @@ jobs:
           mkdir -p target/x86_64-apple-darwin/release
           mkdir -p target/aarch64-apple-darwin/release
           mkdir -p target/aarch64-unknown-linux-musl/release
-          mv user_docs api/docs/book
+          mv user_docs/* api/docs/book
           mv dev_docs/* target/doc/.
           mv glibc/* target/release/.
           mv musl/* target/x86_64-unknown-linux-musl/release/.
