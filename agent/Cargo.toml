@@ -45,7 +45,6 @@ controlgroup = "0.3"
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 thorium-api = { version = "1.3.2", path="../api", default-features = false, features = ["client", "crossbeam-err", "trace"]}
 
-
 [features]
 # Force openssl-sys to staticly link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.

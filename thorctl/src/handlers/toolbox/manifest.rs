@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use thorium::models::{ImageRequest, PipelineRequest};
 use thorium::Error;
+use thorium::models::{ImageRequest, PipelineRequest};
 
 /// A toolbox manifest – a description of pipelines and images that
 /// can be imported into Thorium
@@ -56,7 +56,9 @@ impl ToolboxManifest {
             }
         }
         if !pipelines_missing_images.is_empty() {
-            return Err(Error::new(format!("One or more pipelines require images not found in the manifest: {pipelines_missing_images:?}")));
+            return Err(Error::new(format!(
+                "One or more pipelines require images not found in the manifest: {pipelines_missing_images:?}"
+            )));
         }
         Ok(())
     }
@@ -75,6 +77,31 @@ impl ToolboxManifest {
             )
             .cloned()
             .collect()
+    }
+
+    /// Force all images and pipelines to be imported to the given group by
+    /// setting the group for each item in the manifest, returning the updated
+    /// manifest
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group to force items to be imported to
+    pub fn override_group(mut self, group: &str) -> Self {
+        let group = group.to_string();
+        // get references to all groups
+        self.pipelines
+            .values_mut()
+            .flat_map(|pipeline_manifest| pipeline_manifest.versions.values_mut())
+            .map(|pipeline_version| &mut pipeline_version.config.group)
+            .chain(
+                self.images
+                    .values_mut()
+                    .flat_map(|image_manifest| image_manifest.versions.values_mut())
+                    .map(|image_version| &mut image_version.config.group),
+            )
+            // set each group reference to the given group
+            .for_each(|group_ref| group_ref.clone_from(&group));
+        self
     }
 }
 

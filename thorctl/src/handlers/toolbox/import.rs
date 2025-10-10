@@ -1,5 +1,5 @@
 use colored::Colorize;
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::header::CONTENT_LENGTH;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -338,7 +338,7 @@ async fn get_manifest_from_path(path: &Path, progress: &Bar) -> Result<ToolboxMa
 /// * `cmd` - The toolbox import command that was run
 pub async fn import(thorium: Thorium, conf: CtlConf, cmd: &ImportToolbox) -> Result<(), Error> {
     // get the toolbox manifest by URL or file path
-    let (manifest, progress) = match &cmd.manifest {
+    let (mut manifest, progress) = match &cmd.manifest {
         ManifestLocation::Url(manifest_url) => {
             // create the progress bar
             let progress = Bar::new("", "Downloading manifest...", BarKind::UnboundIO);
@@ -360,8 +360,20 @@ pub async fn import(thorium: Thorium, conf: CtlConf, cmd: &ImportToolbox) -> Res
         )));
     }
     // get all the groups the manifest expects to exist
-    let manifest_groups = manifest.groups();
-    // confirm with the user it's okay to import the manifest
+    let manifest_groups = if let Some(group_override) = &cmd.group_override {
+        progress.info_anonymous(format!(
+            "Overriding all image/pipeline import groups to '{}'",
+            group_override.bright_yellow()
+        ));
+        // replace all groups in the manifest with the override and get the modified manifest
+        manifest = manifest.override_group(group_override);
+        // return a set with just our group override since we replaced it
+        HashSet::from([group_override.to_string()])
+    } else {
+        // get all of the groups the manifest refers to
+        manifest.groups()
+    };
+    // confirm with the user that it's okay to import the manifest
     if !cmd.skip_confirm {
         let confirmed = confirm_manifest(&thorium, &conf, &manifest, &manifest_groups).await?;
         if !confirmed {

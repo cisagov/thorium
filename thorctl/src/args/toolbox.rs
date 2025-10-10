@@ -45,4 +45,9 @@ pub struct ImportToolbox {
     /// Skip the confirmation dialog
     #[clap(short = 'y', long)]
     pub skip_confirm: bool,
+    /// Force the images and pipelines to be uploaded to a specific group
+    ///
+    /// The group will be created if it doesn't already exist
+    #[clap(long)]
+    pub group_override: Option<String>,
 }
