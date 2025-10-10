@@ -144,19 +144,29 @@ async fn collect_file(
             let raw_result = match metadata.len() {
                 // results is empty so don't bother uploading it
                 len if len == 0 => {
-                    // log that our results file is empty
-                    log!(logs, "Warning: Results file exists but is empty");
-                    // create an output with the warning that the result was empty
-                    let mut output = HashMap::with_capacity(1);
-                    output.insert("Warnings", vec!["Results file exists but is empty"]);
-                    // serialize our results
-                    let results = serde_json::to_string(&output)?;
-                    // build our raw results
-                    RawResults {
-                        scan: false,
-                        results: ResultTarget::Db(results),
-                        files: Vec::default(),
-                        display_type: OutputDisplayType::Json,
+                    if image.display_type.requires_results() {
+                        // log that our results file is empty
+                        log!(logs, "Warning: Results file exists but is empty");
+                        // create an output with the warning that the result was empty
+                        let mut output = HashMap::with_capacity(1);
+                        output.insert("Warnings", vec!["Results file exists but is empty"]);
+                        // serialize our results
+                        let results = serde_json::to_string(&output)?;
+                        // build our raw results
+                        RawResults {
+                            scan: false,
+                            results: ResultTarget::Db(results),
+                            files: Vec::default(),
+                            display_type: OutputDisplayType::Json,
+                        }
+                    } else {
+                        // build our raw results with our empty but not required results
+                        RawResults {
+                            scan: image.display_type == OutputDisplayType::Json,
+                            results: ResultTarget::Db("".to_string()),
+                            files: Vec::default(),
+                            display_type: image.display_type,
+                        }
                     }
                 }
                 // results is too large to be stored in the DB
@@ -206,21 +216,32 @@ async fn collect_file(
             Ok(raw_result)
         }
     } else {
-        // log that our results file is over 1 MB
-        log!(logs, "Warning: No results file found");
-        // create an output with the warning that the result was not found
-        let mut output = HashMap::with_capacity(1);
-        output.insert("Warnings", vec!["No non file results found"]);
-        // serialize our results
-        let results = serde_json::to_string(&output)?;
-        // build our raw results
-        let raw_result = RawResults {
-            scan: false,
-            results: ResultTarget::Db(results),
-            files: Vec::default(),
-            display_type: OutputDisplayType::Json,
-        };
-        Ok(raw_result)
+        if image.display_type.requires_results() {
+            // log that no results file was found
+            log!(logs, "Warning: No results file found");
+            // create an output with the warning that the result was not found
+            let mut output = HashMap::with_capacity(1);
+            output.insert("Warnings", vec!["No non file results found"]);
+            // serialize our results
+            let results = serde_json::to_string(&output)?;
+            // build our raw results
+            let raw_result = RawResults {
+                scan: false,
+                results: ResultTarget::Db(results),
+                files: Vec::default(),
+                display_type: OutputDisplayType::Json,
+            };
+            Ok(raw_result)
+        } else {
+            // build our raw results with our empty but not required results
+            let raw_results = RawResults {
+                scan: image.display_type == OutputDisplayType::Json,
+                results: ResultTarget::Db("".to_string()),
+                files: Vec::default(),
+                display_type: image.display_type,
+            };
+            Ok(raw_results)
+        }
     }
 }
 

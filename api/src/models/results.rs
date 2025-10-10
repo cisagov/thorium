@@ -690,6 +690,22 @@ impl OutputDisplayType {
             OutputDisplayType::Xml => "Xml",
         }
     }
+
+    /// Whether this display type requires a results file or not
+    pub fn requires_results(&self) -> bool {
+        match self {
+            OutputDisplayType::Json => true,
+            OutputDisplayType::String => true,
+            OutputDisplayType::Table => true,
+            OutputDisplayType::Image => false,
+            OutputDisplayType::Custom => false,
+            OutputDisplayType::Disassembly => true,
+            OutputDisplayType::Html => true,
+            OutputDisplayType::Markdown => true,
+            OutputDisplayType::Hidden => true,
+            OutputDisplayType::Xml => true,
+        }
+    }
 }
 
 impl Default for OutputDisplayType {
