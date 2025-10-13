@@ -5,10 +5,10 @@ use chrono::{DateTime, Utc};
 use serde_json::value::Value;
 use uuid::Uuid;
 
-use super::bans::Ban;
 use super::EventTrigger;
+use super::bans::Ban;
 use crate::{
-    matches_adds_map, matches_clear, matches_clear_opt, matches_removes_map, matches_update,
+    Error, matches_adds_map, matches_clear, matches_clear_opt, matches_removes_map, matches_update,
     matches_update_opt, same,
 };
 
@@ -32,54 +32,6 @@ pub struct PipelineRequest {
     pub triggers: HashMap<String, EventTrigger>,
     /// The description for this pipeline
     pub description: Option<String>,
-}
-
-impl PipelineRequest {
-    /// Compare the order from a [`PipelineRequest`] and a [`Pipeline`]
-    #[must_use]
-    pub fn compare_order(&self, order: &[Vec<String>]) -> bool {
-        // make sure order is an array
-        if !self.order.is_array() {
-            return false;
-        }
-
-        // convert pipeline request order and iteratively check
-        let stages = self.order.as_array().unwrap();
-        for (i, stage) in stages.iter().enumerate() {
-            // normalize stage to a Vec<Value>
-            let wrapped = match stage.is_array() {
-                true => stage.as_array().unwrap().to_owned(),
-                false => match stage.is_string() {
-                    true => vec![stage.to_owned()],
-                    false => return false,
-                },
-            };
-            // normalize all Values to strings
-            let mut normalized = Vec::with_capacity(wrapped.len());
-            for image in wrapped {
-                match image.is_string() {
-                    true => normalized.push(image.as_str().unwrap().to_owned()),
-                    false => return false,
-                }
-            }
-
-            // make sure the two vectors are the same length
-            if normalized.len() != order[i].len() {
-                return false;
-            }
-
-            // make sure the values in the vector are the same
-            let same = normalized
-                .iter()
-                .zip(&order[i])
-                .all(|(norm, ord)| norm == ord);
-            if !same {
-                return false;
-            }
-        }
-
-        true
-    }
 }
 
 impl PipelineRequest {
@@ -166,6 +118,88 @@ impl PipelineRequest {
     pub fn description<T: Into<String>>(mut self, description: T) -> Self {
         self.description = Some(description.into());
         self
+    }
+
+    /// Compare the order from a [`PipelineRequest`] and a [`Pipeline`]
+    #[must_use]
+    pub fn compare_order(&self, order: &[Vec<String>]) -> bool {
+        // make sure order is an array
+        if !self.order.is_array() {
+            return false;
+        }
+
+        // convert pipeline request order and iteratively check
+        let stages = self.order.as_array().unwrap();
+        for (i, stage) in stages.iter().enumerate() {
+            // normalize stage to a Vec<Value>
+            let wrapped = match stage.is_array() {
+                true => stage.as_array().unwrap().to_owned(),
+                false => match stage.is_string() {
+                    true => vec![stage.to_owned()],
+                    false => return false,
+                },
+            };
+            // normalize all Values to strings
+            let mut normalized = Vec::with_capacity(wrapped.len());
+            for image in wrapped {
+                match image.is_string() {
+                    true => normalized.push(image.as_str().unwrap().to_owned()),
+                    false => return false,
+                }
+            }
+
+            // make sure the two vectors are the same length
+            if normalized.len() != order[i].len() {
+                return false;
+            }
+
+            // make sure the values in the vector are the same
+            let same = normalized
+                .iter()
+                .zip(&order[i])
+                .all(|(norm, ord)| norm == ord);
+            if !same {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Attempt to deserialize the raw image order defined in the pipeline request
+    /// to a `Vec<Vec<&str>>`.
+    ///
+    /// This is done manually rather than using `serde` because [`PipelineRequest`]
+    /// supports both an array of strings and an array of array of strings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the order is not a valid JSON array or if any of its
+    /// elements are not valid arrays or strings
+    pub fn deserialize_image_order(&self) -> Result<Vec<Vec<&str>>, Error> {
+        let mut order = Vec::new();
+        if !self.order.is_array() {
+            return Err(Error::new("order is not a valid JSON array"));
+        }
+        for value in self.order.as_array().unwrap() {
+            if value.is_array() {
+                let mut inner_order = Vec::new();
+                for inner_value in value.as_array().unwrap() {
+                    if !inner_value.is_string() {
+                        return Err(Error::new("order sub-element is not a valid JSON string"));
+                    }
+                    inner_order.push(inner_value.as_str().unwrap());
+                }
+                order.push(inner_order);
+            } else if value.is_string() {
+                order.push(vec![value.as_str().unwrap()]);
+            } else {
+                return Err(Error::new(
+                    "order element is not a valid JSON array or string",
+                ));
+            }
+        }
+        Ok(order)
     }
 }
 

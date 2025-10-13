@@ -190,7 +190,8 @@ async_once = { version = "0.2", optional = true }
 lazy_static = { version = "1.5", optional = true }
 
 # mcp dependencies
-rmcp = { version = "0.6.3", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth"], optional = true }
+rmcp = { version = "=0.6.3", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth"], optional = true }
+rmcp-macros = { version = "=0.6.3" }
 
 # openai support
 openai-api-rs = { version = "6", optional = true }

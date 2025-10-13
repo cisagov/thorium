@@ -27,8 +27,20 @@ impl ToolboxManifest {
         Ok(())
     }
 
-    /// Validate the manifest's pipelines
+    /// Validates pipelines in the manifest
     fn validate_pipelines(&self) -> Result<(), Error> {
+        self.validate_pipelines_images()?;
+        self.validate_pipelines_orders()?;
+        Ok(())
+    }
+
+    /// Validates that all the pipelines in the manifest have images
+    /// also defined in the manifest
+    ///
+    /// # Errors
+    ///
+    /// - Any pipeline manifests expect images not in the toolbox manifest
+    fn validate_pipelines_images(&self) -> Result<(), Error> {
         // make sure all pipelines' requested images are in the manifest
         let mut pipelines_missing_images: HashMap<String, Vec<String>> = HashMap::new();
         for (pipeline_name, pipeline_manifest) in &self.pipelines {
@@ -57,7 +69,62 @@ impl ToolboxManifest {
         }
         if !pipelines_missing_images.is_empty() {
             return Err(Error::new(format!(
-                "One or more pipelines require images not found in the manifest: {pipelines_missing_images:?}"
+                "One or more pipelines require image manifests not found in the toolbox manifest: {pipelines_missing_images:?}"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Validates that the images defined in the pipelines' orders are in the manifest and in
+    /// the right group
+    ///
+    /// # Errors
+    ///
+    /// - Any pipeline order is malformed
+    /// - One or more pipeline orders has images that are not in the pipeline's groups in the manifest
+    fn validate_pipelines_orders(&self) -> Result<(), Error> {
+        // keep track of any pipelines that are missing images
+        let mut pipelines_missing_images: HashMap<&String, Vec<&str>> = HashMap::new();
+        // make a map of groups and all the images they have in the manifest
+        let group_images = self
+            .images
+            .values()
+            .flat_map(|image_manifest| image_manifest.versions.values())
+            .fold(
+                HashMap::<&String, Vec<&String>>::new(),
+                |mut map, image_version| {
+                    map.entry(&image_version.config.group)
+                        .or_default()
+                        .push(&image_version.config.name);
+                    map
+                },
+            );
+        for (pipeline, pipeline_manifest) in &self.pipelines {
+            for version in pipeline_manifest.versions.values() {
+                // try to deserialize the images from the order in the manifest
+                let images = version.config.deserialize_image_order().map_err(|err| {
+                    Error::new(format!(
+                        "Malformed image order in pipeline '{pipeline}': {err}"
+                    ))
+                })?;
+                let images_in_group = group_images.get(&version.config.group);
+                for image in images.iter().flat_map(|sub_order| sub_order.iter()) {
+                    if !images_in_group
+                        .iter()
+                        .flat_map(|images| images.iter())
+                        .any(|group_image| group_image == image)
+                    {
+                        pipelines_missing_images
+                            .entry(pipeline)
+                            .or_default()
+                            .push(image);
+                    }
+                }
+            }
+        }
+        if !pipelines_missing_images.is_empty() {
+            return Err(Error::new(format!(
+                "One or more pipelines require images not found in the manifest or in the pipelines' groups: {pipelines_missing_images:?}"
             )));
         }
         Ok(())

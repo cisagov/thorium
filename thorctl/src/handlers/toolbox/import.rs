@@ -1,5 +1,6 @@
 use colored::Colorize;
 use futures::{StreamExt, TryStreamExt, stream};
+use itertools::Itertools;
 use reqwest::header::CONTENT_LENGTH;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -203,15 +204,15 @@ async fn confirm_manifest(
         .map_err(|err| Error::new(format!("Error getting current user info: {err}")))?;
     // display the manifest's info
     println!("{}", "Images:".bright_yellow());
-    for image_name in manifest.images.keys() {
+    for image_name in manifest.images.keys().sorted_unstable() {
         println!("  {image_name}");
     }
     println!("\n{}", "Pipelines:".bright_yellow());
-    for pipeline_name in manifest.pipelines.keys() {
+    for pipeline_name in manifest.pipelines.keys().sorted_unstable() {
         println!("  {pipeline_name}");
     }
     println!("\n{}", "Groups:".bright_yellow());
-    for group in manifest_groups {
+    for group in manifest_groups.iter().sorted_unstable() {
         println!("  {group}");
     }
     println!();
@@ -352,14 +353,14 @@ pub async fn import(thorium: Thorium, conf: CtlConf, cmd: &ImportToolbox) -> Res
             (manifest, progress)
         }
     };
-    // validate the manifest besides just its formatting
+    // validate the manifest
     if let Err(err) = manifest.validate() {
         return Err(Error::new(format!(
             "Invalid toolbox manifest: {}",
             err.msg().unwrap_or_else(|| "Unknown error".to_string())
         )));
     }
-    // get all the groups the manifest expects to exist
+    // get all the groups the manifest expects to exist, overriding them if we're set to
     let manifest_groups = if let Some(group_override) = &cmd.group_override {
         progress.info_anonymous(format!(
             "Overriding all image/pipeline import groups to '{}'",
@@ -367,6 +368,14 @@ pub async fn import(thorium: Thorium, conf: CtlConf, cmd: &ImportToolbox) -> Res
         ));
         // replace all groups in the manifest with the override and get the modified manifest
         manifest = manifest.override_group(group_override);
+        // validate the manifest again after overriding groups
+        if let Err(err) = manifest.validate() {
+            return Err(Error::new(format!(
+                "Invalid toolbox manifest after group override '{}': {}",
+                group_override.bright_yellow(),
+                err.msg().unwrap_or_else(|| "Unknown error".to_string())
+            )));
+        }
         // return a set with just our group override since we replaced it
         HashSet::from([group_override.to_string()])
     } else {
