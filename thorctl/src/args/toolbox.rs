@@ -13,6 +13,13 @@ pub enum Toolbox {
     /// and ready to run in Thorium
     #[clap(version, author)]
     Import(ImportToolbox),
+    /// Update a toolbox already imported into Thorium by updating and creating images and pipelines
+    /// based on a newer manifest
+    ///
+    /// A Thorium toolbox is an external collection of tools and pipelines pre-configured
+    /// and ready to run in Thorium
+    #[clap(version, author)]
+    Update(UpdateToolbox),
 }
 
 /// The location of the toolbox manifest, either by URL or by file path
@@ -45,9 +52,26 @@ pub struct ImportToolbox {
     /// Skip the confirmation dialog
     #[clap(short = 'y', long)]
     pub skip_confirm: bool,
-    /// Force the images and pipelines to be uploaded to a specific group
+    /// Force the tools and pipelines to be imported to a specific group
     ///
     /// The group will be created if it doesn't already exist
+    #[clap(long)]
+    pub group_override: Option<String>,
+}
+
+/// Download a toolbox manifest and import it into Thorium
+#[derive(Parser, Debug)]
+pub struct UpdateToolbox {
+    /// The URL or file path on the system where the toolbox manifest is found
+    pub manifest: ManifestLocation,
+    /// Skip the confirmation dialog
+    #[clap(short = 'y', long)]
+    pub skip_confirm: bool,
+    /// Force the tools and pipelines to be updated in a specific group
+    ///
+    /// If a group override was set when importing a toolbox, it's highly recommend
+    /// to override the group when updating, otherwise new images, pipelines, and groups
+    /// will be created rather than updating existing ones.
     #[clap(long)]
     pub group_override: Option<String>,
 }

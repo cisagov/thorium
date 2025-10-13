@@ -18,7 +18,7 @@ async fn main() {
     // get the command line args that were passed in
     let args = Args::parse();
     // fall into the right handler and execute this users command
-    if let Err(err) = match &args.cmd {
+    let thorctl_result = match &args.cmd {
         SubCommands::Login(login) => handlers::clusters::login(&args, login).await,
         SubCommands::Clusters(clusters) => handlers::clusters::handle(&args, clusters).await,
         SubCommands::Groups(groups) => handlers::groups::handle(&args, groups).await,
@@ -39,10 +39,12 @@ async fn main() {
         SubCommands::Update => handlers::update::update(&args).await,
         SubCommands::Config(config) => handlers::config::config(&args, config),
         SubCommands::Toolbox(toolbox) => handlers::toolbox::handle(&args, toolbox).await,
-    } {
-        // print the error
-        eprintln!("{err}");
-        // TODO: exit with matching code?
+    };
+    // error if thorctl failed
+    if let Err(error) = thorctl_result {
+        // print our error to stderr
+        eprintln!("{error:#?}");
+        // exit this program with an exit code of 1
         std::process::exit(1);
     }
 }

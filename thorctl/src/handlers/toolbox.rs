@@ -4,10 +4,11 @@ use thorium::Error;
 
 mod import;
 mod manifest;
+mod shared;
+mod update;
 
-use crate::args::toolbox::Toolbox;
 use crate::args::Args;
-use crate::handlers::update;
+use crate::args::toolbox::Toolbox;
 use crate::utils;
 
 pub async fn handle(args: &Args, toolbox: &Toolbox) -> Result<(), Error> {
@@ -19,9 +20,10 @@ pub async fn handle(args: &Args, toolbox: &Toolbox) -> Result<(), Error> {
     }
     // check if we need to update
     if !args.skip_update && !conf.skip_update.unwrap_or_default() {
-        update::ask_update(&thorium).await?;
+        crate::handlers::update::ask_update(&thorium).await?;
     }
     match toolbox {
         Toolbox::Import(cmd) => import::import(thorium, conf, cmd).await,
+        Toolbox::Update(cmd) => update::update(thorium, conf, cmd).await,
     }
 }

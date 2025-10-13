@@ -318,4 +318,9 @@ impl Bar {
     pub fn finish_and_clear(&self) {
         self.bar.finish_and_clear();
     }
+
+    /// Suspend the progress bar while the function `f` is executing
+    pub fn suspend<F: FnOnce() -> R, R>(&self, f: F) -> R {
+        self.bar.suspend(f)
+    }
 }

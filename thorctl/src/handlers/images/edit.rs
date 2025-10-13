@@ -5,21 +5,16 @@ use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use thorium::models::{
-    AutoTag, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings,
-    ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate,
-    DependencySettingsUpdate, EphemeralDependencySettings, EphemeralDependencySettingsUpdate,
-    FilesHandler, FilesHandlerUpdate, Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanUpdate,
-    ImageLifetime, ImageNetworkPolicyUpdate, ImageScaler, ImageUpdate, ImageVersion, Kvm,
-    KvmUpdate, OutputCollection, OutputCollectionUpdate, OutputDisplayType, RepoDependencySettings,
-    ResourcesUpdate, ResultDependencySettings, ResultDependencySettingsUpdate,
-    SampleDependencySettings, SecurityContext, SecurityContextUpdate, SpawnLimits,
-    TagDependencySettings, TagDependencySettingsUpdate, Volume,
+    ChildFilters, Cleanup, Dependencies, Image, ImageArgs, ImageBan, ImageBanUpdate, ImageLifetime,
+    ImageScaler, ImageUpdate, ImageVersion, Kvm, OutputCollection, OutputDisplayType,
+    ResourcesUpdate, SecurityContext, SpawnLimits, Volume,
 };
 use thorium::{Error, Thorium};
 use uuid::Uuid;
 
 use crate::args::images::EditImage;
-use crate::{utils, CtlConf};
+use crate::utils::diff;
+use crate::{CtlConf, set_clear, set_modified, set_modified_opt, utils};
 
 /// A Thorium [`Image`] modified and serialized such that it's easily editable
 #[derive(Debug, Serialize, Deserialize)]
@@ -162,60 +157,6 @@ impl From<Image> for EditableImage {
     }
 }
 
-/// Set this field in the update if it was modified
-macro_rules! set_modified {
-    ($image_field:expr, $edited_image_field:expr) => {
-        ($image_field != $edited_image_field).then_some($edited_image_field)
-    };
-}
-
-/// Set this optional field in the update if it was modified
-macro_rules! set_modified_opt {
-    ($image_field:expr, $edited_image_field:expr) => {
-        ($image_field != $edited_image_field)
-            .then_some($edited_image_field)
-            .flatten()
-    };
-}
-
-/// Clear this field if it was some in the image and was set to none
-macro_rules! set_clear {
-    ($image_field:expr, $edited_image_field:expr) => {
-        $image_field.is_some() && $edited_image_field.is_none()
-    };
-}
-
-/// Clear this field if it was not empty in the image but it was set to empty
-macro_rules! set_clear_vec {
-    ($image_field:expr, $edited_image_field:expr) => {
-        !$image_field.is_empty() && $edited_image_field.is_empty()
-    };
-}
-
-/// Calculate the values to remove/add based on what's in the
-/// old vec and the new vec
-///
-/// Returns collections of values to remove/add in a tuple: `(remove, add)`
-///
-/// We remove everything that's in the old but not in the new and
-/// add everything that's in the new but not in the old. We're okay
-/// to mutate `old` with `extract_if` before calculating what we add because
-/// `new` will contain all the values we want to keep; nothing we
-/// extract from `old` in the first step will affect the calculation of
-/// what we want to add.
-///
-/// # Limitations
-///
-/// - Cannot add/remove duplicate values
-macro_rules! calc_remove_add_vec {
-    ($old:expr, $new:expr) => {
-        (
-            $old.extract_if(.., |old| !$new.contains(old)).collect(),
-            $new.extract_if(.., |new| !$old.contains(new)).collect(),
-        )
-    };
-}
-
 /// A single environment variable key/value pair
 type Env = (String, Option<String>);
 
@@ -232,486 +173,9 @@ fn parse_env(raw_env: &str) -> Result<Env, Error> {
     match (key, value, split.next()) {
         (Some(key), None, None) => Ok((key.to_string(), None)),
         (Some(key), Some(value), None) => Ok((key.to_string(), Some(value.to_string()))),
-        _ => Err(Error::new(format!("Invalid environment variable '{raw_env}'! Environment variables must be formatted `<KEY>=<VALUE>`.")))
-    }
-}
-
-/// Calculate an image args update by diffing old and
-/// new image args settings
-///
-/// # Arguments
-///
-/// * `old_args` - The old args settings
-/// * `new_args` - The new args settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_image_args_update(
-    old_args: ImageArgs,
-    new_args: ImageArgs,
-) -> Option<ImageArgsUpdate> {
-    if old_args == new_args {
-        None
-    } else {
-        Some(ImageArgsUpdate {
-            clear_entrypoint: set_clear!(old_args.entrypoint, new_args.entrypoint),
-            entrypoint: set_modified_opt!(old_args.entrypoint, new_args.entrypoint),
-            clear_command: set_clear!(old_args.command, new_args.command),
-            command: set_modified_opt!(old_args.command, new_args.command),
-            clear_reaction: set_clear!(old_args.reaction, new_args.reaction),
-            reaction: set_modified_opt!(old_args.reaction, new_args.reaction),
-            clear_repo: set_clear!(old_args.repo, new_args.repo),
-            repo: set_modified_opt!(old_args.repo, new_args.repo),
-            clear_commit: set_clear!(old_args.commit, new_args.commit),
-            commit: set_modified_opt!(old_args.commit, new_args.commit),
-            // TODO: template
-            output: set_modified!(old_args.output, new_args.output),
-        })
-    }
-}
-
-/// Calculate a security context update by diffing old and
-/// new security context settings
-///
-/// # Arguments
-///
-/// * `old_security_context` - The old security context settings
-/// * `new_security_context` - The new security context settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_security_context_update(
-    old_security_context: SecurityContext,
-    new_security_context: SecurityContext,
-) -> Option<SecurityContextUpdate> {
-    if old_security_context == new_security_context {
-        None
-    } else {
-        Some(SecurityContextUpdate {
-            clear_user: set_clear!(old_security_context.user, new_security_context.user),
-            user: set_modified_opt!(old_security_context.user, new_security_context.user),
-            clear_group: set_clear!(old_security_context.group, new_security_context.group),
-            group: set_modified_opt!(old_security_context.group, new_security_context.group),
-            allow_privilege_escalation: set_modified!(
-                old_security_context.allow_privilege_escalation,
-                new_security_context.allow_privilege_escalation
-            ),
-        })
-    }
-}
-
-/// Calculate a sample dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_sample_dependencies_update(
-    old_dependencies: SampleDependencySettings,
-    new_dependencies: SampleDependencySettings,
-) -> DependencySettingsUpdate {
-    DependencySettingsUpdate {
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
-    }
-}
-
-/// Calculate a ephemeral dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_ephemeral_dependencies_update(
-    mut old_dependencies: EphemeralDependencySettings,
-    mut new_dependencies: EphemeralDependencySettings,
-) -> EphemeralDependencySettingsUpdate {
-    // calculate which names to remove/add
-    let (remove_names, add_names) =
-        calc_remove_add_vec!(old_dependencies.names, new_dependencies.names);
-    EphemeralDependencySettingsUpdate {
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
-        remove_names,
-        add_names,
-    }
-}
-
-/// Calculate a results dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_results_dependencies_update(
-    mut old_dependencies: ResultDependencySettings,
-    mut new_dependencies: ResultDependencySettings,
-) -> ResultDependencySettingsUpdate {
-    // calculate which images to remove/add
-    let (remove_images, add_images) =
-        calc_remove_add_vec!(old_dependencies.images, new_dependencies.images);
-    // calculate which names to remove/add
-    let (remove_names, add_names) =
-        calc_remove_add_vec!(old_dependencies.names, new_dependencies.names);
-    ResultDependencySettingsUpdate {
-        // remove images that are in the old but not in the new
-        remove_images,
-        // add images that are in the new but not in the old
-        add_images,
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        // TODO: template
-        kwarg: set_modified!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
-        remove_names,
-        add_names,
-    }
-}
-
-/// Calculate a repo dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_repo_dependencies_update(
-    old_dependencies: RepoDependencySettings,
-    new_dependencies: RepoDependencySettings,
-) -> DependencySettingsUpdate {
-    DependencySettingsUpdate {
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
-    }
-}
-
-/// Calculate a tags dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_tags_dependencies_update(
-    old_dependencies: TagDependencySettings,
-    new_dependencies: TagDependencySettings,
-) -> TagDependencySettingsUpdate {
-    TagDependencySettingsUpdate {
-        enabled: set_modified!(old_dependencies.enabled, new_dependencies.enabled),
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
-    }
-}
-
-/// Calculate a children dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_childen_dependencies_update(
-    mut old_dependencies: ChildrenDependencySettings,
-    mut new_dependencies: ChildrenDependencySettings,
-) -> ChildrenDependencySettingsUpdate {
-    // calculate which images to remove/add
-    let (remove_images, add_images) =
-        calc_remove_add_vec!(old_dependencies.images, new_dependencies.images);
-    ChildrenDependencySettingsUpdate {
-        enabled: set_modified!(old_dependencies.enabled, new_dependencies.enabled),
-        remove_images,
-        add_images,
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
-    }
-}
-
-/// Calculate a dependencies update by diffing old and
-/// new dependencies settings
-///
-/// # Arguments
-///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_dependencies_update(
-    old_dependencies: Dependencies,
-    new_dependencies: Dependencies,
-) -> DependenciesUpdate {
-    DependenciesUpdate {
-        samples: calculate_sample_dependencies_update(
-            old_dependencies.samples,
-            new_dependencies.samples,
-        ),
-        ephemeral: calculate_ephemeral_dependencies_update(
-            old_dependencies.ephemeral,
-            new_dependencies.ephemeral,
-        ),
-        results: calculate_results_dependencies_update(
-            old_dependencies.results,
-            new_dependencies.results,
-        ),
-        repos: calculate_repo_dependencies_update(old_dependencies.repos, new_dependencies.repos),
-        tags: calculate_tags_dependencies_update(old_dependencies.tags, new_dependencies.tags),
-        children: calculate_childen_dependencies_update(
-            old_dependencies.children,
-            new_dependencies.children,
-        ),
-    }
-}
-
-/// Calculate a clean up update by diffing old and
-/// new clean up settings
-///
-/// # Arguments
-///
-/// * `old_clean_up` - The old clean up settings
-/// * `new_clean_up` - The new clean up settings
-fn calculate_clean_up_update(
-    old_clean_up: Option<Cleanup>,
-    new_clean_up: Option<Cleanup>,
-) -> CleanupUpdate {
-    match (old_clean_up, new_clean_up) {
-        // nothing changed, so we return a noop
-        (None, None) => CleanupUpdate::default(),
-        // we made a whole new cleanup so update all fields
-        (None, Some(new_clean_up)) => CleanupUpdate {
-            job_id: Some(new_clean_up.job_id),
-            results: Some(new_clean_up.results),
-            result_files_dir: Some(new_clean_up.result_files_dir),
-            script: Some(new_clean_up.script),
-            clear: false,
-        },
-        // we had some and now we have none, so clear it
-        (Some(_), None) => CleanupUpdate::default().clear(),
-        // both are some, so we need to compare each field and update as needed
-        (Some(old_clean_up), Some(new_clean_up)) => CleanupUpdate {
-            job_id: set_modified!(old_clean_up.job_id, new_clean_up.job_id),
-            results: set_modified!(old_clean_up.results, new_clean_up.results),
-            result_files_dir: set_modified!(
-                old_clean_up.result_files_dir,
-                new_clean_up.result_files_dir
-            ),
-            script: set_modified!(old_clean_up.script, new_clean_up.script),
-            clear: false,
-        },
-    }
-}
-
-/// Calculate a files handler update by diffing old and
-/// new files handler settings
-///
-/// # Arguments
-///
-/// * `old_files_handler` - The old files handler settings
-/// * `new_files_handler` - The new files handler settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_files_handler_update(
-    mut old_files_handler: FilesHandler,
-    mut new_files_handler: FilesHandler,
-) -> FilesHandlerUpdate {
-    if old_files_handler == new_files_handler {
-        // if there were no changes, return a noop
-        FilesHandlerUpdate::default()
-    } else {
-        let (remove_names, add_names) =
-            calc_remove_add_vec!(old_files_handler.names, new_files_handler.names);
-        FilesHandlerUpdate {
-            results: set_modified!(old_files_handler.results, new_files_handler.results),
-            result_files: set_modified!(
-                old_files_handler.result_files,
-                new_files_handler.result_files
-            ),
-            tags: set_modified!(old_files_handler.tags, new_files_handler.tags),
-            clear_names: set_clear_vec!(old_files_handler.names, new_files_handler.names),
-            remove_names,
-            add_names,
-        }
-    }
-}
-
-/// Calculate an auto tag update by diffing old and
-/// new auto tag settings
-///
-/// # Arguments
-///
-/// * `old_auto_tag` - The old auto tag settings
-/// * `new_auto_tag` - The new auto tag settings
-fn calculate_auto_tag_updates(
-    mut old_auto_tag: HashMap<String, AutoTag>,
-    mut new_auto_tag: HashMap<String, AutoTag>,
-) -> HashMap<String, AutoTagUpdate> {
-    if old_auto_tag == new_auto_tag {
-        // the auto tag settings were unchanged so return a noop
-        HashMap::default()
-    } else {
-        let mut update = HashMap::new();
-        // iterate over auto tag settings that were removed and set to delete them
-        for (removed_key, _) in old_auto_tag.extract_if(|key, _| !new_auto_tag.contains_key(key)) {
-            update.insert(removed_key, AutoTagUpdate::default().delete());
-        }
-        // iterate over new auto tags and add them
-        for (added_key, auto_tag) in
-            new_auto_tag.extract_if(|key, _| !old_auto_tag.contains_key(key))
-        {
-            update.insert(
-                added_key.clone(),
-                AutoTagUpdate {
-                    logic: Some(auto_tag.logic),
-                    key: Some(added_key),
-                    clear_key: false,
-                    delete: false,
-                },
-            );
-        }
-        // now we're just left with keys/values that are in both, so compare them and update as needed
-        for (key, new_value) in new_auto_tag {
-            // we can be certain the old auto tags has this key, but wrap in an if statement anyway
-            if let Some(old_value) = old_auto_tag.remove(&key) {
-                if new_value == old_value {
-                    // the auto tags are the same so skip this key
-                    continue;
-                }
-                // insert an update for this key
-                update.insert(
-                    key,
-                    AutoTagUpdate {
-                        logic: set_modified!(old_value.logic, new_value.logic),
-                        clear_key: set_clear!(old_value.key, new_value.key),
-                        key: set_modified_opt!(old_value.key, new_value.key),
-                        delete: false,
-                    },
-                );
-            }
-        }
-        update
-    }
-}
-
-/// Calculate an output collection update by diffing old and
-/// new output collection settings
-///
-/// # Arguments
-///
-/// * `old_collection` - The old output collection settings
-/// * `new_collection` - The new output collection settings
-fn calculate_output_collection_update(
-    old_collection: OutputCollection,
-    new_collection: OutputCollection,
-) -> Option<OutputCollectionUpdate> {
-    if old_collection == new_collection {
-        None
-    } else {
-        Some(OutputCollectionUpdate {
-            handler: set_modified!(old_collection.handler, new_collection.handler),
-            // TODO: not sure how to deal with this field
-            clear_files: false,
-            files: calculate_files_handler_update(old_collection.files, new_collection.files),
-            auto_tag: calculate_auto_tag_updates(old_collection.auto_tag, new_collection.auto_tag),
-            children: set_modified!(old_collection.children, new_collection.children),
-            clear_groups: set_clear_vec!(old_collection.groups, new_collection.groups),
-            groups: new_collection.groups,
-        })
-    }
-}
-
-/// Calculate a child filters update by diffing old and
-/// new child filters settings
-///
-/// # Arguments
-///
-/// * `old_filters` - The old child filters settings
-/// * `new_filters` - The new child filters settings
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_child_filters_update(
-    old_filters: ChildFilters,
-    new_filters: ChildFilters,
-) -> Option<ChildFiltersUpdate> {
-    if old_filters == new_filters {
-        None
-    } else {
-        Some(ChildFiltersUpdate {
-            // add ones in the new but not in the old
-            add_mime: new_filters
-                .mime
-                .difference(&old_filters.mime)
-                .cloned()
-                .collect(),
-            // remove ones in the old but not in the new
-            remove_mime: old_filters
-                .mime
-                .difference(&new_filters.mime)
-                .cloned()
-                .collect(),
-            add_file_name: new_filters
-                .file_name
-                .difference(&old_filters.file_name)
-                .cloned()
-                .collect(),
-            remove_file_name: old_filters
-                .file_name
-                .difference(&new_filters.file_name)
-                .cloned()
-                .collect(),
-            add_file_extension: new_filters
-                .file_extension
-                .difference(&old_filters.file_extension)
-                .cloned()
-                .collect(),
-            remove_file_extension: old_filters
-                .file_extension
-                .difference(&new_filters.file_extension)
-                .cloned()
-                .collect(),
-            submit_non_matches: set_modified!(
-                old_filters.submit_non_matches,
-                new_filters.submit_non_matches
-            ),
-        })
-    }
-}
-
-/// Calculate a kvm update by diffing old and new kvm settings
-///
-/// # Arguments
-///
-/// * `old_kvm` - The old kvm settings
-/// * `new_kvm` - The new kvm settings
-fn calculate_kvm_update(old_kvm: Option<Kvm>, new_kvm: Option<Kvm>) -> KvmUpdate {
-    match (old_kvm, new_kvm) {
-        // none in both cases, so return a noop
-        (None, None) => KvmUpdate::default(),
-        // we added kvm settings, so set the update to whatever the new one is
-        (None, Some(new_kvm)) => KvmUpdate {
-            xml: Some(new_kvm.xml),
-            qcow2: Some(new_kvm.qcow2),
-        },
-        // TODO: we set it from some to none, so we ought to clear it, but there's currently no mechanism for that
-        (Some(_), None) => KvmUpdate::default(),
-        (Some(old_kvm), Some(new_kvm)) => {
-            if old_kvm == new_kvm {
-                KvmUpdate::default()
-            } else {
-                KvmUpdate {
-                    xml: set_modified!(old_kvm.xml, new_kvm.xml),
-                    qcow2: set_modified!(old_kvm.qcow2, new_kvm.qcow2),
-                }
-            }
-        }
+        _ => Err(Error::new(format!(
+            "Invalid environment variable '{raw_env}'! Environment variables must be formatted `<KEY>=<VALUE>`."
+        ))),
     }
 }
 
@@ -754,25 +218,6 @@ fn calculate_bans_update(
                 If you want to modify an existing ban, create a new ban and remove the old one.",
             ))
         }
-    }
-}
-
-/// Calculate a network policy update by diffing old and new policies
-///
-/// # Arguments
-///
-/// * `old_policies` - The set of old policies
-/// * `new_policies` - The set of new policies
-#[allow(clippy::needless_pass_by_value)]
-fn calculate_network_policies_update(
-    old_policies: HashSet<String>,
-    new_policies: HashSet<String>,
-) -> ImageNetworkPolicyUpdate {
-    ImageNetworkPolicyUpdate {
-        // policies added are ones in the new but not in the old
-        policies_added: new_policies.difference(&old_policies).cloned().collect(),
-        // policies removed are ones in the old but not in the new
-        policies_removed: old_policies.difference(&new_policies).cloned().collect(),
     }
 }
 
@@ -829,55 +274,57 @@ fn calculate_update(
         (add_env, remove_env.collect())
     };
     Ok(ImageUpdate {
-        // TODO: seems to be unused?
+        // seems to be unused?
         external: None,
-        // TODO: template
+        // needs template
         scaler: set_modified!(image.scaler, edited_image.scaler),
         timeout: set_modified_opt!(image.timeout, edited_image.timeout),
-        // TODO: template millicpu and storage
-        // TODO: deal with letter conversions...
+        // needs template for millicpu and storage
         resources: set_modified!(image.resources, edited_image.resources),
-        // TODO: template
+        // needs template
         spawn_limit: set_modified!(image.spawn_limit, edited_image.spawn_limit),
         add_volumes,
         remove_volumes,
-        // TODO: template
+        // needs template
         add_env,
         remove_env,
         clear_version: set_clear!(image.version, edited_image.version),
-        // TODO: template or use raw??
+        // needs template for semver
         version: set_modified_opt!(image.version, edited_image.version),
         clear_image: set_clear!(image.image, edited_image.image),
         image: set_modified_opt!(image.image, edited_image.image),
-        // TODO: lifetime
+        // needs template
         clear_lifetime: set_clear!(image.lifetime, edited_image.lifetime),
         lifetime: set_modified_opt!(image.lifetime, edited_image.lifetime),
         clear_description: set_clear!(image.description, edited_image.description),
-        args: calculate_image_args_update(image.args, edited_image.args),
+        args: diff::images::calculate_image_args_update(image.args, edited_image.args),
         modifiers: set_modified_opt!(image.modifiers, edited_image.modifiers),
         description: set_modified_opt!(image.description, edited_image.description),
-        security_context: calculate_security_context_update(
+        security_context: diff::images::calculate_security_context_update(
             image.security_context,
             edited_image.security_context,
         ),
         collect_logs: set_modified!(image.collect_logs, edited_image.collect_logs),
         generator: set_modified!(image.generator, edited_image.generator),
-        // TODO: template
-        dependencies: calculate_dependencies_update(image.dependencies, edited_image.dependencies),
-        // TODO: template
+        // needs template
+        dependencies: diff::images::calculate_dependencies_update(
+            image.dependencies,
+            edited_image.dependencies,
+        ),
+        // needs template
         display_type: set_modified!(image.display_type, edited_image.display_type),
-        output_collection: calculate_output_collection_update(
+        output_collection: diff::images::calculate_output_collection_update(
             image.output_collection,
             edited_image.output_collection,
         ),
-        child_filters: calculate_child_filters_update(
+        child_filters: diff::images::calculate_child_filters_update(
             image.child_filters,
             edited_image.child_filters,
         ),
-        clean_up: calculate_clean_up_update(image.clean_up, edited_image.clean_up),
-        kvm: calculate_kvm_update(image.kvm, edited_image.kvm),
+        clean_up: diff::images::calculate_clean_up_update(image.clean_up, edited_image.clean_up),
+        kvm: diff::images::calculate_kvm_update(image.kvm, edited_image.kvm),
         bans: calculate_bans_update(image.bans, edited_image.bans)?,
-        network_policies: calculate_network_policies_update(
+        network_policies: diff::images::calculate_network_policies_update(
             image.network_policies,
             edited_image.network_policies,
         ),

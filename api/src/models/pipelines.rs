@@ -121,6 +121,8 @@ impl PipelineRequest {
     }
 
     /// Compare the order from a [`PipelineRequest`] and a [`Pipeline`]
+    ///
+    /// Returns true if the order is the same
     #[must_use]
     pub fn compare_order(&self, order: &[Vec<String>]) -> bool {
         // make sure order is an array
