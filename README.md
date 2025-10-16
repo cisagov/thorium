@@ -22,6 +22,7 @@ easily orchestrate arbitrary docker/vm/shell tools at scale.
 ---
 - Highly scalable analysis of arbitrary files/repos
 - Near zero-cost analysis tool integration
+- Easy tool import capability
 - Static and dynamic analysis sandboxes
 - User friendly interfaces: GUI + CLI
 - RESTful API for automated access to data
@@ -41,9 +42,21 @@ Thorium allows for developers or analysts to:
 
 ##### Are any tools included?
 
-Currently no there are no tools included in Thorium but we plan on releasing some
-soon. We hope to continue to release tools as well as allow for curated
-contributions from the community.
+Yes, you can use thorctl toolbox to import over 40 images and 20 pipelines into
+your Thorium instance. Some examples of images you can import are:
+ - binwalk
+ - capa
+ - clamav
+ - cwe-checker
+ - email-parser
+ - floss
+ - foremost
+ - ssdeep
+ - quantumstrand
+ - xortool
+ - zeek-dump
+
+![](api/docs/src/static_resources/UpdatedToolbox.gif)
 
 ##### What do I need to deploy Thorium?
 
