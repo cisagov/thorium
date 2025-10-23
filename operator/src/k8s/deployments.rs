@@ -14,7 +14,7 @@ use super::crds;
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-async fn api_template(meta: &ClusterMeta) -> Option<Value> {
+fn api_template(meta: &ClusterMeta) -> Option<Value> {
     let api_spec = meta.cluster.get_api_spec();
     // only include imagePullSecret if required
     let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
@@ -65,6 +65,30 @@ async fn api_template(meta: &ClusterMeta) -> Option<Value> {
                                     "requests": crds::Resources::request_conv(&api_spec.resources).expect("failed to convert resources to valid request format"),
                                 },
                                 "env": api_spec.env.clone(),
+                                "livenessProbe": {
+                                    "httpGet": {
+                                        "path": "/health",
+                                        "port": 80,
+                                        "scheme": "HTTP"
+                                    },
+                                    "initialDelaySeconds": 10,
+                                    "periodSeconds": 10,
+                                    "successThreshold": 1,
+                                    "timeoutSeconds": 1,
+                                    "failureThreshold": 1,
+                                },
+                                "readinessProbe": {
+                                    "httpGet": {
+                                        "path": "/health",
+                                        "port": 80,
+                                        "scheme": "HTTP"
+                                    },
+                                    "initialDelaySeconds": 5,
+                                    "periodSeconds": 3,
+                                    "successThreshold": 1,
+                                    "timeoutSeconds": 1,
+                                    "failureThreshold": 10,
+                                },
                                 "volumeMounts": [
                                     {
                                         "name": "config",
@@ -172,6 +196,14 @@ async fn scaler_template(meta: &ClusterMeta) -> Option<Value> {
                         "secretName": "kube-config"
                     }
                 }));
+                volume_mounts
+                    .as_array_mut()
+                    .unwrap()
+                    .push(serde_json::json!({
+                        "name": "kube-config",
+                        "mountPath": "/root/.kube/config",
+                        "subPath": "config"
+                    }));
             };
             Some(serde_json::json!({
                 "apiVersion": "apps/v1",
@@ -521,7 +553,7 @@ async fn search_streamer_template(meta: &ClusterMeta) -> Option<Value> {
 pub async fn get_templates(meta: &ClusterMeta) -> Result<Vec<Deployment>, Error> {
     let mut deployments: Vec<Deployment> = Vec::with_capacity(5);
     // add any api deployment templates
-    if let Some(deployment) = api_template(meta).await {
+    if let Some(deployment) = api_template(meta) {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         deployments.push(deployment);
     }
@@ -650,7 +682,7 @@ pub async fn delete_one(name: &str, meta: &ClusterMeta) -> Result<(), Error> {
 /// * `meta` - Thorium cluster client and metadata
 pub async fn deploy_api(meta: &ClusterMeta) -> Result<(), Error> {
     // add any api deployment templates
-    if let Some(deployment) = api_template(meta).await {
+    if let Some(deployment) = api_template(meta) {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup

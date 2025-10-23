@@ -1,0 +1,451 @@
+image: rust:latest
+
+stages:
+  - version
+  - base
+  - build
+  - deploy
+  - docs
+  - test
+
+before_script:
+    # clone our dependencies to where they need to be
+  - cd ..
+  - git clone https://gitlab-ci-token:${TOKEN}@cee-gitlab.sandia.gov/ragnarokkr/Thorium/cart-rs.git
+  - cd cart-rs && git checkout 1.2.3 && cd ../thorium
+
+
+# automatic semantic versioning
+semver:
+  stage: version
+  image: thorium-registry.sandia.gov/utils/semver:latest
+  only:
+    - branches
+  artifacts:
+    paths:
+      - version_artifact
+  tags:
+    - k8s
+  before_script: []
+  script:
+    # use artifacts to pass version between stages
+    - python3 /tmp/semver/gensemver.py --url="https://cee-gitlab.sandia.gov" --token_type="private" --token=$TOKEN > /tmp/version
+    - cat /tmp/version > version_artifact
+    - echo $(cat /tmp/version)
+
+base:
+  stage: base
+  image: thorium-registry.sandia.gov/base/docker:latest
+  only:
+    - schedule
+  tags:
+    - k8s
+  before_script: []
+  script:
+    # login to docker
+    - docker login -u gitlab-ci-token -p "$CI_JOB_TOKEN" $CI_REGISTRY
+    - docker login -u thorium -p "$REGISTRY_PASSWORD" thorium-registry.sandia.gov
+    # build and push the base image
+    - docker build --no-cache --pull -t "$CI_REGISTRY_IMAGE/base:latest" --network=host -f base/Dockerfile --build-arg TOKEN=$TOKEN .
+    # tag our image as a thorium-registry image as well
+    - docker tag "$CI_REGISTRY_IMAGE/base:latest" "thorium-registry.sandia.gov/thorium/base:latest"
+    # push our images
+    - docker push "thorium-registry.sandia.gov/thorium/base:latest"
+    - docker push "$CI_REGISTRY_IMAGE/base:latest"
+
+test:
+  stage: test
+  image: thorium-registry.sandia.gov/thorium/base:latest
+  only:
+    - branches
+  tags:
+    - k8s
+  variables:
+    # enable the features required by gxhash explicitly
+    RUSTFLAGS: "-C target-feature=+aes,+sse2"
+  script:
+    # start scylla
+    - scylla --developer-mode 1 --smp 2 --options-file /etc/scylla.d/dev-mode.conf --skip-wait-for-gossip-to-settle 0 1> /dev/null 2> /dev/null &
+    # start redis
+    - redis-server --save "" --appendonly no &
+    # start testing Thorium
+    - cargo test
+
+build-glibc:
+  stage: build
+  image: thorium-registry.sandia.gov/thorium/base:latest
+  only:
+    - branches
+  artifacts:
+    paths:
+      - glibc
+      - dev_docs
+  tags:
+    - k8s
+  variables:
+    # enable the features required by gxhash explicitly
+    RUSTFLAGS: "-C target-feature=+aes,+sse2"
+  script:
+    - lscpu
+    - rustup default nightly-2025-08-01
+    - rustup install nightly-2025-08-01
+    # build our glibc versions
+    - cargo build --release --features vendored-openssl
+    # build the developer docs
+    - cargo doc --no-deps
+    # make a glibc dir
+    - mkdir glibc
+    # copy our artifacts to the a glibc dir
+    - mv target/release/thorium glibc/.
+    - mv target/release/thoradm glibc/.
+    - mv target/release/thorctl glibc/.
+    - mv target/release/thorium-agent glibc/.
+    - mv target/release/thorium-scaler glibc/.
+    - mv target/release/thorium-reactor glibc/.
+    - mv target/release/thorium-event-handler glibc/.
+    - mv target/release/thorium-search-streamer glibc/.
+    - mv target/release/thorium-operator glibc/.
+    - mv target/doc dev_docs
+
+build-musl:
+  image: thorium-registry.sandia.gov/cross/cross:latest
+  stage: build
+  only:
+    - branches
+  artifacts:
+    paths:
+      - musl
+  tags:
+    - k8s
+  variables:
+    # enable the features required by gxhash explicitly
+    RUSTFLAGS: "-C target-feature=+aes,+sse2"
+  script:
+    # login to docker
+    - docker login -u gitlab-ci-token -p "$CI_JOB_TOKEN" $CI_REGISTRY
+    - docker login -u thorium -p "$REGISTRY_PASSWORD" thorium-registry.sandia.gov
+    - rustup default nightly-2025-08-01
+    - rustup install nightly-2025-08-01
+    # copy in our cross toml config
+    - cp /cross-confs/Cross.toml .
+    # cross compile the agent
+    - cd agent
+    - cross build --target x86_64-unknown-linux-musl  --features vendored-openssl --release
+    # cross compile thorctl
+    - cd ../thorctl
+    - cross build --target x86_64-unknown-linux-musl  --features vendored-openssl --release
+    # cross compile thoradm
+    - cd ../thoradm
+    - cross build --target x86_64-unknown-linux-musl  --features vendored-openssl --release
+    # cross compile the reactor
+    - cd ../reactor
+    - cross build --target x86_64-unknown-linux-musl  --features vendored-openssl --release
+    # cross compile the search streamer
+    - cd ../search-streamer
+    - cross build --target x86_64-unknown-linux-musl  --features vendored-openssl --release
+    # cross compile the operator
+    - cd ../operator
+    - cross build --target x86_64-unknown-linux-musl  --features vendored-openssl --release
+    # go back to the root dir
+    - cd ..
+    # make a dir to store musl builds
+    - mkdir musl
+    # copy our compiled binaries
+    - cp target/x86_64-unknown-linux-musl/release/thorium-agent musl/.
+    - cp target/x86_64-unknown-linux-musl/release/thorctl musl/.
+    - cp target/x86_64-unknown-linux-musl/release/thoradm musl/.
+    - cp target/x86_64-unknown-linux-musl/release/thorium-reactor musl/.
+    - cp target/x86_64-unknown-linux-musl/release/thorium-search-streamer musl/.
+    - cp target/x86_64-unknown-linux-musl/release/thorium-operator musl/.
+
+build-windows:
+  image: thorium-registry.sandia.gov/cross/cross:latest
+  stage: build
+  only:
+    - branches
+  artifacts:
+    paths:
+      - windows
+  tags:
+    - k8s
+  variables:
+    # enable the features required by gxhash explicitly
+    RUSTFLAGS: "-C target-feature=+aes,+sse2"
+  script:
+    # login to docker
+    - docker login -u gitlab-ci-token -p "$CI_JOB_TOKEN" $CI_REGISTRY
+    - docker login -u thorium -p "$REGISTRY_PASSWORD" thorium-registry.sandia.gov
+    # copy in our cross toml config
+    - cp /cross-confs/Cross.toml .
+    # cross compile the agent
+    - cd agent
+    - cross -V
+    - cross build --target x86_64-pc-windows-gnu  --features vendored-openssl --release
+    # cross compile thorctl
+    - cd ../thorctl
+    - cross build --target x86_64-pc-windows-gnu  --features vendored-openssl --release
+    # cross compile the reactor
+    - cd ../reactor
+    - cross build --target x86_64-pc-windows-gnu  --features vendored-openssl --release
+    # go back to the root dir
+    - cd ..
+    # make a dir to store windows builds
+    - mkdir windows
+    # copy our compiled binaries
+    - cp target/x86_64-pc-windows-gnu/release/thorium-agent.exe windows/.
+    - cp target/x86_64-pc-windows-gnu/release/thorctl.exe windows/.
+    - cp target/x86_64-pc-windows-gnu/release/thorium-reactor.exe windows/.
+
+build-macos:
+  image: thorium-registry.sandia.gov/cross/rust-darwin:latest
+  stage: build
+  only:
+    - branches
+  artifacts:
+    paths:
+      - macos
+  tags:
+    - k8s
+  variables:
+    # enable the features required by gxhash explicitly
+    RUSTFLAGS: "-C target-feature=+aes"
+  script:
+    - cargo -V
+    # compile Thorctl
+    - cd thorctl
+    # cross compile Thorctl
+    - CC=o64-clang CXX=o64-clang++ cargo build --target x86_64-apple-darwin --features vendored-openssl --release
+    - CC=oa64-clang CXX=oa64-clang++ LIBZ_SYS_STATIC=1 cargo build --release --target aarch64-apple-darwin --features vendored-openssl
+    # compile search-streamer
+    - cd ../search-streamer
+    # cross compile thorctl
+    - CC=o64-clang CXX=o64-clang++ cargo build --target x86_64-apple-darwin --features vendored-openssl --release
+    - CC=oa64-clang CXX=oa64-clang++ LIBZ_SYS_STATIC=1 cargo build --release --target aarch64-apple-darwin --features vendored-openssl
+    # go back to the root dir
+    - cd ..
+    # make a dir to store macos builds
+    - mkdir -p macos/x86_64
+    - mkdir -p macos/aarch64
+    # copy our compiled binaries
+    - cp target/x86_64-apple-darwin/release/thorctl macos/x86_64/.
+    - cp target/aarch64-apple-darwin/release/thorctl macos/aarch64/.
+    - cp target/x86_64-apple-darwin/release/thorium-search-streamer macos/x86_64/.
+    - cp target/aarch64-apple-darwin/release/thorium-search-streamer macos/aarch64/.
+
+#build-aarch64:
+#  image: thorium-registry.sandia.gov/cross/cross:latest
+#  stage: build
+#  only:
+#    - branches
+#  artifacts:
+#    paths:
+#      - aarch64
+#  tags:
+#    - k8s
+#  script:
+#    # login to docker
+#    - docker login -u gitlab-ci-token -p "$CI_JOB_TOKEN" $CI_REGISTRY
+#    # copy in our cross toml config
+#    - cp /cross-confs/Cross.toml .
+#    # cross compile thorctl
+#    - cd thorctl
+#    - cross build --target aarch64-unknown-linux-musl  --features vendored-openssl --release
+#    # cross compile search-streamer
+#    - cd ../search-streamer
+#    - cross build --target aarch64-unknown-linux-musl  --features vendored-openssl --release
+#    # go back to the root dir
+#    - cd ..
+#    # make a dir to store aarch64 builds
+#    - mkdir aarch64
+#    # copy our compiled binaries
+#    - cp target/aarch64-unknown-linux-musl/release/thorctl aarch64/.
+#    - cp target/aarch64-unknown-linux-musl/release/thorium-search-streamer aarch64/.
+
+user-docs:
+  stage: build
+  image: hrektts/mdbook
+  artifacts:
+    paths:
+      - user_docs
+  tags:
+    - k8s
+  before_script: []
+  script:
+    - mdbook build api/docs
+    - mv api/docs/book user_docs
+
+### UI ###
+#generate-ui-tags:
+#  stage: build
+#  image: thorium-registry.sandia.gov/base/ubuntu:latest
+#  tags:
+#    - k8s
+#  artifacts:
+#    paths:
+#      - ui/mitre_tags
+#  before_script:
+#    - cd ui/mitre_tags
+#  script:
+#    - rm *.tags || true
+#    - python3 -m pip install --upgrade pip 
+#    - python3 -m pip install pandas requests mitreattack-python
+#    - git submodule init
+#    - git submodule update
+#    - python3 mitreScraperAttck.py
+#    - python3 mitreScraperMBC.py
+
+build-ui:
+  stage: build
+  image: node:22-alpine
+  tags:
+    - k8s
+  #needs:
+  #  - job: generate-ui-tags
+  #    artifacts: true
+  artifacts:
+    paths:
+      - ui/dist
+  before_script:
+    - cd ui
+  script:
+    # configure npm and install dependencies
+    - export http_proxy="http://proxy.ca.sandia.gov:80"
+    - export https_proxy="http://proxy.ca.sandia.gov:80"
+    - cat sandia_root_ca.cer >> /etc/ssl/certs/ca-certificates.crt
+    - apk add --no-cache python3 make gcc g++
+    - npm config set cafile "sandia_root_ca.cer"
+    - npm config set proxy http://proxy.ca.sandia.gov:80
+    - npm config set https-proxy http://proxy.ca.sandia.gov:80
+    - npm config set registry https://registry.npmjs.org/
+    - npm config set strict-ssl false
+    - npm install --cafile "sandia_root_ca.cer" --verbose
+    # build application
+    - ls /builds/ragnarokkr/Thorium/thorium/ui/src
+    - ls /builds/ragnarokkr/Thorium/thorium/ui
+    - set -e
+    - npm run validate-style
+    - npm run build
+
+#lint-ui:
+#  stage: test
+#  image: node:22-alpine
+#  tags:
+#    - k8s
+#  before_script:
+#    - cd ui
+#  script:
+#    # configure npm and install dependencies
+#    - export http_proxy="http://proxy.ca.sandia.gov:80"
+#    - export https_proxy="http://proxy.ca.sandia.gov:80"
+#    - cat sandia_root_ca.cer >> /etc/ssl/certs/ca-certificates.crt
+#    - apk add --no-cache python3 make gcc g++
+#    - npm config set cafile "sandia_root_ca.cer"
+#    - npm config set proxy http://proxy.ca.sandia.gov:80
+#    - npm config set https-proxy http://proxy.ca.sandia.gov:80
+#    - npm config set registry https://registry.npmjs.org/
+#    - npm config set strict-ssl false
+#    - npm install --cafile "sandia_root_ca.cer" eslint@8 eslint-plugin-react eslint-config-google eslint-plugin-jsdoc eslint-plugin-react-hooks
+#    - npm run lint
+### End UI ###
+
+docker:
+  stage: deploy
+  image: thorium-registry.sandia.gov/base/docker:latest
+  only:
+    - branches
+  dependencies:
+    - semver
+    - build-glibc
+    - build-musl
+    - build-windows
+    - build-macos
+    #- build-aarch64
+    - build-ui
+    - user-docs
+  tags:
+    - k8s
+  before_script: []
+  script:
+    # set our version string
+    - if test -f "version_artifact"; then export VERSION=$(cat ./version_artifact); fi
+    # login to docker
+    - docker login -u gitlab-ci-token -p "$CI_JOB_TOKEN" $CI_REGISTRY
+    - docker login -u thorium -p "$REGISTRY_PASSWORD" thorium-registry.sandia.gov
+    # tag master as stable
+    - if [ "$CI_COMMIT_REF_NAME" = "main" ]; then export CI_COMMIT_REF_NAME="latest"; else export CI_COMMIT_REF_NAME="$CI_COMMIT_REF_NAME"; fi
+    # make our target dirs
+    - mkdir -p target/release
+    - mkdir -p target/doc
+    - mkdir -p target/x86_64-unknown-linux-musl/release
+    - mkdir -p target/x86_64-pc-windows-gnu/release
+    - mkdir -p target/x86_64-apple-darwin/release
+    - mkdir -p target/aarch64-apple-darwin/release
+    #- mkdir -p target/aarch64-unknown-linux-musl/release
+    # move our docs and compiled binaries to the correct spots
+    - mv user_docs api/docs/book
+    - mv dev_docs/* target/doc/.
+    - mv glibc/* target/release/.
+    - mv musl/* target/x86_64-unknown-linux-musl/release/.
+    - mv windows/* target/x86_64-pc-windows-gnu/release/.
+    - mv macos/x86_64/* target/x86_64-apple-darwin/release/.
+    - mv macos/aarch64/* target/aarch64-apple-darwin/release/.
+    #- mv aarch64/* target/aarch64-unknown-linux-musl/release/.
+    # build and push image to the latest or branch tag
+    - docker build --pull --no-cache -t "thorium-registry.sandia.gov/thorium/thorium:$CI_COMMIT_REF_NAME" --network=host -f Dockerfile .
+    - docker tag thorium-registry.sandia.gov/thorium/thorium:$CI_COMMIT_REF_NAME "$CI_REGISTRY_IMAGE/thorium:$CI_COMMIT_REF_NAME"
+    - docker push "thorium-registry.sandia.gov/thorium/thorium:$CI_COMMIT_REF_NAME"
+    - docker push "$CI_REGISTRY_IMAGE/thorium:$CI_COMMIT_REF_NAME"
+    # retag and push to the version tag if version is set
+    - if [ -n "$VERSION" ]; then docker tag thorium-registry.sandia.gov/thorium/thorium:$CI_COMMIT_REF_NAME "thorium-registry.sandia.gov/thorium/thorium:$VERSION"; fi
+    - if [ -n "$VERSION" ]; then docker push "thorium-registry.sandia.gov/thorium/thorium:$VERSION"; fi
+    - if [ -n "$VERSION" ]; then docker tag $CI_REGISTRY_IMAGE/thorium:$CI_COMMIT_REF_NAME "$CI_REGISTRY_IMAGE/thorium:$VERSION"; fi
+    - if [ -n "$VERSION" ]; then docker push "$CI_REGISTRY_IMAGE/thorium:$VERSION"; fi
+
+thorctl:
+  stage: deploy
+  image: thorium-registry.sandia.gov/base/docker:latest
+  only:
+    - branches
+  dependencies:
+    - semver
+    - build-musl
+  tags:
+    - k8s
+  before_script: []
+  script:
+    # set our version string
+    - if test -f "version_artifact"; then export VERSION=$(cat ./version_artifact); fi
+    # login to docker
+    - docker login -u gitlab-ci-token -p "$CI_JOB_TOKEN" $CI_REGISTRY
+    - docker login -u thorium -p "$REGISTRY_PASSWORD" thorium-registry.sandia.gov
+    # make our target dirs
+    - mkdir -p target/x86_64-unknown-linux-musl/release
+    # move our docs and compiled binaries to the correct spots
+    - mv musl/* target/x86_64-unknown-linux-musl/release/.
+    # tag main as stable
+    - if [ "$CI_COMMIT_REF_NAME" = "main" ]; then export CI_COMMIT_REF_NAME="latest"; else export CI_COMMIT_REF_NAME="$CI_COMMIT_REF_NAME"; fi
+    # build and push image to the latest or branch tag
+    - docker build --pull --no-cache -t "thorium-registry.sandia.gov/thorium/thorctl:$CI_COMMIT_REF_NAME" --network=host -f thorctl/Dockerfile .
+    - docker tag thorium-registry.sandia.gov/thorium/thorctl:$CI_COMMIT_REF_NAME "$CI_REGISTRY_IMAGE/thorctl:$CI_COMMIT_REF_NAME"
+    - docker push "thorium-registry.sandia.gov/thorium/thorctl:$CI_COMMIT_REF_NAME"
+    - docker push "$CI_REGISTRY_IMAGE/thorctl:$CI_COMMIT_REF_NAME"
+    # retag and push to the version tag if version is set
+    - if [ -n "$VERSION" ]; then docker tag thorium-registry.sandia.gov/thorium/thorctl:$CI_COMMIT_REF_NAME "thorium-registry.sandia.gov/thorium/thorctl:$VERSION"; fi
+    - if [ -n "$VERSION" ]; then docker push "thorium-registry.sandia.gov/thorium/thorctl:$VERSION"; fi
+    - if [ -n "$VERSION" ]; then docker tag $CI_REGISTRY_IMAGE/thorctl:$CI_COMMIT_REF_NAME "$CI_REGISTRY_IMAGE/thorctl:$VERSION"; fi
+    - if [ -n "$VERSION" ]; then docker push "$CI_REGISTRY_IMAGE/thorctl:$VERSION"; fi
+pages:
+  stage: docs
+  image: hrektts/mdbook
+  only:
+    - main
+  dependencies:
+    - user-docs
+  artifacts:
+    paths:
+      - public
+  tags:
+    - k8s
+  before_script: []
+  script:
+    - mv user_docs public

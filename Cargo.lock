@@ -4012,7 +4012,7 @@ dependencies = [
 [[package]]
 name = "kube"
 version = "2.0.1"
-source = "git+https://github.com/kube-rs/kube.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
+source = "git+https://github.com/stackabletech/kube-rs.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
 dependencies = [
  "k8s-openapi",
  "kube-client",
@@ -4024,7 +4024,7 @@ dependencies = [
 [[package]]
 name = "kube-client"
 version = "2.0.1"
-source = "git+https://github.com/kube-rs/kube.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
+source = "git+https://github.com/stackabletech/kube-rs.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -4059,7 +4059,7 @@ dependencies = [
 [[package]]
 name = "kube-core"
 version = "2.0.1"
-source = "git+https://github.com/kube-rs/kube.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
+source = "git+https://github.com/stackabletech/kube-rs.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
 dependencies = [
  "chrono",
  "derive_more",
@@ -4077,7 +4077,7 @@ dependencies = [
 [[package]]
 name = "kube-derive"
 version = "2.0.1"
-source = "git+https://github.com/kube-rs/kube.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
+source = "git+https://github.com/stackabletech/kube-rs.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
 dependencies = [
  "darling 0.21.3",
  "proc-macro2",
@@ -4090,7 +4090,7 @@ dependencies = [
 [[package]]
 name = "kube-runtime"
 version = "2.0.1"
-source = "git+https://github.com/kube-rs/kube.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
+source = "git+https://github.com/stackabletech/kube-rs.git?rev=cfdfcd1#cfdfcd13284348583ffd76ff3a24bd00b0ad6e79"
 dependencies = [
  "ahash 0.8.12",
  "async-broadcast",
