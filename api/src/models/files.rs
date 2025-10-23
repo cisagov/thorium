@@ -250,6 +250,26 @@ impl SampleCheck {
         self
     }
 
+    /// Sets the name for this existence check
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to set for this file
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::SampleCheck;
+    ///
+    /// SampleCheck::new("63b0490d4736e740f26ea9483d55c254abe032845b70ba84ea463ca6582d106f")
+    ///     .name("example.exe");
+    /// ```
+    #[must_use]
+    pub fn name<T: Into<String>>(mut self, name: T) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
     /// Sets the origin for this extence check
     ///
     /// # Arguments

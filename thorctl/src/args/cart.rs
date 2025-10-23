@@ -22,8 +22,7 @@ fn default_temp_cart_path() -> PathBuf {
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cart {
     /// The files/directories to cart
-    #[clap(required = true)]
-    pub targets: Vec<String>,
+    pub targets: Vec<PathBuf>,
     /// The password to use for encryption (no longer than 16 characters)
     ///     Note: encryption is only used to bypass malware scans;
     ///           the password is stored in plaintext in the cart header
@@ -61,10 +60,10 @@ pub struct Cart {
     /// Any regular expressions to use to determine which files to skip
     #[clap(short, long)]
     pub skip: Vec<String>,
-    /// Apply include/skip filters to directories as well as files
-    #[clap(short = 'F', long)]
-    pub filter_dirs: bool,
     /// Include hidden directories/files
+    ///
+    /// Note that if a given target is itself hidden, hidden files/directories within that
+    /// target will be included
     #[clap(long)]
     pub include_hidden: bool,
 }

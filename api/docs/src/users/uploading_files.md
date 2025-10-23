@@ -229,54 +229,61 @@ thorctl files upload -G example-group ./files --include-hidden
 ### Folder Tags
 
 Thorctl also has a feature to use file subdirectories as tag values with customizable tag keys using the `--folder-tags` option.
-For example, say you're uploading a directory `bin` with the following structure:
+For example, say you're uploading a directory `foo` with the following structure:
 
 ```
-cool_binaries
-├── file1
-└── dumped
-    ├── file2
-    ├── file3
-    ├── pe
-        └── file4
-    └── elf
-        └── file5
+foo
+├── foo1.txt
+└── bar
+    ├── bar1.txt
+    ├── bar2.txt
+    ├── baz
+        └── baz1.txt
+    └── qux
+        └── qux1.txt
 ```
 
-The `cool_binaries` directory contains five total files spread across three subdirectories. Each tag we provide with `--folder-tags`
-corresponds to a directory from top to bottom (including the root `cool_binaries` directory). So for example, if you run:
+The `foo` directory contains five total files spread across three subdirectories. Each tag we provide with `--folder-tags`
+corresponds to a directory from top to bottom (including the root `foo` directory). So for example, if you run:
 
 ```bash
-thorctl files upload -G example-group ./bin --folder-tags alpha --folder-tags beta --folder-tags gamma
+thorctl files upload -G example-group foo --folder-tags alpha/beta/gamma
 ```
 
-The key `alpha` would correspond to the `bin` directory, `beta` to `dumped`, and `gamma` to `pe` and `elf`. So all
-files in the `cool_binaries` directory **including files in subdirectories** would get the tag `alpha=cool_binaries`, all files in the
-`dumped` directory would get the tag `beta=dumped`, and so on. Below is a summary of the files and the tags they
+The key `alpha` would correspond to the `foo` directory, `beta` to `bar`, and `gamma` to `baz` and `qux`. So all
+files in the `foo` directory **including files in subdirectories** would get the tag `alpha=foo`, all files in the
+`bar` directory would get the tag `beta=bar`, and so on. Below is a summary of the files and the tags they
 would have after running the above command:
 
 | File | Tags |
 | ---- | ---- |
-| file1 | `alpha=cool_binaries` |
-| file2 | `alpha=cool_binaries`, `beta=dumped` |
-| file3 | `alpha=cool_binaries`, `beta=dumped` |
-| file4 | `alpha=cool_binaries`, `beta=dumped`, `gamma=pe` |
-| file5 | `alpha=cool_binaries`, `beta=dumped`, `gamma=elf` |
+| foo1.txt | `alpha=foo` |
+| bar1.txt | `alpha=foo`, `beta=bar` |
+| bar2.txt | `alpha=foo`, `beta=bar` |
+| baz1.txt | `alpha=foo`, `beta=bar`, `gamma=baz` |
+| qux1.txt | `alpha=foo`, `beta=bar`, `gamma=qux` |
 
 A few things to note:
 
+- Because `/` is used to delimit individual folder tag keys, keys cannot have `/` in them.
 - Tags correspond to subdirectory *levels*, not individual subdirectories, meaning files in subdirectories on the same
-level will get the same tag key (like `pe` and `elf` above).
+level will get the same tag key (like `baz` and `qux` above).
 - You don't have to provide the same number of tags as subdirectory levels. Any files in subdirectories deeper than the
-number of folder tags will receive all of their parents' tags until the provided tags are exhausted (e.g. a file in a
-child directory of `elf` called `x86` would get tags for `cool_binaries`, `dumped` and `elf` but not for `x86`).
+number of folder tags will receive all of their parents' tags until the provided tags are exhausted (e.g. if `qux` had
+a child directory called `quux` with a file called `quux1.txt`, it would get tags for `foo`, `bar`, and `qux`, but not
+for `quux`).
+- To skip a directory level, you can simply provide an empty tag key for that level. For example, `--folder-tags a//c`
+on file `a/b/c/d.txt` would get the tags `a=a` and `c=c` but no tag for `b`.
+- The root `/` directory in absolute paths as well as `.` in relative paths are ignored, so `--folder-tags a/b`
+on `/a/b/c.txt`, `./a/b/c.txt`, and `./a/./b/./c.txt` would all have tags `a=a` and `b=b`. Note that `..` components
+(e.g. `a/b/../b/c.txt`) are *not* ignored.
 
 ### Adjust Number of Parallel Uploads
 
 By default, Thorctl can perform a maximum of 10 actions in parallel at any given time. In the case of file uploads, that means
 a maximum of 10 files can be uploaded concurrently. You can adjust the number of parallel actions Thorctl will attempt to conduct
-using the `-w` flag:
+using the `--workers/-w` flag:
 
 ```bash
-thorctl -w 20 files upload --file-groups <group> <file/or/folders>
+thorctl --workers 20 files upload --file-groups <group> <files/or/directories>
 ```

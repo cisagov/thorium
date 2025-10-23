@@ -1,13 +1,10 @@
+use cart_rs::CartStream;
+use generic_array::{GenericArray, typenum::U16};
+use regex::RegexSet;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-
-use cart_rs::CartStream;
-
-use futures::{stream, StreamExt};
-use generic_array::{typenum::U16, GenericArray};
-use regex::RegexSet;
 use thorium::Error;
 use tokio::{
     fs::{File, OpenOptions},
@@ -15,9 +12,8 @@ use tokio::{
     task::JoinError,
 };
 use uuid::Uuid;
-use walkdir::DirEntry;
 
-use crate::args::{cart::Cart, Args};
+use crate::args::{Args, cart::Cart};
 use crate::utils;
 
 /// Handle the cart command
@@ -30,8 +26,11 @@ pub async fn handle(args: &Args, cmd: &Cart) -> Result<(), Error> {
     // build the set of regexs to determine which files to include or skip
     let filter = RegexSet::new(&cmd.filter)?;
     let skip = RegexSet::new(&cmd.skip)?;
-    let password_array: GenericArray<u8, U16> =
-        GenericArray::clone_from_slice(&pad_zeroes(cmd.password.as_bytes())?);
+    // prepare data for saving to between tasks
+    let cmd = Arc::new(cmd.clone());
+    let password_array: Arc<GenericArray<u8, U16>> = Arc::new(GenericArray::clone_from_slice(
+        &pad_zeroes(cmd.password.as_bytes())?,
+    ));
     // construct base output path
     let base_out_path = if cmd.in_place {
         &cmd.temp_dir
@@ -42,18 +41,35 @@ pub async fn handle(args: &Args, cmd: &Cart) -> Result<(), Error> {
     // print headers
     CartLine::header();
     // iterate over targets and uncart them
-    for target in &cmd.targets {
-        cart_target(
-            target,
-            base_out_path,
-            cmd,
-            &filter,
-            &skip,
-            &password_array,
-            args.workers,
-        )
-        .await;
-    }
+    utils::fs::process_async_walk(
+        cmd.targets.clone().into_iter(),
+        |path| {
+            // make a copy of the path for printing errors
+            let path_copy = path.clone();
+            // copy data for this task
+            let base_out_path = base_out_path.clone();
+            let cmd = cmd.clone();
+            let password = password_array.clone();
+            async move {
+                // cart the entry in a new task
+                let cart_result: Result<Result<PathBuf, Error>, JoinError> =
+                    tokio::spawn(cart_path(path, base_out_path, cmd, password)).await;
+                // log the result
+                match cart_result {
+                    Ok(Ok(out_path)) => CartLine::success(&path_copy, &out_path),
+                    Ok(Err(err)) => CartLine::error(&path_copy, &err),
+                    Err(err) => CartLine::error(&path_copy, &Error::from(err)),
+                }
+            }
+        },
+        CartLine::error,
+        &filter,
+        &skip,
+        cmd.include_hidden,
+        // run process concurrently based on the number of workers set
+        args.workers,
+    )
+    .await;
     // remove temporary drectory after in-place conversion
     if cmd.in_place {
         tokio::fs::remove_dir_all(base_out_path).await?;
@@ -61,79 +77,20 @@ pub async fn handle(args: &Args, cmd: &Cart) -> Result<(), Error> {
     Ok(())
 }
 
-/// Cart the file(s) at the given target
-///
-/// # Arguments
-///
-/// * `target` - The path to the target file or directory
-/// * `base_out_path` - The base output path
-/// * `cmd` - The cart command including user options
-/// * `filter` - Regex set used to determine which files to uncart
-/// * `skip` - Regex set used to determine which files to skip when uncarting
-/// * `password` - The password used to encrypt the cart file
-/// * `workers` - The number of workers that will cart the files
-async fn cart_target(
-    target: &String,
-    base_out_path: &Path,
-    cmd: &Cart,
-    filter: &RegexSet,
-    skip: &RegexSet,
-    password: &GenericArray<u8, U16>,
-    workers: usize,
-) {
-    // create Arcs to share references between threads
-    let target_path = Arc::new(PathBuf::from(target));
-    let base_out_path = Arc::new(PathBuf::from(base_out_path));
-    let cmd = Arc::new(cmd.clone());
-    let password = Arc::new(*password);
-    // cart all file entries at the given target path, filtered based on settings
-    stream::iter(
-        // filter the entries based on user settings
-        utils::fs::get_filtered_entries(target, filter, skip, cmd.include_hidden, cmd.filter_dirs)
-            .into_iter()
-            // map each filtered entry to a future that will spawn a new thread
-            // that carts its given entry. The future awaits the carting thread,
-            // then prints out the result
-            .map(|entry| async {
-                // clone the entry path to use for printing the results
-                let entry_path = PathBuf::from(entry.path());
-                // clone the Arcs for this thread
-                let target_path = target_path.clone();
-                let base_out_path = base_out_path.clone();
-                let cmd = cmd.clone();
-                let password = password.clone();
-                // cart the entry in a new thread
-                let cart_result: Result<Result<PathBuf, Error>, JoinError> =
-                    tokio::spawn(cart_entry(entry, target_path, base_out_path, cmd, password))
-                        .await;
-                // print out the result form the thread
-                match cart_result {
-                    Ok(Ok(out_path)) => CartLine::success(entry_path, out_path),
-                    Ok(Err(err)) => CartLine::error(entry_path, &err),
-                    Err(err) => CartLine::error(entry_path, &Error::from(err)),
-                }
-            }),
-    )
-    // await the mapped futures, limiting the maxmimum running at any given time by the number of workers
-    .for_each_concurrent(workers, |future| future)
-    .await;
-}
-
-/// Cart the given [`DirEntry`]
+/// Cart the file at the given path
 ///
 /// Returns the path to the carted file or an error on failure
 ///
 /// # Arguments
 ///
-/// * `entry` - The [`DirEntry`] to cart
+/// * `path` - The path to cart
 /// * `target_path` - The path to the target
 /// * `base_out_path` - The base output path
 /// * `cmd` - The cart command including user options
 /// * `password` - The password used to encrypt the cart file
-async fn cart_entry(
-    entry: DirEntry,
-    target_path: Arc<PathBuf>,
-    base_out_path: Arc<PathBuf>,
+async fn cart_path(
+    path: PathBuf,
+    base_out_path: PathBuf,
     cmd: Arc<Cart>,
     password: Arc<GenericArray<u8, U16>>,
 ) -> Result<PathBuf, Error> {
@@ -141,13 +98,12 @@ async fn cart_entry(
     let input: File = OpenOptions::new()
         .read(true)
         .write(false)
-        .open(&entry.path())
+        .open(&path)
         .await?;
     // generate output path and create necessary directories
     let mut out_path = construct_out_path(
+        &path,
         &base_out_path,
-        &target_path,
-        entry.path(),
         cmd.preserve_dir_structure,
         cmd.no_extension,
         cmd.in_place,
@@ -173,13 +129,15 @@ async fn cart_entry(
     }
     // if conversion is in-place, replace the input file with the output cart
     if cmd.in_place {
-        tokio::fs::rename(&out_path, entry.path()).await?;
+        // replace the original file
+        tokio::fs::rename(&out_path, &path).await?;
         if cmd.no_extension {
-            out_path = PathBuf::from(entry.path());
+            out_path = path;
         } else {
-            out_path = PathBuf::from(entry.path());
+            out_path.clone_from(&path);
             out_path.as_mut_os_string().push(".cart");
-            tokio::fs::rename(entry.path(), &out_path).await?;
+            // rename the file to have the '.cart' extension
+            tokio::fs::rename(&path, &out_path).await?;
         }
     }
     Ok(out_path)
@@ -207,50 +165,38 @@ fn pad_zeroes(arr: &[u8]) -> Result<[u8; 16], Error> {
     }
 }
 
-/// Construct the output path for the uncarted file
+/// Construct the output path for the carted file
 ///
 /// # Arguments
 ///
+/// * `path` - The path to the input cart file
 /// * `base_out_path` - The base output path
-/// * `target_path` - The path to the target given by the user
-/// * `entry_path` - The path to the entry or input cart file
 /// * `preserve_dir_structure` - User flag to preserve the directory structure of the target
 /// * `no_extension` - User flag to refrain from adding the ".cart" extension to the file
 /// * `in_place` - User flag to convert in-place
 fn construct_out_path(
+    path: &Path,
     base_out_path: &Path,
-    target_path: &Path,
-    entry_path: &Path,
     preserve_dir_structure: bool,
     no_extension: bool,
     in_place: bool,
 ) -> Result<PathBuf, Error> {
+    // start with the base output path
     let mut out_path = PathBuf::from(base_out_path);
     // preserve the target structure if flag is set
     if preserve_dir_structure {
         // append target path
-        if target_path.is_absolute() {
-            out_path.as_mut_os_string().push(target_path);
+        if path.is_absolute() {
+            // path already has leading '/' so push the raw OsStr
+            out_path.as_mut_os_string().push(path);
         } else {
-            out_path.push(target_path);
-        }
-        let entry_path_buf = PathBuf::from(entry_path);
-        // remove superfluous target path from entry path
-        match entry_path_buf.strip_prefix(target_path) {
-            Ok(stripped_entry_path) => {
-                // append the rest of the entry to the output path;
-                // stripped entry path is blank if target is the path to the file,
-                // so only append if stripped entry path has components
-                if stripped_entry_path.components().next().is_some() {
-                    out_path.push(stripped_entry_path);
-                }
-            }
-            Err(error) => return Err(Error::from(error)),
+            // path does not have leading '/' so push it as a path
+            out_path.push(path);
         }
     } else {
         // if directory structure is not preserved, just add the filename;
         // unchecked because every entry given to this function is a file
-        let file_name = entry_path.file_name().ok_or(Error::Generic(String::from(
+        let file_name = path.file_name().ok_or(Error::Generic(String::from(
             "Error creating output path! The given entry is not a file",
         )))?;
         out_path.push(file_name);
@@ -289,9 +235,9 @@ impl CartLine {
     ///
     /// * `input_path` - The path to the input cart file
     /// * `output_path` - The path to the output uncarted file
-    pub fn error<P: AsRef<Path>>(input_path: P, err: &Error) {
+    pub fn error(input_path: &Path, err: &Error) {
         Self::print(
-            input_path.as_ref(),
+            input_path,
             Path::new("."),
             err.msg()
                 .unwrap_or(String::from("Unknown error carting file")),

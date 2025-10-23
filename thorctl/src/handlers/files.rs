@@ -1,23 +1,24 @@
 //! Handles files commands
+
 use download::FilesDownloadWorker;
-use futures::stream::{self, StreamExt};
 use futures::TryStreamExt;
+use futures::stream::{self, StreamExt};
 use http::status::StatusCode;
 use owo_colors::OwoColorize;
 use regex::RegexSet;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::path::Path;
 use thorium::models::{
-    FileDeleteOpts, ReactionRequest, Sample, SampleCheck, SampleListLine, SampleSubmissionResponse,
+    FileDeleteOpts, ReactionRequest, Sample, SampleListLine, SampleSubmissionResponse,
     SubmissionChunk,
 };
 use thorium::{CtlConf, Error, Thorium};
 use uuid::Uuid;
-use walkdir::DirEntry;
 
 mod download;
 
-use super::{update, Controller};
+use super::{Controller, update};
 use crate::args::files::{DeleteFiles, DescribeFiles, DownloadFiles, Files, GetFiles, UploadFiles};
 use crate::args::{Args, DescribeCommand, SearchParameterized};
 use crate::utils;
@@ -38,14 +39,37 @@ macro_rules! upload_print {
     };
 }
 
+macro_rules! upload_print_dry_run {
+    ($status:expr, $path:expr, $sha256:expr, $msg:expr) => {
+        println!(
+            "{:<4} | {:<32} | {:<64} | {}",
+            $status,
+            $path.to_string_lossy(),
+            $sha256,
+            $msg
+        )
+    };
+}
+
 impl UploadLine {
     /// Print this log lines header
+    #[allow(clippy::print_literal)]
     pub fn header() {
         println!(
             "{} | {:<32} | {:<64} | {:<36} | {:<24}",
             "CODE", "PATH", "SHA256", "SUBMISSION", "MESSAGE"
         );
         println!("{:-<5}+{:-<34}+{:-<66}+{:-<38}+{:-<26}", "", "", "", "", "");
+    }
+
+    /// Print this log lines header
+    #[allow(clippy::print_literal)]
+    pub fn header_dry_run() {
+        println!(
+            "{} | {:<32} | {:<64} | {}",
+            "CODE", "PATH", "SHA256", "MESSAGE"
+        );
+        println!("{:-<5}+{:-<34}+{:-<66}+{:-<60}", "", "", "", "");
     }
 
     /// Build and print a successful file upload log line
@@ -55,7 +79,7 @@ impl UploadLine {
     /// * `path` - The path this file was uploaded from
     /// * `resp` - The submission response from the API
     pub fn uploaded(path: &Path, resp: &SampleSubmissionResponse) {
-        // print an uplopaded line
+        // print an uploaded line
         upload_print!("200".bright_green(), path, resp.sha256, resp.id, "-");
     }
 
@@ -67,6 +91,32 @@ impl UploadLine {
     /// * `sha256` - The sha256 for this file
     pub fn conflict(path: &Path, sha256: &str) {
         upload_print!("409".bright_blue(), path, sha256, "-", "Already Exists");
+    }
+
+    /// Build and print a successful file upload log line but for
+    /// a dry run
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path this file was uploaded from
+    /// * `sha256` - The SHA256 of the file
+    pub fn uploaded_dry_run(path: &Path, sha256: &str, tags: &HashMap<String, HashSet<String>>) {
+        // construct a message to display the tags assigned to the file
+        let tags_msg = if tags.is_empty() {
+            String::new()
+        } else {
+            tags.iter()
+                .fold("Tags: ".to_string(), |mut msg, (key, values)| {
+                    for value in values {
+                        write!(&mut msg, "{key}={value}, ").unwrap();
+                    }
+                    msg
+                })
+                .trim_end_matches(", ")
+                .to_string()
+        };
+        // print an uploaded dry run line
+        upload_print_dry_run!("-", path, sha256, tags_msg);
     }
 
     /// Build and print that we failed to upload a file
@@ -84,7 +134,7 @@ impl UploadLine {
             Some(code) => upload_print!(code.as_str().bright_red(), path, "-", "-", msg),
             // no status code is present so just use '-' painted bright red
             None => upload_print!("-".bright_red(), path, "-", "-", msg),
-        };
+        }
     }
 }
 
@@ -95,49 +145,52 @@ impl UploadLine {
 ///  * `thorium` - A Thorium client
 ///  * `cmd` - The upload files command to execute
 ///  * `entry` - The file entry we are uploading
+///  * `reaction_reqs` - The requests for reactions to spawn on the file on upload
 async fn uploader(
     thorium: &Thorium,
     cmd: &UploadFiles,
-    entry: &DirEntry,
+    path: &Path,
     reaction_reqs: Vec<ReactionRequest>,
 ) -> Result<(), Error> {
-    // get the path for this file
-    let path = entry.path();
     // get the sha256 for this file
     let sha256 = utils::sha256(path).await?;
-    // check if this file has already been uploaded
+    // check if this file has already been uploaded to these groups
     let exists = thorium
         .files
-        .exists(&SampleCheck::new(sha256.clone()))
+        .exists(&cmd.build_check(path, &sha256))
         .await?;
     // if this id does not already exist then upload it
     if exists.id.is_none() {
         // Build the sample request for this file
         let sample_req = cmd.build_req(path);
-        // upload this file
-        let resp = thorium.files.create(sample_req).await;
-        // determine if we should print an error message or not
-        match resp {
-            Ok(resp) => {
-                UploadLine::uploaded(path, &resp);
-                // create reactions for the new file concurrently
-                stream::iter(
-                    reaction_reqs
-                        .into_iter()
-                        .map(|req| req.sample(sha256.clone())),
-                )
-                .map(Ok)
-                .try_for_each_concurrent(10, |req| async move {
-                    thorium.reactions.create(&req).await.map(|_| ())
-                })
-                .await?;
-            }
-            Err(err) => {
-                // if this file was already uploaded then don't print an error
-                if err.status() == Some(StatusCode::CONFLICT) {
-                    UploadLine::conflict(path, &sha256);
-                } else {
-                    UploadLine::error(path, &err);
+        if cmd.dry_run {
+            UploadLine::uploaded_dry_run(path, &sha256, &sample_req.tags);
+        } else {
+            // upload this file
+            let resp = thorium.files.create(sample_req).await;
+            // determine if we should print an error message or not
+            match resp {
+                Ok(resp) => {
+                    UploadLine::uploaded(path, &resp);
+                    // create reactions for the new file concurrently
+                    stream::iter(
+                        reaction_reqs
+                            .into_iter()
+                            .map(|req| req.sample(sha256.clone())),
+                    )
+                    .map(Ok)
+                    .try_for_each_concurrent(10, |req| async move {
+                        thorium.reactions.create(&req).await.map(|_| ())
+                    })
+                    .await?;
+                }
+                Err(err) => {
+                    // if this file was already uploaded then don't print an error
+                    if err.status() == Some(StatusCode::CONFLICT) {
+                        UploadLine::conflict(path, &sha256);
+                    } else {
+                        UploadLine::error(path, &err);
+                    }
                 }
             }
         }
@@ -200,32 +253,33 @@ async fn upload(thorium: &Thorium, cmd: &UploadFiles) -> Result<(), Error> {
     let filter = RegexSet::new(&cmd.filter)?;
     let skip = RegexSet::new(&cmd.skip)?;
     // print the upload logs headers
-    UploadLine::header();
-    // crawl over each path and upload them if they are new
-    for target in &cmd.targets {
-        stream::iter(
-            // retrieve all file entries at the given target path, filtered based on settings
-            utils::fs::get_filtered_entries(
-                target,
-                &filter,
-                &skip,
-                cmd.include_hidden,
-                cmd.filter_dirs,
-            ),
-        )
-        .map(|entry| {
-            let reaction_reqs = reaction_reqs.clone();
+    if cmd.dry_run {
+        UploadLine::header_dry_run();
+    } else {
+        UploadLine::header();
+    }
+    // collect targets to upload from the command
+    let targets = cmd.targets.clone().into_targets().await?;
+    utils::fs::process_async_walk(
+        targets.into_iter(),
+        |target| {
+            // get a reference to the reaction requests that we can move into the async block
+            let reaction_reqs_ref = &reaction_reqs;
             async move {
+                let reaction_reqs = reaction_reqs_ref.clone();
                 // upload the entry if it's new
-                if let Err(err) = uploader(thorium, cmd, &entry, reaction_reqs).await {
-                    UploadLine::error(entry.path(), &err);
+                if let Err(err) = uploader(thorium, cmd, &target, reaction_reqs).await {
+                    UploadLine::error(&target, &err);
                 }
             }
-        })
-        .buffer_unordered(25)
-        .collect::<Vec<()>>()
-        .await;
-    }
+        },
+        UploadLine::error,
+        &filter,
+        &skip,
+        cmd.include_hidden,
+        10,
+    )
+    .await;
     Ok(())
 }
 

@@ -22,8 +22,7 @@ fn default_temp_uncart_path() -> PathBuf {
 #[allow(clippy::struct_excessive_bools)]
 pub struct Uncart {
     /// The files to uncart
-    #[clap(required = true)]
-    pub targets: Vec<String>,
+    pub targets: Vec<PathBuf>,
     /// The output directory to save the uncarted file(s) to
     #[clap(short, long, default_value = default_output_path().into_os_string(), conflicts_with = "in_place")]
     pub output: PathBuf,

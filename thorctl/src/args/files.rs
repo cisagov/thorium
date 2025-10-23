@@ -4,7 +4,8 @@
 
 use clap::Parser;
 use std::path::{Path, PathBuf};
-use thorium::models::{OriginRequest, SampleRequest};
+use thorium::Error;
+use thorium::models::{OriginRequest, SampleCheck, SampleRequest};
 use uuid::Uuid;
 
 use super::traits::describe::{DescribeCommand, DescribeSealed};
@@ -15,6 +16,48 @@ use super::traits::search::{SearchParameterized, SearchParams, SearchSealed};
 pub enum Files {
     /// Upload some files and/or directories to Thorium
     #[clap(version, author)]
+    #[command(
+        about = "Upload some files and/or directories to Thorium",
+        long_about = r#"
+Upload some files and/or directories to Thorium
+
+Examples:
+  # Upload a single file to a group
+  thorctl files upload -G example-group ./hello.txt
+
+  # Upload several files and a directory in one command
+  thorctl files upload -G example-group ./hello.txt /bin/ls ~/Documents
+
+  # Upload to multiple groups
+  thorctl files upload -G group1,group2,group3 ./my-folder
+
+  # Upload with tags (each tag requires its own flag)
+  thorctl files upload -G example-group -T Dataset=Examples -T Corn=good ./my-file.exe
+
+  # Upload only files matching a regex
+  thorctl files upload -G example-group --filter \\.exe$ ./my-folder
+
+  # Upload everything except files matching a regex
+  thorctl files upload -G example-group --skip ^temp-.* ./my-folder
+
+  # Combine multiple filters and skips
+  thorctl files upload -G example-group \
+    --filter \\.exe$ \
+    --skip evil \
+    --skip ^temp-.* \
+    ./my-folder
+
+  # Include hidden files and directories
+  thorctl files upload -G example-group --include-hidden ./my-folder
+
+  # Use folder hierarchy as tag values associated with given keys (keys delimited by '/')
+  # (see `--folder-tags` documentation below for more usage details)
+  thorctl files upload -G example-group --folder-tags alpha/beta/gamma ./my-folder
+
+  # Adjust the number of parallel uploads (workers)
+  thorctl --workers 20 files upload -G example-group ./big-dir
+"#
+    )]
     Upload(UploadFiles),
     /// Download files from Thorium
     #[clap(version, author)]
@@ -30,11 +73,53 @@ pub enum Files {
     Delete(DeleteFiles),
 }
 
+/// The targets to upload, whether explicit paths, paths in a file, or both
+/// but at least one
+#[derive(clap::Args, Debug, Clone)]
+#[group(required = true, multiple = true)]
+#[cfg_attr(test, derive(Default))]
+pub struct UploadFilesTargets {
+    /// The files and/or folders to upload
+    pub targets: Vec<PathBuf>,
+    /// An optional file containing a list of paths to files/directories to upload,
+    /// delimited by newline
+    ///
+    /// `--filter`, `--skip`, and other options will apply to each path as if it
+    /// were passed as a positional argument
+    #[clap(long)]
+    pub from_file: Option<PathBuf>,
+}
+
+impl UploadFilesTargets {
+    /// Collect all targets given by the user to a Vec of owned [`PathBuf`]
+    pub async fn into_targets(self) -> Result<Vec<PathBuf>, Error> {
+        // get the set of lines from the file if we're given one
+        let paths_from_file = if let Some(file) = &self.from_file {
+            let lines = crate::utils::fs::lines_set_from_file(file)
+                .await
+                .map_err(|err| {
+                    Error::new(format!(
+                        "Error collecting targets: {}",
+                        err.msg().unwrap_or_default()
+                    ))
+                })?;
+            // convert lines to PathBuf and return a vec
+            lines.into_iter().map(PathBuf::from).collect()
+        } else {
+            vec![]
+        };
+        Ok(self.targets.into_iter().chain(paths_from_file).collect())
+    }
+}
+
 /// A command to upload some files to Thorium
 #[derive(Parser, Debug)]
+#[cfg_attr(test, derive(Default))]
 pub struct UploadFiles {
-    /// The files and or folders to upload
-    pub targets: Vec<String>,
+    /// The targets to upload, whether explicit paths, paths in a file, or both
+    /// but at least one
+    #[clap(flatten)]
+    pub targets: UploadFilesTargets,
     /// The groups to upload these files to
     #[clap(short = 'G', long, value_delimiter = ',', required = true)]
     pub file_groups: Vec<String>,
@@ -45,6 +130,12 @@ pub struct UploadFiles {
     ///    (i.e. <TAG>=<VALUE1>=<VALUE2>=<VALUE3>)
     #[clap(long, default_value = "=", verbatim_doc_comment)]
     pub delimiter: char,
+    /// Display files that will be uploaded without uploading them
+    ///
+    /// This option will still send requests to the API to check if files
+    /// already exists but won't actually submit the files.
+    #[clap(long)]
+    pub dry_run: bool,
     /// Any pipelines to immediately spawn for the files that are uploaded;
     /// pipelines are specified by their name + group, separated with ":"
     /// (i.e. <PIPELINE1>:<GROUP1>,<PIPELINE2>:<GROUP2>)
@@ -56,14 +147,21 @@ pub struct UploadFiles {
     /// Any regular expressions to use to determine which files to skip
     #[clap(short, long)]
     pub skip: Vec<String>,
-    /// Apply include/skip filters to directories as well as files
-    #[clap(short = 'F', long, default_value = "false")]
-    pub filter_dirs: bool,
     /// Include hidden directories/files
+    ///
+    /// Note that if a given target is itself hidden, hidden files/directories within that
+    /// target will be included
     #[clap(long, default_value = "false")]
     pub include_hidden: bool,
-    /// The tags keys to use for each folder name starting at the root of the specified targets
-    #[clap(long)]
+    /// A list of keys to assign to directory names to upload as tags (e.g. --folder-tags "a/b" on
+    /// "foo/bar/baz.txt" would have tags "a=foo", "b=bar")
+    ///
+    /// Providing an empty key in the list will skip a directory level (e.g. --folder-tags "a//b" on
+    /// "foo/bar/baz/file.txt" would have tags "a=foo", b=baz"). See the Thorium docs for more
+    /// examples.
+    ///
+    /// Note: Because "/" is used to delimit keys, keys cannot have "/" in them
+    #[clap(long, value_delimiter = '/')]
     pub folder_tags: Vec<String>,
 }
 
@@ -104,19 +202,62 @@ impl UploadFiles {
                 req = req.tag(split[0], *value);
             }
         }
+        req = self.add_folder_tags(req, path);
+        // extract any origins from this path
+        req.origin = Self::extract_origin(path);
+        req
+    }
+
+    /// Add tags to the [`SampleRequest`] based on the given folder tags and the path
+    /// to the sample to upload
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - The sample request to add tags to
+    /// * `path` - The path to the sample to upload
+    fn add_folder_tags(&self, mut req: SampleRequest, path: &Path) -> SampleRequest {
         // get our parent path if one exists
         if let Some(parent) = path.parent() {
+            let mut parent_iter = parent.iter();
+            // if the path is absolute, skip the root directory
+            if parent.is_absolute()
+                || parent
+                    .components()
+                    .next()
+                    // or skip the first '.' if it's relative
+                    .is_some_and(|component| component.as_os_str() == ".")
+            {
+                parent_iter.next();
+            }
             // crawl over any folder_tags and our path and build the tags
-            for (key, value) in self.folder_tags.iter().zip(parent.iter().skip(1)) {
+            for (folder_key, component) in self.folder_tags.iter().zip(parent_iter) {
+                // if this folder key is empty, just skip it
+                if !folder_key.is_empty()
                 // try to cast the folder name to a utf-8 string
-                if let Some(name) = value.to_str() {
-                    req = req.tag(key, name);
+                    && let Some(folder_value) = component.to_str()
+                {
+                    req = req.tag(folder_key, folder_value);
                 }
             }
         }
-        // extract any origins from this path
-        req.origin = UploadFiles::extract_origin(path);
         req
+    }
+
+    /// Build a check to see if this file already exists with an identical
+    /// submission
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the file to upload
+    /// * `sha256` - The file's SHA256
+    pub fn build_check(&self, path: &Path, sha256: &str) -> SampleCheck {
+        let mut check = SampleCheck::new(sha256.to_string())
+            .groups(self.file_groups.clone())
+            .name(path.to_string_lossy());
+        if let Some(origin) = Self::extract_origin(path) {
+            check = check.origin(origin);
+        }
+        check
     }
 }
 
@@ -561,3 +702,153 @@ impl DescribeSealed for DescribeFiles {
 }
 
 impl DescribeCommand for DescribeFiles {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        collections::{HashMap, HashSet},
+        path::Path,
+    };
+
+    /// A wrapper function to construct default structs needed to add folder tags,
+    /// returning the folder tags that were created
+    fn folder_tags_test_wrapper(
+        folder_tags: Vec<String>,
+        path: &Path,
+    ) -> HashMap<String, HashSet<String>> {
+        let cmd = UploadFiles {
+            folder_tags,
+            ..Default::default()
+        };
+        let mut req = SampleRequest::new(path, Vec::<String>::new());
+        // add the folder tags
+        req = cmd.add_folder_tags(req, path);
+        req.tags
+    }
+
+    #[test]
+    fn test_add_folder_tags_absolute() {
+        let folder_tags = vec![
+            "source".to_string(),
+            "user".to_string(),
+            "project".to_string(),
+            "version".to_string(),
+        ];
+        let path = Path::new("/home/cool-user/myproj/v1/file.txt");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        let expected: HashMap<_, _> = [
+            // we should skip the root directory
+            (&folder_tags[0], "home"),
+            (&folder_tags[1], "cool-user"),
+            (&folder_tags[2], "myproj"),
+            (&folder_tags[3], "v1"),
+        ]
+        .into_iter()
+        .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+        .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_relative() {
+        let folder_tags = vec!["module".to_string(), "submodule".to_string()];
+        let path = Path::new("src/lib/main.rs");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        let expected: HashMap<_, _> = [(&folder_tags[0], "src"), (&folder_tags[1], "lib")]
+            .into_iter()
+            .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+            .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_relative_dot() {
+        let folder_tags = vec!["module".to_string(), "submodule".to_string()];
+        let path = Path::new("./src/lib/main.rs");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        // we should skip the '.' component
+        let expected: HashMap<_, _> = [(&folder_tags[0], "src"), (&folder_tags[1], "lib")]
+            .into_iter()
+            .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+            .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_relative_dot_in_middle() {
+        let folder_tags = vec!["module".to_string(), "submodule".to_string()];
+        let path = Path::new("./src/./lib/main.rs");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        // we should skip both '.' components; Path::iter normalizes away '.' components
+        let expected: HashMap<_, _> = [(&folder_tags[0], "src"), (&folder_tags[1], "lib")]
+            .into_iter()
+            .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+            .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_relative_dots_in_middle() {
+        let folder_tags = vec!["module".to_string(), "submodule".to_string()];
+        let path = Path::new("./src/../src/main.rs");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        // we should skip the first '.' component, but not the parent directory '..'
+        let expected: HashMap<_, _> = [(&folder_tags[0], "src"), (&folder_tags[1], "..")]
+            .into_iter()
+            .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+            .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_skip_empty_tag() {
+        let folder_tags = vec!["first".to_string(), String::new(), "third".to_string()];
+        let path = Path::new("/a/b/c/d.txt");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        // we should skip the second directory because the folder tag is empty
+        let expected: HashMap<_, _> = [(&folder_tags[0], "a"), (&folder_tags[2], "c")]
+            .into_iter()
+            .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+            .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_more_tags_than_components() {
+        let folder_tags = vec![
+            "one".to_string(),
+            "two".to_string(),
+            "three".to_string(),
+            "four".to_string(),
+        ];
+        let path = Path::new("x/y.txt");
+        let result = folder_tags_test_wrapper(folder_tags.clone(), path);
+        // only get the first x component
+        let expected: HashMap<_, _> = [(&folder_tags[0], "x")]
+            .into_iter()
+            .map(|(key, value)| (key.clone(), HashSet::from_iter([value.to_string()])))
+            .collect();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_no_parent() {
+        let folder_tags = vec!["only".to_string()];
+        let path = Path::new("file.txt");
+        let result = folder_tags_test_wrapper(folder_tags, path);
+        // no folder tags
+        let expected = HashMap::new();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_add_folder_tags_no_folder_tags() {
+        let folder_tags = vec![];
+        let path = Path::new("project/file.txt");
+        let result = folder_tags_test_wrapper(folder_tags, path);
+        // no folder tags
+        let expected = HashMap::new();
+        assert_eq!(result, expected);
+    }
+}
