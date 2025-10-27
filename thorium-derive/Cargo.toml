@@ -4,6 +4,8 @@ resolver = "2"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+description = "Derives useful functions and traits for Thorium."
+license-file = "../LICENSE"
 
 [lib]
 name = "thorium_derive"

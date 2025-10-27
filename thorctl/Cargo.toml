@@ -3,11 +3,13 @@ name = "thorctl"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+description = "A CLI tool for interacting with Thorium."
+license-file = "../LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thorium-api = { path = "../api", version = "1.3.1", default-features=false, features = ["client", "kanal-err", "dialoguer-err"]}
+thorium-api = { path = "../api", version = "1.3.2", default-features=false, features = ["client", "kanal-err", "dialoguer-err"]}
 clap = { version = "4", features = ["derive", "wrap_help", "string"] }
 tokio = { version = "1.45", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }
