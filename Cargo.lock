@@ -232,6 +232,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-tokio-tar"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec179a06c1769b1e42e1e2cbe74c7dcdb3d6383c838454d063eaac5bbb7ebbe5"
+dependencies = [
+ "filetime",
+ "futures-core",
+ "libc",
+ "portable-atomic",
+ "rustc-hash",
+ "tokio",
+ "tokio-stream",
+ "xattr",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4324,7 +4340,7 @@ checksum = "416f7e718bdb06000964960ffa43b4335ad4012ae8b99060261aa4a8088d5ccb"
 dependencies = [
  "bitflags 2.9.4",
  "libc",
- "redox_syscall 0.5.17",
+ "redox_syscall",
 ]
 
 [[package]]
@@ -4987,7 +5003,7 @@ checksum = "bc838d2a56b5b1a6c25f55575dfc605fabb63bb2365f6c2353ef9159aa69e4a5"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall 0.5.17",
+ "redox_syscall",
  "smallvec",
  "windows-targets 0.52.6",
 ]
@@ -5537,15 +5553,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
-]
-
-[[package]]
-name = "redox_syscall"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567664f262709473930a4bf9e51bf2ebf3348f2e748ccc50dea20646858f8f29"
-dependencies = [
- "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -6855,7 +6862,7 @@ dependencies = [
 
 [[package]]
 name = "thoradm"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
@@ -6887,7 +6894,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "strum",
- "thorium",
+ "thorium-api",
  "tokio",
  "tokio-util",
  "uuid",
@@ -6895,7 +6902,7 @@ dependencies = [
 
 [[package]]
 name = "thorctl"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "async-trait",
  "async-walkdir",
@@ -6930,7 +6937,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
- "thorium",
+ "thorium-api",
  "tokio",
  "tokio-stream",
  "url",
@@ -6939,12 +6946,48 @@ dependencies = [
 ]
 
 [[package]]
-name = "thorium"
-version = "1.3.0"
+name = "thorium-agent"
+version = "1.3.1"
+dependencies = [
+ "async-trait",
+ "bincode",
+ "cart-rs",
+ "cgroups-rs",
+ "chrono",
+ "clap",
+ "config",
+ "controlgroup",
+ "crossbeam",
+ "dirs",
+ "futures 0.3.31",
+ "gethostname",
+ "infer",
+ "itertools 0.14.0",
+ "openssl",
+ "opentelemetry 0.30.0",
+ "path-clean",
+ "regex",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sysinfo",
+ "thorium-api",
+ "tokio",
+ "tracing",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
+name = "thorium-api"
+version = "1.3.1"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
  "argon2",
+ "astral-tokio-tar",
  "async-recursion",
  "async-trait",
  "async_once",
@@ -7025,7 +7068,6 @@ dependencies = [
  "thorium-derive",
  "tokio",
  "tokio-stream",
- "tokio-tar",
  "tokio-test",
  "tokio-util",
  "tower",
@@ -7043,43 +7085,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "thorium-agent"
-version = "1.3.0"
-dependencies = [
- "async-trait",
- "bincode",
- "cart-rs",
- "cgroups-rs",
- "chrono",
- "clap",
- "config",
- "controlgroup",
- "crossbeam",
- "dirs",
- "futures 0.3.31",
- "gethostname",
- "infer",
- "itertools 0.14.0",
- "openssl",
- "opentelemetry 0.30.0",
- "path-clean",
- "regex",
- "reqwest",
- "semver",
- "serde",
- "serde_derive",
- "serde_json",
- "sysinfo",
- "thorium",
- "tokio",
- "tracing",
- "uuid",
- "walkdir",
-]
-
-[[package]]
 name = "thorium-derive"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "darling 0.20.11",
  "proc-macro2",
@@ -7089,14 +7096,14 @@ dependencies = [
 
 [[package]]
 name = "thorium-event-handler"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "chrono",
  "clap",
  "futures 0.3.31",
  "futures-locks",
  "reqwest",
- "thorium",
+ "thorium-api",
  "tokio",
  "tracing",
  "uuid",
@@ -7104,7 +7111,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-operator"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "aws-credential-types",
  "aws-sdk-s3",
@@ -7127,14 +7134,14 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "serde_yaml",
- "thorium",
+ "thorium-api",
  "tokio",
  "tokio-stream",
 ]
 
 [[package]]
 name = "thorium-reactor"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -7150,7 +7157,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sysinfo",
- "thorium",
+ "thorium-api",
  "tokio",
  "tracing",
  "uuid",
@@ -7159,7 +7166,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-scaler"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -7184,7 +7191,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "serial_test",
- "thorium",
+ "thorium-api",
  "thorium-scaler",
  "tokio",
  "tracing",
@@ -7193,7 +7200,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-search-streamer"
-version = "1.3.0"
+version = "1.3.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7210,7 +7217,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "serde_yaml",
- "thorium",
+ "thorium-api",
  "tokio",
  "tracing",
  "url",
@@ -7394,21 +7401,6 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
-]
-
-[[package]]
-name = "tokio-tar"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d5714c010ca3e5c27114c1cdeb9d14641ace49874aa5626d7149e47aedace75"
-dependencies = [
- "filetime",
- "futures-core",
- "libc",
- "redox_syscall 0.3.5",
- "tokio",
- "tokio-stream",
- "xattr",
 ]
 
 [[package]]

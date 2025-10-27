@@ -895,7 +895,7 @@ async fn create_hidden_result() -> Result<(), thorium::Error> {
         OutputDisplayType::Hidden,
     )
     .tool_version(ImageVersion::SemVer(
-        semver::Version::parse("1.3.0-rc").unwrap(),
+        semver::Version::parse("1.3.1-rc").unwrap(),
     ));
     // send this result to the API
     client.files.create_result(output_req).await?;
