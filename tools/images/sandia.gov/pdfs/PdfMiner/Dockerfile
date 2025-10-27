@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN python3 -m pip install pdfminer.six --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org
+RUN python3 -m pip install pdfminer.six
 
 COPY pdfmine.py /app/.
 

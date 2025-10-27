@@ -1,0 +1,9 @@
+
+name = "autovolatility3"
+type = "pipeline"
+description = "https://github.com/H3xKatana/autoVolatility3"
+version = "latest"
+config_from = "autovolatility3.json"
+
+[images.autovolatility3]
+version = "latest"

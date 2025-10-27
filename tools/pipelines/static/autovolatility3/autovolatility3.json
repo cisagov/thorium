@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "autovolatility3",
+  "order": [
+    [
+      "autovolatility3"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": "Automates volatility3"
+}

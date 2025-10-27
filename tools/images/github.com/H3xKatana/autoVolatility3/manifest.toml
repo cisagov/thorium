@@ -1,0 +1,6 @@
+name = "autovolatility3"
+type = "image"
+config_from = "autovolatility3.json"
+build_path = "./"
+image_name = "tools/github.com/h3xkatana/autovolatility3"
+version = "latest"

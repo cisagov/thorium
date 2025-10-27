@@ -8,11 +8,11 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-# NOTE: Check ExifTool official site for latest version; 13.38 may not be available. Latest version: 13.40
 ADD https://exiftool.org/Image-ExifTool-13.40.tar.gz /app/
 
-RUN tar -xzvf Image-ExifTool-13.40.tar.gz && \
-    rm Image-ExifTool-13.40.tar.gz
+RUN tar -xzvf *.tar.gz && \
+    mv Image-ExifTool-*/exiftool /app/exiftool && \
+    rm *.tar.gz
 
 COPY run_exiftool.py /app/.
 

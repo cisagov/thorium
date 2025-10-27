@@ -20,14 +20,10 @@ jobs:
       matrix: ${{ steps.generate-tool-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-        #with:
-        #  ref: 'refs/heads/main'
       - name: list images to build
         id: generate-tool-matrix
         run: |
           MATRIX=$(python3 tools/scripts/build-actions-matrix.py tools/toolbox.json)
-          #MATRIX_JSON="{ \"matrix\": $MATRIX}"
-          #echo $MATRIX_JSON | jq .
           echo "matrix=$(echo $MATRIX | jq -c .)" >> $GITHUB_OUTPUT
         
   build-tools:
@@ -43,10 +39,7 @@ jobs:
       matrix:
         tool: ${{ fromJson(needs.generate-tool-builds.outputs.matrix) }}
     steps:
-      #- run: echo ${{ needs.generate-tool-builds.outputs.matrix }}
       - uses: actions/checkout@v4
-        #with:
-        #  ref: 'refs/heads/main'
       - name: Login to Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Build Tool Container Image

@@ -1,12 +1,12 @@
 {
   "group": "static",
-  "name": "pharos-apianalyzer",
+  "name": "autovolatility3",
   "scaler": "K8s",
   "image": "",
-  "timeout": 1200,
+  "timeout": 3600,
   "resources": {
-    "cpu": "4000m",
-    "memory": "32768Mi",
+    "cpu": "10000m",
+    "memory": "16384Mi",
     "ephemeral_storage": "0Mi",
     "nvidia_gpu": 0,
     "amd_gpu": 0
@@ -22,7 +22,7 @@
     "commit": null,
     "output": "None"
   },
-  "description": null,
+  "description": "Automates volatility \n\nhttps://github.com/H3xKatana/autoVolatility3",
   "security_context": {
     "user": null,
     "group": null,
@@ -68,7 +68,7 @@
       "strategy": "Paths"
     }
   },
-  "display_type": "JSON",
+  "display_type": "String",
   "output_collection": {
     "handler": "Files",
     "files": {

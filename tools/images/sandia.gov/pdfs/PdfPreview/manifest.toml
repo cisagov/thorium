@@ -4,3 +4,4 @@ config_from = "pdf-preview.json"
 build_path = "./"
 image_name = "tools/sandia.gov/pdfs/pdf-preview"
 version = "latest"
+allow_base_override = false

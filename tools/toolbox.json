@@ -78,6 +78,28 @@
         }
       }
     },
+    "autovolatility3": {
+      "latest": {
+        "description": "https://github.com/H3xKatana/autoVolatility3",
+        "images": {
+          "autovolatility3": {
+            "version": "latest"
+          }
+        },
+        "config": {
+          "group": "static",
+          "name": "autovolatility3",
+          "order": [
+            [
+              "autovolatility3"
+            ]
+          ],
+          "sla": 640800,
+          "triggers": {},
+          "description": "Automates volatility3"
+        }
+      }
+    },
     "surfactant": {
       "latest": {
         "description": "https://github.com/LLNL/Surfactant",
@@ -497,6 +519,28 @@
         }
       }
     },
+    "cve-bin-tool": {
+      "latest": {
+        "description": "https://github.com/intel/cve-bin-tool",
+        "images": {
+          "cve-bin-tool-sbom": {
+            "version": "latest"
+          }
+        },
+        "config": {
+          "group": "static",
+          "name": "cve-bin-tool",
+          "order": [
+            [
+              "cve-bin-tool-sbom"
+            ]
+          ],
+          "sla": 640800,
+          "triggers": {},
+          "description": "The CVE Binary Tool is a free, open source tool to help you find known vulnerabilities in software, using data from the National Vulnerability Database (NVD) list of Common Vulnerabilities and Exposures (CVEs) as well as known vulnerability data from Redhat, Open Source Vulnerability Database (OSV), Gitlab Advisory Database (GAD), and Curl."
+        }
+      }
+    },
     "blint": {
       "latest": {
         "description": "https://github.com/owasp-dep-scan/blint",
@@ -725,6 +769,10 @@
       "latest": {
         "build_path": "./images/exiftool.org/tools/exiftool",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/exiftool.org/tools/exiftool:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "exiftool",
@@ -824,6 +872,10 @@
       "latest": {
         "build_path": "./images/gnu.org/binutils/dump-symbols",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/dump-symbols:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "dump-symbols",
@@ -923,6 +975,10 @@
       "latest": {
         "build_path": "./images/gnu.org/binutils/strings",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "strings",
@@ -1022,6 +1078,10 @@
       "latest": {
         "build_path": "./images/gnu.org/binutils/strings-32le",
         "build_image": false,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "strings-32le",
@@ -1124,6 +1184,10 @@
       "latest": {
         "build_path": "./images/gnu.org/binutils/strings-32be",
         "build_image": false,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "strings-32be",
@@ -1226,6 +1290,10 @@
       "latest": {
         "build_path": "./images/gnu.org/binutils/strings-16be",
         "build_image": false,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "strings-16be",
@@ -1328,6 +1396,10 @@
       "latest": {
         "build_path": "./images/gnu.org/binutils/strings-16le",
         "build_image": false,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "strings-16le",
@@ -1430,6 +1502,10 @@
       "latest": {
         "build_path": "./images/mark0.net/software/trid",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/mark0.net/software/trid:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "trid",
@@ -1529,6 +1605,10 @@
       "latest": {
         "build_path": "./images/salsa.debian.org/pkg-security-team/fcrackzip",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/salsa.debian.org/pkg-security-team/fcrackzip-unzip:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "unzip",
@@ -1628,6 +1708,10 @@
       "latest": {
         "build_path": "./images/salsa.debian.org/rul/foremost",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/salsa.debian.org/rul/foremost:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "foremost",
@@ -1727,6 +1811,10 @@
       "latest": {
         "build_path": "./images/sandia.gov/emails/email-parser",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/emails/email-parser:latest"
+        ],
+        "allow_base_override": false,
         "config": {
           "group": "static",
           "name": "email-parser",
@@ -1826,6 +1914,10 @@
       "latest": {
         "build_path": "./images/sandia.gov/pdfs/PdfMiner",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/pdfs/pdf-miner:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "pdf-miner",
@@ -1929,6 +2021,10 @@
       "latest": {
         "build_path": "./images/sandia.gov/pdfs/PdfPreview",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/pdfs/pdf-preview:latest"
+        ],
+        "allow_base_override": false,
         "config": {
           "group": "static",
           "name": "pdf-preview",
@@ -2027,6 +2123,10 @@
       "latest": {
         "build_path": "./images/github.com/gamelinux/prads",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/gamelinux/prads:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "prads",
@@ -2122,10 +2222,220 @@
         }
       }
     },
+    "cve-bin-tool": {
+      "latest": {
+        "build_path": "./images/github.com/intel/cve-bin-tool/cve",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "cve-bin-tool",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool:latest",
+          "timeout": 600,
+          "resources": {
+            "cpu": "3000m",
+            "memory": "4096Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": "The CVE Binary Tool is a free, open source tool to help you find known vulnerabilities in software, using data from the National Vulnerability Database (NVD) list of Common Vulnerabilities and Exposures (CVEs) as well as known vulnerability data from Redhat, Open Source Vulnerability Database (OSV), Gitlab Advisory Database (GAD), and Curl.",
+          "security_context": {
+            "user": 0,
+            "group": 0,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "String",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results.txt",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
+    "cve-bin-tool-sbom": {
+      "latest": {
+        "build_path": "./images/github.com/intel/cve-bin-tool/sbom",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool/sbom:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "cve-bin-tool-sbom",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool/sbom:latest",
+          "timeout": 600,
+          "resources": {
+            "cpu": "3000m",
+            "memory": "4096Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": "The CVE Binary Tool is a free, open source tool to help you find known vulnerabilities in software, using data from the National Vulnerability Database (NVD) list of Common Vulnerabilities and Exposures (CVEs) as well as known vulnerability data from Redhat, Open Source Vulnerability Database (OSV), Gitlab Advisory Database (GAD), and Curl.\n\nWe create a minimal scanner that outputs vendor, product, and version tuples that does not require Internet access. A limitation of this version is that it cannot detect SQLite versions.",
+          "security_context": {
+            "user": 0,
+            "group": 0,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "String",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results.txt",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
     "pefile": {
       "latest": {
         "build_path": "./images/github.com/erocarrera/pefile",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/erocarrera/pefile:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "pefile",
@@ -2221,10 +2531,117 @@
         }
       }
     },
+    "autovolatility3": {
+      "latest": {
+        "build_path": "./images/github.com/H3xKatana/autoVolatility3",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/h3xkatana/autovolatility3:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "autovolatility3",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/h3xkatana/autovolatility3:latest",
+          "timeout": 3600,
+          "resources": {
+            "cpu": "10000m",
+            "memory": "16384Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": "Automates volatility \n\nhttps://github.com/H3xKatana/autoVolatility3",
+          "security_context": {
+            "user": null,
+            "group": null,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "String",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
     "suricata": {
       "latest": {
         "build_path": "./images/github.com/OSIF/suricata",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/osif/suricata:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "suricata",
@@ -2324,6 +2741,10 @@
       "latest": {
         "build_path": "./images/github.com/ssdeep-project/ssdeep",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/ssdeep-project/ssdeep:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "ssdeep",
@@ -2423,6 +2844,10 @@
       "latest": {
         "build_path": "./images/github.com/file/file",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/file/file:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "file-linux",
@@ -2522,6 +2947,10 @@
       "latest": {
         "build_path": "./images/github.com/rocky/python-uncompyle6",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/rocky/python-uncompyle6:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "python-uncompyle6",
@@ -2621,6 +3050,10 @@
       "latest": {
         "build_path": "./images/github.com/llnl/surfactant",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/llnl/surfactant:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "surfactant",
@@ -2720,6 +3153,10 @@
       "latest": {
         "build_path": "./images/github.com/simsong/tcpflow",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/simsong/tcpflow:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "tcpflow",
@@ -2819,6 +3256,10 @@
       "latest": {
         "build_path": "./images/github.com/simsong/bulk_extractor",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/simsong/bulk-extractor:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "bulk-extractor",
@@ -2918,6 +3359,10 @@
       "latest": {
         "build_path": "./images/github.com/ReFirmLabs/binwalk",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/refirmlabs/binwalk:latest"
+        ],
+        "allow_base_override": false,
         "config": {
           "group": "static",
           "name": "binwalk",
@@ -3017,6 +3462,10 @@
       "latest": {
         "build_path": "./images/github.com/google/magika",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/google/magika:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "magika",
@@ -3116,6 +3565,10 @@
       "latest": {
         "build_path": "./images/github.com/decalage2/balbuzard",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/decalage2/balbuzard:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "balbuzard",
@@ -3215,6 +3668,10 @@
       "latest": {
         "build_path": "./images/github.com/onekey-sec/unblob",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/onekey-sec/unblob:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "unblob",
@@ -3316,6 +3773,10 @@
       "latest": {
         "build_path": "./images/github.com/mandiant/quantumstrand",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/quantumstrand:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "quantumstrand",
@@ -3415,6 +3876,10 @@
       "latest": {
         "build_path": "./images/github.com/mandiant/stringsifter",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/stringsifter:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "stringsifter",
@@ -3514,6 +3979,10 @@
       "latest": {
         "build_path": "./images/github.com/mandiant/capa",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/capa:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "capa",
@@ -3613,6 +4082,10 @@
       "latest": {
         "build_path": "./images/github.com/mandiant/flare-floss",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/floss:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "floss",
@@ -3712,6 +4185,10 @@
       "latest": {
         "build_path": "./images/github.com/mbeijen/mimetype",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/mbeijen/mimetype:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "mimetype",
@@ -3810,6 +4287,10 @@
       "latest": {
         "build_path": "./images/github.com/trailofbits/polyfile",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/trailofbits/polyfile:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "polyfile",
@@ -3911,6 +4392,10 @@
       "latest": {
         "build_path": "./images/github.com/upx/upx",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/upx/upx-unpack:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "upx-unpack",
@@ -4010,6 +4495,10 @@
       "latest": {
         "build_path": "./images/github.com/pdfminer/pdf2text",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/pdfminer/pdf2text:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "pdf2text",
@@ -4109,6 +4598,10 @@
       "latest": {
         "build_path": "./images/github.com/hellman/xortool",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/hellman/xortool:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "xortool",
@@ -4208,6 +4701,10 @@
       "latest": {
         "build_path": "./images/github.com/zeek/zeek",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/zeek/zeek-dump:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "zeek-dump",
@@ -4307,6 +4804,10 @@
       "latest": {
         "build_path": "./images/github.com/horsicq/detect-it-easy",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/horsicq/detect-it-easy:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "detect-it-easy",
@@ -4406,6 +4907,10 @@
       "latest": {
         "build_path": "./images/github.com/Cisco-Talos/ClamAV",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/cisco-talos/clamav:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "clamav",
@@ -4505,6 +5010,10 @@
       "latest": {
         "build_path": "./images/github.com/owasp-dep-scan/blint",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/owasp-dep-scan/blint:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "blint",
@@ -4604,6 +5113,10 @@
       "latest": {
         "build_path": "./images/github.com/ralphje/signify",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/ralphje/signify:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "signify",
@@ -4703,6 +5216,10 @@
       "latest": {
         "build_path": "./images/github.com/virustotal/yara",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/virustotal/yara:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "yara",
@@ -4800,10 +5317,432 @@
         }
       }
     },
+    "pharos-callanalyzer": {
+      "latest": {
+        "build_path": "./images/github.com/cmu-sei/pharos-callanalyzer",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-callanalyzer:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "pharos-callanalyzer",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-callanalyzer:latest",
+          "timeout": 1200,
+          "resources": {
+            "cpu": "4000m",
+            "memory": "32768Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": null,
+          "security_context": {
+            "user": null,
+            "group": null,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "JSON",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
+    "pharos-fn2hash": {
+      "latest": {
+        "build_path": "./images/github.com/cmu-sei/pharos-fn2hash",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-fn2hash:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "pharos-fn2hash",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-fn2hash:latest",
+          "timeout": 600,
+          "resources": {
+            "cpu": "4000m",
+            "memory": "32768Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": [
+              "/usr/local/bin/fn2hash"
+            ],
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": {
+              "Kwarg": "--json"
+            }
+          },
+          "description": null,
+          "security_context": {
+            "user": null,
+            "group": null,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "JSON",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": [
+              "static"
+            ]
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
+    "pharos-apianalyzer": {
+      "latest": {
+        "build_path": "./images/github.com/cmu-sei/pharos-apianalyzer",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-apianalyzer:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "pharos-apianalyzer",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-apianalyzer:latest",
+          "timeout": 1200,
+          "resources": {
+            "cpu": "4000m",
+            "memory": "32768Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": null,
+          "security_context": {
+            "user": null,
+            "group": null,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "JSON",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
+    "pharos-ooanalyzer": {
+      "latest": {
+        "build_path": "./images/github.com/cmu-sei/pharos-ooanalyzer",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-ooanalyzer:latest"
+        ],
+        "allow_base_override": true,
+        "config": {
+          "group": "static",
+          "name": "pharos-ooanalyzer",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-ooanalyzer:latest",
+          "timeout": 1200,
+          "resources": {
+            "cpu": "4000m",
+            "memory": "32768Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": null,
+          "security_context": {
+            "user": null,
+            "group": null,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "JSON",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
     "peid": {
       "latest": {
         "build_path": "./images/github.com/packing-box/peid",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/packing-box/peid:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "peid",
@@ -4903,6 +5842,10 @@
       "latest": {
         "build_path": "./images/github.com/wireshark/tshark",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/wireshark/tshark:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "tshark",
@@ -5002,6 +5945,10 @@
       "latest": {
         "build_path": "./images/github.com/fkie-cad/cwe-checker",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/github.com/fkie-cad/cwe-checker:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "cwe-checker",
@@ -5101,6 +6048,10 @@
       "latest": {
         "build_path": "./images/blog.didierstevens.com/tools/xorstrings",
         "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/blog.didierstevens.com/tools/xorstrings:latest"
+        ],
+        "allow_base_override": true,
         "config": {
           "group": "static",
           "name": "xorstrings",
@@ -5198,5 +6149,8 @@
     }
   },
   "name": "CISA Hosted Thorium Github Tools",
-  "registry": "ghcr.io/cisagov/thorium"
+  "registry": "ghcr.io/cisagov/thorium",
+  "registries": [
+    "ghcr.io/cisagov/thorium"
+  ]
 }

@@ -6,7 +6,7 @@
   "timeout": 1200,
   "resources": {
     "cpu": "4000m",
-    "memory": "16384Mi",
+    "memory": "32768Mi",
     "ephemeral_storage": "0Mi",
     "nvidia_gpu": 0,
     "amd_gpu": 0

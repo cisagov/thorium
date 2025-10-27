@@ -41,12 +41,13 @@ for image in images.keys():
             continue
         # grab build path for docker context for image/version
         build_path = images[image][version].get("build_path")
+        image_tags = images[image][version].get("image_tags", [])
         # grab registry image name from Thorium image config
         config = images[image][version].get("config", {})
         image_name = config.get("image", "")
         # both context build_path and registry image_name must be specified
         if (build_path != "" and image_name != ""):
-            matrix.append({"build_path": build_path, "image_name": image_name})
+            matrix.append({"build_path": build_path, "image_name": image_name, "image_tags": image_tags})
         else:
             logging.error(f"Image \"{config.get("name", "")}\" with empty build_path ({build_path}) or image name ({image_name})")
 

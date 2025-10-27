@@ -4,3 +4,4 @@ config_from = "email-parser.json"
 build_path = "./"
 image_name = "tools/sandia.gov/emails/email-parser"
 version = "latest"
+allow_base_override = false

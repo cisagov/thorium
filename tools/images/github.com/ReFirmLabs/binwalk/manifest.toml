@@ -4,3 +4,4 @@ config_from = "binwalk.json"
 build_path = "./"
 image_name = "tools/github.com/refirmlabs/binwalk"
 version = "latest"
+allow_base_override = false
