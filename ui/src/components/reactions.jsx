@@ -109,20 +109,10 @@ const deleteReactions = async (reactionList) => {
     // handle adding the error to the results object for rendering
     const handleReactionDeleteFailure = (error) => {
       reactionDeleteResults.push({
-        error: 'Failed to delete ' + reaction.pipeline + ': ' + error,
+        error: error,
       });
     };
-
-    const res = await deleteReaction(reaction.group, reaction.id, handleReactionDeleteFailure);
-    if (res) {
-      // return response including reaction uuid and pipeline/group
-      reactionDeleteResults.push({
-        id: reaction.id,
-        error: '',
-        group: reaction.group,
-        pipeline: reaction.pipeline,
-      });
-    }
+    await deleteReaction(reaction.group, reaction.id, handleReactionDeleteFailure);
   }
   return reactionDeleteResults;
 };
@@ -308,12 +298,12 @@ const DeleteReactionAlerts = ({ responses }) => {
         responses.map((deleteResponse, idx) => (
           <Row key={idx}>
             {deleteResponse.error && (
-              <Alert className="full-width danger" variant="">
+              <Alert className="full-width" variant="danger">
                 <center>{deleteResponse.error}</center>
               </Alert>
             )}
             {deleteResponse.error == '' && (
-              <Alert className="full-width info" variant="">
+              <Alert className="full-width" variant="info">
                 <center>
                   <span>
                     {`Successfully deleted reaction ${deleteResponse.id}`}
@@ -380,43 +370,43 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDeleteItems] = useState(5);
   const [deleteReactionResponses, setDeleteReactionResponses] = useState([]);
-  // get a list of reactions by the sha256 tag
-  useEffect(() => {
-    const getReactionsList = async () => {
-      if (!deleteInProgress) {
-        const reactions = [];
-        if (userInfo && userInfo.groups) {
-          for (const group of userInfo.groups) {
-            let moreReactions = true;
-            let cursor = null;
-            // need to get all reactions in chunks of 100 until there are no more left
-            while (moreReactions) {
-              const reactionsList = await listReactions(group, checkCookie, '', sha256, true, cursor, 10000);
-              if (reactionsList) {
-                // add returned reactions to local reactions array
-                reactions.push(...reactionsList.details);
-                // if cursor is undefined there are no more reactions for this group/tag
-                if (reactionsList['cursor'] == undefined) {
-                  moreReactions = false;
-                } else {
-                  cursor = reactionsRes.data.cursor;
-                }
+
+  const getReactionsList = async () => {
+    setLoading(true);
+    if (!deleteInProgress) {
+      const reactions = [];
+      if (userInfo && userInfo.groups) {
+        for (const group of userInfo.groups) {
+          let moreReactions = true;
+          let cursor = null;
+          // need to get all reactions in chunks of 100 until there are no more left
+          while (moreReactions) {
+            const reactionsList = await listReactions(group, checkCookie, '', sha256, true, cursor, 10000);
+            if (reactionsList) {
+              // add returned reactions to local reactions array
+              reactions.push(...reactionsList.details);
+              // if cursor is undefined there are no more reactions for this group/tag
+              if (reactionsList['cursor'] == undefined) {
+                moreReactions = false;
+              } else {
+                cursor = reactionsRes.data.cursor;
               }
             }
           }
-
-          setReactionsList(reactions);
-          reactions.forEach((reaction) => (reactionsMap[reaction.id] = reaction));
-          setReactionsMap(reactionsMap);
         }
-        setLoading(false);
+        setReactionsList(reactions);
+        reactions.forEach((reaction) => (reactionsMap[reaction.id] = reaction));
+        setReactionsMap(reactionsMap);
       }
-    };
+      setLoading(false);
+    }
+  };
 
+  // get a list of reactions by the sha256 tag
+  useEffect(() => {
     // only trigger reaction status API requests when component is being viewed
     if (autoRefresh) {
       // get a reaction list for the first render
-      setLoading(true);
       getReactionsList();
       // now update the list every X seconds where x is the interval passed in below
       const intervalId = setInterval(() => {
@@ -504,11 +494,11 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
         deleteReactionList.push(reactionsMap[reactionID]);
       }
     });
-    const deleteResponses = await deleteReactions(deleteReactionList);
-    setDeleteReactionResponses(deleteResponses);
-
+    const deleteErrors = await deleteReactions(deleteReactionList);
     setLoading(false);
     deleteInProgress = false;
+    await getReactionsList();
+    setDeleteReactionResponses(deleteErrors);
   };
 
   return (
@@ -641,7 +631,7 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
           )}
         </>
       )}
-      <Row className="pt-1">
+      <Row className="mt-2">
         <DeleteReactionAlerts responses={deleteReactionResponses} />
       </Row>
       <br />

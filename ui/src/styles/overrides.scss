@@ -34,6 +34,7 @@ body,
 html {
   font-family: 'Product Sans';
   letter-spacing: 0.5px;
+  scrollbar-gutter: stable;
 
   /* width (no effect in FireFox) */
   ::-webkit-scrollbar {
