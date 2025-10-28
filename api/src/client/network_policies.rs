@@ -285,6 +285,7 @@ impl NetworkPolicies {
             .client
             .patch(&url)
             .header("authorization", &self.token)
+            .query(&query)
             .json(&update);
         // send this request
         send!(self.client, req)
