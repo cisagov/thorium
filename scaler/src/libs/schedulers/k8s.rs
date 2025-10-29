@@ -7,7 +7,7 @@
 //! what a pod is doing at any given time.
 
 use chrono::prelude::*;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use hashbrown::HashMap;
 use k8s_openapi::api::networking::v1::NetworkPolicy;
 use kube::config::{KubeConfigOptions, Kubeconfig};
@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 use thorium::models::{ImageScaler, ScrubbedUser, SystemSettings, UserRole, WorkerDeleteMap};
 use thorium::{Conf, Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 pub mod cluster;
@@ -42,7 +42,7 @@ use volumes::{MountGen, Volumes};
 
 use super::{Allocatable, AllocatableUpdate, Scheduler, Spawned, WorkerDeletion};
 use crate::libs::scaler::ErrorOutKinds;
-use crate::libs::{helpers, BanSets, Cache, Tasks};
+use crate::libs::{BanSets, Cache, Tasks, helpers};
 use crate::{raw_entry_vec_extend, raw_entry_vec_push};
 
 /// Get a client for our k8s clusters based off of a kube config
@@ -70,9 +70,10 @@ async fn from_kubeconfig(
             continue;
         }
         // build the options for getting a specific clusters config
-        let mut opts = KubeConfigOptions::default();
-        // set the context to use
-        opts.context = Some(context.name.clone());
+        let opts = KubeConfigOptions {
+            context: Some(context.name.clone()),
+            ..Default::default()
+        };
         // get this clusters config
         let mut cluster_conf =
             kube::Config::from_custom_kubeconfig(kube_conf.clone(), &opts).await?;
@@ -82,6 +83,10 @@ async fn from_kubeconfig(
             .map(String::to_owned);
         // disable certificate validation if requested
         cluster_conf.accept_invalid_certs = k8s_conf.accept_invalid_certs(&context.name);
+        // clear our proxy settings if requested
+        if conf.thorium.scaler.k8s.clear_proxy {
+            cluster_conf.proxy_url = None;
+        }
         // create a client based on this config
         let client = kube::Client::try_from(cluster_conf)?;
         // get this clusters alias or use our context name
@@ -376,7 +381,9 @@ impl K8s {
                         }
                     } else {
                         // this policy's info is missing from the cache; log an error
-                        let msg = format!("Network policy info for '{ns}:{k8s_policy_name}' with ID '{id}' is missing from the cache!");
+                        let msg = format!(
+                            "Network policy info for '{ns}:{k8s_policy_name}' with ID '{id}' is missing from the cache!"
+                        );
                         event!(Level::ERROR, msg = msg);
                     }
                 } else {
@@ -566,7 +573,9 @@ impl K8s {
                 }
                 // the policy is missing from the cache, so log a warning
                 None => {
-                    let msg = format!("A policy with id '{id}' was set to be deployed, but the policy is missing from the cache!");
+                    let msg = format!(
+                        "A policy with id '{id}' was set to be deployed, but the policy is missing from the cache!"
+                    );
                     event!(Level::ERROR, msg = msg);
                 }
             }
@@ -802,8 +811,9 @@ impl K8s {
                     // if the base policy already exists (we got a 409 CONFLICT), ignore the error
                     if api_err.code != 409 {
                         // log the error
-                        let msg =
-                                        format!("Failed to deploy base network policy '{policy_name}' to namespace '{ns}': {k8s_err}");
+                        let msg = format!(
+                            "Failed to deploy base network policy '{policy_name}' to namespace '{ns}': {k8s_err}"
+                        );
                         event!(Level::ERROR, msg = msg);
                         // mark that a deploy error occurred for this group
                         no_errors = false;
@@ -812,8 +822,8 @@ impl K8s {
                 _ => {
                     // log the error
                     let msg = format!(
-                                    "Failed to deploy base network policy '{policy_name}' to namespace '{ns}': {k8s_err}"
-                                );
+                        "Failed to deploy base network policy '{policy_name}' to namespace '{ns}': {k8s_err}"
+                    );
                     event!(Level::ERROR, msg = msg);
                     // mark that a deploy error occurred for this group
                     no_errors = false;

@@ -515,6 +515,9 @@ pub struct K8s {
     /// The divisor to use when calculating what % of resources to reduce fair share ranks by
     #[serde(default = "default_fair_share_divisor")]
     pub fair_share_divisor: u64,
+    /// Clear any proxy settings that kube finds
+    #[serde(default)]
+    pub clear_proxy: bool,
 }
 
 impl Default for K8s {
@@ -527,6 +530,7 @@ impl Default for K8s {
             limbo: default_limbo(),
             fair_share: FairShareWeights::default(),
             fair_share_divisor: default_fair_share_divisor(),
+            clear_proxy: false,
         }
     }
 }
