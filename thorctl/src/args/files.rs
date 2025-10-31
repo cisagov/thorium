@@ -349,7 +349,7 @@ pub struct DownloadFiles {
     /// The max number of total submissions to find in the search
     ///     Note: Because one file may have several submissions (i.e. users upload the same file
     ///           to different groups), the number of files downloaded will likely be less than this limit
-    #[clap(short, long, default_value = "50", verbatim_doc_comment)]
+    #[clap(short, long, default_value = "200", verbatim_doc_comment)]
     pub limit: usize,
     /// Refrain from setting a limit when downloading files
     ///     Note: This can lead to downloading many millions of files

@@ -87,6 +87,9 @@ pub struct Args {
     /// The number of parallel async actions to process at once
     #[clap(short, long, default_value_t = 10)]
     pub workers: usize,
+    /// Disable progress tracking and only print errors to stderr
+    #[clap(short, long)]
+    pub quiet: bool,
 }
 
 /// The commands to send to handlers for Thorium

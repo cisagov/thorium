@@ -84,13 +84,28 @@ impl BarKind {
 }
 
 /// The controller for multiple progress bars in Thorctl
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct MultiBar {
     /// The multiprogress controlling all our progress bars
-    multi: MultiProgress,
+    multi: Option<MultiProgress>,
 }
 
 impl MultiBar {
+    /// Create a new multi progress bar
+    ///
+    /// # Arguments
+    ///
+    /// * `quiet` - Whether this progress bar should be visible
+    pub fn new(quiet: bool) -> Self {
+        // this progress bar is not quiet then create a progress bar
+        let multi = if quiet {
+            None
+        } else {
+            Some(MultiProgress::new())
+        };
+        MultiBar { multi }
+    }
+
     /// Add child progress bar
     ///
     /// # Arguments
@@ -98,12 +113,20 @@ impl MultiBar {
     /// * `name` - The name identifying this bar
     /// * `kind` - The kind of bar to add
     pub fn add(&self, name: &str, kind: BarKind) -> Bar {
-        // create a new progress bar
-        let bar = ProgressBar::new_spinner();
-        // configure our new bar
-        kind.setup(name, &bar);
-        // add this bar to our multi progress bar
-        self.multi.add(bar.clone());
+        // if quiet is set then don't create a bar
+        let bar = match &self.multi {
+            Some(multi) => {
+                // create a new progress bar
+                let bar = ProgressBar::new_spinner();
+                // configure our new bar
+                kind.setup(name, &bar);
+                // add this bar to our multi progress bar
+                multi.add(bar.clone());
+                // return our child bar
+                Some(bar)
+            }
+            None => None,
+        };
         // build our child progress bar
         Bar {
             name: name.to_owned(),
@@ -117,7 +140,10 @@ impl MultiBar {
     ///
     /// * `msg` - The error message to print
     pub fn error(&self, msg: &str) -> Result<(), Errors> {
-        self.multi.println(msg)?;
+        match &self.multi {
+            Some(multi) => multi.println(msg)?,
+            None => eprintln!("{msg}"),
+        }
         Ok(())
     }
 }
@@ -128,7 +154,7 @@ pub struct Bar {
     /// The name of this progress bar
     name: String,
     /// The progress bar to use when showing progress
-    pub bar: ProgressBar,
+    pub bar: Option<ProgressBar>,
 }
 
 impl Bar {
@@ -145,7 +171,7 @@ impl Bar {
     {
         let bar = Self {
             name: name.into(),
-            bar: ProgressBar::new(0),
+            bar: Some(ProgressBar::new(0)),
         };
         bar.refresh(msg, kind);
         bar
@@ -164,10 +190,35 @@ impl Bar {
     {
         let bar = Self {
             name: name.into(),
-            bar: ProgressBar::new_spinner(),
+            bar: Some(ProgressBar::new_spinner()),
         };
         bar.refresh(msg, BarKind::Unbound);
         bar
+    }
+
+    /// Change this bars style
+    ///
+    /// # Arguments
+    ///
+    /// * `style` - The style to set
+    pub fn set_style(&self, style: ProgressStyle) {
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            // update our bars style
+            bar.set_style(style);
+        }
+    }
+
+    /// Set a steady tick rate for our bar
+    ///
+    /// # Arguments
+    ///
+    /// * `tick` - The tick duration to set
+    pub fn enable_steady_tick(&self, tick: Duration) {
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.enable_steady_tick(tick);
+        }
     }
 
     /// Rename this bar
@@ -185,8 +236,11 @@ impl Bar {
     ///
     /// * `msg` - The message to set
     pub fn set_message<M: Into<Cow<'static, str>>>(&self, msg: M) {
-        // set our new message
-        self.bar.set_message(msg);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            // set our new message
+            bar.set_message(msg);
+        }
     }
 
     /// Set the length for this bar
@@ -196,7 +250,10 @@ impl Bar {
     /// * `len` - The length to set
     #[allow(dead_code)]
     pub fn set_length(&self, len: u64) {
-        self.bar.set_length(len);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.set_length(len);
+        }
     }
 
     /// Increment our total length
@@ -205,7 +262,10 @@ impl Bar {
     ///
     /// * `delta` - The delta to apply
     pub fn inc_length(&self, delta: u64) {
-        self.bar.inc_length(delta);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.inc_length(delta);
+        }
     }
 
     /// Increment our progress
@@ -214,7 +274,10 @@ impl Bar {
     ///
     /// * `delta` - The delta to apply
     pub fn inc(&self, delta: u64) {
-        self.bar.inc(delta);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.inc(delta);
+        }
     }
 
     /// Set the position of our progress bar
@@ -223,7 +286,10 @@ impl Bar {
     ///
     /// * `position` - The new position to set
     pub fn set_position(&self, position: u64) {
-        self.bar.set_position(position);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.set_position(position);
+        }
     }
 
     /// Print an info message
@@ -232,12 +298,15 @@ impl Bar {
     ///
     /// * `msg` - The info message to print
     pub fn info<T: AsRef<str>>(&self, msg: T) {
-        self.bar.println(format!(
-            "{}: {} - {}",
-            "Info".bright_blue(),
-            &self.name,
-            msg.as_ref(),
-        ));
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.println(format!(
+                "{}: {} - {}",
+                "Info".bright_blue(),
+                &self.name,
+                msg.as_ref(),
+            ));
+        }
     }
 
     /// Print an info message without the bar's name included
@@ -246,8 +315,10 @@ impl Bar {
     ///
     /// * `msg` - The info message to print
     pub fn info_anonymous<T: AsRef<str>>(&self, msg: T) {
-        self.bar
-            .println(format!("{}: {}", "Info".bright_blue(), msg.as_ref(),));
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.println(format!("{}: {}", "Info".bright_blue(), msg.as_ref(),));
+        }
     }
 
     /// Print a warning message
@@ -256,12 +327,15 @@ impl Bar {
     ///
     /// * `msg` - The warning message to print
     pub fn warning<T: AsRef<str>>(&self, msg: T) {
-        self.bar.println(format!(
-            "{}: {} - {}",
-            "Warning".bright_yellow(),
-            &self.name,
-            msg.as_ref(),
-        ));
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.println(format!(
+                "{}: {} - {}",
+                "Warning".bright_yellow(),
+                &self.name,
+                msg.as_ref(),
+            ));
+        }
     }
 
     /// Print an error message
@@ -270,12 +344,25 @@ impl Bar {
     ///
     /// * `msg` - The error message to print
     pub fn error<T: AsRef<str>>(&self, msg: T) {
-        self.bar.println(format!(
-            "{}: {} - {}",
-            "Error".bright_red(),
-            &self.name,
-            msg.as_ref(),
-        ));
+        // print our error if we are in quiet mode or not
+        match &self.bar {
+            Some(bar) => {
+                bar.println(format!(
+                    "{}: {} - {}",
+                    "Error".bright_red(),
+                    &self.name,
+                    msg.as_ref(),
+                ));
+            }
+            None => {
+                eprintln!(
+                    "{}: {} - {}",
+                    "Error".bright_red(),
+                    &self.name,
+                    msg.as_ref(),
+                )
+            }
+        }
     }
 
     /// Print an error message without the bar's name included
@@ -284,8 +371,15 @@ impl Bar {
     ///
     /// * `msg` - The error message to print
     pub fn error_anonymous<T: AsRef<str>>(&self, msg: T) {
-        self.bar
-            .println(format!("{}: {}", "Error".bright_red(), msg.as_ref(),));
+        // print our error if we are in quiet mode or not
+        match &self.bar {
+            Some(bar) => {
+                bar.println(format!("{}: {}", "Error".bright_red(), msg.as_ref(),));
+            }
+            None => {
+                eprintln!("{}: {}", "Error".bright_red(), msg.as_ref());
+            }
+        }
     }
 
     /// Set a new message for this bar.
@@ -296,31 +390,47 @@ impl Bar {
     ///
     /// * `msg` - The message to set
     pub fn refresh<M: Into<Cow<'static, str>>>(&self, msg: M, kind: BarKind) {
-        // reset any progress in this bar
-        self.bar.reset();
-        // resetup our bar
-        kind.setup(&self.name, &self.bar);
-        // set our new message
-        self.bar.set_message(msg);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            // reset any progress in this bar
+            bar.reset();
+            // resetup our bar
+            kind.setup(&self.name, &bar);
+            // set our new message
+            bar.set_message(msg);
+        }
     }
 
     /// Finish the bar, leaving its message displayed
     pub fn finish(&self) {
-        self.bar.finish();
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.finish();
+        }
     }
 
     /// Finish this bar with an updated message
     pub fn finish_with_message<M: Into<Cow<'static, str>>>(&self, msg: M) {
-        self.bar.finish_with_message(msg);
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.finish_with_message(msg);
+        }
     }
 
     /// Finish this bar and clear it
     pub fn finish_and_clear(&self) {
-        self.bar.finish_and_clear();
+        // check if we are in quiet mode or not
+        if let Some(bar) = &self.bar {
+            bar.finish_and_clear();
+        }
     }
 
     /// Suspend the progress bar while the function `f` is executing
     pub fn suspend<F: FnOnce() -> R, R>(&self, f: F) -> R {
-        self.bar.suspend(f)
+        // check if we are in quiet mode or not
+        match &self.bar {
+            Some(bar) => bar.suspend(f),
+            None => f(),
+        }
     }
 }

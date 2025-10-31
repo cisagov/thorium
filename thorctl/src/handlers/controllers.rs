@@ -3,8 +3,8 @@ use crate::args::Args;
 
 use super::progress::{BarKind, MultiBar};
 use super::{JobMsg, MonitorHandler, MonitorMsg, Worker, WorkerWrapper};
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use kanal::{AsyncReceiver, AsyncSender};
 use owo_colors::OwoColorize;
 use thorium::{CtlConf, Error, Thorium};
@@ -46,7 +46,7 @@ impl<W: Worker> Controller<W> {
         cmd: &W::Cmd,
     ) -> Self {
         // build a new multiprogress bar
-        let multi = MultiBar::default();
+        let multi = MultiBar::new(args.quiet);
         // build our channel for sending/receiving messeges
         let (jobs_tx, jobs_rx) = kanal::unbounded_async();
         // build our channel for sending/receiving monitor updates on

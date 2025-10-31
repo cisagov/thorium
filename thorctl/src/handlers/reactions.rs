@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
@@ -7,8 +7,8 @@ use futures::TryStreamExt;
 use futures::stream::{self, StreamExt};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use thorium::Thorium;
 use thorium::models::{Reaction, ReactionListParams, ReactionStatus};
+use thorium::{CtlConf, Thorium};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
@@ -19,11 +19,33 @@ use crate::args::reactions::{
     DescribeReactions, GetReactions, LogsReactions, ReactionTarget, Reactions,
 };
 use crate::args::{self, Args, DescribeCommand, SearchParameterized};
+use crate::handlers::Controller;
 use crate::utils;
 
 pub mod create;
+pub mod delete;
 
 use create::create;
+use delete::ReactionsDeleteWorker;
+
+// build a helpful error message
+const HELPFUL_ARG_COMBO_ERROR: &str = r"
+Error: Invalid argument combination!
+
+Here are some valid examples:
+
+# Get a specific reaction
+thorctl reactions <sub command> 69ff8820-f688-4968-bd6f-45a4cb0f78a9
+
+# Get reactions by pipeline
+thorctl reactions <sub command> --group static --pipeline identify-files
+
+# Get reactions by pipeline and status
+thorctl reactions <sub command> --group --pipeline identify-files --status Created
+
+# Get reactions by tag (like a samples sha256)
+thorctl reactions <sub command> --tag 4f2bdeb982dad19cbc06dfe770d88a09a8542e34db9d92fbed21d4f2c4fa7525
+";
 
 /// prints out a single info line
 macro_rules! info_print {
@@ -260,7 +282,9 @@ async fn get(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
         (true, Some(pipe), Some(status), None) => crawl_status!(thorium, pipe, status, cmd)?,
         // get info on reactions for a specific tag
         (true, None, None, Some(tag)) => crawl_tag!(thorium, tag, cmd)?,
-        _ => panic!("UNKNOWN ARG COMBO"),
+        _ => {
+            return Err(Error::new(HELPFUL_ARG_COMBO_ERROR));
+        }
     };
     // print our header for this return
     InfoLine::header();
@@ -733,7 +757,12 @@ async fn logs(thorium: &Thorium, cmd: &LogsReactions) -> Result<(), Error> {
 ///
 /// * `thorium` - A Thorium client
 /// * `cmd` - The full get command/args
-async fn delete(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
+async fn delete(
+    thorium: &Thorium,
+    cmd: &GetReactions,
+    args: &Args,
+    conf: &CtlConf,
+) -> Result<(), Error> {
     // determine the correct action to take based on the args specified
     let mut cursor = match (cmd.targets.is_empty(), &cmd.pipeline, &cmd.status, &cmd.tag) {
         // get info on specific reactions by id
@@ -746,18 +775,34 @@ async fn delete(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
         (true, None, None, Some(tag)) => crawl_tag!(thorium, tag, cmd)?,
         _ => panic!("UNKNOWN ARG COMBO"),
     };
-    // print our header for this return
-    InfoLine::header();
+    // create a new worker controller
+    let mut controller = Controller::<ReactionsDeleteWorker>::spawn(
+        "Deleting Reactions",
+        thorium,
+        args.workers,
+        conf,
+        args,
+        cmd,
+    )
+    .await;
+    // track the number of items we are popping to make sure our limit is a hard limit
+    let mut added = 0;
     // crawl over this cursor until its exhausted
     loop {
         // delete all reactions that we have pulled
-        for reaction in &cursor.details {
-            thorium
-                .reactions
-                .delete(&reaction.group, &reaction.id)
-                .await?;
-            // print our delete log
-            InfoLine::info(reaction);
+        for reaction in cursor.details.drain(..) {
+            // if we already added the number of reactions we want to delete then stop adding more
+            // this has to be done because redis cursors are a soft limit
+            if added == cmd.limit {
+                break;
+            }
+            // try to add this delete reaction job
+            if let Err(error) = controller.add_job(reaction).await {
+                // log this error
+                controller.error(&error.to_string());
+            }
+            // increment our number of added reactions
+            added += 1;
         }
         // check if this cursor has been exhausted
         if cursor.exhausted {
@@ -766,6 +811,8 @@ async fn delete(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
         // get the next page of data
         cursor.next().await?;
     }
+    // wait for all our workers to complete
+    controller.finish().await?;
     Ok(())
 }
 
@@ -791,7 +838,7 @@ pub async fn handle(args: &Args, cmd: &Reactions) -> Result<(), Error> {
         Reactions::Get(cmd) => get(&thorium, cmd).await,
         Reactions::Describe(cmd) => describe(&thorium, cmd).await,
         Reactions::Logs(cmd) => logs(&thorium, cmd).await,
-        Reactions::Delete(cmd) => delete(&thorium, cmd).await,
+        Reactions::Delete(cmd) => delete(&thorium, cmd, args, &conf).await,
         Reactions::Create(cmd) => create(thorium, cmd).await,
     }
 }

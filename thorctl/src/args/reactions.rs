@@ -6,8 +6,8 @@ use std::borrow::ToOwned;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
+use clap::builder::NonEmptyStringValueParser;
 use itertools::Itertools;
 use thorium::models::{GenericJobArgs, GenericJobKwargs, GenericJobOpts, Reaction, ReactionArgs};
 use thorium::{Error, Thorium};
@@ -16,10 +16,10 @@ use uuid::Uuid;
 use crate::handlers::reactions::create::ReactionArgsInfo;
 use crate::utils;
 
+use super::DescribeCommand;
 use super::pipelines::PipelineTarget;
 use super::traits::describe::DescribeSealed;
 use super::traits::search::{SearchParameterized, SearchParams, SearchSealed};
-use super::DescribeCommand;
 
 /// The commands to send to the reactions task handler
 #[derive(Parser, Debug)]
@@ -44,7 +44,7 @@ pub enum Reactions {
 }
 
 /// A command to get info on some reactions
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct GetReactions {
     /// Any specific reactions to get info about
     pub targets: Vec<Uuid>,
@@ -643,7 +643,7 @@ impl CreateReactions {
                         "Error opening reaction args file at '{}': {}",
                         reaction_args_file.to_string_lossy(),
                         err
-                    )))
+                    )));
                 }
             };
             let args: ReactionArgsInfo = match serde_json::from_reader(file) {
@@ -653,7 +653,7 @@ impl CreateReactions {
                         "Reaction args file at '{}' is not formatted correctly! \
                         See `thorctl reactions create --help` for a formatting example",
                         reaction_args_file.to_string_lossy()
-                    )))
+                    )));
                 }
             };
             for (arg_pipeline, arg_images) in &args {

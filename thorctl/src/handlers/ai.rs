@@ -116,9 +116,11 @@ async fn call_tool_helper(
     let name = params.name.to_string();
     // add a progress bar and log what tools we are calling
     let bar = progress.add("", BarKind::Unbound);
-    bar.bar.set_style(mcp_bar_style().unwrap());
-    bar.bar
-        .enable_steady_tick(std::time::Duration::from_millis(120));
+    // set our bars style
+    bar.set_style(mcp_bar_style().unwrap());
+    // set this bars steady tick rate
+    bar.enable_steady_tick(std::time::Duration::from_millis(120));
+    // set this bars message
     bar.set_message(format!("Calling Tool: {name}"));
     // call this mcp tool
     let call_resp = mcp.call_tool(params).await.unwrap();
@@ -148,7 +150,7 @@ impl<A: AiSupport> ThorChat<A> {
         // setup mcp
         let mcp = setup_mcp(&conf).await?;
         // create a default progress bar
-        let progress = MultiBar::default();
+        let progress = MultiBar::new(args.quiet);
         // create a thorchat object
         let mut thorchat = ThorChat { ai, progress, mcp };
         // init our tools
@@ -212,10 +214,9 @@ impl<A: AiSupport> ThorChat<A> {
         let bar = self.progress.add("", BarKind::Unbound);
         bar.set_message("Asking Question");
         // set the bar style for ai questions
-        bar.bar.set_style(ai_bar_style()?);
+        bar.set_style(ai_bar_style()?);
         // set a steady tick for this bar
-        bar.bar
-            .enable_steady_tick(std::time::Duration::from_millis(120));
+        bar.enable_steady_tick(std::time::Duration::from_millis(120));
         // ask our ai and don't check for an error until we shutdown our progress bar
         let response_result = self.ai.ask(question).await;
         // stop our progress bar
@@ -233,10 +234,9 @@ impl<A: AiSupport> ThorChat<A> {
         // set the message for our bar
         bar.set_message("Telling AI about tool results");
         // set the bar style for ai questions
-        bar.bar.set_style(ai_bar_style()?);
+        bar.set_style(ai_bar_style()?);
         // set a steady tick for this bar
-        bar.bar
-            .enable_steady_tick(std::time::Duration::from_millis(120));
+        bar.enable_steady_tick(std::time::Duration::from_millis(120));
         // tell our ai about our results without checking for an error until we shutdown our progress bar
         let response_result = self.ai.add_tool_results(tool_results).await;
         // stop our progress bar

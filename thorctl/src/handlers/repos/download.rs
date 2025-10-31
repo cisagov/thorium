@@ -11,9 +11,9 @@ use thorium::models::{RepoDownloadOpts, UntarredRepo};
 use thorium::{CtlConf, Error, Thorium};
 
 use super::progress::{Bar, BarKind, MultiBar};
+use crate::Args;
 use crate::args::repos::{DownloadRepos, RepoDownloadOrganization, RepoTarget};
 use crate::handlers::{Monitor, MonitorMsg, Worker};
-use crate::Args;
 
 /// The repo ingest monitor
 pub struct RepoDownloadMonitor;
@@ -263,7 +263,12 @@ impl DownloadWorker {
     /// Download a repo to disk
     pub async fn download(&self, mut job: RepoTarget, output: &PathBuf) -> Result<(), Error> {
         // build the opts for downloading this repo
-        let mut opts = RepoDownloadOpts::default().progress(self.bar.bar.clone());
+        let mut opts = RepoDownloadOpts::default();
+        // if we have a bar then add it to our download opts
+        if let Some(bar) = &self.bar.bar {
+            // add our progress bar to this download
+            opts.progress = Some(bar.clone());
+        }
         // if a commitish is set then set that
         if let Some(commitish) = job.commitish.take() {
             opts.commitish = Some(commitish);

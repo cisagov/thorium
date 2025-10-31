@@ -42,8 +42,11 @@ async fn main() {
     };
     // error if thorctl failed
     if let Err(error) = thorctl_result {
-        // print our error to stderr
-        eprintln!("{error:#?}");
+        // print our error to stderr nicely if possible
+        match error {
+            Error::Generic(msg) => eprintln!("{msg}"),
+            _ => eprintln!("{error:#?}"),
+        }
         // exit this program with an exit code of 1
         std::process::exit(1);
     }

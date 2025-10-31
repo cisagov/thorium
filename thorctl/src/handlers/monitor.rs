@@ -81,6 +81,6 @@ impl<M: Monitor> MonitorHandler<M> {
             }
         }
         // finish our global bar
-        self.global_bar.finish_and_clear();
+        self.global_bar.finish();
     }
 }

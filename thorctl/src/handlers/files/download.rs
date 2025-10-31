@@ -10,11 +10,11 @@ use std::sync::Arc;
 use thorium::models::{CarvedOrigin, FileDownloadOpts, Origin, Sample, SubmissionChunk};
 use thorium::{CtlConf, Error, Thorium};
 
+use crate::Args;
 use crate::args::files::{DownloadFiles, FileDownloadOrganization};
 use crate::handlers::progress::{Bar, BarKind, MultiBar};
 use crate::handlers::{Monitor, MonitorMsg, Worker};
 use crate::utils;
-use crate::Args;
 
 /// The files download monitor
 pub struct FilesDownloadMonitor;
@@ -24,11 +24,21 @@ impl Monitor for FilesDownloadMonitor {
     type Update = ();
 
     /// build this monitors progress bar
+    ///
+    /// # Arguments
+    ///
+    /// * `multi` - The multibar to add a bar too
+    /// * `msg`- The message to set for our monitor bar
     fn build_bar(multi: &MultiBar, msg: &str) -> Bar {
         multi.add(msg, BarKind::Bound(0))
     }
 
     /// Apply an update to our global progress bar
+    ///
+    /// # Arguments
+    ///
+    /// * `bar` - The bar to apply updates too
+    /// * `update` - The update to apply
     fn apply(bar: &Bar, _: Self::Update) {
         bar.inc(1);
     }
@@ -352,9 +362,12 @@ impl FilesDownloadWorker {
     /// Download this file for the first submission chunk
     async fn download(&self, sample: &Sample, output: &PathBuf) -> Result<(), Error> {
         // set the file download opts to use
-        let mut opts = FileDownloadOpts::default()
-            .uncart_by_value(self.cmd.uncarted)
-            .progress(self.bar.bar.clone());
+        let mut opts = FileDownloadOpts::default().uncart_by_value(self.cmd.uncarted);
+        // if we have a bar then add it to our download opts
+        if let Some(bar) = &self.bar.bar {
+            // add our progress bar to this download
+            opts.progress = Some(bar.clone());
+        }
         // download this file and uncart it
         self.thorium
             .files
