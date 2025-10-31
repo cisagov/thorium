@@ -4,7 +4,10 @@ version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
 clap = { workspace = true }
@@ -23,7 +26,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 futures = "0.3"
 tracing = { workspace = true }
 opentelemetry = { workspace = true }
-openssl = "*"
+openssl = { workspace = true }
 scylla = { version = "1.2" }
 itertools = "0.14"
 redis = { version = "0.23", default-features = false, features = ["tokio-comp"] }
@@ -32,8 +35,3 @@ bytesize = "2.1"
 
 [dev-dependencies]
 rand = "0.9"
-
-[features]
-# Force openssl-sys to staticly link in the openssl library. Necessary when
-# cross compiling to x86_64-unknown-linux-musl.
-vendored-openssl = ["openssl/vendored"]

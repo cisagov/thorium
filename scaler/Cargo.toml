@@ -38,7 +38,7 @@ base64 = "0.22"
 rayon = "1.10"
 bincode = "2.0.1"
 uuid = { version = "1", features = ["serde", "v4"] }
-openssl = "*"
+openssl = { workspace = true}
 tracing = {  workspace = true }
 rustls = "0.23"
 hashbrown = "0.15"

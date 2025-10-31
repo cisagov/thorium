@@ -6,7 +6,6 @@ edition.workspace = true
 description = "A CLI tool for performing administrative tasks in Thorium."
 license-file = "../LICENSE"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 # Force openssl-sys to staticly link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
@@ -35,7 +34,7 @@ config = { version = "0.15", features = ["yaml"] }
 dialoguer = "0.11"
 sha2 = "0.10"
 data-encoding = "2.9"
-openssl = "*"
+openssl = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 aws-types = "1.3"

@@ -6,7 +6,10 @@ edition = { workspace = true }
 description = "A CLI tool for interacting with Thorium."
 license-file = "../LICENSE"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
 thorium-api = { workspace = true, features = ["client", "kanal-err", "dialoguer-err", "openai", "rmcp-err"]}
@@ -38,7 +41,7 @@ chrono = { workspace = true, features = ["serde", "rkyv", "rkyv-validation"] }
 url = "2"
 elasticsearch = "9.0.0-alpha.1"
 async-trait = "0.1"
-openssl = "*"
+openssl = { workspace = true }
 rpassword = "7.4"
 indicatif = "0.17"
 rand = "0.9.1"
@@ -50,9 +53,3 @@ cfg-if = "1"
 reqwest = { workspace = true , default-features = false, features = ["rustls-tls"] }
 rmcp = { version = "=0.6.3", features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"]}
 openai-api-rs = "6"
-
-
-[features]
-# Force openssl-sys to staticly link in the openssl library. Necessary when
-# cross compiling to x86_64-unknown-linux-musl.
-vendored-openssl = ["openssl/vendored"]

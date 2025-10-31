@@ -1284,7 +1284,7 @@ where
     }
 
     /// Consume our sorted data in order to fill our user facing data buffer
-    fn consume_sorted(&mut self) -> bool {
+    fn consume_sorted(&mut self, mut tag_ties: Option<&mut HashMap<String, String>>) -> bool {
         // keep looping until we have enough data to return or no more sorted data
         loop {
             // keep consuming until our user facing data buffer is full
@@ -1295,7 +1295,7 @@ where
                     Some((timestamp, mut item)) => {
                         // if we have multiple rows with the same timestamp then disambiguate them
                         // only tags have to do this
-                        if self.retain.tags_retain.is_some() && item.len() > 1 {
+                        if tag_ties.is_some() && item.len() > 1 {
                             // sort our ambigous rows by their cluster key
                             D::sort_by_cluster_key(&mut item);
                         }
@@ -1322,9 +1322,9 @@ where
                         // if we have another item then add it to our tie map
                         if let Some(tied_row) = item.front() {
                             // if this a tags cursor add this to our tag ties
-                            if let Some(tags_retain) = &mut self.retain.tags_retain {
+                            if let Some(tag_ties) = &mut tag_ties {
                                 // add this tie to our tag tie map
-                                tied_row.add_tag_tie(&mut tags_retain.ties);
+                                tied_row.add_tag_tie(*tag_ties);
                             } else {
                                 // add this to our regular query tie map
                                 tied_row.add_tie(&mut self.retain.ties);
@@ -1374,7 +1374,7 @@ where
             // cast and sort the rows we just retrieved
             D::sort(tied_queries, &mut self.sorted, &mut self.mapped).await?;
             // consume our sorted data and check if we have enough data to return
-            if self.consume_sorted() {
+            if self.consume_sorted(None) {
                 // we have enough data so return
                 return Ok(());
             }
@@ -1382,7 +1382,7 @@ where
         // determine which partitions have data
         self.query(limit, shared).await?;
         // consume enough of our sorted data
-        self.consume_sorted();
+        self.consume_sorted(None);
         Ok(())
     }
 
@@ -1440,7 +1440,7 @@ where
     async fn tag_query(
         &mut self,
         group_by: &Vec<D::GroupBy>,
-        tags_retain: &TagsRetain,
+        tags_retain: &mut TagsRetain,
         mapping: &mut HashMap<String, TagMapping>,
         prepared: &PreparedStatement,
         shared: &Shared,
@@ -1501,7 +1501,7 @@ where
                 &mut self.mapped,
             )?;
             // consume our sorted data and return if needed
-            self.consume_sorted();
+            self.consume_sorted(Some(&mut tags_retain.ties));
             // if we have enough data to return then return
             if self.mapped >= self.limit {
                 break;
@@ -1510,7 +1510,7 @@ where
             // this can't be moved to a function due to borrow check sadness
             match (self.year.cmp(&self.end_year), buckets.len() >= 100) {
                 // we have more buckets this year too query so just update our bucket
-                (Ordering::Greater, true) | (Ordering::Equal, true) => {
+                (Ordering::Greater | Ordering::Equal, true) => {
                     // TODO does this overlap?
                     self.bucket = (buckets.last().unwrap() - 1) as u32;
                 }
@@ -1532,7 +1532,7 @@ where
                     self.bucket = duration.num_seconds() as u32 / self.partition_size as u32;
                 }
                 // we have reached our end bucket and end year
-                (Ordering::Equal, false) | (Ordering::Less, false) => {
+                (Ordering::Equal | Ordering::Less, false) => {
                     match buckets.last() {
                         Some(bucket) => self.bucket = *bucket as u32,
                         None => self.bucket = self.end_bucket,
@@ -1601,13 +1601,13 @@ where
             &mut self.mapped,
         )?;
         // consume our sorted data
-        self.consume_sorted();
+        self.consume_sorted(Some(&mut tags_retain.ties));
         // only query for more data if we don't have enough to return
         if self.mapped < self.limit {
             // get tag data using normal queries
             self.tag_query(
                 &group_by,
-                &tags_retain,
+                &mut tags_retain,
                 &mut mapping,
                 query_prepared,
                 shared,
@@ -1629,7 +1629,7 @@ where
         // if we have more already sorted rows then return those first
         if self.mapped > 0 {
             // consume our remaining sorted values
-            self.consume_sorted();
+            self.consume_sorted(None);
             // if we have enough data then return
             if self.data.len() >= self.limit {
                 return Ok(());

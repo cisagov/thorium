@@ -29,7 +29,7 @@ async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
-openssl = "*"
+openssl = { workspace = true }
 rustix = { version = "1.0", features = ["process"] }
 semver = { version = "1", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v4"] }

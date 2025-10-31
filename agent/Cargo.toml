@@ -4,7 +4,10 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -25,7 +28,7 @@ async-trait = "0.1"
 crossbeam = "0.8"
 bincode = "2.0.1"
 sysinfo = "0.35"
-openssl = "*"
+openssl = { workspace = true }
 tracing = { workspace = true }
 opentelemetry = { workspace = true, features = ["trace"] }
 semver = { version = "1", features = ["serde"] }
@@ -44,8 +47,3 @@ controlgroup = "0.3"
 # disable cgroups support when on windows
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 thorium-api = { workspace = true, default-features = false, features = ["client", "crossbeam-err", "trace"]}
-
-[features]
-# Force openssl-sys to staticly link in the openssl library. Necessary when
-# cross compiling to x86_64-unknown-linux-musl.
-vendored-openssl = ["openssl/vendored"]
