@@ -134,6 +134,8 @@ where
     /// Get the next page of data for this cursor
     #[syncwrap::clone]
     pub async fn next(&mut self) -> Result<(), Error> {
+        // make sure our page is not larger then our limit
+        let page_size = std::cmp::min(self.page, self.limit);
         // retry sending our request for new data on transient errors if enabled
         let mut raw = loop {
             // build request
@@ -141,7 +143,7 @@ where
                 .client
                 .get(&self.url)
                 .header("authorization", &self.token)
-                .query(&[("cursor", self.cursor), ("limit", self.page)]);
+                .query(&[("cursor", self.cursor), ("limit", page_size)]);
             // send request and build a raw cursor
             match send_build!(self.client, req, RawCursorData<T>) {
                 Ok(raw) => break raw,

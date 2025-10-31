@@ -5,7 +5,7 @@ use indicatif::ProgressStyle;
 use owo_colors::OwoColorize;
 use rmcp::model::{
     CallToolRequestParam, CallToolResult, ClientCapabilities, ClientInfo, Implementation,
-    InitializeRequestParam,
+    InitializeRequestParam, ProtocolVersion,
 };
 use rmcp::service::RunningService;
 use rmcp::transport::StreamableHttpClientTransport;
@@ -39,11 +39,14 @@ pub async fn setup_mcp(
     let transport = StreamableHttpClientTransport::from_config(config);
     // build our client
     let client_info = ClientInfo {
-        protocol_version: Default::default(),
+        protocol_version: ProtocolVersion::default(),
         capabilities: ClientCapabilities::default(),
         client_info: Implementation {
-            name: "Thorium MCP Generator".to_string(),
-            version: "0.0.1".to_string(),
+            name: "Thorium".to_owned(),
+            title: Some("Thorium".to_owned()),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            icons: None,
+            website_url: Some(conf.keys.api.clone()),
         },
     };
     // build our client

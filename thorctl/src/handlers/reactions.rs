@@ -3,23 +3,23 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
 use colored::Colorize;
-use futures::stream::{self, StreamExt};
 use futures::TryStreamExt;
+use futures::stream::{self, StreamExt};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use thorium::models::{Reaction, ReactionListParams, ReactionStatus};
 use thorium::Thorium;
+use thorium::models::{Reaction, ReactionListParams, ReactionStatus};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use super::progress::Bar;
 use super::update;
+use crate::Error;
 use crate::args::reactions::{
     DescribeReactions, GetReactions, LogsReactions, ReactionTarget, Reactions,
 };
 use crate::args::{self, Args, DescribeCommand, SearchParameterized};
 use crate::utils;
-use crate::Error;
 
 pub mod create;
 
@@ -121,7 +121,7 @@ impl InfoLine {
             Some(code) => info_print!(code.as_str().bright_red(), "-", "-", "-", "-", id, msg),
             // no status code is present so just use '-' painted bright red
             None => info_print!("-".bright_red(), "", "-", "-", "-", id, msg),
-        };
+        }
     }
 }
 
@@ -439,7 +439,7 @@ async fn write_reaction_logs(
                     return Err(Error::new(format!(
                         "Unable to create file '{}': {err}",
                         file_path.to_string_lossy()
-                    )))
+                    )));
                 }
             },
         };
