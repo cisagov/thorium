@@ -1,9 +1,9 @@
-use thorium::{client::Thorium, models::Image, Error};
+use thorium::{Error, client::Thorium, models::Image};
 
 use crate::args::Args;
 use crate::args::{
-    images::{DescribeImages, GetImages, Images},
     DescribeCommand,
+    images::{DescribeImages, GetImages, Images},
 };
 
 use crate::utils;
@@ -45,12 +45,34 @@ impl GetImagesLine {
     ///
     /// * `image` - The image to print
     pub fn print_image(image: &Image) {
+        // limit our description preview to at most 40 characters
+        let description = image.description.as_ref().map_or_else(
+            // we have no description so replace it with a '-'
+            || "-".to_string(),
+            // we have a description so truncate it if needed
+            |descr| {
+                // if we have more then 37 chars in our description then just get the first 40
+                if descr.len() > 37 {
+                    // get the first 40 chars
+                    let truncated = descr.chars().take(37);
+                    // add a ... onto our string to signify its truncated
+                    let ending = "...".chars();
+                    // chain our iters together and make them into a string
+                    let combined = truncated.chain(ending).collect::<String>();
+                    // replace any newlines with spaces
+                    combined.replace('\n', " ")
+                } else {
+                    descr.replace('\n', " ")
+                }
+            },
+        );
+        // print our image info
         println!(
             "{:<30} | {:<20} | {:<10} | {}",
             image.name,
             image.group,
             image.scaler.as_str(),
-            image.description.as_ref().unwrap_or(&"-".to_string())
+            description
         );
     }
 }

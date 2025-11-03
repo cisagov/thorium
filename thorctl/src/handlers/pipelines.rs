@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use std::collections::HashSet;
-use thorium::models::PipelineRequest;
 use thorium::CtlConf;
-use thorium::{models::Pipeline, Error, Thorium};
+use thorium::models::PipelineRequest;
+use thorium::{Error, Thorium, models::Pipeline};
 
 use crate::args::pipelines::{DescribePipelines, GetPipelines, Pipelines};
 use crate::args::{Args, DescribeCommand};
@@ -44,11 +44,31 @@ impl GetPipelinesLine {
     ///
     /// * `pipeline` - The pipeline to print
     pub fn print_pipeline(pipeline: &Pipeline) {
+        // limit our description preview to at most 40 characters
+        let description = pipeline.description.as_ref().map_or_else(
+            // we have no description so replace it with a '-'
+            || "-".to_string(),
+            // we have a description so truncate it if needed
+            |descr| {
+                // if we have more then 37 chars in our description then just get the first 40
+                if descr.len() > 37 {
+                    // get the first 40 chars
+                    let truncated = descr.chars().take(37);
+                    // add a ... onto our string to signify its truncated
+                    let ending = "...".chars();
+                    // chain our iters together and make them into a string
+                    let combined = truncated.chain(ending).collect::<String>();
+                    // replace any newlines with spaces
+                    combined.replace('\n', " ")
+                } else {
+                    descr.replace('\n', " ")
+                }
+            },
+        );
+        // print our pipeline info
         println!(
             "{:<30} | {:<20} | {}",
-            pipeline.name,
-            pipeline.group,
-            pipeline.description.as_ref().unwrap_or(&"-".to_string())
+            pipeline.name, pipeline.group, description
         );
     }
 }
@@ -143,7 +163,7 @@ async fn get_import_images(cmd: &ImportPipelines) -> Result<Vec<String>, Error> 
                 let stage_iter = stages
                     .iter()
                     .filter_map(|val| val.as_str())
-                    .map(|str| str.to_owned());
+                    .map(ToOwned::to_owned);
                 images.extend(stage_iter);
             }
         }
