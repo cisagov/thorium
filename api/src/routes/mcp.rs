@@ -4,6 +4,7 @@ use axum::Router;
 use axum::http::request::Parts;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::{ErrorData, tool_handler};
@@ -49,7 +50,7 @@ impl McpConfig {
                 let value_str = value.to_str().unwrap();
                 // split this on spaces and get our token
                 // if there isn't a space then assume they passed just a token
-                match value_str.split_once(" ") {
+                match value_str.split_once(' ') {
                     Some((_, token)) => Ok(token),
                     None => Ok(value_str),
                 }
@@ -135,7 +136,7 @@ pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
     let service = StreamableHttpService::new(
         move || Ok(ThoriumMCP::new(mcp_conf)),
         LocalSessionManager::default().into(),
-        Default::default(),
+        StreamableHttpServerConfig::default(),
     );
     // get a new mcp router
     let mcp_router = Router::<AppState>::new().fallback_service(service);

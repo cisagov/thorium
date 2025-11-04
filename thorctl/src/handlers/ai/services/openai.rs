@@ -1,12 +1,12 @@
 //! OpenAI support for ThoriumAgent
-use openai_api_rs::v1::{
-    api::OpenAIClient,
-    chat_completion::{
-        self, ChatCompletionMessage, ChatCompletionRequest, ChatCompletionResponse, Content,
-        MessageRole, Reasoning, ReasoningEffort, ReasoningMode, Tool,
-    },
-    types::{Function, FunctionParameters, JSONSchemaDefine, JSONSchemaType},
+use openai_api_rs::v1::api::OpenAIClient;
+use openai_api_rs::v1::chat_completion::chat_completion::{
+    ChatCompletionRequest, ChatCompletionResponse,
 };
+use openai_api_rs::v1::chat_completion::{
+    self, ChatCompletionMessage, Content, MessageRole, Tool, ToolChoiceType,
+};
+use openai_api_rs::v1::types::{Function, FunctionParameters, JSONSchemaDefine, JSONSchemaType};
 use rmcp::model::{CallToolRequestParam, CallToolResult, ListToolsResult, RawContent};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -167,7 +167,7 @@ impl OpenAI {
                 // add our tools to this chat request
                 .tools(tools)
                 // let the LLM decide what tools to call
-                .tool_choice(chat_completion::ToolChoiceType::Auto);
+                .tool_choice(ToolChoiceType::Auto);
         }
         // TODO do this differently with tracing
         if self.debug {
@@ -315,7 +315,7 @@ impl AiSupport for OpenAI {
                 };
                 // add this tool call to our chat history
                 let msg = ChatCompletionMessage {
-                    role: MessageRole::function,
+                    role: MessageRole::tool,
                     content,
                     name: Some(name.clone()),
                     tool_calls: None,

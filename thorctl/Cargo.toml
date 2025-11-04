@@ -32,7 +32,7 @@ generic-array = "0.14"
 lazy_static = "1.5"
 sha2 = "0.10"
 data-encoding = "2.9"
-cart-rs = { version = "*", path = "../cart-rs"}
+cart-rs = { workspace = true }
 regex = "1.11"
 git2 = "0.20"
 gix = "0.72"
@@ -51,5 +51,5 @@ dialoguer = "0.11"
 dirs = "6"
 cfg-if = "1"
 reqwest = { workspace = true , default-features = false, features = ["rustls-tls"] }
-rmcp = { version = "0.6.4", features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"]}
-openai-api-rs = "6"
+rmcp = { version = "0.8", features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"]}
+openai-api-rs = "8"

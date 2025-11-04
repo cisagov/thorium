@@ -190,11 +190,10 @@ async_once = { version = "0.2", optional = true }
 lazy_static = { version = "1.5", optional = true }
 
 # mcp dependencies
-rmcp = { version = "0.6.4", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth"], optional = true }
-rmcp-macros = { version = "0.6.4" }
+rmcp = { version = "0.8", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth"], optional = true }
 
 # openai support
-openai-api-rs = { version = "6", optional = true }
+openai-api-rs = { version = "8", optional = true }
 
 
 # add cgroups for linux systems

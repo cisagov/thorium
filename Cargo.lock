@@ -4644,9 +4644,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openai-api-rs"
-version = "6.0.13"
+version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a167b2db9070d38ba8a3bb24c459ca9303b542215ca9937ea38a0f0b72aa2488"
+checksum = "4e6de2e22a050033c79ad7f5f83848f50dca9e23c6ef6ce12ca39606a3bc5367"
 dependencies = [
  "bytes",
  "futures-util",
@@ -5708,9 +5708,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "0.6.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41ab0892f4938752b34ae47cb53910b1b0921e55e77ddb6e44df666cab17939f"
+checksum = "e5947688160b56fb6c827e3c20a72c90392a1d7e9dec74749197aa1780ac42ca"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -5742,9 +5742,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "0.6.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1827cd98dab34cade0513243c6fe0351f0f0b2c9d6825460bcf45b42804bdda0"
+checksum = "01263441d3f8635c628e33856c468b96ebbce1af2d3699ea712ca71432d4ee7a"
 dependencies = [
  "darling 0.21.3",
  "proc-macro2",
@@ -7013,7 +7013,6 @@ dependencies = [
  "reqwest",
  "rkyv",
  "rmcp",
- "rmcp-macros",
  "rustix",
  "schemars 1.1.0",
  "scylla",

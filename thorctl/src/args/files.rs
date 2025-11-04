@@ -306,7 +306,7 @@ pub struct DownloadFiles {
     /// Download files uncarted rather than leaving them in the benign "Cart" format
     #[clap(short, long)]
     pub uncarted: bool,
-    /// The path to download these files to
+    /// The directory to download these files to
     #[clap(short, long)]
     pub output: Option<String>,
     /// Refrain from adding the ".cart" extension to the downloaded file

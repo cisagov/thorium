@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use super::elastic::{self, ElasticResponse};
 use super::keys::{cursors, tags};
-use crate::models::{ApiCursor, CensusKeys, CensusSupport, ElasticDoc, TagListRow};
+use crate::models::{ApiCursor, ElasticDoc, TagListRow};
 use crate::models::{ElasticSearchParams, TagType};
 use crate::utils::{ApiError, Shared, helpers};
 use crate::{
@@ -379,7 +379,7 @@ pub trait ScyllaCursorSupport: CursorCore {
                         // cast our row and add it
                         entry.push_back(cast.into());
                         // increment our mapped count
-                        *mapped += 1
+                        *mapped += 1;
                     }
                 }
             }
@@ -403,7 +403,7 @@ pub trait ScyllaCursorSupport: CursorCore {
             to_sort.insert(index, row);
         }
         // rebuild this ambiguous row list in order
-        for (_, index) in sorted.iter() {
+        for (_, index) in &sorted {
             // get this row and insert it
             if let Some(row) = to_sort.remove(&index) {
                 // add this row in the correct order
@@ -480,27 +480,6 @@ pub struct CursorCount {
     pub count: i64,
 }
 
-fn update_first_last(
-    first: &mut i32,
-    last: &mut i32,
-    oldest_first: &mut i32,
-    new_first: i32,
-    new_last: i32,
-) {
-    // check if this bucket range moves the first bucket with data down
-    if new_first < *first {
-        *first = new_first;
-    }
-    // check if this bucket range brings the overlaping buckets with data up
-    if new_last > *last {
-        *last = new_last;
-    }
-    // check if this increments the largest bucket found so far
-    if new_first < *oldest_first {
-        *oldest_first = new_first;
-    }
-}
-
 /// A tie query for data based on tags
 async fn ties_tags_query_helper<'a, D: CursorCore>(
     ties_prepared: &PreparedStatement,
@@ -551,7 +530,7 @@ async fn tags_query_helper<'a, D: CursorCore>(
         .session
         .execute_iter(
             query_prepared.clone(),
-            (kind, group, year, buckets.clone(), key, value, start, end),
+            (kind, group, year, buckets, key, value, start, end),
         )
         .await?;
     // check if there is more
@@ -587,7 +566,7 @@ async fn parse_tag_queries<'a>(
     mapping: &mut HashMap<String, TagMapping>,
 ) -> Result<(), ApiError> {
     // crawl over our queries and deserialize them
-    for (key, value, query) in queries {
+    for (key, value, query) in queries.into_iter() {
         // set the type to cast this stream too
         let mut typed_stream = query.rows_stream::<TagListRow>()?;
         // cast our rows to typed values
@@ -635,7 +614,7 @@ where
     /// The data this cursor has retrieved
     pub data: Vec<D>,
     /// The internal sorted data to return to the user
-    sorted: BTreeMap<DateTime<Utc>, VecDeque<D>>,
+    pub sorted: BTreeMap<DateTime<Utc>, VecDeque<D>>,
     /// The currently available number of rows we have sorted
     pub mapped: usize,
     /// whether this cursor has been exhausted or not
@@ -1002,10 +981,10 @@ where
                 .collect::<Result<Vec<i32>, _>>()?;
             // get the final item in this list
             if let Some(oldest_first) = buckets.last() {
-                // increment our oldest first by 1 so we don't loop over buckets
-                let incr_oldest_first = *oldest_first - 1;
+                // decrement our oldest first by 1 so we don't loop over buckets
+                let decr_oldest_first = *oldest_first - 1;
                 // add our new oldest first
-                stream_keys.push((group, stream_key, incr_oldest_first));
+                stream_keys.push((group, stream_key, decr_oldest_first));
                 // add these buckets to our found buckets
                 found.insert(group, buckets);
             }
@@ -1111,7 +1090,7 @@ where
     /// * `tags` - The tags to find bucket intersections for
     /// * `tags_required` - The number of tags required
     /// * `pre_filter` - The unfiltered buckets for our tags
-    /// * `oldest_first` - The oldest first bucket across all our bucket ranges
+    /// * `next_bucket` - The next bucket to start listing from next time
     /// * `possible` - Whether an intersection is still possible
     #[instrument(name = "ScyllaCursor::filter_bucket_intersection", skip_all)]
     fn filter_bucket_intersection(
@@ -1120,12 +1099,12 @@ where
         tags: &HashMap<String, Vec<String>>,
         tags_required: usize,
         pre_filter: Vec<Vec<i32>>,
-        oldest_first: &mut i32,
+        next_bucket: &mut i32,
         possible: &mut bool,
     ) -> Vec<i32> {
         // get the first and last bucket that we know contains data
         let mut first = 0;
-        let mut last = i32::MAX;
+        let mut last = 0;
         // build a map of our buckets by tag key/value pair
         let mut map: HashMap<(&String, &String), BTreeSet<i32>> =
             HashMap::with_capacity(tags_required);
@@ -1134,10 +1113,10 @@ where
         // step over our bucket data in the same order we retrieved it
         // get each tag key we are going to be querying for
         for (key, values) in tags {
-            // check for census info for each group
-            for _ in group_by {
-                // get all the buckets that contain data for each value
-                for value in values {
+            // get all the buckets that contain data for each value
+            for value in values {
+                // check for census info for each group
+                for group in group_by {
                     // get this values buckets
                     let buckets = bucket_stream.next().unwrap();
                     // skip any empty bucket lists
@@ -1145,14 +1124,14 @@ where
                         // get our first and last items in this bucket list
                         let local_first = *buckets.first().unwrap();
                         let local_last = *buckets.last().unwrap();
-                        // update our first_last values
-                        update_first_last(
-                            &mut first,
-                            &mut last,
-                            oldest_first,
-                            local_first,
-                            local_last,
-                        );
+                        // check if this bucket range moves the first bucket with data up
+                        if local_first > first {
+                            first = local_first;
+                        }
+                        // check if this bucket range brings the overlaping buckets with data up
+                        if local_last > last {
+                            last = local_last;
+                        }
                         // get an entry to this key/value bucket set
                         let entry: &mut BTreeSet<i32> = map.entry((key, value)).or_default();
                         // add the buckets for this group
@@ -1161,6 +1140,8 @@ where
                 }
             }
         }
+        // set our oldest first to be our last
+        *next_bucket = last.saturating_sub(1);
         // check if we didn't find data for every tag key/value pair
         if map.len() < tags_required {
             // set that it is no longer possible to have an intersection
@@ -1175,7 +1156,7 @@ where
             // check each potential bucket in this bucket range
             for bucket in buckets {
                 // check if this bucket is in our overlapping range
-                if *bucket > first && *bucket < last {
+                if *bucket <= first && *bucket >= last {
                     // add this potential overlapping bucket or increment its count
                     let entry: &mut i32 = in_range.entry(*bucket).or_default();
                     // increment its count
@@ -1213,7 +1194,7 @@ where
             0
         };
         // track the oldest first bucket we have seen in this loop so far
-        let mut oldest_first = self.bucket as i32;
+        let mut next_bucket = self.bucket as i32;
         // track whether an intersection is possible this year
         let mut possible = true;
         // build all of the keys we are getting valid buckets for
@@ -1226,10 +1207,10 @@ where
         };
         // get each tag key we are going to be querying for
         for (key, values) in &tags_retain.tags {
-            // check for census info for each group
-            for group in group_by {
-                // get all the buckets that contain data for each value
-                for value in values {
+            // get all the buckets that contain data for each value
+            for value in values {
+                // check for census info for each group
+                for group in group_by {
                     // build the key for this tags bucket stream
                     let stream_key = census_stream_fn(tags_retain.tag_type, group, key, value, self.year, shared);
                     // add this stream key to our list
@@ -1244,7 +1225,7 @@ where
             // do this for each stream key
             for stream_key in &stream_keys {
                 // get the next 100 items
-                pipe.cmd("zrange").arg(stream_key).arg(oldest_first).arg(end)
+                pipe.cmd("zrange").arg(stream_key).arg(next_bucket).arg(end)
                         .arg("byscore").arg("limit").arg(0).arg(100).arg("rev");
             }
             // execute our queries
@@ -1262,10 +1243,12 @@ where
                 pre_intersection.push(buckets);
             }
             // get the intersection of all buckets that all tags are in
-            let intersection =
-                self.filter_bucket_intersection(group_by, &tags_retain.tags, tags_retain.tags_required, pre_intersection, &mut oldest_first, &mut possible);
+            let mut intersection =
+                self.filter_bucket_intersection(group_by, &tags_retain.tags, tags_retain.tags_required, pre_intersection, &mut next_bucket, &mut possible);
             // if we have intersecting buckets or an intersection is not possible for this year then return
             if !intersection.is_empty() || !possible {
+                // sort our intersection
+                intersection.sort_unstable();
                 return Ok(intersection);
             }
         }
@@ -1508,14 +1491,13 @@ where
             }
             // update our bucket counter correctly
             // this can't be moved to a function due to borrow check sadness
-            match (self.year.cmp(&self.end_year), buckets.len() >= 100) {
+            match (self.year.cmp(&self.end_year), buckets.is_empty()) {
                 // we have more buckets this year too query so just update our bucket
-                (Ordering::Greater | Ordering::Equal, true) => {
-                    // TODO does this overlap?
-                    self.bucket = (buckets.last().unwrap() - 1) as u32;
+                (Ordering::Greater | Ordering::Equal, false) => {
+                    self.bucket = (buckets.first().unwrap() - 1) as u32;
                 }
                 // we have more years to query so decrement our year and update our bucket
-                (Ordering::Greater, false) => {
+                (Ordering::Greater, true) => {
                     // decrement our year
                     self.year = self.year.saturating_sub(1);
                     // get a duration for the next year
@@ -1532,7 +1514,7 @@ where
                     self.bucket = duration.num_seconds() as u32 / self.partition_size as u32;
                 }
                 // we have reached our end bucket and end year
-                (Ordering::Equal | Ordering::Less, false) => {
+                (Ordering::Equal | Ordering::Less, true) => {
                     match buckets.last() {
                         Some(bucket) => self.bucket = *bucket as u32,
                         None => self.bucket = self.end_bucket,
@@ -1542,7 +1524,7 @@ where
                     break;
                 }
                 // we have gone past our end year bounds somehow
-                (Ordering::Less, true) => {
+                (Ordering::Less, false) => {
                     event!(
                         Level::ERROR,
                         msg = "Gone past end year bound?",
@@ -1639,7 +1621,9 @@ where
         match self.retain.tags_retain.take() {
             // we have tags to filter on
             Some(tags_retain) => {
+                // get the next page of data based on tags
                 let tags_retain = self.next_tags(tags_retain, shared).await?;
+                // restore our retained tags data
                 self.retain.tags_retain = Some(tags_retain);
                 Ok(())
             }
@@ -1677,7 +1661,7 @@ where
     D: Debug,
 {
     /// convert this scylla cursor to a user facing cursor
-    fn from(mut scylla_cursor: ScyllaCursor<D>) -> Self {
+    fn from(scylla_cursor: ScyllaCursor<D>) -> Self {
         // if our cursor is exhausted then don't include a cursor id
         let id = if scylla_cursor.exhausted() {
             None
