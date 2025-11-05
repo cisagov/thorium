@@ -3,9 +3,6 @@
   "name": "pdf-analyze",
   "order": [
     [
-      "pdf-preview"
-    ],
-    [
       "pdf2text"
     ]
   ],

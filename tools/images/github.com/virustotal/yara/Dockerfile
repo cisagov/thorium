@@ -8,12 +8,12 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-ADD https://github.com/VirusTotal/yara/archive/refs/tags/v4.5.4.tar.gz /app/
+ADD https://github.com/VirusTotal/yara/archive/refs/tags/v4.5.5.tar.gz /app/
 
-RUN tar -xzvf v4.5.4.tar.gz && \
-    rm v4.5.4.tar.gz
+RUN tar -xzvf v4.5.5.tar.gz && \
+    rm v4.5.5.tar.gz
 
-WORKDIR /app/yara-4.5.4
+WORKDIR /app/yara-4.5.5
 
 RUN ./bootstrap.sh && \
     ./configure && \

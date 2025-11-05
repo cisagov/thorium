@@ -17,7 +17,7 @@ def extractTags(result):
 
 def run(file_path):
     # run exiftool tool on sample
-    cmd = ['./exiftool', '-j', '-b', '-api', 'timezone=UTC', file_path]
+    cmd = ['./exiftool/exiftool', '-j', '-b', '-api', 'timezone=UTC', file_path]
     proc = subprocess.Popen(cmd,
                             shell=False,
                             stdout=subprocess.PIPE,

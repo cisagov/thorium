@@ -7,6 +7,3 @@ config_from = "pdf-analyze.json"
 
 [images.pdf2text]
 version = "latest"
-
-[images.pdf-preview]
-version = "latest"

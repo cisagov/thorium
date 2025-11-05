@@ -11,7 +11,7 @@ RUN apt update && \
 ADD https://exiftool.org/Image-ExifTool-13.40.tar.gz /app/
 
 RUN tar -xzvf *.tar.gz && \
-    mv Image-ExifTool-*/exiftool /app/exiftool && \
+    mv Image-ExifTool-*/ /app/exiftool && \
     rm *.tar.gz
 
 COPY run_exiftool.py /app/.

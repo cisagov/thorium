@@ -38,7 +38,7 @@ RUN git clone --depth 1 https://github.com/H3xKatana/autoVolatility3.git /opt/au
 WORKDIR /opt/autovolatility3
 
 RUN chmod +x autovol3.py
-ADD wrapper.sh /opt/autovolatility3/.
+ADD wrapper.sh /opt/.
 
 # default command (you can override at runtime)
 ENTRYPOINT ["bash", "/opt/wrapper.sh"]

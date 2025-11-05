@@ -208,18 +208,12 @@
         "images": {
           "pdf2text": {
             "version": "latest"
-          },
-          "pdf-preview": {
-            "version": "latest"
           }
         },
         "config": {
           "group": "static",
           "name": "pdf-analyze",
           "order": [
-            [
-              "pdf-preview"
-            ],
             [
               "pdf2text"
             ]
