@@ -8,12 +8,12 @@ use std::collections::{BTreeMap, HashSet};
 use thorium::conf::K8sHostAliases;
 use thorium::models::Image;
 use thorium::{Conf, Error};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use super::{Containers, Secrets, Volumes};
+use crate::libs::Cache;
 use crate::libs::scaler::ErrorOutKinds;
 use crate::libs::schedulers::{Spawned, WorkerDeletion};
-use crate::libs::Cache;
 use crate::{raw_entry_map_extend, raw_entry_map_insert};
 
 /// Pods api wrapper for kubernetes
@@ -60,10 +60,10 @@ impl Pods {
         // build the containers wrapper
         let containers = Containers::new(cluster_name);
         // get our host aliases
-        let host_aliases = conf.thorium.scaler.k8s.host_aliases(context_name);
-        // clone our host aliases
-        let host_aliases = host_aliases
-            .map(|aliases| aliases.clone())
+        let unconverted_aliases = conf.thorium.scaler.k8s.host_aliases(context_name);
+        // convert our host aliases into a K8s host aliases object
+        let host_aliases = unconverted_aliases
+            .map(|map| map.iter().map(K8sHostAliases::from).collect())
             .unwrap_or_default();
         // get client for creating namespaced clients with
         let client = client.clone();

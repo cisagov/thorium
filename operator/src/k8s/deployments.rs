@@ -3,6 +3,7 @@ use k8s_openapi::api::apps::v1::Deployment;
 use kube::api::{DeleteParams, ListParams, Patch, PatchParams, PostParams};
 use serde_json::Value;
 use std::time;
+use thorium::conf::K8sHostAliases;
 use thorium::{Error, client::Basic};
 use tokio;
 
@@ -14,7 +15,7 @@ use super::crds;
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-fn api_template(meta: &ClusterMeta) -> Option<Value> {
+fn api_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>) -> Option<Value> {
     let api_spec = meta.cluster.get_api_spec();
     // only include imagePullSecret if required
     let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
@@ -103,6 +104,7 @@ fn api_template(meta: &ClusterMeta) -> Option<Value> {
                                 ]
                             }
                         ],
+                        "hostAliases": host_aliases,
                         "volumes": [
                             {
                                 "name": "config",
@@ -132,7 +134,7 @@ fn api_template(meta: &ClusterMeta) -> Option<Value> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-async fn scaler_template(meta: &ClusterMeta) -> Option<Value> {
+async fn scaler_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>) -> Option<Value> {
     let scaler_spec = meta.cluster.get_scaler_spec();
     // only include imagePullSecret if required
     match scaler_spec {
@@ -254,6 +256,7 @@ async fn scaler_template(meta: &ClusterMeta) -> Option<Value> {
                                     "volumeMounts": volume_mounts
                                 }
                             ],
+                            "hostAliases": host_aliases,
                             "volumes": volumes,
                             "imagePullSecrets": image_pull_secrets
                         }
@@ -270,7 +273,10 @@ async fn scaler_template(meta: &ClusterMeta) -> Option<Value> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-async fn baremetal_scaler_template(meta: &ClusterMeta) -> Option<Value> {
+async fn baremetal_scaler_template(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Option<Value> {
     let scaler_spec = meta.cluster.get_baremetal_scaler_spec();
     // only include imagePullSecret if required
     let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
@@ -335,6 +341,7 @@ async fn baremetal_scaler_template(meta: &ClusterMeta) -> Option<Value> {
                                 ]
                             }
                         ],
+                        "hostAliases": host_aliases,
                         "volumes": [
                             {
                                 "name": "config",
@@ -363,7 +370,10 @@ async fn baremetal_scaler_template(meta: &ClusterMeta) -> Option<Value> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-async fn event_handler_template(meta: &ClusterMeta) -> Option<Value> {
+async fn event_handler_template(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Option<Value> {
     let handler_spec = meta.cluster.get_event_handler_spec();
     // only include imagePullSecret if required
     let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
@@ -428,6 +438,7 @@ async fn event_handler_template(meta: &ClusterMeta) -> Option<Value> {
                                 ]
                             }
                         ],
+                        "hostAliases": host_aliases,
                         "volumes": [
                             {
                                 "name": "config",
@@ -456,7 +467,10 @@ async fn event_handler_template(meta: &ClusterMeta) -> Option<Value> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-async fn search_streamer_template(meta: &ClusterMeta) -> Option<Value> {
+async fn search_streamer_template(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Option<Value> {
     let streamer_spec = meta.cluster.get_search_streamer_spec();
     // only include imagePullSecret if required
     let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
@@ -521,6 +535,7 @@ async fn search_streamer_template(meta: &ClusterMeta) -> Option<Value> {
                                 ]
                             }
                         ],
+                        "hostAliases": host_aliases,
                         "volumes": [
                             {
                                 "name": "config",
@@ -551,29 +566,40 @@ async fn search_streamer_template(meta: &ClusterMeta) -> Option<Value> {
 /// * `meta` - Thorium cluster client and metadata
 #[allow(dead_code)]
 pub async fn get_templates(meta: &ClusterMeta) -> Result<Vec<Deployment>, Error> {
+    // get our k8s config
+    let k8s_config = &meta.cluster.spec.config.thorium.scaler.k8s;
+    // get the name of our primary cluster
+    let primary = &k8s_config.primary_cluster;
+    // get our host aliases
+    let unconverted_aliases = k8s_config.host_aliases(primary);
+    // convert our host aliases into a K8s host aliases object
+    let host_aliases = unconverted_aliases
+        .map(|map| map.iter().map(K8sHostAliases::from).collect())
+        .unwrap_or_default();
+    // preallocate a list of our core component deployments
     let mut deployments: Vec<Deployment> = Vec::with_capacity(5);
     // add any api deployment templates
-    if let Some(deployment) = api_template(meta) {
+    if let Some(deployment) = api_template(meta, &host_aliases) {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         deployments.push(deployment);
     }
     // add any scaler deployment templates
-    if let Some(deployment) = scaler_template(meta).await {
+    if let Some(deployment) = scaler_template(meta, &host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         deployments.push(deployment);
     }
     // add any baremetal scaler deployment templates
-    if let Some(deployment) = baremetal_scaler_template(meta).await {
+    if let Some(deployment) = baremetal_scaler_template(meta, &host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         deployments.push(deployment);
     }
     // add any event handler deployment templates
-    if let Some(deployment) = event_handler_template(meta).await {
+    if let Some(deployment) = event_handler_template(meta, &host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         deployments.push(deployment);
     }
     // add any search streamer deployment templates
-    if let Some(deployment) = search_streamer_template(meta).await {
+    if let Some(deployment) = search_streamer_template(meta, &host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         deployments.push(deployment);
     }
@@ -680,9 +706,12 @@ pub async fn delete_one(name: &str, meta: &ClusterMeta) -> Result<(), Error> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-pub async fn deploy_api(meta: &ClusterMeta) -> Result<(), Error> {
+pub async fn deploy_api(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Result<(), Error> {
     // add any api deployment templates
-    if let Some(deployment) = api_template(meta) {
+    if let Some(deployment) = api_template(meta, host_aliases) {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup
@@ -697,9 +726,12 @@ pub async fn deploy_api(meta: &ClusterMeta) -> Result<(), Error> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-pub async fn deploy_scalers(meta: &ClusterMeta) -> Result<(), Error> {
+pub async fn deploy_scalers(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Result<(), Error> {
     // deploy any scaler from template
-    if let Some(deployment) = scaler_template(meta).await {
+    if let Some(deployment) = scaler_template(meta, host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup
@@ -707,7 +739,7 @@ pub async fn deploy_scalers(meta: &ClusterMeta) -> Result<(), Error> {
         delete_one("scaler", meta).await?;
     }
     // deploy any baremetal scaler from template
-    if let Some(deployment) = baremetal_scaler_template(meta).await {
+    if let Some(deployment) = baremetal_scaler_template(meta, host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup
@@ -722,9 +754,12 @@ pub async fn deploy_scalers(meta: &ClusterMeta) -> Result<(), Error> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-pub async fn deploy_event_handler(meta: &ClusterMeta) -> Result<(), Error> {
+pub async fn deploy_event_handler(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Result<(), Error> {
     // deploy any event handler from template
-    if let Some(deployment) = event_handler_template(meta).await {
+    if let Some(deployment) = event_handler_template(meta, host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup
@@ -739,9 +774,12 @@ pub async fn deploy_event_handler(meta: &ClusterMeta) -> Result<(), Error> {
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-pub async fn deploy_search_streamer(meta: &ClusterMeta) -> Result<(), Error> {
+pub async fn deploy_search_streamer(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Result<(), Error> {
     // deploy any event handler from template
-    if let Some(deployment) = search_streamer_template(meta).await {
+    if let Some(deployment) = search_streamer_template(meta, host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup

@@ -2,6 +2,7 @@
 use bytesize::ByteSize;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::net::IpAddr;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
@@ -408,6 +409,7 @@ impl Default for FairShareWeights {
     }
 }
 
+#[cfg(feature = "k8s")]
 /// The host aliases to apply to all pods in K8s
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, Default)]
 pub struct K8sHostAliases {
@@ -415,6 +417,18 @@ pub struct K8sHostAliases {
     ip: String,
     /// The host aliases for this IP
     hostnames: Vec<String>,
+}
+
+#[cfg(feature = "k8s")]
+impl From<(&IpAddr, &Vec<String>)> for K8sHostAliases {
+    /// Build a ``K8sHostAliases``` struct from a mapped version of k8s host aliases
+    fn from((ip, hosts): (&IpAddr, &Vec<String>)) -> Self {
+        // Build a K8s version of this ip's host alias info
+        K8sHostAliases {
+            ip: ip.to_string(),
+            hostnames: hosts.clone(),
+        }
+    }
 }
 
 /// Helps serde default the max positive sway to 50
@@ -447,7 +461,7 @@ pub struct K8sCluster {
     pub api_url: Option<String>,
     /// The host aliases to apply to pods in this cluster
     #[serde(default)]
-    pub host_aliases: Vec<K8sHostAliases>,
+    pub host_aliases: HashMap<IpAddr, Vec<String>>,
     /// Whether this cluster uses an invalid certificate or not
     #[serde(default)]
     pub insecure: bool,
@@ -471,7 +485,7 @@ impl Default for K8sCluster {
             max_sway: default_max_sway(),
             tls_server_name: None,
             api_url: None,
-            host_aliases: Vec::default(),
+            host_aliases: HashMap::default(),
             insecure: false,
             restricted: false,
             image_restrictions: HashMap::default(),
@@ -494,9 +508,17 @@ fn default_fair_share_divisor() -> u64 {
     1
 }
 
+/// Helps serde default the primary k8s cluster to deploy core components too
+fn default_primary_cluster() -> String {
+    "kubernetes-admin@cluster.local".to_owned()
+}
+
 /// The settings for all k8s clusters used by Thorium
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct K8s {
+    /// The name of the primary cluster that core components will be deployed too
+    #[serde(default = "default_primary_cluster")]
+    pub primary_cluster: String,
     /// The k8s clusters to be used by Thorium by their context name
     #[serde(default)]
     pub clusters: BTreeMap<String, K8sCluster>,
@@ -524,6 +546,7 @@ impl Default for K8s {
     /// Create a default k8s config
     fn default() -> Self {
         K8s {
+            primary_cluster: default_primary_cluster(),
             clusters: BTreeMap::default(),
             ignored_contexts: HashSet::default(),
             dwell: default_dwell(),
@@ -602,7 +625,7 @@ impl K8s {
     /// # Arguments
     ///
     /// * `context_name` - The cluster to check by its context name
-    pub fn host_aliases(&self, context_name: &str) -> Option<&Vec<K8sHostAliases>> {
+    pub fn host_aliases(&self, context_name: &str) -> Option<&HashMap<IpAddr, Vec<String>>> {
         // try to get our cluster
         match self.clusters.get(context_name) {
             Some(cluster) => Some(&cluster.host_aliases),
