@@ -22,6 +22,30 @@
         }
       }
     },
+    "byte-frequency": {
+      "latest": {
+        "description": "Graph frequency of bytes within a file",
+        "images": {
+          "byte-frequency": {
+            "version": "latest"
+          }
+        },
+        "config": {
+          "group": "static",
+          "name": "byte-frequency",
+          "order": [
+            [
+              "byte-frequency"
+            ]
+          ],
+          "sla": 640800,
+          "triggers": {
+            "RunOnNewSamples": "NewSample"
+          },
+          "description": "---\nThe `byte-frequency` tool graphs how often unicode characters occur within a binary file and provides a variance that can be compared across samples.\n\n---\n##### Usage\n\nUse this tool on any sample that you suspect may be packed or encrypted to verify if it exhibits high entropy. High entropy in files is an indicator that they have been obfuscated. For executable files that the `byte-frequency` graph suggests are packed, you can try using static unpackers like `upx-unpack` or dynamic analysis tools such as `CAPEv2` to obtain an unpacked version of the sample. Additionally, you can analyze the variance shown below the graph to compare multiple samples and identify any outliers within a group of samples that are likely packed.\n\n---"
+        }
+      }
+    },
     "strings": {
       "latest": {
         "description": "Scan for strings within a file or binary using an ensemble of tools",
@@ -220,6 +244,19 @@
           ],
           "sla": 640800,
           "triggers": {
+            "RunOnRFC822": {
+              "Tag": {
+                "tag_types": [
+                  "Files"
+                ],
+                "required": {
+                  "MIMEType": [
+                    "message/rfc822"
+                  ]
+                },
+                "not": {}
+              }
+            },
             "RunOnPDF": {
               "Tag": {
                 "tag_types": [
@@ -1904,6 +1941,109 @@
         }
       }
     },
+    "byte-frequency": {
+      "latest": {
+        "build_path": "./images/sandia.gov/byte-frequency",
+        "build_image": true,
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/byte-frequency:latest"
+        ],
+        "allow_base_override": false,
+        "config": {
+          "group": "static",
+          "name": "byte-frequency",
+          "scaler": "K8s",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/byte-frequency:latest",
+          "timeout": 300,
+          "resources": {
+            "cpu": "1000m",
+            "memory": "4096Mi",
+            "ephemeral_storage": "0Mi",
+            "nvidia_gpu": 0,
+            "amd_gpu": 0
+          },
+          "spawn_limit": "Unlimited",
+          "volumes": [],
+          "env": {},
+          "args": {
+            "entrypoint": null,
+            "command": null,
+            "reaction": null,
+            "repo": null,
+            "commit": null,
+            "output": "None"
+          },
+          "description": "---\nThe `byte-frequency` tool graphs how often unicode characters occur within a binary file and provides a variance that can be compared across samples.\n\n---\n##### Usage\n\nUse this tool on any sample that you suspect may be packed or encrypted to verify if it exhibits high entropy. High entropy in files is an indicator that they have been obfuscated. For executable files that the `byte-frequency` graph suggests are packed, you can try using static unpackers like `upx-unpack` or dynamic analysis tools such as `CAPEv2` to obtain an unpacked version of the sample. Additionally, you can analyze the variance shown below the graph to compare multiple samples and identify any outliers within a group of samples that are likely packed.\n\n---",
+          "security_context": {
+            "user": null,
+            "group": null,
+            "allow_privilege_escalation": false
+          },
+          "collect_logs": true,
+          "generator": false,
+          "dependencies": {
+            "samples": {
+              "location": "/tmp/thorium/samples",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "ephemeral": {
+              "location": "/tmp/thorium/ephemeral",
+              "kwarg": null,
+              "strategy": "Paths",
+              "names": []
+            },
+            "results": {
+              "images": [],
+              "location": "/tmp/thorium/prior-results",
+              "kwarg": "None",
+              "strategy": "Paths",
+              "names": []
+            },
+            "repos": {
+              "location": "/tmp/thorium/repos",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "tags": {
+              "enabled": false,
+              "location": "/tmp/thorium/prior-tags",
+              "kwarg": null,
+              "strategy": "Paths"
+            },
+            "children": {
+              "enabled": false,
+              "images": [],
+              "location": "/tmp/thorium/prior-children",
+              "kwarg": null,
+              "strategy": "Paths"
+            }
+          },
+          "display_type": "Image",
+          "output_collection": {
+            "handler": "Files",
+            "files": {
+              "results": "/tmp/thorium/results",
+              "result_files": "/tmp/thorium/result-files",
+              "tags": "/tmp/thorium/tags",
+              "names": []
+            },
+            "children": "/tmp/thorium/children",
+            "auto_tag": {},
+            "groups": []
+          },
+          "child_filters": {
+            "mime": [],
+            "file_name": [],
+            "file_extension": [],
+            "submit_non_matches": false
+          },
+          "clean_up": null,
+          "kvm": null,
+          "network_policies": []
+        }
+      }
+    },
     "pdf-miner": {
       "latest": {
         "build_path": "./images/sandia.gov/pdfs/PdfMiner",
@@ -2196,109 +2336,6 @@
             "handler": "Files",
             "files": {
               "results": "/tmp/thorium/results",
-              "result_files": "/tmp/thorium/result-files",
-              "tags": "/tmp/thorium/tags",
-              "names": []
-            },
-            "children": "/tmp/thorium/children",
-            "auto_tag": {},
-            "groups": []
-          },
-          "child_filters": {
-            "mime": [],
-            "file_name": [],
-            "file_extension": [],
-            "submit_non_matches": false
-          },
-          "clean_up": null,
-          "kvm": null,
-          "network_policies": []
-        }
-      }
-    },
-    "cve-bin-tool": {
-      "latest": {
-        "build_path": "./images/github.com/intel/cve-bin-tool/cve",
-        "build_image": true,
-        "image_tags": [
-          "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool:latest"
-        ],
-        "allow_base_override": true,
-        "config": {
-          "group": "static",
-          "name": "cve-bin-tool",
-          "scaler": "K8s",
-          "image": "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool:latest",
-          "timeout": 600,
-          "resources": {
-            "cpu": "3000m",
-            "memory": "4096Mi",
-            "ephemeral_storage": "0Mi",
-            "nvidia_gpu": 0,
-            "amd_gpu": 0
-          },
-          "spawn_limit": "Unlimited",
-          "volumes": [],
-          "env": {},
-          "args": {
-            "entrypoint": null,
-            "command": null,
-            "reaction": null,
-            "repo": null,
-            "commit": null,
-            "output": "None"
-          },
-          "description": "The CVE Binary Tool is a free, open source tool to help you find known vulnerabilities in software, using data from the National Vulnerability Database (NVD) list of Common Vulnerabilities and Exposures (CVEs) as well as known vulnerability data from Redhat, Open Source Vulnerability Database (OSV), Gitlab Advisory Database (GAD), and Curl.",
-          "security_context": {
-            "user": 0,
-            "group": 0,
-            "allow_privilege_escalation": false
-          },
-          "collect_logs": true,
-          "generator": false,
-          "dependencies": {
-            "samples": {
-              "location": "/tmp/thorium/samples",
-              "kwarg": null,
-              "strategy": "Paths"
-            },
-            "ephemeral": {
-              "location": "/tmp/thorium/ephemeral",
-              "kwarg": null,
-              "strategy": "Paths",
-              "names": []
-            },
-            "results": {
-              "images": [],
-              "location": "/tmp/thorium/prior-results",
-              "kwarg": "None",
-              "strategy": "Paths",
-              "names": []
-            },
-            "repos": {
-              "location": "/tmp/thorium/repos",
-              "kwarg": null,
-              "strategy": "Paths"
-            },
-            "tags": {
-              "enabled": false,
-              "location": "/tmp/thorium/prior-tags",
-              "kwarg": null,
-              "strategy": "Paths"
-            },
-            "children": {
-              "enabled": false,
-              "images": [],
-              "location": "/tmp/thorium/prior-children",
-              "kwarg": null,
-              "strategy": "Paths"
-            }
-          },
-          "display_type": "String",
-          "output_collection": {
-            "handler": "Files",
-            "files": {
-              "results": "/tmp/thorium/results.txt",
               "result_files": "/tmp/thorium/result-files",
               "tags": "/tmp/thorium/tags",
               "names": []

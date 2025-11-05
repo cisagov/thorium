@@ -1,0 +1,14 @@
+{
+  "group": "static",
+  "name": "byte-frequency",
+  "order": [
+    [
+      "byte-frequency"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {
+    "RunOnNewSamples": "NewSample"
+  },
+  "description": "---\nThe `byte-frequency` tool graphs how often unicode characters occur within a binary file and provides a variance that can be compared across samples.\n\n---\n##### Usage\n\nUse this tool on any sample that you suspect may be packed or encrypted to verify if it exhibits high entropy. High entropy in files is an indicator that they have been obfuscated. For executable files that the `byte-frequency` graph suggests are packed, you can try using static unpackers like `upx-unpack` or dynamic analysis tools such as `CAPEv2` to obtain an unpacked version of the sample. Additionally, you can analyze the variance shown below the graph to compare multiple samples and identify any outliers within a group of samples that are likely packed.\n\n---"
+}

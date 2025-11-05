@@ -8,6 +8,19 @@
   ],
   "sla": 640800,
   "triggers": {
+    "RunOnRFC822": {
+      "Tag": {
+        "tag_types": [
+          "Files"
+        ],
+        "required": {
+          "MIMEType": [
+            "message/rfc822"
+          ]
+        },
+        "not": {}
+      }
+    },
     "RunOnPDF": {
       "Tag": {
         "tag_types": [

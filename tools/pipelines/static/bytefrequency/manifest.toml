@@ -1,0 +1,8 @@
+name = "byte-frequency"
+type = "pipeline"
+description = "Graph frequency of bytes within a file"
+version = "latest"
+config_from = "byte-frequency.json"
+
+[images.byte-frequency]
+version = "latest"
