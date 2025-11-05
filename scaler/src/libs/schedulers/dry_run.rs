@@ -1,11 +1,12 @@
 //! The dry run scheduler for Thorium
 
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashSet};
 use hashbrown::HashMap;
+use std::collections::{BTreeMap, HashSet};
+use thorium::conf::SpawnSlots;
 use thorium::models::{NodeHealth, SystemSettings};
 use thorium::{Conf, Error, Thorium};
-use tracing::{instrument};
+use tracing::instrument;
 
 use super::{
     Allocatable, AllocatableUpdate, NodeAllocatableUpdate, NodeResources, Scheduler, Spawned,
@@ -33,7 +34,7 @@ impl DryRunNode {
     /// * `name` - The name of this node
     fn new(name: String) -> Self {
         // create our default nodes resources
-        let mut resources = NodeResources::new(name);
+        let mut resources = NodeResources::new(name, SpawnSlots::default());
         // give our pretend node 32 cores and 64 GiB of ram
         resources.available.cpu = 32000;
         resources.available.memory = 65536;
@@ -43,8 +44,6 @@ impl DryRunNode {
         resources.available.worker_slots = 100;
         // set our total resources
         resources.total = resources.available.clone();
-        // we can spawn at most 2 items per loop
-        resources.spawn_slots = 2;
         // build a pretend dry run node
         DryRunNode {
             health: NodeHealth::Healthy,

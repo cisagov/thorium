@@ -11,7 +11,7 @@ use base64::Engine as _;
 
 use crate::models::{
     Image, ImageScaler, NetworkPolicyCustomK8sRule, NetworkPolicyCustomLabel, NetworkPolicyRuleRaw,
-    NetworkProtocol, TagType, UnixInfo,
+    NetworkProtocol, Pools, TagType, UnixInfo,
 };
 
 /// Helps serde default a value to false
@@ -421,7 +421,7 @@ pub struct K8sHostAliases {
 
 #[cfg(feature = "k8s")]
 impl From<(&IpAddr, &Vec<String>)> for K8sHostAliases {
-    /// Build a ``K8sHostAliases``` struct from a mapped version of k8s host aliases
+    /// Build a ``K8sHostAliases`` struct from a mapped version of k8s host aliases
     fn from((ip, hosts): (&IpAddr, &Vec<String>)) -> Self {
         // Build a K8s version of this ip's host alias info
         K8sHostAliases {
@@ -431,11 +431,76 @@ impl From<(&IpAddr, &Vec<String>)> for K8sHostAliases {
     }
 }
 
-/// Helps serde default the max positive sway to 50
-fn default_max_sway() -> u64 {
-    50
+/// Helps serde default spawn slots to 2
+fn default_spawn_slots() -> u64 {
+    2
 }
 
+/// The amount of spawn slots per node for different pools
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, JsonSchema)]
+pub struct SpawnSlots {
+    /// The amount of pods to spawn per scale loop for the deadline pool
+    pub deadlines: u64,
+    /// The amount of pods to spawn per scale loop for the fairshare pool
+    pub fairshare: u64,
+}
+
+impl Default for SpawnSlots {
+    fn default() -> Self {
+        SpawnSlots {
+            deadlines: default_spawn_slots(),
+            fairshare: default_spawn_slots(),
+        }
+    }
+}
+
+impl SpawnSlots {
+    /// Create a ``SpawnSlots`` object with no spawn slots
+    #[must_use]
+    pub fn empty() -> Self {
+        SpawnSlots {
+            deadlines: 0,
+            fairshare: 0,
+        }
+    }
+
+    /// Check if we have any spawn slots to spawn this worker
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - The pool we want to spawn a worker in
+    #[must_use]
+    pub fn enough(&self, pool: Pools) -> bool {
+        match pool {
+            Pools::Deadline => self.deadlines > 0,
+            Pools::FairShare => self.fairshare > 0,
+        }
+    }
+
+    /// Consume a spawn slot for a specific pool
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - The pool we want to spawn a worker in
+    pub fn consume(&mut self, pool: Pools) {
+        match pool {
+            Pools::Deadline => self.deadlines -= 1,
+            Pools::FairShare => self.fairshare -= 1,
+        }
+    }
+
+    /// Add another ``Spawnslots`` object to this object
+    ///
+    /// # Arguments
+    ///
+    /// * `rhs` - The other ``SpawnSlot`` to add
+    pub fn add(&mut self, rhs: Self) {
+        // add our deadlines
+        self.deadlines += rhs.deadlines;
+        // add our fairshare
+        self.fairshare += rhs.fairshare;
+    }
+}
 /// The settings for a single k8s cluster
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct K8sCluster {
@@ -450,9 +515,9 @@ pub struct K8sCluster {
     /// Any groups to restrict to being to deploy jobs to this cluster
     #[serde(default)]
     pub groups: Vec<String>,
-    /// The max positive sway when spawning pods
-    #[serde(default = "default_max_sway")]
-    pub max_sway: u64,
+    /// The max numbers of pods to spawn per node
+    #[serde(default)]
+    pub spawn_slots: SpawnSlots,
     /// The tls server name to use for cert validation
     #[serde(default)]
     pub tls_server_name: Option<String>,
@@ -482,7 +547,7 @@ impl Default for K8sCluster {
             nodes: vec![],
             filters: NodeFilters::default(),
             groups: vec![],
-            max_sway: default_max_sway(),
+            spawn_slots: SpawnSlots::default(),
             tls_server_name: None,
             api_url: None,
             host_aliases: HashMap::default(),
@@ -695,9 +760,9 @@ pub struct BareMetalCluster {
     /// The nodes in the cluster to run Thorium jobs on by hostname/ip and any restrictions
     #[serde(default)]
     pub nodes: HashMap<String, BareMetalNodeSettings>,
-    /// The max positive sway when configuring agents
-    #[serde(default = "default_max_sway")]
-    pub max_sway: u64,
+    /// The max numbers of pods to spawn per node
+    #[serde(default)]
+    pub spawn_slots: SpawnSlots,
     /// The path the bare metal scaler can find the Thorium agent at
     #[serde(default = "default_bare_metal_agent")]
     pub agent_path: String,
@@ -709,7 +774,7 @@ impl Default for BareMetalCluster {
         BareMetalCluster {
             username: default_bare_metal_user(),
             nodes: HashMap::default(),
-            max_sway: default_max_sway(),
+            spawn_slots: SpawnSlots::default(),
             agent_path: default_bare_metal_agent(),
         }
     }
@@ -818,9 +883,9 @@ pub struct KvmCluster {
     /// The nodes in the cluster to run Thorium jobs on by hostname/ip and any restrictions
     #[serde(default)]
     pub nodes: HashMap<String, KvmNodeSettings>,
-    /// The max positive sway when configuring agents
-    #[serde(default = "default_max_sway")]
-    pub max_sway: u64,
+    /// The max numbers of pods to spawn per node
+    #[serde(default)]
+    pub spawn_slots: SpawnSlots,
     /// The path the bare metal scaler can find the Thorium agent at
     #[serde(default = "default_kvm_agent")]
     pub agent_path: String,
@@ -1112,30 +1177,29 @@ impl Default for Scaler {
 }
 
 impl Scaler {
-    /// Get the maximum amount of positive sway allowed for the configured scheduler
+    /// Get the spawn slots config for a specific cluster
     ///
     /// # Arguments
     ///
     /// * `scaler` - The scaler to get the max sway of
-    pub fn max_sway(&self, scaler: ImageScaler, cluster: &str) -> u64 {
+    pub fn spawn_slots(&self, scaler: ImageScaler, cluster: &str) -> SpawnSlots {
         match scaler {
             ImageScaler::K8s => self
                 .k8s
                 .clusters
                 .get(cluster)
-                .map_or_else(default_max_sway, |c| c.max_sway),
-            ImageScaler::Windows => 2,
+                .map_or_else(SpawnSlots::default, |c| c.spawn_slots),
             ImageScaler::BareMetal => self
                 .bare_metal
                 .clusters
                 .get(cluster)
-                .map_or_else(default_max_sway, |c| c.max_sway),
+                .map_or_else(SpawnSlots::default, |c| c.spawn_slots),
             ImageScaler::Kvm => self
                 .kvm
                 .clusters
                 .get(cluster)
-                .map_or_else(default_max_sway, |c| c.max_sway),
-            ImageScaler::External => default_max_sway(),
+                .map_or_else(SpawnSlots::default, |c| c.spawn_slots),
+            ImageScaler::External | ImageScaler::Windows => SpawnSlots::default(),
         }
     }
 

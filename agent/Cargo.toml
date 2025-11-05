@@ -22,7 +22,7 @@ chrono = { workspace = true }
 gethostname = "1.0"
 futures = "0.3"
 uuid = { version = "1", features = ["serde", "v4"]}
-cart-rs = { version = "*", path = "../cart-rs"}
+cart-rs = { workspace = true }
 walkdir = "2"
 async-trait = "0.1"
 crossbeam = "0.8"

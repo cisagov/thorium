@@ -1,5 +1,7 @@
 //! A pool of resources to schedule
 
+use std::collections::HashMap;
+
 use thorium::models::{Image, Pools, Resources, SystemSettings};
 
 /// Tracks what resources are freed from what pool
@@ -33,6 +35,8 @@ pub struct Pool {
     pub resources: Resources,
     /// The total amount of resources in this pool
     total: Resources,
+    /// How many spawn slots this pool has per cluster
+    pub spawn_slots: HashMap<String, u64>,
 }
 
 impl Pool {
@@ -41,6 +45,7 @@ impl Pool {
     /// # Arguments
     ///
     /// * `image` - The image this deadline is based on
+    /// * `pool` - The pool this image is being spawned in
     pub fn enough(&self, image: &Image) -> bool {
         // check if this pool has enough resources to spawn this image
         self.resources.enough(&image.resources)
@@ -60,7 +65,22 @@ impl Pool {
         self.resources += free;
     }
 
+    /// Set a clusters spawn slot count
+    ///
+    /// # Arguments
+    ///
+    /// * `cluster` - The cluster to set a spawn slot count for
+    /// * `spawn_slots` - The number of spawn slots to set
+    pub fn set_spawn_slot<C: Into<String>>(&mut self, cluster: C, spawn_slots: u64) {
+        // get an entry ot this clusters spawn slots
+        let entry = self.spawn_slots.entry(cluster.into()).or_default();
+        // update our spawn slot count
+        *entry = spawn_slots;
+    }
+
     /// Setup this pool for fairshare based on system settings
+    ///
+    /// This will not setup spawn slots until nodes are added.
     pub fn setup_fairshare(settings: &SystemSettings) -> Self {
         // build the total amount of resources in this pool
         let total = Resources::new(
@@ -71,8 +91,9 @@ impl Pool {
         );
         // build our pool
         Pool {
-            resources: total.clone(),
+            resources: total,
             total,
+            spawn_slots: HashMap::with_capacity(1),
         }
     }
 }

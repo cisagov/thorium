@@ -6,7 +6,7 @@ use chrono::prelude::*;
 use hashbrown::HashMap;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
-use thorium::conf::{FairShareWeights, IsRestricted, WorkerRestrictions};
+use thorium::conf::{FairShareWeights, IsRestricted, SpawnSlots, WorkerRestrictions};
 use thorium::models::{
     Deadline, Image, ImageScaler, NodeListParams, Pools, Requisition, Resources, SpawnLimits,
     SpawnMap, SystemSettings, WorkerDeleteMap,
@@ -59,6 +59,8 @@ pub struct AllocatableUpdate {
 
 /// The resources we can allocate across all clusters this scaler can see
 pub struct Allocatable {
+    /// The Thorium config in use by this scaler
+    conf: Conf,
     /// The type of scheduler in use
     scaler_type: ImageScaler,
     /// The size of our deadline window
@@ -117,6 +119,7 @@ impl Allocatable {
         fair_share.insert(0, starter_set);
         // build a new allocatable object
         Allocatable {
+            conf: conf.clone(),
             scaler_type,
             deadline_window: conf.thorium.scaler.deadline_window,
             bans: BanSets::new(scaler_type),
@@ -162,7 +165,11 @@ impl Allocatable {
         // get this clusters resources
         let (_, cluster_name, mut cluster) = match self.remove_cluster(name) {
             Some((cpus, cluster_name, cluster)) => (cpus, cluster_name, cluster),
-            None => (0, name.to_owned(), ClusterResources::new(name.to_owned())),
+            None => (
+                0,
+                name.to_owned(),
+                ClusterResources::new(self.scaler_type, name.to_owned(), &self.conf),
+            ),
         };
         // apply an update to this cluster
         let freed = cluster.update(update, &mut self.image_counts, &mut self.counts);
@@ -191,10 +198,37 @@ impl Allocatable {
     /// Log all clusters current resources
     #[instrument(name = "Allocatable::log_resources", skip_all)]
     pub fn log_resources(&self) {
+        // log our deadline pools resources
+        event!(
+            Level::INFO,
+            pool = "deadlines",
+            cpu = self.deadlines_pool.resources.cpu,
+            memory = self.deadlines_pool.resources.memory,
+            ephemeral_storage = self.deadlines_pool.resources.ephemeral_storage,
+            nvidia_gpu = self.deadlines_pool.resources.nvidia_gpu,
+            amd_gpu = self.deadlines_pool.resources.amd_gpu,
+        );
+        // log our fairshare pools resources
+        event!(
+            Level::INFO,
+            pool = "fairshare",
+            cpu = self.fairshare_pool.resources.cpu,
+            memory = self.fairshare_pool.resources.memory,
+            ephemeral_storage = self.fairshare_pool.resources.ephemeral_storage,
+            nvidia_gpu = self.fairshare_pool.resources.nvidia_gpu,
+            amd_gpu = self.fairshare_pool.resources.amd_gpu,
+        );
         // crawl each cpu group
         for cpu_group in self.clusters.values() {
             // crawl the clusters in this cpu group
             for (cluster, cluster_info) in cpu_group {
+                // log this clusters spawn slots
+                event!(
+                    Level::INFO,
+                    cluster,
+                    deadline_spawn_slots = self.deadlines_pool.spawn_slots.get(cluster),
+                    fairshare_spawn_slots = self.fairshare_pool.spawn_slots.get(cluster),
+                );
                 // crawl the node cpu groups in this cluster
                 for node_group in cluster_info.nodes.values() {
                     // crawl the nodes in this cpu group
@@ -211,7 +245,8 @@ impl Allocatable {
                             ephemeral_storage = resources.ephemeral_storage,
                             nvidia_gpu = resources.nvidia_gpu,
                             amd_gpu = resources.amd_gpu,
-                            spawn_slots = node_info.spawn_slots
+                            spawn_slots_deadlines = node_info.spawn_slots.deadlines,
+                            spawn_slots_fairshare = node_info.spawn_slots.fairshare,
                         );
                     }
                 }
@@ -322,7 +357,12 @@ impl Allocatable {
     /// # Arguments
     ///
     /// * `image` - The image to allocate resources for
-    fn allocate_cluster_helper(&mut self, image: &Image) -> Option<(u64, String, NodeResources)> {
+    /// * `pool` - The pool we are trying to allocate resources in
+    fn allocate_cluster_helper(
+        &mut self,
+        image: &Image,
+        pool: Pools,
+    ) -> Option<(u64, String, NodeResources)> {
         // crawl over all nodes until we find one that we can fit on
         for (cpus, cluster_map) in self.clusters.iter_mut().rev() {
             // iterate over the clusters that have the same number of cores
@@ -334,7 +374,7 @@ impl Allocatable {
                     IsRestricted::WrongCluster => continue,
                 };
                 // try to consume the resources for this image on a node
-                if let Some(node) = cluster.allocate_node(image, nodes) {
+                if let Some(node) = cluster.allocate_node(image, nodes, pool) {
                     // clone our values
                     let cluster_name = cluster_name.to_owned();
                     // return the info we found
@@ -350,9 +390,10 @@ impl Allocatable {
     /// # Arguments
     ///
     /// * `image` - The image to allocate resources for
-    fn allocate_cluster(&mut self, image: &Image) -> Option<(String, String)> {
+    /// * `pool` - The pool we are trying to allocate resources in
+    fn allocate_cluster(&mut self, image: &Image, pool: Pools) -> Option<(String, String)> {
         // locate the cluster and node that we are allocating resources on
-        if let Some((cpus, cluster_name, node)) = self.allocate_cluster_helper(image) {
+        if let Some((cpus, cluster_name, node)) = self.allocate_cluster_helper(image, pool) {
             // get our cluster from the target cpu group
             match self
                 .clusters
@@ -393,7 +434,7 @@ impl Allocatable {
         // check if we have enough resources in the target pool
         if self.enough(image, pool) {
             // try to allocate this image on a node
-            return match self.allocate_cluster(image) {
+            return match self.allocate_cluster(image, pool) {
                 Some((cluster, node)) => {
                     // consume the resources from the correct pool
                     self.consume(image, pool);
@@ -574,15 +615,33 @@ impl Allocatable {
         // crawl over all of our clusters
         for cluster_group in self.clusters.values_mut() {
             // crawl over all of our clusters in this cluster cpu group
-            for clusters in cluster_group.values_mut() {
+            for (name, cluster) in cluster_group {
+                // start with no spawn slots for this cluster
+                let mut cluster_spots = SpawnSlots::empty();
                 // crawl over over all node cpu groups
-                for node_group in clusters.nodes.values_mut() {
+                for node_group in cluster.nodes.values_mut() {
                     // add this size of this group to our node cnt
                     node_cnt += node_group.len();
-                    // reset this nodes spawn limit
-                    node_group
-                        .values_mut()
-                        .for_each(|node| node.spawn_slots = 2);
+                    // step over all of the nodes in this node cpu group
+                    for node in node_group.values_mut() {
+                        // reset this nodes spawn slots
+                        node.spawn_slots = cluster.spawn_slots_reset;
+                        // add this nodes spawn slots to our cluster spawn slots
+                        cluster_spots.add(node.spawn_slots);
+                    }
+                }
+                // update this clusters spawn slot count for all pools
+                self.deadlines_pool
+                    .set_spawn_slot(name, cluster_spots.deadlines);
+                // if we don't have fairshare enabled then just add our fairshare slots to the deadline pool
+                if self.fairshare_pool.resources.some() {
+                    // fairshare has resources to schedule
+                    self.fairshare_pool
+                        .set_spawn_slot(name, cluster_spots.fairshare);
+                } else {
+                    // fairshare has no resources to schedule
+                    self.deadlines_pool
+                        .set_spawn_slot(name, cluster_spots.fairshare);
                 }
             }
         }
@@ -1074,6 +1133,8 @@ pub struct ClusterResources {
     pub low_resources: bool,
     /// A map of resources for one node
     pub nodes: BTreeMap<u64, HashMap<String, NodeResources>>,
+    /// The spawnable slots per node to set
+    pub spawn_slots_reset: SpawnSlots,
 }
 
 impl ClusterResources {
@@ -1082,13 +1143,17 @@ impl ClusterResources {
     /// # Arguments
     ///
     /// * `name` - The name of this cluster
-    pub fn new(name: String) -> Self {
+    pub fn new(scaler_type: ImageScaler, name: String, conf: &Conf) -> Self {
+        // get this clusters max number of spawnable workers per node
+        let spawn_slots = conf.thorium.scaler.spawn_slots(scaler_type, &name);
+        // build our cluster resources object
         ClusterResources {
             name,
             resources: Resources::default(),
             total: Resources::default(),
             low_resources: false,
             nodes: BTreeMap::default(),
+            spawn_slots_reset: spawn_slots,
         }
     }
 
@@ -1210,7 +1275,7 @@ impl ClusterResources {
             // get this nodes entry
             let entry = temp_nodes
                 .entry(name.clone())
-                .or_insert_with(|| NodeResources::new(name));
+                .or_insert_with(|| NodeResources::new(name, self.spawn_slots_reset));
             // apply our update to this node
             entry.available = node_update.available;
             entry.total = node_update.total;
@@ -1232,10 +1297,12 @@ impl ClusterResources {
     ///
     /// * `image` - The image to base these pods on
     /// * `nodes` - The nodes that this image is restricted to if any
+    /// * `pool` - The pool we are trying to allocate resources in
     fn allocate_node(
         &mut self,
         image: &Image,
         nodes: Option<&HashSet<String>>,
+        pool: Pools,
     ) -> Option<NodeResources> {
         // start crawling through the nodes by total cpu
         for node_map in self.nodes.values_mut().rev() {
@@ -1246,7 +1313,7 @@ impl ClusterResources {
                     .iter_mut()
                     // filter out any nodes that do not meet our restrictions
                     .filter(|(name, _)| restrictions.contains(*name))
-                    .find(|(_, node)| node.spawnable(image))
+                    .find(|(_, node)| node.spawnable(image, pool))
                     .map(|(name, _)| name.to_owned())
                 {
                     // get this node from our map
@@ -1254,7 +1321,7 @@ impl ClusterResources {
                         // consume the resources for this image
                         node.available.consume(&image.resources, 1);
                         // consume a spawn slot
-                        node.spawn_slots -= 1;
+                        node.spawn_slots.consume(pool);
                         // we spawned something so return true
                         return Some(node);
                     }
@@ -1264,7 +1331,7 @@ impl ClusterResources {
                 // get the first node that has enough resources for us
                 if let Some(name) = node_map
                     .iter()
-                    .find(|(_, node)| node.spawnable(image))
+                    .find(|(_, node)| node.spawnable(image, pool))
                     .map(|(name, _)| name.to_owned())
                 {
                     // get this node from our map
@@ -1272,7 +1339,7 @@ impl ClusterResources {
                         // consume the resources for this image
                         node.available.consume(&image.resources, 1);
                         // consume a spawn slot
-                        node.spawn_slots -= 1;
+                        node.spawn_slots.consume(pool);
                         // we spawned something so return true
                         return Some(node);
                     }
@@ -1364,7 +1431,7 @@ pub struct NodeResources {
     /// The workers that are spawned on this node
     pub spawned: BTreeMap<DateTime<Utc>, Vec<Spawned>>,
     /// The number of spawn slots for this node
-    pub spawn_slots: u64,
+    pub spawn_slots: SpawnSlots,
 }
 
 impl NodeResources {
@@ -1373,13 +1440,13 @@ impl NodeResources {
     /// # Arguments
     ///
     /// * `name` - The name of this node
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, spawn_slots: SpawnSlots) -> Self {
         NodeResources {
             name,
             available: Resources::default(),
             total: Resources::default(),
             spawned: BTreeMap::default(),
-            spawn_slots: 2,
+            spawn_slots,
         }
     }
 
@@ -1388,9 +1455,9 @@ impl NodeResources {
     /// # Arguments
     ///
     /// * `image` - The image we want to spawn
-    pub fn spawnable(&self, image: &Image) -> bool {
+    pub fn spawnable(&self, image: &Image, pool: Pools) -> bool {
         // check if we have enough spawn slots for this pod
-        if self.spawn_slots == 0 {
+        if !self.spawn_slots.enough(pool) {
             return false;
         }
         // make sure this node has enough resources for this image

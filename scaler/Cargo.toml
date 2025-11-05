@@ -4,8 +4,6 @@ resolver = "2"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-description = "Scales workers across clusters in Thorium."
-license-file = "../LICENSE"
 
 [features]
 # include test utilities for the Thorium scaler

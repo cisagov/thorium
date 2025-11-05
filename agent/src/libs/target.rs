@@ -1,31 +1,8 @@
 use thorium::models::{Image, Pools, ScrubbedUser, WorkerDeleteMap, WorkerStatus, WorkerUpdate};
 use thorium::{Error, Thorium};
-use tokio::task::JoinHandle;
 use tracing::instrument;
-use uuid::Uuid;
 
 use crate::args::Args;
-
-/// The current Reaction and Job id for a target
-#[derive(Debug)]
-pub struct CurrentTarget {
-    /// The currently active job id
-    pub job: Uuid,
-    /// The handle for this active job
-    pub handle: JoinHandle<()>,
-}
-
-impl CurrentTarget {
-    /// Create a new current target
-    ///
-    /// # Arguments
-    ///
-    /// * `job` - The currently active job id
-    /// * `handle` - A handle to this jobs tokio task
-    pub fn new(job: Uuid, handle: JoinHandle<()>) -> Self {
-        CurrentTarget { job, handle }
-    }
-}
 
 /// The Target stage to claim and run a job for
 pub struct Target {
@@ -43,8 +20,6 @@ pub struct Target {
     pub user: ScrubbedUser,
     /// The client to use for this image
     pub thorium: Thorium,
-    /// The current reaction and job id if we have an active job
-    pub active: Option<CurrentTarget>,
     /// What pool of resources this worker was spawned under
     pub pool: Pools,
 }

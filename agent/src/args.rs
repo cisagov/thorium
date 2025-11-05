@@ -38,7 +38,7 @@ pub struct Args {
     #[clap(short, long, default_value = "keys.yml")]
     pub keys: String,
     /// How long should this agent sit limbo before exiting without a job to work on
-    #[clap(short, long, default_value = "30")]
+    #[clap(short, long, default_value = "5")]
     pub limbo: usize,
 }
 
@@ -67,7 +67,6 @@ impl Args {
             image,
             user,
             thorium: thorium.clone(),
-            active: None,
             pool: worker.pool,
         };
         //log this new target
