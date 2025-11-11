@@ -274,8 +274,6 @@ pub async fn delete_many(
     Ok(())
 }
 
-/// Get specific associations
-
 /// List associations for a specific entity/file/repo
 ///
 /// # Arguments

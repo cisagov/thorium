@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use super::elastic::{self, ElasticResponse};
 use super::keys::{cursors, tags};
-use crate::models::{ApiCursor, ElasticDoc, TagListRow};
+use crate::models::{ApiCursor, ElasticDoc, TagCounts, TagKeyCounts, TagListRow, TagMap, User};
 use crate::models::{ElasticSearchParams, TagType};
 use crate::utils::{ApiError, Shared, helpers};
 use crate::{
@@ -37,6 +37,8 @@ pub enum CursorKind {
     SimpleScylla,
     /// A group-based cursor in Scylla with no concept of time bucketing
     GroupedScylla,
+    /// A tags counting cursor
+    TagsCount,
     /// A cursor based on data in Elastic
     Elastic,
     /// A Tree of data in Thorium
@@ -51,6 +53,7 @@ impl CursorKind {
             CursorKind::Scylla => "Scylla",
             CursorKind::SimpleScylla => "SimpleScylla",
             CursorKind::GroupedScylla => "GroupedScylla",
+            CursorKind::TagsCount => "TagsCount",
             CursorKind::Elastic => "Elastic",
             CursorKind::Tree => "Tree",
         }
@@ -135,7 +138,7 @@ pub trait CursorCore: Debug + Serialize + for<'a> Deserialize<'a> {
     /// # Arguments
     ///
     /// * `params` - The params to use to build this cursor
-    fn get_id(params: &mut Self::Params) -> Option<Uuid>;
+    fn get_id(params: &Self::Params) -> Option<Uuid>;
 
     // Get our start and end timestamps
     ///
@@ -699,7 +702,7 @@ where
         shared: &Shared,
     ) -> Result<ScyllaCursor<D>, ApiError> {
         // if we have a cursor id then try to get our cursor from the DB
-        if let Some(id) = D::get_id(&mut params) {
+        if let Some(id) = D::get_id(&params) {
             ScyllaCursor::get(id, params, dedupe, shared).await
         } else {
             // this is a new cursor
@@ -782,7 +785,7 @@ where
         shared: &Shared,
     ) -> Result<ScyllaCursor<D>, ApiError> {
         // if we have a cursor id then try to get our cursor from the DB
-        if let Some(id) = D::get_id(&mut params) {
+        if let Some(id) = D::get_id(&params) {
             ScyllaCursor::get(id, params, dedupe, shared).await
         } else {
             // this is a new cursor
@@ -1116,7 +1119,7 @@ where
             // get all the buckets that contain data for each value
             for value in values {
                 // check for census info for each group
-                for group in group_by {
+                for _ in group_by {
                     // get this values buckets
                     let buckets = bucket_stream.next().unwrap();
                     // skip any empty bucket lists
@@ -1152,7 +1155,7 @@ where
         // build a hashset of buckets in any order
         let mut in_range: HashMap<i32, i32> = HashMap::with_capacity(1000);
         // add all of our valid buckets
-        for (_, buckets) in &map {
+        for buckets in map.values() {
             // check each potential bucket in this bucket range
             for bucket in buckets {
                 // check if this bucket is in our overlapping range
@@ -2717,6 +2720,217 @@ impl ExistsCursor {
         // log that we did not find data
         event!(Level::INFO, exists = false);
         Ok(false)
+    }
+}
+
+pub trait TagCountCursorSupport: ScyllaCursorSupport + Send {
+    /// The type for our data with tags
+    type Details;
+
+    /// Get or create a new backing cursor for the data whose tags we are counting
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params used to get our backing cursor
+    /// * `extra` - Any extra params needed to get our backing cursor
+    /// * `shared` - Shared Thorium objects
+    #[allow(async_fn_in_trait)]
+    async fn backing_cursor(
+        params: <Self as CursorCore>::Params,
+        _extra: <Self as CursorCore>::ExtraFilters,
+        shared: &Shared,
+    ) -> Result<ScyllaCursor<Self>, ApiError> {
+        // get our backing cursor
+        ScyllaCursor::from_params(params, true, shared).await
+    }
+
+    /// Get the details for our backing cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is calling this cursor
+    /// * `backing` - The backing cursor to get details from
+    /// * `shared` - Shared Thorium objects
+    #[allow(async_fn_in_trait)]
+    async fn get_details(
+        user: &User,
+        backing: &mut ScyllaCursor<Self>,
+        shared: &Shared,
+    ) -> Result<Vec<Self::Details>, ApiError>;
+
+    /// Extract the tags from a single item returned by this cursor
+    fn tags(item: Self::Details) -> TagMap;
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct TagCountCursorRetain {
+    /// The total number of items that were counted
+    pub total: u64,
+    /// The specific counts for each Tag
+    pub tags: HashMap<String, TagKeyCounts>,
+}
+
+impl TagCountCursorRetain {
+    /// Create a new ``TagCounts`` object with some default capacity
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - The capacity to set
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        TagCountCursorRetain {
+            total: 0,
+            tags: HashMap::with_capacity(capacity),
+        }
+    }
+
+    /// Add some tags to our count
+    ///
+    /// # Arguments
+    ///
+    /// * `tags` - The tags to add to our count
+    pub fn add_tags(&mut self, tags: TagMap) {
+        // increment our total count
+        self.total += 1;
+        // step over these tags keys
+        for (key, value_map) in tags {
+            // get an entry to this keys count
+            let key_entry = self.tags.entry(key).or_default();
+            // count each of our values
+            for (value, _) in value_map {
+                // get an entry to this counts map
+                let value_entry = key_entry.values.entry(value).or_default();
+                // increment this key/value pairs count
+                *value_entry += 1;
+                // increment the total count for this key
+                key_entry.total += 1;
+            }
+        }
+    }
+}
+
+pub struct ScyllaTagCountCursor<D: TagCountCursorSupport + Send> {
+    /// The id for our tag count cursor
+    pub id: Uuid,
+    /// The info to retain across tag counts
+    pub retain: TagCountCursorRetain,
+    /// The cursor backing our counts
+    backing: ScyllaCursor<D>,
+}
+
+impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
+    /// Get or create a new tag count cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params for counting tags
+    /// * `extra` - Any extra params needed to count tags
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScyllaTagCountCursor::from_params", skip_all, err(Debug))]
+    pub async fn from_params(
+        params: <D as CursorCore>::Params,
+        extra: <D as CursorCore>::ExtraFilters,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
+        // get our cursor id if we have one
+        let (id, retain) = match <D as CursorCore>::get_id(&params) {
+            Some(id) => {
+                // build the key to our cursor data in redis
+                let key = cursors::data(CursorKind::TagsCount, &id, shared);
+                // get our cursor from redis
+                let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
+                // if we didn't get any data then return a 404
+                match data {
+                    // deserialize our cursor data
+                    Some(data) => (id, deserialize!(&data)),
+                    // this cursor data is missing so return an error
+                    None => return not_found!(format!("Cursor {id} not found!")),
+                }
+            }
+            None => (Uuid::new_v4(), TagCountCursorRetain::with_capacity(1000)),
+        };
+        // get our backing cursor
+        let mut backing = D::backing_cursor(params, extra, shared).await?;
+        // override our backing cursors id to be the same as our tags count cursor
+        backing.id = id;
+        // build our internal tag count cursor
+        let internal = ScyllaTagCountCursor {
+            id,
+            retain,
+            backing,
+        };
+        Ok(internal)
+    }
+
+    /// Count the next page of data
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is counting tags and objects
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScyllaTagCountCursor::next", skip_all, err(Debug))]
+    pub async fn next(&mut self, user: &User, shared: &Shared) -> Result<(), ApiError> {
+        // get the next page of data for this cursor
+        self.backing.next(shared).await?;
+        // get the details for the current page of data
+        let details = D::get_details(user, &mut self.backing, shared).await?;
+        // count the tags for each item
+        for item in details {
+            // get the tags for this item
+            let tags = D::tags(item);
+            // add the tags to our count
+            self.retain.add_tags(tags);
+        }
+        Ok(())
+    }
+
+    /// Save this tag count cursor to redis
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScyllaTagCountCursor::save", skip_all, err(Debug))]
+    pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
+        // save our backing cursor
+        self.backing.save(shared).await?;
+        // serialize our cursor info
+        let serialized = serialize!(&self.retain);
+        // build the key to save this cursor data too
+        let key = cursors::data(CursorKind::TagsCount, &self.id, shared);
+        // save this cursors data to redis
+        let _: () = query!(
+            cmd("set").arg(key).arg(serialized).arg("EX").arg(2_628_000),
+            shared
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Check if our count cursor has exhausted its backing cursor
+    pub fn exhausted(&self) -> bool {
+        self.backing.exhausted()
+    }
+}
+
+impl<D: TagCountCursorSupport> From<ScyllaTagCountCursor<D>> for TagCounts {
+    /// Convert an ``ScyllaTagCountCursor`` to a user facing ``TagCounts``
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - The internal tag count cursor to convert
+    fn from(cursor: ScyllaTagCountCursor<D>) -> Self {
+        // if our cursor is not exhausted then return a cursor id
+        let cursor_id = if cursor.exhausted() {
+            None
+        } else {
+            Some(cursor.id)
+        };
+        // build our user facing tag count cursor
+        TagCounts {
+            cursor: cursor_id,
+            total: cursor.retain.total,
+            tags: cursor.retain.tags,
+        }
     }
 }
 

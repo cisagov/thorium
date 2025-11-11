@@ -1,11 +1,15 @@
 //! Structures for tagging objects in Thorium
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::str::FromStr;
+use uuid::Uuid;
 
-use super::backends::TagSupport;
+use crate::models::TagMap;
+
 use super::InvalidEnum;
+use super::backends::TagSupport;
 
 /// The different types of tags
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Hash, Eq)]
@@ -586,5 +590,77 @@ impl<T: TagSupport + 'static + Send> super::CensusSupport for TagCensusCaseInsen
             value = row.value_lower,
             year = row.year,
         )
+    }
+}
+
+/// The counts for a specific tag key and its value
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct TagKeyCounts {
+    /// The total number of items with this tag key
+    pub total: u64,
+    /// The number of times each value for this tag was counted
+    pub values: HashMap<String, u64>,
+}
+
+/// A count of tags across some chunk of time
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct TagCounts {
+    /// The id for this cursor if it can be continued
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    /// The total number of items that were counted
+    pub total: u64,
+    /// The specific counts for each Tag
+    pub tags: HashMap<String, TagKeyCounts>,
+}
+
+impl TagCounts {
+    /// Create a new ``TagCounts`` object with some default capacity
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - The capacity to set
+    pub fn with_capacity(capacity: usize) -> Self {
+        TagCounts {
+            cursor: None,
+            total: 0,
+            tags: HashMap::with_capacity(capacity),
+        }
+    }
+
+    /// Add some tags to our count
+    pub fn add_tags(&mut self, tags: TagMap) {
+        // increment our total count
+        self.total += 1;
+        // step over these tags keys
+        for (key, value_map) in tags {
+            // get an entry to this keys count
+            let key_entry = self.tags.entry(key).or_default();
+            // count each of our values
+            for (value, _) in value_map {
+                // get an entry to this counts map
+                let value_entry = key_entry.values.entry(value).or_default();
+                // increment this key/value pairs count
+                *value_entry += 1;
+                // increment the total count for this key
+                key_entry.total += 1;
+            }
+        }
+    }
+}
+
+#[cfg(feature = "client")]
+impl crate::models::CountCursorSupport for TagCounts {
+    /// The type of data to be displayed to uses for this count
+    type Data = HashMap<String, TagKeyCounts>;
+
+    /// Extract the data from our api returned count object
+    fn consume(self) -> Result<(Option<Uuid>, usize, Self::Data), crate::client::Error> {
+        // try to cast our total to a usize
+        let total = self.total.try_into()?;
+        // return the data needed for our count cursor
+        Ok((self.cursor, total, self.tags))
     }
 }

@@ -19,7 +19,9 @@ use uuid::Uuid;
 mod download;
 
 use super::{Controller, update};
-use crate::args::files::{DeleteFiles, DescribeFiles, DownloadFiles, Files, GetFiles, UploadFiles};
+use crate::args::files::{
+    CountFiles, DeleteFiles, DescribeFiles, DownloadFiles, Files, GetFiles, UploadFiles,
+};
 use crate::args::{Args, DescribeCommand, SearchParameterized};
 use crate::utils;
 
@@ -478,6 +480,31 @@ async fn get(thorium: &Thorium, cmd: &GetFiles) -> Result<(), Error> {
     Ok(())
 }
 
+/// Counts files and their tags
+///
+/// # Arguments
+///
+/// * `thorium` - A Thorium client
+/// * `cmd` - The full count command/args
+async fn count(thorium: &Thorium, cmd: &CountFiles) -> Result<(), Error> {
+    // build a search object from our args
+    let opts = cmd.build_file_opts()?;
+    // build a cursor object for counting files and their tags
+    let mut cursor = thorium.files.count(&opts).await?;
+    // crawl over this cursor until its exhausted
+    loop {
+        // check if this cursor has been exhausted
+        if cursor.exhausted() {
+            break;
+        }
+        // get the next page of data
+        cursor.refill().await?;
+    }
+    // print our count info
+    println!("{:#?}", cursor.data);
+    Ok(())
+}
+
 /// Describe files by displaying/saving their JSON-formatted details
 ///
 /// * `thorium` - The Thorium client
@@ -770,6 +797,7 @@ pub async fn handle(args: &Args, cmd: &Files) -> Result<(), Error> {
         Files::Upload(cmd) => upload(&thorium, cmd).await,
         Files::Download(cmd) => download(&thorium, cmd, args, &conf).await,
         Files::Get(cmd) => get(&thorium, cmd).await,
+        Files::Count(cmd) => count(&thorium, cmd).await,
         Files::Describe(cmd) => describe(&thorium, cmd).await,
         Files::Delete(cmd) => delete(&thorium, cmd).await,
     }

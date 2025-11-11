@@ -18,7 +18,8 @@ use crate::models::{
     OriginRequest, Output, OutputDisplayType, OutputFormBuilder, OutputHandler, OutputKind,
     OutputMap, OutputResponse, PcapNetworkProtocol, ResultFileDownloadParams, ResultGetParams,
     Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse,
-    SubmissionChunk, SubmissionUpdate, TagDeleteRequest, TagRequest, User, ZipDownloadParams,
+    SubmissionChunk, SubmissionUpdate, TagCounts, TagDeleteRequest, TagRequest, User,
+    ZipDownloadParams,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -579,6 +580,38 @@ async fn list_associations(
     Ok(Json(cursor))
 }
 
+/// Counts files and their tags
+///
+/// # Arguments
+///
+/// * `user` - The user that is counting files and tags
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/files/count/",
+    params(
+        ("params" = FileListParams, description = "Query params to use for this file count request"),
+    ),
+    responses(
+        (status = 200, description = "JSON-formatted cursor response containing the counts of files and tags", body = TagCounts),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::files::count", skip_all, err(Debug))]
+async fn count(
+    user: User,
+    params: FileListParams,
+    State(state): State<AppState>,
+) -> Result<Json<TagCounts>, ApiError> {
+    // count files and their tags
+    let counts = Sample::count(&user, params, false, &state.shared).await?;
+    Ok(Json(counts))
+}
+
 /// Allow users to upload results for files to Thorium
 ///
 /// # Arguments
@@ -707,7 +740,7 @@ async fn download_result_file(
 #[derive(OpenApi)]
 #[openapi(
     paths(list, upload, list_details, get_sample, delete_sample, exists, download, download_as_zip, /*download_result_file,*/ update, tag, delete_tags, create_comment, delete_comment, download_attachment, get_results, upload_results),
-    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams)),
+    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams, TagCounts)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct FileApiDocs;
@@ -726,6 +759,7 @@ async fn openapi() -> Json<utoipa::openapi::OpenApi> {
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/files/", get(list).post(upload))
+        .route("/files/count/", get(count))
         .route("/files/details/", get(list_details))
         .route("/files/associations/{sha256}", get(list_associations))
         .route("/files/sample/{sha256}", get(get_sample))

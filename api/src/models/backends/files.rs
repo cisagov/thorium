@@ -15,14 +15,15 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::CommentSupport;
-use super::db::{self, CursorCore, ScyllaCursorSupport};
+use super::db::{self, CursorCore, ScyllaCursorSupport, TagCountCursorSupport};
+use crate::models::backends::db::ScyllaCursor;
 use crate::models::{
     ApiCursor, CarvedOrigin, CarvedOriginTypes, Comment, CommentForm, CommentResponse, CommentRow,
     DeleteCommentParams, DeleteSampleParams, FileListParams, Group, GroupAllowAction, Origin,
     OriginForm, OriginRequest, OriginTypes, S3Objects, Sample, SampleCheck, SampleCheckResponse,
     SampleForm, SampleListLine, SampleSubmissionResponse, Submission, SubmissionChunk,
-    SubmissionListRow, SubmissionRow, SubmissionUpdate, TagListRow, TagType, User,
-    ZipDownloadParams,
+    SubmissionListRow, SubmissionRow, SubmissionUpdate, TagCounts, TagListRow, TagMap, TagType,
+    User, ZipDownloadParams,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
@@ -653,6 +654,30 @@ impl Sample {
         Ok(ApiCursor::from(scylla_cursor))
     }
 
+    /// Counts files and their tags
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is counting samples and their tags
+    /// * `params` - The params to use when counting samples and their tags
+    /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Sample::count", skip(user, shared), err(Debug))]
+    pub async fn count<P: Into<FileListParams> + std::fmt::Debug>(
+        user: &User,
+        params: P,
+        dedupe: bool,
+        shared: &Shared,
+    ) -> Result<TagCounts, ApiError> {
+        // convert our params if needed
+        let mut params = params.into();
+        // authorize the groups to count files from
+        user.authorize_groups(&mut params.groups, shared).await?;
+        // count a page of files
+        let internal = db::files::count(user, params, shared).await?;
+        // convert this to a user facing cursor
+        Ok(TagCounts::from(internal))
+    }
+
     /// Adds a submission onto a sample object
     ///
     /// # Arguments
@@ -1237,8 +1262,8 @@ impl CursorCore for SampleListLine {
     /// # Arguments
     ///
     /// * `params` - The params to use to build this cursor
-    fn get_id(params: &mut Self::Params) -> Option<Uuid> {
-        params.cursor.take()
+    fn get_id(params: &Self::Params) -> Option<Uuid> {
+        params.cursor.clone()
     }
 
     /// Get our start and end timestamps
@@ -1532,6 +1557,44 @@ impl ScyllaCursorSupport for SampleListLine {
                 (group, year, bucket, start, end, limit),
             )
             .await
+    }
+}
+
+impl TagCountCursorSupport for SampleListLine {
+    /// The type for our data with tags
+    type Details = Sample;
+
+    /// Get the details for our backing cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params used to get our backing cursor
+    /// * `extra` - Any extra params needed to get our backing cursor
+    /// * `shared` - Shared Thorium objects
+    async fn get_details(
+        user: &User,
+        backing: &mut ScyllaCursor<Self>,
+        shared: &Shared,
+    ) -> Result<Vec<Self::Details>, ApiError> {
+        // get the sha256s for the data we are listing
+        let sha256s = backing
+            .data
+            .drain(..)
+            .map(|line: SampleListLine| line.sha256)
+            .collect::<Vec<String>>();
+        // get the sample details for this cursor
+        db::files::list_details(&user.groups, sha256s, shared).await
+    }
+
+    /// The type to use when getting details
+    ///
+    /// Extract the tags from a single item returned by this cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `item` - The item to get the tag map for
+    fn tags(item: Self::Details) -> TagMap {
+        item.tags
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "cart-rs"
-version = "1.2.3"
+version = "1.2.4"
 description = "A cart library that can cart/uncart data in a high performance streaming fashion"
 readme = "README.md"
 license-file = "../LICENSE"

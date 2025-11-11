@@ -169,8 +169,8 @@ impl CursorCore for ListableAssociation {
     /// # Arguments
     ///
     /// * `params` - The params to use to build this cursor
-    fn get_id(params: &mut Self::Params) -> Option<Uuid> {
-        params.cursor.take()
+    fn get_id(params: &Self::Params) -> Option<Uuid> {
+        params.cursor.clone()
     }
 
     // Get our start and end timestamps

@@ -16,11 +16,11 @@ use tracing::instrument;
 use super::Error;
 use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferProgress};
 use crate::models::{
-    Attachment, CartedSample, CommentRequest, CommentResponse, Cursor, DeleteCommentParams,
-    DownloadedSample, FileDeleteOpts, FileDownloadOpts, FileListOpts, OutputMap, OutputRequest,
-    OutputResponse, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine,
-    SampleRequest, SampleSubmissionResponse, SubmissionUpdate, TagDeleteRequest, TagRequest,
-    UncartedSample,
+    Attachment, CartedSample, CommentRequest, CommentResponse, CountCursor, Cursor,
+    DeleteCommentParams, DownloadedSample, FileDeleteOpts, FileDownloadOpts, FileListOpts,
+    OutputMap, OutputRequest, OutputResponse, ResultGetParams, Sample, SampleCheck,
+    SampleCheckResponse, SampleListLine, SampleRequest, SampleSubmissionResponse, SubmissionUpdate,
+    TagCounts, TagDeleteRequest, TagRequest, UncartedSample,
 };
 use crate::{
     add_date, add_query, add_query_bool, add_query_list, add_query_list_clone, send, send_build,
@@ -573,6 +573,79 @@ impl Files {
         );
         // get the data for this request and create our cursor
         Cursor::new(
+            &url,
+            opts.page_size,
+            opts.limit,
+            &self.token,
+            &query,
+            &self.client,
+        )
+        .await
+    }
+
+    /// Counts all files and their tags that meet some search criteria
+    ///
+    /// # Arguments
+    ///
+    /// * `opts` - The options for this cursor
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::{Thorium, SearchDate};
+    /// use thorium::models::FileListOpts;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // build a search to count tags for files from 2020
+    /// let search = FileListOpts::default()
+    ///     .start(SearchDate::year(2020, false)?)
+    ///     .end(SearchDate::year(2020, true)?)
+    ///     // limit it to 100 files
+    ///     .limit(100);
+    /// // Count tags for up to 100 files from 2020
+    /// thorium.files.count(&search).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Files::count", skip_all, err(Debug))
+    )]
+    pub async fn count(&self, opts: &FileListOpts) -> Result<CountCursor<TagCounts>, Error> {
+        // build the url for listing files
+        let url = format!("{}/api/files/count/", self.host);
+        // get the correct page size if our limit is smaller then our page_size
+        let page_size = opts.limit.map_or_else(
+            || opts.page_size,
+            |limit| std::cmp::min(opts.page_size, limit),
+        );
+        // build our query params
+        let mut query = vec![("limit".to_owned(), page_size.to_string())];
+        add_query_list!(query, "groups[]".to_owned(), opts.groups);
+        add_date!(query, "start".to_owned(), opts.start);
+        add_date!(query, "end".to_owned(), opts.end);
+        add_query!(query, "cursor".to_owned(), opts.cursor);
+        // add our tag query params
+        for (key, values) in &opts.tags {
+            // build the key for this tag param
+            let query_key = format!("tags[{key}][]");
+            // add this tag keys filters to our query params
+            add_query_list_clone!(query, query_key, values);
+        }
+        add_query_bool!(
+            query,
+            "tags_case_insensitive".to_owned(),
+            opts.tags_case_insensitive
+        );
+        // get the data for this request and create our count cursor
+        CountCursor::new(
             &url,
             opts.page_size,
             opts.limit,

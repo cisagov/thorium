@@ -9,16 +9,17 @@ use uuid::Uuid;
 
 use super::ScyllaCursor;
 use crate::models::backends::TagSupport;
+use crate::models::backends::db::ScyllaTagCountCursor;
 use crate::models::{
     Comment, CommentForm, CommentRow, Event, FileListParams, ResultSearchEvent, Sample,
     SampleCheck, SampleCheckResponse, SampleForm, SampleListLine, SampleSubmissionResponse,
-    Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate, TagDeleteRequest, TagRequest,
-    TagSearchEvent, User,
+    Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate, TagCounts, TagDeleteRequest,
+    TagRequest, TagSearchEvent, User,
 };
 use crate::utils::s3::StandardHashes;
 use crate::utils::{ApiError, Shared, helpers};
 use crate::{
-    conflict, for_groups, internal_err, log_scylla_err, not_found, same_vec, serialize,
+    conflict, conn, for_groups, internal_err, log_scylla_err, not_found, same_vec, serialize,
     unauthorized,
 };
 
@@ -1067,4 +1068,26 @@ pub async fn delete_comment(
             .await?;
     }
     Ok(())
+}
+
+/// Count a page of files and their tags
+///
+/// # Arguments
+///
+/// * `user` - The user that is counting files
+/// * `params` - The params for counting tags
+/// * `shared` - Shared Thorium objects
+pub async fn count(
+    user: &User,
+    params: FileListParams,
+    shared: &Shared,
+) -> Result<ScyllaTagCountCursor<SampleListLine>, ApiError> {
+    // Get an existing tag count cursor or create a new one
+    let mut cursor =
+        ScyllaTagCountCursor::<SampleListLine>::from_params(params, (), shared).await?;
+    // get the next page of data
+    cursor.next(user, shared).await?;
+    // save our cursors state
+    cursor.save(shared).await?;
+    Ok(cursor)
 }

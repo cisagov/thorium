@@ -1145,8 +1145,8 @@ impl CursorCore for EntityListLine {
         shared.config.thorium.entities.partition_size
     }
 
-    fn get_id(params: &mut Self::Params) -> Option<Uuid> {
-        params.cursor.take()
+    fn get_id(params: &Self::Params) -> Option<Uuid> {
+        params.cursor.clone()
     }
 
     fn get_start_end(

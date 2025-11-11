@@ -29,5 +29,5 @@ pub mod users;
 pub use cursors::{
     CursorCore, ElasticCursor, ExistsCursor, GroupedScyllaCursor, GroupedScyllaCursorRetain,
     GroupedScyllaCursorSupport, ScyllaCursor, ScyllaCursorRetain, ScyllaCursorSupport,
-    SimpleCursorExt, SimpleScyllaCursor,
+    ScyllaTagCountCursor, SimpleCursorExt, SimpleScyllaCursor, TagCountCursorSupport,
 };

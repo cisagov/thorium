@@ -848,8 +848,8 @@ impl CursorCore for Commitish {
     /// # Arguments
     ///
     /// * `params` - The params to use to build this cursor
-    fn get_id(params: &mut Self::Params) -> Option<Uuid> {
-        params.cursor.take()
+    fn get_id(params: &Self::Params) -> Option<Uuid> {
+        params.cursor.clone()
     }
 
     // Get our start and end timestamps
@@ -1185,8 +1185,8 @@ impl CursorCore for RepoListLine {
     /// # Arguments
     ///
     /// * `params` - The params to use to build this cursor
-    fn get_id(params: &mut Self::Params) -> Option<Uuid> {
-        params.cursor.take()
+    fn get_id(params: &Self::Params) -> Option<Uuid> {
+        params.cursor.clone()
     }
 
     // Get our start and end timestamps

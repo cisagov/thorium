@@ -75,6 +75,8 @@ pub enum Error {
     Semver(semver::Error),
     /// An error casting bytes to a utf8 formatted string
     StringFromUtf8(std::string::FromUtf8Error),
+    /// An error from casting an int
+    TryFromInt(std::num::TryFromIntError),
     /// An error from rustix
     #[cfg(feature = "rustix")]
     Rustix(rustix::io::Errno),
@@ -143,61 +145,62 @@ impl Error {
         match self {
             Error::Thorium { msg, .. } => msg.clone(),
             Error::Generic(msg) => Some(msg.clone()),
-            Error::Reqwest(err) => Some(err.to_string()),
-            Error::IO(err) => Some(err.to_string()),
-            Error::ChronoParse(err) => Some(err.to_string()),
-            Error::PrefixStrip(err) => Some(err.to_string()),
-            Error::Git(err) => Some(err.to_string()),
-            Error::GitOpen(err) => Some(err.to_string()),
-            Error::GitFindReference(err) => Some(err.to_string()),
-            Error::GitReferenceIter(err) => Some(err.to_string()),
-            Error::GitReferenceIterInit(err) => Some(err.to_string()),
-            Error::GitReferencePeel(err) => Some(err.to_string()),
-            Error::GitFindObject(err) => Some(err.to_string()),
-            Error::GitDecodeObject(err) => Some(err.to_string()),
-            Error::GitCommit(err) => Some(err.to_string()),
-            Error::GitObjectTryInto(err) => Some(err.to_string()),
-            Error::GitDateParse(err) => Some(err.to_string()),
-            Error::Uuid(err) => Some(err.to_string()),
-            Error::Config(err) => Some(err.to_string()),
-            Error::Elastic(err) => Some(err.to_string()),
-            Error::Serde(err) => Some(err.to_string()),
-            Error::SerdeYaml(err) => Some(err.to_string()),
-            Error::ShellExpand(err) => Some(err.clone()),
-            Error::Regex(err) => Some(err.to_string()),
-            Error::Cart(err) => Some(err.to_string()),
-            Error::BuildElastic(err) => Some(err.to_string()),
-            Error::UrlParse(err) => Some(err.to_string()),
-            Error::CidrParse(err) => Some(err.to_string()),
-            Error::ParseInt(err) => Some(err.to_string()),
-            Error::JoinError(err) => Some(err.to_string()),
-            Error::ConversionError(err) => Some(err.msg.to_owned()),
-            Error::Semver(err) => Some(err.to_string()),
-            Error::StringFromUtf8(err) => Some(err.to_string()),
+            Error::Reqwest(error) => Some(error.to_string()),
+            Error::IO(error) => Some(error.to_string()),
+            Error::ChronoParse(error) => Some(error.to_string()),
+            Error::PrefixStrip(error) => Some(error.to_string()),
+            Error::Git(error) => Some(error.to_string()),
+            Error::GitOpen(error) => Some(error.to_string()),
+            Error::GitFindReference(error) => Some(error.to_string()),
+            Error::GitReferenceIter(error) => Some(error.to_string()),
+            Error::GitReferenceIterInit(error) => Some(error.to_string()),
+            Error::GitReferencePeel(error) => Some(error.to_string()),
+            Error::GitFindObject(error) => Some(error.to_string()),
+            Error::GitDecodeObject(error) => Some(error.to_string()),
+            Error::GitCommit(error) => Some(error.to_string()),
+            Error::GitObjectTryInto(error) => Some(error.to_string()),
+            Error::GitDateParse(error) => Some(error.to_string()),
+            Error::Uuid(error) => Some(error.to_string()),
+            Error::Config(error) => Some(error.to_string()),
+            Error::Elastic(error) => Some(error.to_string()),
+            Error::Serde(error) => Some(error.to_string()),
+            Error::SerdeYaml(error) => Some(error.to_string()),
+            Error::ShellExpand(error) => Some(error.clone()),
+            Error::Regex(error) => Some(error.to_string()),
+            Error::Cart(error) => Some(error.to_string()),
+            Error::BuildElastic(error) => Some(error.to_string()),
+            Error::UrlParse(error) => Some(error.to_string()),
+            Error::CidrParse(error) => Some(error.to_string()),
+            Error::ParseInt(error) => Some(error.to_string()),
+            Error::JoinError(error) => Some(error.to_string()),
+            Error::ConversionError(error) => Some(error.msg.clone()),
+            Error::Semver(error) => Some(error.to_string()),
+            Error::StringFromUtf8(error) => Some(error.to_string()),
+            Error::TryFromInt(error) => Some(error.to_string()),
             #[cfg(feature = "rustix")]
-            Error::Rustix(err) => Some(err.to_string()),
+            Error::Rustix(error) => Some(error.to_string()),
             #[cfg(feature = "k8s")]
-            Error::K8s(err) => Some(err.to_string()),
+            Error::K8s(error) => Some(error.to_string()),
             #[cfg(feature = "k8s")]
-            Error::K8sConfig(err) => Some(err.to_string()),
+            Error::K8sConfig(error) => Some(error.to_string()),
             #[cfg(feature = "cgroups")]
-            Error::Cgroups(err) => Some(err.to_string()),
+            Error::Cgroups(error) => Some(error.to_string()),
             #[cfg(feature = "crossbeam-err")]
-            Error::CrossbeamSend(err) => Some(err.to_string()),
+            Error::CrossbeamSend(error) => Some(error.to_string()),
             #[cfg(feature = "kanal-err")]
-            Error::KanalSend(err) => Some(err.to_string()),
+            Error::KanalSend(error) => Some(error.to_string()),
             #[cfg(feature = "kanal-err")]
-            Error::KanalRecv(err) => Some(err.to_string()),
+            Error::KanalRecv(error) => Some(error.to_string()),
             #[cfg(feature = "scylla-utils")]
-            Error::ScyllaType(err) => Some(err.to_string()),
+            Error::ScyllaType(error) => Some(error.to_string()),
             #[cfg(feature = "scylla-utils")]
-            Error::ScyllaNextRow(err) => Some(err.to_string()),
+            Error::ScyllaNextRow(error) => Some(error.to_string()),
             #[cfg(feature = "dialoguer-err")]
-            Error::Dialoguer(err) => Some(err.to_string()),
+            Error::Dialoguer(error) => Some(error.to_string()),
             #[cfg(feature = "openai")]
-            Error::OpenAI(err) => Some(err.to_string()),
+            Error::OpenAI(error) => Some(error.to_string()),
             #[cfg(feature = "rmcp-err")]
-            Error::RmcpServiceError(err) => Some(err.to_string()),
+            Error::RmcpServiceError(error) => Some(error.to_string()),
         }
     }
 
@@ -238,6 +241,7 @@ impl Error {
             Error::ConversionError(_) => "ConversionError",
             Error::Semver(_) => "Semver",
             Error::StringFromUtf8(_) => "StringFromUtf8",
+            Error::TryFromInt(_) => "TryFromInt",
             #[cfg(feature = "rustix")]
             Error::Rustix(_) => "rustix",
             #[cfg(feature = "k8s")]
@@ -473,6 +477,12 @@ impl From<semver::Error> for Error {
 impl From<std::string::FromUtf8Error> for Error {
     fn from(error: std::string::FromUtf8Error) -> Self {
         Error::StringFromUtf8(error)
+    }
+}
+
+impl From<std::num::TryFromIntError> for Error {
+    fn from(error: std::num::TryFromIntError) -> Self {
+        Error::TryFromInt(error)
     }
 }
 

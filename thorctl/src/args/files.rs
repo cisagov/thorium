@@ -65,6 +65,9 @@ Examples:
     /// Get information on files
     #[clap(version, author)]
     Get(GetFiles),
+    /// Count files and their tags
+    #[clap(version, author)]
+    Count(CountFiles),
     /// Describe a particular file, displaying all details
     #[clap(version, author)]
     Describe(DescribeFiles),
@@ -451,6 +454,78 @@ impl SearchParameterized for GetFiles {
     }
 }
 impl SearchSealed for GetFiles {
+    fn get_search_params(&self) -> SearchParams {
+        SearchParams {
+            groups: &self.groups,
+            tags: &self.tags,
+            tags_case_insensitive: self.tags_case_insensitive,
+            delimiter: self.delimiter,
+            start: &self.start,
+            end: &self.end,
+            date_fmt: &self.date_fmt,
+            cursor: self.cursor,
+            limit: self.limit,
+            no_limit: self.no_limit,
+            page_size: self.page_size,
+        }
+    }
+}
+
+/// A command to count files and their tags in Thorium
+#[derive(Parser, Debug)]
+pub struct CountFiles {
+    /// Any groups to filter by when counting for files
+    ///     Note: If no groups are given, the count will include all groups the user is apart of
+    #[clap(short, long, value_delimiter = ',', verbatim_doc_comment)]
+    pub groups: Vec<String>,
+    /// Any tags to filter by when counting for files (<Key>=<Value>)
+    #[clap(short, long)]
+    pub tags: Vec<String>,
+    /// Whether matching on tags should be case-insensitive
+    #[clap(short = 'c', long, default_value_t = false)]
+    pub tags_case_insensitive: bool,
+    /// The delimiter character to use when splitting tags into key/values
+    ///    (i.e. <Key>=<VALUE>)
+    #[clap(long, default_value = "=", verbatim_doc_comment)]
+    pub delimiter: char,
+    /// The most recent datetime to start counting at in UTC
+    #[clap(short, long)]
+    pub start: Option<String>,
+    /// The oldest datetime to stop counting at in UTC
+    #[clap(short, long)]
+    pub end: Option<String>,
+    /// The format string to use when parsing the start/end datetimes
+    ///     Example: The format of "2014-5-17T12:34:56" is "%Y-%m-%dT%H:%M:%S"
+    ///     (see <https://docs.rs/chrono/latest/chrono/format/strftime>)
+    #[clap(long, default_value = "%Y-%m-%dT%H:%M:%S", verbatim_doc_comment)]
+    pub date_fmt: String,
+    /// The cursor to continue a count with
+    #[clap(long)]
+    pub cursor: Option<Uuid>,
+    /// The max number of file to count
+    #[clap(short, long, default_value = "50")]
+    pub limit: usize,
+    /// Refrain from setting a limit when retrieving files
+    ///     Note: This can lead to retrieving info for many millions of files
+    ///           inadvertently. Be careful!
+    #[clap(long, verbatim_doc_comment)]
+    pub no_limit: bool,
+    /// The number of file to count in one request
+    #[clap(short, long, default_value = "50")]
+    pub page_size: usize,
+}
+
+impl SearchParameterized for CountFiles {
+    fn has_targets(&self) -> bool {
+        // CountFiles should never have specific targets
+        false
+    }
+    fn apply_to_all(&self) -> bool {
+        // CountFiles has no explicit "--all" option
+        false
+    }
+}
+impl SearchSealed for CountFiles {
     fn get_search_params(&self) -> SearchParams {
         SearchParams {
             groups: &self.groups,

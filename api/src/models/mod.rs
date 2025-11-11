@@ -124,6 +124,7 @@ pub use system::{
     WorkerDeleteMap, WorkerList, WorkerRegistration, WorkerRegistrationList, WorkerStatus,
     WorkerUpdate,
 };
+pub use tags::{TagCounts, TagKeyCounts};
 pub use trees::{
     Tree, TreeBranch, TreeGrowQuery, TreeNode, TreeOpts, TreeParams, TreeQuery, TreeRelatedQuery,
     TreeRelationships, TreeSupport,
@@ -142,7 +143,7 @@ pub mod backends;
 cfg_if::cfg_if! {
     if #[cfg(feature = "client")] {
         pub use git::UntarredRepo;
-        pub use cursors::{Cursor, DateOpts};
+        pub use cursors::{Cursor, DateOpts, CountCursor, CountCursorSupport};
         pub use files::UncartedSample;
     }
 }

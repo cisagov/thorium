@@ -61,15 +61,12 @@ impl Header {
         let config = bincode::config::standard();
         // hardcode CaRT version 1 and an optional header length of 0
         let version = b"\x01\x00";
-        //let opt_len = bincode::encode_(&(0_u64))?;
         // write the header to the buffer
         buf.write_all(MAGIC_NUM)?;
         buf.write_all(version)?;
-        bincode::encode_into_slice(0_64, buf, config)?;
-        //buf.write_all(&bincode::serialize(&(0_u64))?)?;
+        bincode::encode_into_slice(0_u64, buf, config)?;
         buf.write_all(key)?;
-        //buf.write_all(&opt_len)?;
-        bincode::encode_into_slice(0_64, buf, config)?;
+        bincode::encode_into_slice(0_u64, buf, config)?;
         Ok(())
     }
 
