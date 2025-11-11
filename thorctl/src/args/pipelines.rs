@@ -2,9 +2,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use std::path::PathBuf;
-
 use clap::Parser;
+use clap::builder::NonEmptyStringValueParser;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::utils;
@@ -312,6 +312,7 @@ pub struct DeletePipelineNotification {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub struct ExportPipelines {
     /// The pipelines to export
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
     pub pipelines: Vec<String>,
     /// The group to export pipelines from
     #[clap(short, long, required = true)]
@@ -319,6 +320,9 @@ pub struct ExportPipelines {
     /// The directory to export our pipelines too
     #[clap(short, long, default_value = "exports")]
     pub output: PathBuf,
+    /// Export pipeline/image configs only with no docker images
+    #[clap(long)]
+    pub config_only: bool,
 }
 
 /// A command to import pipeliness

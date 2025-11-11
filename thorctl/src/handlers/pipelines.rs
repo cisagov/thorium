@@ -268,6 +268,7 @@ async fn export(
         images: images.into_iter().collect(),
         group: cmd.group.clone(),
         output: image_output,
+        config_only: cmd.config_only,
     };
     // export all of the required images
     super::images::export(thorium, &image_cmd, args, conf).await?;

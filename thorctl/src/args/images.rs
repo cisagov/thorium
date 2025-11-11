@@ -2,9 +2,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use std::path::PathBuf;
-
 use clap::Parser;
+use clap::builder::NonEmptyStringValueParser;
+use std::path::PathBuf;
 use thorium::client::conf;
 use thorium::models::ImageScaler;
 use uuid::Uuid;
@@ -369,6 +369,7 @@ pub struct ImportImages {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub struct ExportImages {
     /// The images to export
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
     pub images: Vec<String>,
     /// The group to export images from
     #[clap(short, long, required = true)]
@@ -376,4 +377,7 @@ pub struct ExportImages {
     /// The directory to export our images too
     #[clap(short, long, default_value = "exports")]
     pub output: PathBuf,
+    /// Only export image configs with no docker images
+    #[clap(long)]
+    pub config_only: bool,
 }

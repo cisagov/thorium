@@ -10,10 +10,10 @@ use thorium::{CtlConf, Error, Thorium};
 use tokio::fs::File;
 use tokio::process::Command;
 
+use crate::Args;
 use crate::args::images::ExportImages;
 use crate::handlers::progress::{Bar, BarKind, MultiBar};
 use crate::handlers::{Monitor, MonitorMsg, Worker};
-use crate::Args;
 
 /// The image export monitor
 pub struct ImageExportMonitor;
@@ -106,7 +106,9 @@ impl ImageExportWorker {
         // pop our file name from our path
         export_path.pop();
         // save this images docker file to disk
-        if let Some(image_url) = &image.image {
+        if !self.cmd.config_only
+            && let Some(image_url) = &image.image
+        {
             self.export_docker(&image.name, image_url, export_path)
                 .await?;
         }
