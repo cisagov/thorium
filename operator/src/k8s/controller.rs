@@ -1,74 +1,73 @@
 use crate::k8s::crds::ThoriumCluster;
-use futures::StreamExt;
-use kube::{
-    api::{Api, ListParams},
-    client::Client,
-    runtime::{
-        controller::{Action, Controller},
-        finalizer::{finalizer, Event as Finalizer},
-        watcher::Config,
-    },
-};
+use kube::api::{Api, ListParams};
+use kube::client::Client;
+use kube::config::{KubeConfigOptions, Kubeconfig};
 use std::sync::Arc;
-use thorium::Error;
-use tokio::time::Duration;
+use thorium::{Error, Thorium};
 
+use super::watchers;
 use crate::args::OperateCluster;
 use crate::k8s::clusters::ClusterMeta;
 use crate::k8s::crds;
-use crate::k8s::operate;
 
-const RECONCILE_ERROR_REQUEUE_SECS: u64 = 60u64;
-
-/// Controller state including kubeapi client and url
+/// Info and client about our deployed Thorium cluster
 #[derive(Clone)]
-pub struct State {
-    /// kube API client
-    client: Client,
-    /// ingress route for Thorium API
-    url: Option<String>,
+pub struct ThoriumInfo {
+    /// A client for this Thorium clusters api
+    pub thorium: Arc<Thorium>,
+    /// The config for this Thorium cluster
+    pub meta: Arc<ClusterMeta>,
 }
 
-/// Methods operating on controller state
-impl State {
-    /// Wrap state in Arc
-    pub fn to_context(&self) -> Arc<State> {
-        Arc::new(self.clone())
+/// The controller the Thorium k8s operator
+#[derive(Default)]
+pub struct SharedInfo {
+    /// The info for different clusters in thorium
+    pub info: papaya::HashMap<String, ThoriumInfo>,
+}
+
+impl SharedInfo {
+    /// Get the Thorium info for a specific node
+    pub fn get_for_node(&self, k8s_cluster: &str, node: &String) -> Result<ThoriumInfo, Error> {
+        // iterate over our clusters
+        for (_, info) in &self.info.pin() {
+            // get a ref to our k8s clusters
+            let k8s_config = &info.meta.cluster.spec.config.thorium.scaler.k8s;
+            // get the k8s cluster this node comes from
+            if let Some(cluster) = k8s_config.clusters.get(k8s_cluster) {
+                // return the cluster that we found if it contains our node or is empty
+                if cluster.nodes.is_empty() || cluster.nodes.contains(node) {
+                    return Ok(info.to_owned());
+                }
+            }
+        }
+        Err(Error::new(format!("No config for {k8s_cluster}:{node}")))
     }
 }
 
-/// Handle errors in the reconcile process
-pub fn error_policy(_cluster: Arc<ThoriumCluster>, error: &Error, _state: Arc<State>) -> Action {
-    println!("Controller error:\n\t{}", error);
-    println!(
-        "Requeuing ThoriumCluster reconciliation in {} seconds",
-        RECONCILE_ERROR_REQUEUE_SECS
-    );
-    Action::requeue(Duration::from_secs(RECONCILE_ERROR_REQUEUE_SECS))
-}
-
-/// Reconcile changes to ThoriumCluster
-///
-/// Arguments
-///
-/// * `cluster` - Thorium cluster being changed
-/// * `state` - Controller context including client instance and optional URL
-pub async fn reconcile(cluster: Arc<ThoriumCluster>, state: Arc<State>) -> Result<Action, Error> {
-    // build cluster metadata
-    let meta = ClusterMeta::new(&cluster, &state.client).await?;
-    let clusters_api: Api<ThoriumCluster> = Api::namespaced(meta.client.clone(), &meta.namespace);
-    println!(
-        "Reconciling ThoriumCluster changes for {} in namespace {}",
-        meta.name, meta.namespace
-    );
-    finalizer(&clusters_api, crds::CRD_NAME, cluster, |event| async {
-        match event {
-            Finalizer::Apply(_cluster) => operate::apply(&meta, state.url.clone()).await,
-            Finalizer::Cleanup(_cluster) => operate::cleanup(&meta).await,
-        }
-    })
-    .await
-    .map_err(|e| Error::new(format!("Finalizer error: {}", e)))
+async fn get_k8s_clients() -> Result<Vec<(String, Client)>, Error> {
+    // try to load the kubeconfig from the environment
+    let Some(kube_conf) = Kubeconfig::from_env()? else {
+        return Err(Error::new("Failed to load k8s config"));
+    };
+    // build a list of clients and their context names
+    let mut clients = Vec::with_capacity(1);
+    // iterate over all contexts in this kube config and build a client for each of them
+    // ignoring any of the ignored clusters
+    for context in &kube_conf.contexts {
+        // build the options for getting a specific clusters config
+        let opts = KubeConfigOptions {
+            context: Some(context.name.clone()),
+            ..Default::default()
+        };
+        // get this clusters config
+        let cluster_conf = kube::Config::from_custom_kubeconfig(kube_conf.clone(), &opts).await?;
+        // create a client based on this config
+        let client = kube::Client::try_from(cluster_conf)?;
+        // add this client and context name to our list of clients
+        clients.push((context.name.clone(), client));
+    }
+    Ok(clients)
 }
 
 /// Initialize the controller and shared state (given the crd is installed)
@@ -76,7 +75,7 @@ pub async fn reconcile(cluster: Arc<ThoriumCluster>, state: Arc<State>) -> Resul
 /// Arguments
 ///
 /// * `args` - Arguments passed to the thorium-operator operate sub command
-pub async fn run(args: &OperateCluster) {
+pub async fn run(args: OperateCluster) {
     // TODO: explicitly set ring as default crypto provider, otherwise we get panics
     // when creating the kube client; possibly fixed in newer versions of the kube crate
     // so we might be able to remove this after upgrading kube
@@ -85,29 +84,32 @@ pub async fn run(args: &OperateCluster) {
             .install_default()
             .expect("Failed to set 'ring' as default crypto provider");
     }
-    let client = Client::try_default()
+    // get clients for all Thorium clusters
+    let clients = get_k8s_clients()
         .await
-        .expect("failed to create kube Client");
-    // the crd always has to exist before we can read the resource from k8s
-    // create the ThoriumCluster CRD in k8s
-    crds::create_or_update(&client)
-        .await
-        .expect("failed to create ThoriumCluster CRD");
-    // list ThoriumCluster resources
-    let clusters_api: Api<ThoriumCluster> = Api::<ThoriumCluster>::all(client.clone());
-    if let Err(e) = clusters_api.list(&ListParams::default().limit(1)).await {
-        println!("Failed to list ThoriumCluster API: {}", e);
-        std::process::exit(1);
+        .expect("Failed to get kubernetes clients");
+    // initialize our shared info across controllers/watchers
+    let shared = Arc::new(SharedInfo::default());
+    // instance a set to spawn our watchers into
+    let mut watchers = tokio::task::JoinSet::new();
+    // spawn watchers for all clients
+    for (name, client) in clients {
+        // the crd always has to exist before we can read the resource from k8s
+        // create the ThoriumCluster CRD in k8s
+        crds::create_or_update(&client)
+            .await
+            .expect("failed to create ThoriumCluster CRD");
+        // list ThoriumCluster resources
+        let clusters_api: Api<ThoriumCluster> = Api::<ThoriumCluster>::all(client.clone());
+        if let Err(error) = clusters_api.list(&ListParams::default().limit(1)).await {
+            println!("Failed to list ThoriumCluster API: {error}");
+            std::process::exit(1);
+        }
+        // start the watchers for this cluster
+        watchers::start(name, &client, &args, &shared, &mut watchers);
     }
-    let state = State {
-        client: client.clone(),
-        url: args.url.clone(),
-    };
-    // create the ThoriumCluster controller to watch for resource changes
-    Controller::new(clusters_api, Config::default().any_semantic())
-        .shutdown_on_signal()
-        .run(reconcile, error_policy, state.to_context())
-        .filter_map(|x| async move { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(()))
-        .await;
+    // wait for either of our watchers to finish
+    if let Some(result) = watchers.join_next().await {
+        panic!("A watcher died/finished!: {result:#?}");
+    }
 }

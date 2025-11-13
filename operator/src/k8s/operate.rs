@@ -1,9 +1,11 @@
 use kube::runtime::controller::Action;
+use std::sync::Arc;
 use thorium::conf::K8sHostAliases;
 use thorium::{Error, Thorium};
 use tokio::time::Duration;
 
 use crate::app;
+use crate::k8s::controller::{SharedInfo, ThoriumInfo};
 use crate::k8s::{self, clusters::ClusterMeta};
 
 const POD_WAIT_TIMEOUT: u64 = 300u64;
@@ -18,7 +20,11 @@ const APPLY_REQUEUE_SECS: u64 = 86400u64;
 ///
 /// * `meta` - Thorium cluster metadata being operated upon
 /// * `url` - Override url for Kubernetes api service.
-pub async fn apply(meta: &ClusterMeta, url: Option<String>) -> Result<Action, Error> {
+pub async fn apply(
+    meta: &ClusterMeta,
+    url: Option<String>,
+    shared: &Arc<SharedInfo>,
+) -> Result<Action, Error> {
     println!(
         "Applying {} ThoriumCluster in {} namespace",
         &meta.name, &meta.namespace
@@ -97,11 +103,20 @@ pub async fn apply(meta: &ClusterMeta, url: Option<String>) -> Result<Action, Er
     // create event handler deployment from CR
     k8s::deployments::deploy_search_streamer(meta, &host_aliases).await?;
     // label nodes
-    k8s::nodes::label_all_nodes(meta).await?;
+    k8s::nodes::label_all_nodes(meta, &thorium).await?;
     // add nodes to Thorium for each k8s cluster
     app::nodes::add_nodes_to_thorium(meta, &thorium).await?;
     // deploy version specific upgrades here if needed
     app::upgrades::handler(meta).await?;
+    // get the name of this thorium cr
+    let name = meta.name.clone();
+    // build an info object for our shared map
+    let thorium_info = ThoriumInfo {
+        thorium: Arc::new(thorium),
+        meta: Arc::new(meta.to_owned()),
+    };
+    // add this Thorium meta object to our shared map
+    shared.info.pin().insert(name, thorium_info);
     // log completed ThoriumCluster instance
     println!("Completed creation of {} ThoriumCluster", &meta.name);
     // If no events were received, check back every 5 min
@@ -114,7 +129,7 @@ pub async fn apply(meta: &ClusterMeta, url: Option<String>) -> Result<Action, Er
 /// ``ThoriumCluster`` deployments.
 ///
 /// Notes:
-///   Not all cluster remnants are remove with this operation. Databases and database content persist
+///   Not all cluster remnants are removed with this operation. Databases and database content persist
 ///   after k8s Thorium resources are cleaned up. User passwords, cluster and node settings will all
 ///   persist after you delete a ``ThoriumCluster`` resource. This also does not remove any on host files
 ///   such as those dropped into the /opt/thorium directory of each worker node. Since we don't delete

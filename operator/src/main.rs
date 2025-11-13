@@ -13,8 +13,8 @@ async fn main() {
     // load command line args
     let args = args::Args::parse();
     // execute the right handler
-    match &args.cmd {
+    match args.cmd {
         // start backing up data
-        args::SubCommands::Operate(operate_args) => controller::run(&operate_args).await,
+        args::SubCommands::Operate(operate_args) => controller::run(operate_args).await,
     }
 }

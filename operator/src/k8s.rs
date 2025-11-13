@@ -8,3 +8,4 @@ pub mod nodes;
 pub mod operate;
 pub mod secrets;
 pub mod services;
+mod watchers;

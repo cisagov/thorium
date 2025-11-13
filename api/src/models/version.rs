@@ -7,6 +7,17 @@ pub struct Version {
     pub thorium: semver::Version,
 }
 
+impl Version {
+    /// Check if a version is different then our own where the other version is a string
+    #[cfg(feature = "client")]
+    pub fn compare_thorium(&self, other: &str) -> Result<bool, crate::client::Error> {
+        // parse our other version
+        let other_cast = semver::Version::parse(other)?;
+        // compare our versions
+        Ok(other_cast == self.thorium)
+    }
+}
+
 /// The different operating systems Thorium supports
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum Os {
