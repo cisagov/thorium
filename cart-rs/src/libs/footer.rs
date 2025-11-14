@@ -43,7 +43,7 @@ pub static MAGIC_NUM: &[u8; 4] = b"TRAC";
 #[derive(Debug, Clone)]
 pub struct Footer {
     // The size of the optional footer to skip
-    pub opt_len: u64,
+    pub opt_len: usize,
 }
 
 impl Footer {
@@ -110,7 +110,7 @@ impl Footer {
     /// Calculate how much of the binary to trim off the end to not read the footer
     #[must_use]
     pub fn trim(&self) -> usize {
-        // In order to not read the footer we need to trim 28 bytes plus any optional footer
-        (28 + self.opt_len) as usize
+        // In order to not read the footer we need to trim the footer len plus any optional footer
+        FOOTER_LEN + self.opt_len
     }
 }

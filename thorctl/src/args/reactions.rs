@@ -117,7 +117,7 @@ pub struct DescribeReactions {
 }
 
 impl SearchSealed for DescribeReactions {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -272,9 +272,9 @@ impl DescribeSealed for DescribeReactions {
         ReactionTarget::parse(raw, ':')
     }
 
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &Thorium,
     ) -> Result<Self::Data, thorium::Error> {
         // parse a reaction target from the raw string
@@ -352,7 +352,7 @@ pub struct LogsReactions {
 }
 
 impl SearchSealed for LogsReactions {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -726,7 +726,7 @@ impl SearchParameterized for CreateReactions {
     }
 }
 impl SearchSealed for CreateReactions {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,

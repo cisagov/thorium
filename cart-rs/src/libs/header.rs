@@ -15,7 +15,7 @@ pub const KEY_LEN: usize = 16;
 /// The optional length will largely be ignored as we do not currently support optional headers.
 #[derive(Debug, Clone)]
 pub struct Header {
-    /// The version of CaRT in use
+    /// The version of ``CaRT`` in use
     pub version: u8,
     /// The key used to encrypt this file
     pub key: Vec<u8>,

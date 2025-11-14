@@ -2,9 +2,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use std::path::PathBuf;
-
 use clap::Parser;
+use clap::builder::NonEmptyStringValueParser;
+use std::path::PathBuf;
 use thorium::models::OutputDisplayType;
 use uuid::Uuid;
 
@@ -12,12 +12,60 @@ use super::traits::search::{SearchParameterized, SearchParams, SearchSealed};
 
 /// The commands to send to the results task handler
 #[derive(Parser, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Results {
     /// Get information on specific results
     #[clap(version, author)]
     Get(GetResults),
     /// Upload new results to Thorium
-    #[clap(version, author)]
+    #[command(
+        about = "Upload new results to Thorium",
+        long_about = r#"
+Upload new results to Thorium
+
+Examples:
+
+# Upload a result for the file designated by SHA256;
+# if a file, uploads file contents as a result;
+# if a directory, uploads content from file designated by '--results' flag
+# and uploads all other files as attachments
+thorctl results upload --tools my-tool --display-type string ./abcd1234ef5678...
+
+# Set a specific display type for the result (e.g. JSON)
+thorctl results upload --tools my-tool --display-type json ./abcd1234ef5678...
+
+# Upload multiple targets in one command
+thorctl results upload --tools my-tool --display-type string ./sha1 ./sha2 ./sha3
+
+# Upload a parent directory containing multiple SHA256 sub‑directories/files
+#   ./results/
+#   ├── a1b2c3d4e5f6...
+#   │   └── results
+#   ├── f6e5d4c3b2a1...
+#   └── 1234567890ab...
+#       └── results
+thorctl results upload --tools my-tool --display-type string ./results
+
+# Upload a SHA256 directory with per‑tool subdirectories
+#   ./abcd1234ef5678...
+#   ├── tool-a/
+#   │   └── results
+#   ├── tool-b/
+#   │   └── results
+#   └── tool-c/
+#       └── results
+thorctl results upload --display-type string ./abcd1234ef5678...
+
+# Specify a custom results file name to upload as the main results (visible in the Web UI)
+thorctl results upload --results my_result_file --display-type string ./abcd1234ef5678...
+
+# Restrict results visibility to specific groups
+thorctl results upload -G example-group -t my-tool --display-type string ./abcd1234ef5678...
+
+# Perform a dry run to see what would be uploaded without actually uploading
+thorctl results upload --display-type string --dry-run ./results
+"#
+    )]
     Upload(UploadResults),
 }
 
@@ -140,7 +188,7 @@ impl SearchParameterized for GetResults {
     }
 }
 impl SearchSealed for GetResults {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -160,18 +208,55 @@ impl SearchSealed for GetResults {
 /// A command to upload new results to Thorium
 #[derive(Parser, Debug)]
 pub struct UploadResults {
-    // Any specific files to create results for
+    /// The files/directories containing results to upload; these should either be
+    /// a parent directory containing sub-directories/files named as the SHA256
+    /// for their respective file (e.g. 'results/<SHA256>') or the SHA256
+    /// directories/files themselves (e.g. '<SHA256>').
+    ///
+    /// Files named as a SHA256 will be uploaded as a single result for the SHA256
+    /// they are named for and associated with the tool(s) given by the `--tools/-t`
+    /// flag.
+    ///
+    /// Directories named by SHA256 can either have results organized by the tools they
+    /// should be associated with (e.g. '<SHA256>/my-tool/results') OR they can have
+    /// results all together in the SHA256 directory (e.g. '<SHA256>/results'), in which
+    /// case they will be associated to the tool(s) given by the `--tools/-t` flag.
+    /// If any files are further nested within tool directories
+    /// (e.g. '<SHA256>/my-tool/some-dir/results'), they will be uploaded recursively
+    /// and all associated together.
+    ///
+    /// Any files/directories under the main target directory *not* named by SHA256
+    /// will be ignored (e.g. 'results/my-file.txt')
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
     pub targets: Vec<String>,
-    /// The groups to add these result to
-    #[clap(short = 'G', long, value_delimiter = ',')]
+    /// The groups to add these results to
+    ///
+    /// If no groups are provided, results will be visible to all groups that
+    /// can view the file
+    #[clap(short = 'G', long, value_delimiter = ',', value_parser = NonEmptyStringValueParser::new())]
     pub result_groups: Vec<String>,
-    /// The tool these results are for
-    #[clap(short, long)]
-    pub tool: String,
-    /// The name of the file containing the results to display in the UI
-    #[clap(short, long)]
-    pub results: Option<String>,
-    /// The display type to use when rendering these results
+    /// The tools these results are for
+    ///
+    /// Determines with which tools file not nested within tool directories will be
+    /// associated (e.g. '<SHA256>/results'). Note that any tool may be given,
+    /// even if the tool doesn't exist within the Thorium instance.
+    #[clap(short, long, value_delimiter = ',', value_parser = NonEmptyStringValueParser::new())]
+    pub tools: Vec<String>,
+    /// The name of the file within results directories containing the main results
+    /// to display in the UI
+    ///
+    /// All other files in the directory will be uploaded as result files. If any tool
+    /// directory or the SHA256 directory is missing this main results file, an error
+    /// will be logged and no results will be uploaded. To upload empty results, create
+    /// an empty results file.
+    #[clap(short, long, default_value = "results", value_parser = NonEmptyStringValueParser::new())]
+    pub results: String,
+    /// The display type to use when rendering results
+    ///
+    /// This is applied to *all* results for *all* tools
     #[clap(short, long, value_enum, ignore_case = true)]
     pub display_type: OutputDisplayType,
+    /// Display which results will be uploaded and to which tools without actually uploading
+    #[clap(long)]
+    pub dry_run: bool,
 }

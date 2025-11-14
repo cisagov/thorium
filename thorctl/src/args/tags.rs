@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use clap::{builder::NonEmptyStringValueParser, Parser};
+use clap::{Parser, builder::NonEmptyStringValueParser};
 
 use super::traits::search::{SearchParameterized, SearchParams, SearchSealed};
 
@@ -117,7 +117,7 @@ impl SearchParameterized for AddTags {
     }
 }
 impl SearchSealed for AddTags {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -215,7 +215,7 @@ impl SearchParameterized for DeleteTags {
     }
 }
 impl SearchSealed for DeleteTags {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,

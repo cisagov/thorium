@@ -56,7 +56,7 @@ pub struct DescribeGroups {
 }
 
 impl SearchSealed for DescribeGroups {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &[],
             tags: &[],
@@ -111,9 +111,9 @@ impl DescribeSealed for DescribeGroups {
         Ok(raw)
     }
 
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &thorium::Thorium,
     ) -> Result<Self::Data, thorium::Error> {
         thorium.groups.get(target).await
@@ -133,12 +133,14 @@ impl DescribeSealed for DescribeGroups {
         } else {
             params.limit as u64
         };
-        Ok(vec![thorium
-            .groups
-            .list()
-            .details()
-            .page(params.page_size as u64)
-            .limit(limit)])
+        Ok(vec![
+            thorium
+                .groups
+                .list()
+                .details()
+                .page(params.page_size as u64)
+                .limit(limit),
+        ])
     }
 }
 

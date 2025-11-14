@@ -130,9 +130,9 @@ pub trait DescribeSealed: SearchParameterized {
     ///
     /// * `target` - The target to query data for
     /// * `thorium` - The Thorium client
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &Thorium,
     ) -> Result<Self::Data, thorium::Error>;
 
@@ -180,7 +180,7 @@ pub trait DescribeSealed: SearchParameterized {
         &self,
         thorium: &Thorium,
         seq: &mut S,
-        progress: &Option<Bar>,
+        progress: Option<&Bar>,
     ) -> Result<usize, Error>
     where
         S: serde::ser::SerializeSeq,
@@ -221,7 +221,7 @@ pub trait DescribeSealed: SearchParameterized {
         list_path: &PathBuf,
         thorium: &Thorium,
         seq: &mut S,
-        progress: &Option<Bar>,
+        progress: Option<&Bar>,
     ) -> Result<usize, Error>
     where
         S: serde::ser::SerializeSeq,
@@ -268,7 +268,7 @@ pub trait DescribeSealed: SearchParameterized {
         &self,
         thorium: &Thorium,
         seq: &mut S,
-        progress: &Option<Bar>,
+        progress: Option<&Bar>,
     ) -> Result<usize, Error>
     where
         S: serde::ser::SerializeSeq,
@@ -309,7 +309,7 @@ pub trait DescribeSealed: SearchParameterized {
         &self,
         thorium: &Thorium,
         seq: &mut S,
-        progress: &Option<Bar>,
+        progress: Option<&Bar>,
     ) -> Result<usize, Error>
     where
         S: serde::ser::SerializeSeq,
@@ -362,7 +362,7 @@ pub trait DescribeCommand: DescribeSealed {
                 Err(err) => {
                     return Err(Error::new(format!(
                         "Error calculating bounds on data collection: {err}"
-                    )))
+                    )));
                 }
             }
         } else {
@@ -390,7 +390,7 @@ pub trait DescribeCommand: DescribeSealed {
                         return Err(Error::new(format!(
                             "Unable to open file '{}': {err}",
                             out_path.to_string_lossy()
-                        )))
+                        )));
                     }
                 }
             }
@@ -401,7 +401,9 @@ pub trait DescribeCommand: DescribeSealed {
             (false, None) => {
                 let mut stdout_ser_pretty = serde_json::Serializer::pretty(std::io::stdout());
                 let mut seq = stdout_ser_pretty.serialize_seq(None)?;
-                let num_described = self.describe_sealed(thorium, &mut seq, &progress).await?;
+                let num_described = self
+                    .describe_sealed(thorium, &mut seq, progress.as_ref())
+                    .await?;
                 seq.end()?;
                 // add a newline because serde doesn't
                 println!();
@@ -410,14 +412,18 @@ pub trait DescribeCommand: DescribeSealed {
             (false, Some(file)) => {
                 let mut file_ser_pretty = serde_json::Serializer::pretty(file);
                 let mut seq = file_ser_pretty.serialize_seq(None)?;
-                let num_described = self.describe_sealed(thorium, &mut seq, &progress).await?;
+                let num_described = self
+                    .describe_sealed(thorium, &mut seq, progress.as_ref())
+                    .await?;
                 seq.end()?;
                 num_described
             }
             (true, None) => {
                 let mut stdout_ser = serde_json::Serializer::new(std::io::stdout());
                 let mut seq = stdout_ser.serialize_seq(None)?;
-                let num_described = self.describe_sealed(thorium, &mut seq, &progress).await?;
+                let num_described = self
+                    .describe_sealed(thorium, &mut seq, progress.as_ref())
+                    .await?;
                 seq.end()?;
                 // add a newline because serde doesn't
                 println!();
@@ -426,7 +432,9 @@ pub trait DescribeCommand: DescribeSealed {
             (true, Some(file)) => {
                 let mut file_ser = serde_json::Serializer::new(file);
                 let mut seq = file_ser.serialize_seq(None)?;
-                let num_described = self.describe_sealed(thorium, &mut seq, &progress).await?;
+                let num_described = self
+                    .describe_sealed(thorium, &mut seq, progress.as_ref())
+                    .await?;
                 seq.end()?;
                 num_described
             }

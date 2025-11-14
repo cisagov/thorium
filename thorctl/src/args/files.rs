@@ -382,7 +382,7 @@ impl SearchParameterized for DownloadFiles {
     }
 }
 impl SearchSealed for DownloadFiles {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -454,7 +454,7 @@ impl SearchParameterized for GetFiles {
     }
 }
 impl SearchSealed for GetFiles {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -622,7 +622,7 @@ impl SearchParameterized for DeleteFiles {
     }
 }
 impl SearchSealed for DeleteFiles {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -701,7 +701,7 @@ pub struct DescribeFiles {
 }
 
 impl SearchSealed for DescribeFiles {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -756,9 +756,9 @@ impl DescribeSealed for DescribeFiles {
         Ok(raw)
     }
 
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &thorium::Thorium,
     ) -> Result<Self::Data, thorium::Error> {
         thorium.files.get(target).await

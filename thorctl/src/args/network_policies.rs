@@ -4,17 +4,17 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{path::PathBuf, str::FromStr};
-use thorium::{models::NetworkPolicyRuleRaw, Error};
+use thorium::{Error, models::NetworkPolicyRuleRaw};
 
 use clap::Parser;
 use uuid::Uuid;
 
 use super::{
+    DescribeCommand, SearchParameterized,
     traits::{
         describe::DescribeSealed,
         search::{SearchParams, SearchSealed},
     },
-    DescribeCommand, SearchParameterized,
 };
 
 /// The commands to send to the network policies task handler
@@ -77,7 +77,7 @@ impl SearchParameterized for GetNetworkPolicies {
 }
 
 impl SearchSealed for GetNetworkPolicies {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &[],
@@ -167,7 +167,7 @@ impl SearchParameterized for DescribeNetworkPolicies {
 }
 
 impl SearchSealed for DescribeNetworkPolicies {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &[],
@@ -226,9 +226,11 @@ impl DescribeSealed for DescribeNetworkPolicies {
         };
         // error out if we have more data left
         if split.next().is_some() {
-            return Err(Error::new("Invalid network policy target; network policy \
+            return Err(Error::new(
+                "Invalid network policy target; network policy \
                 must contain a name and optionally an ID delimited with the delimiter given in '--id-delimiter' \
-                (e.g. <NAME>:<ID>)"));
+                (e.g. <NAME>:<ID>)",
+            ));
         }
         Ok(NetworkPolicyTarget {
             name: name.to_owned(),
@@ -236,9 +238,9 @@ impl DescribeSealed for DescribeNetworkPolicies {
         })
     }
 
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &thorium::Thorium,
     ) -> Result<Self::Data, thorium::Error> {
         thorium.network_policies.get(&target.name, target.id).await

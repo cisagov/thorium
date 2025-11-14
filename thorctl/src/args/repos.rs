@@ -6,8 +6,8 @@ use std::{collections::HashMap, path::PathBuf};
 
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Parser, ValueEnum};
-use thorium::models::{CommitishKinds, RepoCheckout, RepoDependencyRequest, RepoRequest};
 use thorium::Error;
+use thorium::models::{CommitishKinds, RepoCheckout, RepoDependencyRequest, RepoRequest};
 use uuid::Uuid;
 
 use super::traits::describe::{DescribeCommand, DescribeSealed};
@@ -101,7 +101,7 @@ impl SearchParameterized for GetRepos {
     }
 }
 impl SearchSealed for GetRepos {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -177,7 +177,7 @@ pub struct DescribeRepos {
 }
 
 impl SearchSealed for DescribeRepos {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -232,9 +232,9 @@ impl DescribeSealed for DescribeRepos {
         Ok(raw)
     }
 
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &thorium::Thorium,
     ) -> Result<Self::Data, thorium::Error> {
         thorium.repos.get(target).await
@@ -460,7 +460,7 @@ impl SearchParameterized for UpdateRepos {
     }
 }
 impl SearchSealed for UpdateRepos {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,
@@ -609,7 +609,7 @@ impl SearchParameterized for DownloadRepos {
     }
 }
 impl SearchSealed for DownloadRepos {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &self.tags,

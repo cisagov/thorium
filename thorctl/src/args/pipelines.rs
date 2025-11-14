@@ -93,7 +93,7 @@ pub struct DescribePipelines {
 }
 
 impl SearchSealed for DescribePipelines {
-    fn get_search_params(&self) -> SearchParams {
+    fn get_search_params(&self) -> SearchParams<'_> {
         SearchParams {
             groups: &self.groups,
             tags: &[],
@@ -177,9 +177,9 @@ impl DescribeSealed for DescribePipelines {
         PipelineTarget::parse(raw, ':')
     }
 
-    async fn retrieve_data<'a>(
+    async fn retrieve_data(
         &self,
-        target: Self::Target<'a>,
+        target: Self::Target<'_>,
         thorium: &thorium::Thorium,
     ) -> Result<Self::Data, thorium::Error> {
         let group = if let Some(group) = &target.group {

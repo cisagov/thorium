@@ -38,7 +38,7 @@ pub struct SearchParams<'a> {
 /// from being called outside the module
 pub trait SearchSealed {
     /// Build [`SearchParams`] from the implementor
-    fn get_search_params(&self) -> SearchParams;
+    fn get_search_params(&self) -> SearchParams<'_>;
 }
 
 /// Describes a command that can build the parameters needed to search

@@ -3,23 +3,21 @@ use http::StatusCode;
 use owo_colors::OwoColorize;
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::fs::DirEntry;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use thorium::client::ResultsClient;
-use thorium::models::{
-    OnDiskFile, Output, OutputDisplayType, OutputRequest, ResultGetParams, Sample,
-};
+use thorium::models::{Output, OutputDisplayType, ResultGetParams};
 use thorium::{Error, Thorium};
 use tokio::fs::{create_dir_all, File};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
-use walkdir::WalkDir;
 
 use super::update;
-use crate::args::results::{GetResults, Results, ResultsPostProcessing, UploadResults};
+use crate::args::results::{GetResults, Results, ResultsPostProcessing};
 use crate::args::{Args, SearchParameterized};
 use crate::utils;
+
+mod upload;
 
 /// prints out a single downloaded result line
 macro_rules! get_print {
@@ -28,7 +26,7 @@ macro_rules! get_print {
     };
 }
 
-/// A single line for a reaction creation log
+/// A single line for a results get log
 struct GetLine;
 
 impl GetLine {
@@ -57,12 +55,12 @@ impl GetLine {
     }
 }
 
-/// Find and create a unique file for this result_file
+/// Find and create a unique file for this result file
 ///
 /// # Arguments
 ///
 /// * `file_path` - The file path to make unique
-async fn create_unique_file(file_path: &PathBuf) -> Result<File, Error> {
+async fn create_unique_file(file_path: &Path) -> Result<File, Error> {
     // get our this paths prefix
     let prefix = file_path.file_prefix().unwrap_or_default().to_owned();
     // get our result files name
@@ -73,8 +71,7 @@ async fn create_unique_file(file_path: &PathBuf) -> Result<File, Error> {
     let suffix = name.slice_encoded_bytes(prefix_size..);
     let parent = file_path
         .parent()
-        .map(|parent| parent.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from_str("/").unwrap());
+        .map_or_else(|| PathBuf::from_str("/").unwrap(), Path::to_path_buf);
     // the integer to append to this duplicate file name
     let mut num = 1;
     // keep trying new file names until we find one that is unique
@@ -444,71 +441,6 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
     Ok(())
 }
 
-/// Uploads a single result to Thorium
-async fn upload_helper(
-    thorium: &Thorium,
-    cmd: &UploadResults,
-    sha256: String,
-    entry: &DirEntry,
-) -> Result<(), Error> {
-    // build a path to our results file
-    let mut path = entry.path();
-    path.push(cmd.results.as_ref().unwrap_or(&"results".to_owned()));
-    // build a list of results_files and childrent
-    let mut results_files = Vec::default();
-    // start recursively walking through this directory ignoring any hidden files
-    for entry in WalkDir::new(entry.path())
-        .into_iter()
-        .filter_map(Result::ok)
-    {
-        // if this is a file then determine what to do with it
-        if entry.file_type().is_file() {
-            // build the on disk file object for this result file
-            let on_disk = OnDiskFile::new(entry.path()).trim_prefix(entry.path());
-            results_files.push(on_disk);
-        }
-    }
-    // try to read in this results file
-    let results_string = std::fs::read_to_string(path)?;
-    // create our result request
-    let results = OutputRequest::<Sample>::new(sha256, &cmd.tool, results_string, cmd.display_type)
-        .files(results_files);
-    thorium.files.create_result(results).await?;
-    Ok(())
-}
-
-/// Crawl target directories and upload their results to Thorium
-///
-/// # Arguments
-///
-/// * `thorium` - A Thorium client
-/// * `cmd` - The full result upload command/args
-pub async fn upload(thorium: &Thorium, cmd: &UploadResults) -> Result<(), Error> {
-    // crawl over each path and upload them if they are new
-    for path in &cmd.targets {
-        // walk through the top level directories
-        for entry in std::fs::read_dir(path)?.filter_map(Result::ok) {
-            // try to extract this file name as a string
-            if let Ok(name) = entry.file_name().into_string() {
-                // skip anything thats not the same length as a sha256
-                if name.len() != 64 {
-                    continue;
-                }
-                // get the filetype of this entry
-                let filetype = entry.file_type()?;
-                // if this is a file then upload it as a singular result otherwise crawl the directory
-                if filetype.is_file() {
-                    panic!("NOT DONE YET");
-                } else {
-                    // this file is either a directory or a symlink so crawl it
-                    upload_helper(thorium, cmd, name, &entry).await?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Handle all reults commands
 ///
 /// # Arguments
@@ -529,6 +461,6 @@ pub async fn handle(args: &Args, cmd: &Results) -> Result<(), Error> {
     // call the right results handler
     match cmd {
         Results::Get(cmd) => get(&thorium, cmd, args.workers).await,
-        Results::Upload(cmd) => upload(&thorium, cmd).await,
+        Results::Upload(cmd) => upload::upload(&thorium, cmd).await,
     }
 }
