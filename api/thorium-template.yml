@@ -1,0 +1,47 @@
+thorium:
+  interface: "127.0.0.1"
+  port: 38000
+  namespace: "<NAMESPACE>"
+  secret_key: "<SECRET_KEY>"
+  tracing:
+    local:
+      level: "Off"
+  files:
+    password: "SecretCornIsBest"
+    bucket: "<BUCKET>"
+  results:
+    bucket: "<BUCKET>"
+  ephemeral:
+    bucket: "<BUCKET>"
+  attachments:
+    bucket: "<BUCKET>"
+  repos:
+    bucket: "<BUCKET>"
+  s3:
+    access_key: "<ACCESS_KEY>"
+    secret_token: "<SECRET_TOKEN>"
+    endpoint: "<S3_ENDPOINT>"
+    region: "<REGION>"
+  retention:
+    data: 10
+    logs: 10
+  web_ui:
+    version: "0.0.0"
+redis:
+  host: "<REDIS_IP>"
+  port: 6379
+scylla:
+  nodes:
+    - "<IP>"
+  replication: 1
+elastic:
+  node: "<ELASTIC_IP>"
+  username: "<ELASTIC_USERNAME>"
+  password: "<ELASTIC_PASSWORD>"
+  results:
+    samples: "<ELASTIC_SAMPLE_RESULTS_INDEX>"
+    repos: "<ELASTIC_REPO_RESULTS_INDEX>"
+  tags:
+    samples: "<ELASTIC_SAMPLE_TAGS_INDEX>"
+    repos: "<ELASTIC_REPO_TAGS_INDEX>"
+

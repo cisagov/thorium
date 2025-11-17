@@ -521,7 +521,7 @@ where
 }
 
 #[serde_with::serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TreeGrowQuery {
     /// The nodes to grow

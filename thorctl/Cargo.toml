@@ -29,7 +29,6 @@ walkdir = "2.5"
 async-walkdir = "2"
 futures = "0.3"
 generic-array = "0.14"
-lazy_static = "1.5"
 sha2 = "0.10"
 data-encoding = "2.9"
 cart-rs = { workspace = true }

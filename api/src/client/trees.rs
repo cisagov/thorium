@@ -5,7 +5,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::Error;
-use crate::models::{Tree, TreeGrowQuery, TreeOpts, TreeParams, TreeQuery};
+use crate::models::{Tree, TreeGrowQuery, TreeOpts, TreeQuery};
 use crate::{add_query, send_build};
 
 #[derive(Clone)]
@@ -33,7 +33,7 @@ impl Trees {
     /// # Examples
     ///
     /// ```
-    /// use thorium::client::trees;
+    /// use thorium::client::Trees;
     ///
     /// let client = reqwest::Client::new();
     /// let trees = Trees::new("http://127.0.0.1", "token", &client);
@@ -166,7 +166,7 @@ impl Trees {
     ///
     /// ```
     /// use thorium::Thorium;
-    /// use thorium::models::{SubmissionUpdate, TreeOpts, TreeQuery};
+    /// use thorium::models::{SubmissionUpdate, TreeOpts, TreeGrowQuery};
     /// # use thorium::Error;
     ///
     /// # async fn exec() -> Result<(), Error> {

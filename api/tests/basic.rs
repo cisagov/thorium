@@ -1,6 +1,7 @@
 //! Tests the basic routes in Thorium
 
-use thorium::{is, test_utilities, Error};
+use thorium::models::system::DEFAULT_IFF;
+use thorium::{Error, is, test_utilities};
 
 #[tokio::test]
 async fn identify() -> Result<(), Error> {
@@ -9,7 +10,7 @@ async fn identify() -> Result<(), Error> {
     // send the identify query
     let resp = client.basic.identify().await?;
     // make sure we get the right string back
-    is!(resp, "Thorium".to_owned());
+    is!(resp, DEFAULT_IFF);
     Ok(())
 }
 

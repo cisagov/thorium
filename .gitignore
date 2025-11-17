@@ -2,10 +2,16 @@ book
 keys.yml
 *.txt
 target
-**/thorium*.yml
 *.bak
 binaries
 built
 .vscode
 Cargo.lock
 .DS_Store
+
+# ignore Thorium configs to avoid exposing sensitive info
+**/thorium*.yml
+
+# allow template and test configs
+!api/thorium-template.yml
+!api/tests/thorium-testing.yml

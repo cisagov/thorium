@@ -355,12 +355,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async_once"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ce4f10ea3abcd6617873bae9f91d1c5332b4a778bd9ce34d0cd517474c1de82"
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6881,7 +6875,6 @@ dependencies = [
  "indicatif",
  "itertools",
  "kanal",
- "lazy_static",
  "openai-api-rs",
  "openssl",
  "owo-colors",
@@ -6948,7 +6941,6 @@ dependencies = [
  "argon2",
  "async-recursion",
  "async-trait",
- "async_once",
  "aws-credential-types",
  "aws-sdk-s3",
  "aws-smithy-http",
@@ -6993,7 +6985,6 @@ dependencies = [
  "k8s-openapi",
  "kanal",
  "kube",
- "lazy_static",
  "ldap3",
  "lettre",
  "md-5",

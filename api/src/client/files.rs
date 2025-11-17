@@ -336,9 +336,9 @@ impl Files {
                 // check if this file should be downloaded in an uncarted format or not
                 if opts.uncart {
                     // get our response as a stream of bytes
-                    let stream = resp.bytes_stream().map_err(|err| {
-                        std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
-                    });
+                    let stream = resp
+                        .bytes_stream()
+                        .map_err(|err| std::io::Error::other(err.to_string()));
                     // convert our async read to a buf reader
                     let reader = StreamReader::new(stream);
                     // start uncarting this stream of data

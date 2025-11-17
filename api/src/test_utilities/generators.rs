@@ -1,7 +1,7 @@
 use cidr::{Ipv4Cidr, Ipv6Cidr};
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream};
 use rand::seq::IndexedRandom;
-use rand::{seq::IteratorRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, seq::IteratorRandom};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
@@ -79,6 +79,7 @@ fn gen_utf8_string(num_chars: usize) -> String {
 
 /// Generate a random group request
 #[allow(dead_code)]
+#[must_use]
 pub fn gen_group() -> GroupRequest {
     let name = gen_string(50);
     GroupRequest::new(name.clone())
@@ -109,7 +110,6 @@ pub async fn groups(cnt: usize, client: &Thorium) -> Result<Vec<GroupRequest>, E
 ///
 /// * `cnt` - The number of users to create
 /// * `client` - The client to get a host string from when creating these users
-/// * ``
 #[allow(dead_code)]
 pub async fn users(cnt: usize, client: &Thorium) -> Result<Vec<String>, Error> {
     // generate usernames
@@ -119,15 +119,15 @@ pub async fn users(cnt: usize, client: &Thorium) -> Result<Vec<String>, Error> {
         .iter()
         .map(|username| {
             // use my
-            UserCreate::new(username, &gen_string(64), "fake@fake.gov").skip_verification()
+            UserCreate::new(username, gen_string(64), "fake@fake.gov").skip_verification()
         })
         .collect();
     // use default client settings
     let settings = ClientSettings::default();
     // get our secret key
-    let secret_key = Some(&test_utilities::config_ref().thorium.secret_key);
+    let secret_key = Some(&test_utilities::CONF.thorium.secret_key);
     // create these users in Thorium
-    for bp in blueprints.into_iter() {
+    for bp in blueprints {
         Users::create(&client.host, bp, secret_key, &settings).await?;
     }
     Ok(usernames)
@@ -151,7 +151,7 @@ pub async fn client(client: &Thorium) -> Result<Thorium, Error> {
     // use default client settings
     let settings = ClientSettings::default();
     // get our secret key
-    let secret_key = Some(&test_utilities::config_ref().thorium.secret_key);
+    let secret_key = Some(&test_utilities::CONF.thorium.secret_key);
     // create user in Thorium
     Users::create(&client.host, bp, secret_key, &settings).await?;
     // build client for this user
@@ -166,7 +166,13 @@ pub async fn client(client: &Thorium) -> Result<Thorium, Error> {
 /// # Arguments
 ///
 /// * `group` - The group this image should be in
+///
+/// # Panics
+///
+/// Panics if semver version fails to parse, which shouldn't happen because
+/// we always set it to a good value
 #[allow(dead_code)]
+#[must_use]
 pub fn gen_image(group: &str) -> ImageRequest {
     let name = gen_string(25);
     ImageRequest::new(group, &name)
@@ -242,6 +248,7 @@ pub fn gen_image(group: &str) -> ImageRequest {
 ///
 /// * `group` - The group this image should be in
 #[allow(dead_code)]
+#[must_use]
 pub fn gen_ext_image(group: &str) -> ImageRequest {
     let name = gen_string(25);
     ImageRequest::new(group, &name)
@@ -264,13 +271,13 @@ pub async fn images(
     client: &Thorium,
 ) -> Result<Vec<ImageRequest>, Error> {
     // create a 20 random images then
-    let images: Vec<ImageRequest> = if !external {
-        (0..cnt).map(|_| gen_image(group)).collect()
-    } else {
+    let images: Vec<ImageRequest> = if external {
         (0..cnt).map(|_| gen_ext_image(group)).collect()
+    } else {
+        (0..cnt).map(|_| gen_image(group)).collect()
     };
     // create images
-    for image in images.iter() {
+    for image in &images {
         client.images.create(image).await?;
     }
     Ok(images)
@@ -332,7 +339,7 @@ pub async fn gen_generator_pipe(group: &str, client: &Thorium) -> Result<Pipelin
     // build our final image
     images.push(gen_image(group));
     // create images
-    for image in images.iter() {
+    for image in &images {
         client.images.create(image).await?;
     }
     // get the order of the images to spawn
@@ -369,7 +376,7 @@ pub async fn pipelines(
         pipelines.push(gen_pipe(group, 3, external, client).await?);
     }
     // create pipelines
-    for pipe in pipelines.iter() {
+    for pipe in &pipelines {
         client.pipelines.create(pipe).await?;
     }
     Ok(pipelines)
@@ -399,7 +406,7 @@ pub async fn gen_jobs(
         client.groups.create(&GroupRequest::new(group)).await?;
     }
     // crawl the images in this pipeline
-    for image in images.iter() {
+    for image in images {
         // check if this image exists already
         if client.images.get(group, &image.name).await.is_err() {
             // assume the error is because this pipeline doesn't exist yet
@@ -448,13 +455,13 @@ pub async fn gen_all(
     let mut pipes: Vec<PipelineRequest> = vec![];
     // create random images and pipelines
     let mut rng = rand::rngs::SmallRng::from_os_rng();
-    for group in groups.iter() {
+    for group in &groups {
         let mut group_images: Vec<ImageRequest> = vec![];
         // get cnt internal and external images
         group_images.extend((0..cnt).map(|_| gen_image(&group.name)));
         group_images.extend((0..cnt).map(|_| gen_ext_image(&group.name)));
         // create these images
-        for image in group_images.iter() {
+        for image in &group_images {
             client.images.create(image).await?;
         }
         // create pipelines using these random iamges
@@ -482,6 +489,7 @@ pub async fn gen_all(
 
 /// Generate random args for a stage of a reaction
 #[allow(dead_code)]
+#[must_use]
 pub fn gen_args() -> GenericJobArgs {
     // generate a random number of positional args
     let positionals: Vec<String> = (0..gen_int!(3, 10))
@@ -514,6 +522,7 @@ pub fn gen_args() -> GenericJobArgs {
 /// * `pipe` - The pipeline this reaction is for
 /// * `tag` - The tag to use for the pipeline
 #[allow(dead_code)]
+#[must_use]
 pub fn gen_reaction(group: &str, pipe: &Pipeline, tag: Option<&str>) -> ReactionRequest {
     // create a reaction request
     let react_req = ReactionRequest::new(group, &pipe.name);
@@ -523,12 +532,10 @@ pub fn gen_reaction(group: &str, pipe: &Pipeline, tag: Option<&str>) -> Reaction
         None => react_req,
     };
     // generate and inject args into this reaction request
-    let react_req = pipe
-        .order
+    pipe.order
         .iter()
         .flatten()
-        .fold(react_req, |req, image| req.args(image.clone(), gen_args()));
-    react_req
+        .fold(react_req, |req, image| req.args(image.clone(), gen_args()))
 }
 
 /// Setup a number of random reactions in a group for a specific pipeline
@@ -566,17 +573,17 @@ pub async fn sub_reactions(
     client: &Thorium,
 ) -> Result<(Vec<ReactionRequest>, Vec<ReactionCreation>, Pipeline), Error> {
     // create a random pipeline
-    let pipe_req = pipelines(&group, 1, false, client).await?.remove(0);
+    let pipe_req = pipelines(group, 1, false, client).await?.remove(0);
     // get the pipeline for this pipeline order
-    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    let pipe = client.pipelines.get(group, &pipe_req.name).await?;
     // track our spawned sub reactions
     let mut sub_reacts = vec![];
     let mut creates = vec![];
     // spawn 3 sub reactions
     for _ in 0..cnt {
         // Create a random reaction based on our pipeline request
-        let sub_req = gen_reaction(&group, &pipe, None);
-        let sub_req = sub_req.parent(parent.clone());
+        let sub_req = gen_reaction(group, &pipe, None);
+        let sub_req = sub_req.parent(*parent);
         // make sure that we were able to create a reaction and our jobs
         let resp = client.reactions.create(&sub_req).await?;
         sub_reacts.push(sub_req);
@@ -589,6 +596,7 @@ pub async fn sub_reactions(
 ///
 /// This assumes a return code of 0
 #[allow(dead_code)]
+#[must_use]
 pub fn stage_logs() -> StageLogsAdd {
     // create default stage logs
     let mut logs = StageLogsAdd::default().code(0);
@@ -607,6 +615,7 @@ pub fn stage_logs() -> StageLogsAdd {
 ///
 /// * `group` - The group this sample should be in
 #[allow(dead_code)]
+#[must_use]
 pub fn gen_sample(group: &str) -> SampleRequest {
     SampleRequest::new_buffer(Buffer::new(gen_string(gen_int!(2048, 4096))), vec![group])
         .description(gen_string(gen_int!(20, 2048)))
@@ -638,7 +647,7 @@ pub async fn samples(
         .map(|_| gen_sample(group))
         .collect::<Vec<SampleRequest>>();
     // upload these files
-    for req in reqs.iter() {
+    for req in &reqs {
         client.files.create(req.clone()).await?;
     }
     Ok(reqs)

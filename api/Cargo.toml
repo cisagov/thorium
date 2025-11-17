@@ -61,7 +61,7 @@ dialoguer-err = ["dialoguer"]
 trace = ["tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-jaeger", "opentelemetry-otlp", "opentelemetry-semantic-conventions", "tracing", "tracing-subscriber", "tracing-core", "valuable"]
 
 # include test utilities for the Thorium api
-test-utilities = ["once_cell", "async_once", "lazy_static", "api"]
+test-utilities = ["api"]
 
 # Force openssl-sys to staticly link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
@@ -186,8 +186,6 @@ kanal = { version = "0.1.1", optional = true }
 dialoguer = { version = "0.11", optional = true }
 
 # test utilities dependencies
-async_once = { version = "0.2", optional = true }
-lazy_static = { version = "1.5", optional = true }
 
 # mcp dependencies
 rmcp = { version = "0.8", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth"], optional = true }
@@ -202,8 +200,6 @@ cgroups-rs = {version = "0.3", optional = true }
 
 [dev-dependencies]
 rand = { version = "0.9.1", features = ["alloc", "small_rng"] }
-lazy_static = "1.5"
-async_once = "0.2"
 # udeps might think this is unused but its used by our doc tests
 tokio-test = "0.4"
 serial_test = "3"

@@ -2,6 +2,7 @@
 
 use data_encoding::HEXLOWER;
 use md5::Md5;
+use rand::RngCore;
 use sha1::{Digest, Sha1};
 use sha2::Sha256;
 use std::collections::HashSet;
@@ -41,12 +42,18 @@ async fn create() -> Result<(), thorium::Error> {
 
 #[tokio::test]
 async fn download() -> Result<(), thorium::Error> {
+    // the data to be uploaded, then downloaded and verified;
+    // we generate random data to ensure that we upload a new file
+    // each run
+    let mut random_data = [0u8; 32];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut random_data);
     // get admin client
     let client = test_utilities::admin_client().await?;
     // Create a group
     let group = generators::groups(1, &client).await?.remove(0).name;
     // build a sample request
-    let file_req = SampleRequest::new_buffer(Buffer::new("EvilCorn"), vec![group])
+    let file_req = SampleRequest::new_buffer(Buffer::new(random_data), vec![group])
         .description("test file")
         .tag("corn", "yes")
         .origin(OriginRequest::downloaded(
@@ -54,24 +61,22 @@ async fn download() -> Result<(), thorium::Error> {
             Some("google".to_string()),
         ));
     // upload this file
-    client.files.create(file_req).await?;
+    let resp = client.files.create(file_req).await?;
+    // download the file and check that it's valid
+    let temp_path = std::env::temp_dir().join("UNCARTED_MAL");
     // build the options for downloading this file
     let mut opts = FileDownloadOpts::default().uncart();
     // download this file
     client
         .files
-        .download(
-            "afe19e37584cf1d9983889200ca3a8da7957fe6524e91068e9708f07a2f2e79d",
-            "UNCARTED_MAL",
-            &mut opts,
-        )
+        .download(&resp.sha256, &temp_path, &mut opts)
         .await?;
     // read in our uncarted file
-    let data = tokio::fs::read("UNCARTED_MAL").await?;
+    let data = tokio::fs::read(&temp_path).await?;
     // delete the uncarted malware file
-    tokio::fs::remove_file("UNCARTED_MAL").await?;
+    tokio::fs::remove_file(&temp_path).await?;
     // make sure that our uncarted file matches
-    is!(data, b"EvilCorn");
+    is!(data, random_data);
     Ok(())
 }
 
@@ -121,7 +126,7 @@ async fn update() -> Result<(), thorium::Error> {
     // update this file
     let update_resp = client.files.update(&resp.sha256, &update).await?;
     is!(update_resp.status().as_u16(), 204);
-    // make sure this tag was updated
+    // make sure the sample was updated
     let sample = client.files.get(&resp.sha256).await?;
     is!(sample, update);
     Ok(())
@@ -751,7 +756,7 @@ async fn comment_attachment_prune() -> Result<(), thorium::Error> {
     .await?;
     // try to retrieve the attachment
     let attachment_path = format!("{}/{}/{}", &hashes.sha256, &comment_id, attachment_id);
-    let s3 = S3::new(&test_utilities::config());
+    let s3 = S3::new(&test_utilities::CONF);
     let attachment_resp = s3.attachments.download(&attachment_path).await;
     // ensure the attachment has been deleted
     match attachment_resp {
@@ -1091,8 +1096,8 @@ async fn create_files() -> Result<(), thorium::Error> {
         "I am a test result",
         OutputDisplayType::String,
     )
-    .file(OnDiskFile::new("/bin/bash"))
-    .file(OnDiskFile::new("/bin/ls"));
+    .file(OnDiskFile::new("Cargo.toml"))
+    .file(OnDiskFile::new("thorium-template.yml"));
     // send this result to the API
     client.files.create_result(output_req).await?;
     Ok(())

@@ -92,7 +92,7 @@ impl Basic {
     /// ```
     pub async fn identify(&self) -> Result<String, Error> {
         // build request
-        let req = self.client.get(format!("{}/api/", self.host));
+        let req = self.client.get(format!("{}/api", self.host));
         // send this request and build a string
         let val = send!(self.client, req)?.text().await?;
         Ok(val)
