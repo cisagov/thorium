@@ -1641,7 +1641,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }
@@ -1658,7 +1660,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }
@@ -1675,7 +1679,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }
@@ -1707,7 +1713,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }

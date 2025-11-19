@@ -1347,3 +1347,15 @@ async fn delete_submitter_tag() -> Result<(), thorium::Error> {
 
     Ok(())
 }
+
+/// Test if queries with tag keys beginning with numbers preceding a letter
+/// work. On older versions of serde-qs this would produce a `ParseIntError`
+#[tokio::test]
+async fn list_tag_key_with_number() -> Result<(), thorium::Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // try listing with a key beginning with a number
+    let opts = FileListOpts::default().tag("9a", "1").limit(1);
+    let _files = client.files.list(&opts).await?;
+    Ok(())
+}

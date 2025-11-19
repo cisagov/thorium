@@ -3,13 +3,13 @@
 //! Currently only Scylla is supported
 
 use axum::extract::FromRequestParts;
-use axum::http::{request::Parts, StatusCode};
+use axum::http::{StatusCode, request::Parts};
 use chrono::prelude::*;
-use futures::{stream, Future, StreamExt, TryStreamExt};
+use futures::{Future, StreamExt, TryStreamExt, stream};
 use scylla::errors::ExecutionError;
 use scylla::response::query_result::QueryResult;
 use std::collections::{HashMap, HashSet};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::db::{self, GroupedScyllaCursorSupport};
@@ -18,8 +18,8 @@ use crate::models::{
     NetworkPolicyListParams, NetworkPolicyListRow, NetworkPolicyRequest, NetworkPolicyRow,
     NetworkPolicyRule, NetworkPolicyUpdate, User,
 };
-use crate::utils::{bounder, helpers};
 use crate::utils::{ApiError, Shared};
+use crate::utils::{bounder, helpers};
 use crate::{
     bad, deserialize, for_groups, internal_err, not_found, unauthorized, update_return_old,
     update_take,
@@ -538,7 +538,7 @@ macro_rules! validate_allowed_groups {
                 Err(err) => {
                     return internal_err!(format!(
                         "Unable to verify that allowed groups exist: {err}"
-                    ))
+                    ));
                 }
             }
             Ok::<(), ApiError>(())
@@ -1045,7 +1045,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }

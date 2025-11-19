@@ -148,7 +148,7 @@ pub trait NotificationSupport: KeySupport + Sized {
                         err.msg.unwrap_or_else(|| {
                             "an unknown error occurred retrieving notifications".to_string()
                         })
-                    ))
+                    ));
                 }
             };
         // create a notification for each added ban
@@ -191,7 +191,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }

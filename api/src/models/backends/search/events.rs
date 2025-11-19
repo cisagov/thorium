@@ -8,9 +8,9 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::is_admin;
-use crate::models::backends::db;
 use crate::models::SearchEventStatus;
 use crate::models::User;
+use crate::models::backends::db;
 use crate::models::{SearchEvent, SearchEventPopOpts};
 use crate::utils::{ApiError, Shared};
 
@@ -143,7 +143,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }
@@ -155,8 +157,8 @@ mod tests {
     use chrono::Utc;
 
     use crate::models::{
-        backends::search::events::{BACKOFF_JITTER, BACKOFF_SECS, MAX_ATTEMPTS},
         ResultSearchEvent, Sample,
+        backends::search::events::{BACKOFF_JITTER, BACKOFF_SECS, MAX_ATTEMPTS},
     };
 
     use super::SearchEventBackend;

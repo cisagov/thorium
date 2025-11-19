@@ -3,14 +3,14 @@
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream};
 use itertools::Itertools;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
-use crate::models::backends::{db, NotificationSupport};
+use crate::models::backends::{NotificationSupport, db};
 use crate::models::system::{
     BARE_METAL_CACHE_KEY, EXTERNAL_CACHE_KEY, K8S_CACHE_KEY, KVM_CACHE_KEY, WINDOWS_CACHE_KEY,
 };
@@ -23,7 +23,7 @@ use crate::models::{
     PipelineBanUpdate, PipelineKey, Resources, ResourcesRequest, ResourcesUpdate, SecurityContext,
     SecurityContextUpdate, SpawnLimits, SystemSettings, User,
 };
-use crate::utils::{bounder, ApiError, Shared};
+use crate::utils::{ApiError, Shared, bounder};
 use crate::{
     bad, can_delete, can_develop, conflict, deserialize_ext, deserialize_opt, extract,
     internal_err, is_admin, not_found, update, update_clear, update_opt, update_opt_empty,
@@ -465,7 +465,7 @@ impl CleanupUpdate {
                             return bad!(
                                 "A clean up script must be set to update clean up settings!"
                                     .to_owned()
-                            )
+                            );
                         }
                     }
                 }
@@ -536,7 +536,10 @@ impl ImageBanUpdate {
         // check that all bans to be added don't already exist
         for ban_add in &self.bans_added {
             if image.bans.contains_key(&ban_add.id) {
-                return bad!(format!("A ban with id '{}' already exists. Bans cannot be updated, only added or removed.", ban_add.id));
+                return bad!(format!(
+                    "A ban with id '{}' already exists. Bans cannot be updated, only added or removed.",
+                    ban_add.id
+                ));
             }
         }
         // add the requested bans
@@ -574,7 +577,9 @@ impl ImageNetworkPolicyUpdate {
             .filter(|remove| !image.network_policies.contains(*remove))
             .collect();
         if !bad_removes.is_empty() {
-            return bad!(format!("The image does not have one or more of the network policies to be removed: {bad_removes:?}"));
+            return bad!(format!(
+                "The image does not have one or more of the network policies to be removed: {bad_removes:?}"
+            ));
         }
         // check that the image doesn't already have any of the added network policies already
         let bad_adds: Vec<&String> = self
@@ -583,7 +588,9 @@ impl ImageNetworkPolicyUpdate {
             .filter(|add| image.network_policies.contains(*add))
             .collect();
         if !bad_adds.is_empty() {
-            return bad!(format!("The image already has one or more of the network policies to be added: {bad_adds:?}"));
+            return bad!(format!(
+                "The image already has one or more of the network policies to be added: {bad_adds:?}"
+            ));
         }
         // check that all of the added network policies actually exist
         let image_group_slice = &[image.group.clone()];
@@ -591,7 +598,9 @@ impl ImageNetworkPolicyUpdate {
             NetworkPolicy::exists_all(self.policies_added.iter(), image_group_slice, shared)
                 .await?;
         if !missing_policies.is_empty() {
-            return not_found!(format!("One or more of the added network policies does not exist in the image's group: {missing_policies:?}"));
+            return not_found!(format!(
+                "One or more of the added network policies does not exist in the image's group: {missing_policies:?}"
+            ));
         }
         // update the used_by data for the network policies
         NetworkPolicy::set_used_by(
@@ -689,7 +698,9 @@ impl Image {
                 )
                 .await?;
                 if !missing_policies.is_empty() {
-                    return not_found!(format!("One or more of the network policies does not exist in the image's group: {missing_policies:?}"));
+                    return not_found!(format!(
+                        "One or more of the network policies does not exist in the image's group: {missing_policies:?}"
+                    ));
                 }
             }
             // if the image is NOT scaled in K8's and policies were provided, return an error
@@ -1190,7 +1201,9 @@ where
         // try to extract our query
         if let Some(query) = parts.uri.query() {
             // try to deserialize our query string
-            Ok(serde_qs::Config::new(5, false).deserialize_str(query)?)
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
         } else {
             Ok(Self::default())
         }
