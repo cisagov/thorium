@@ -1059,7 +1059,7 @@ dependencies = [
 
 [[package]]
 name = "cart-rs"
-version = "1.2.3"
+version = "1.2.5"
 dependencies = [
  "bincode",
  "bytes",
@@ -6819,7 +6819,7 @@ dependencies = [
 
 [[package]]
 name = "thoradm"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
@@ -6859,7 +6859,7 @@ dependencies = [
 
 [[package]]
 name = "thorctl"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "async-walkdir",
@@ -6906,7 +6906,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-agent"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "bincode",
@@ -6941,7 +6941,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-api"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -7051,7 +7051,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-derive"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "darling 0.20.11",
  "proc-macro2",
@@ -7061,7 +7061,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-event-handler"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "chrono",
  "clap",
@@ -7076,7 +7076,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-operator"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "aws-credential-types",
  "aws-sdk-s3",
@@ -7106,7 +7106,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-reactor"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -7131,7 +7131,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-scaler"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -7165,7 +7165,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-search-streamer"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "bytesize",

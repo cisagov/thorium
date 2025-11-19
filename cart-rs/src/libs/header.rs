@@ -57,16 +57,20 @@ impl Header {
     /// will fail to write. IO errors should only occur if an insufficient buffer is provided.
     pub fn write(key: &[u8], mut buf: &mut [u8]) -> Result<(), Error> {
         Self::validate_key(key)?;
-        // setup a bincode config
-        let config = bincode::config::standard();
-        // hardcode CaRT version 1 and an optional header length of 0
-        let version = b"\x01\x00";
-        // write the header to the buffer
+        // create the bincode config; use fixed int encoding to ensure we write 8 bytes
+        // when we write `0_u64` instead of just 1 byte
+        let config = bincode::config::standard().with_fixed_int_encoding();
+        // write the CaRT magic number (4 bytes)
         buf.write_all(MAGIC_NUM)?;
+        // write CaRT version 1 (2 bytes)
+        let version = b"\x01\x00";
         buf.write_all(version)?;
-        bincode::encode_into_slice(0_u64, buf, config)?;
+        // write reserved space (8 bytes)
+        bincode::encode_into_std_write(0_u64, &mut buf, config)?;
+        // write the encryption key (16 bytes)
         buf.write_all(key)?;
-        bincode::encode_into_slice(0_u64, buf, config)?;
+        // hardcode an optional header length of 0 (8 bytes)
+        bincode::encode_into_std_write(0_u64, &mut buf, config)?;
         Ok(())
     }
 
@@ -80,8 +84,8 @@ impl Header {
     ///
     /// If this buffer does not start with the CART magic number then an error will be returned.
     pub fn get(raw: &[u8]) -> Result<Self, Error> {
-        // setup a bincode config
-        let config = bincode::config::standard();
+        // create the bincode config; use fixed int encoding because that's how we write things
+        let config = bincode::config::standard().with_fixed_int_encoding();
         // make sure the magic numbers match carts magic number
         Self::validate(raw)?;
         // extract the version number
