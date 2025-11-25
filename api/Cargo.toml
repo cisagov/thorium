@@ -92,7 +92,6 @@ cfg-if = "1"
 bytes = { version = "1", features = ["serde"] }
 cart-rs = { workspace = true }
 base64 = { version = "0.22" }
-enum-utils = "0.1"
 url = "2"
 schemars = { workspace = true }
 semver = { version = "1", features = ["serde"] }

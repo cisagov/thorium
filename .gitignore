@@ -6,7 +6,6 @@ target
 binaries
 built
 .vscode
-Cargo.lock
 .DS_Store
 
 # ignore Thorium configs to avoid exposing sensitive info

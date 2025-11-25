@@ -9,7 +9,9 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap::builder::NonEmptyStringValueParser;
 use itertools::Itertools;
-use thorium::models::{GenericJobArgs, GenericJobKwargs, GenericJobOpts, Reaction, ReactionArgs};
+use thorium::models::{
+    GenericJobArgs, GenericJobKwargs, GenericJobOpts, Reaction, ReactionArgs, ReactionStatus,
+};
 use thorium::{Error, Thorium};
 use uuid::Uuid;
 
@@ -30,7 +32,7 @@ pub enum Reactions {
     Get(GetReactions),
     /// Deletes reactions by id or with a search
     #[clap(version, author)]
-    Delete(GetReactions),
+    Delete(DeleteReactions),
     /// Describe specific reactions, displaying/saving details in JSON format
     #[clap(version, author)]
     Describe(DescribeReactions),
@@ -55,8 +57,8 @@ pub struct GetReactions {
     #[clap(short, long)]
     pub pipeline: Option<String>,
     /// The status to focus on for status specific operations
-    #[clap(short, long)]
-    pub status: Option<String>,
+    #[clap(short, long, value_enum)]
+    pub status: Option<ReactionStatus>,
     /// The tag to focus on for tag specific operations
     #[clap(short, long)]
     pub tag: Option<String>,
@@ -66,6 +68,40 @@ pub struct GetReactions {
     /// The max number of reactions to list
     #[clap(short, long, default_value = "50")]
     pub limit: u64,
+    /// The number of reactions to retrieve per request
+    #[clap(long, default_value = "50")]
+    pub page_size: u64,
+    /// Refrain from setting a limit when listing reactions
+    #[clap(long, conflicts_with = "limit")]
+    pub no_limit: bool,
+}
+
+/// A command to delete reactions
+#[derive(Parser, Debug, Clone)]
+pub struct DeleteReactions {
+    /// Any specific reactions to delete
+    pub targets: Vec<Uuid>,
+    /// The group to limit our scope to
+    #[clap(short, long)]
+    pub group: String,
+    /// The pipeline to delete reactions for
+    #[clap(short, long)]
+    pub pipeline: Option<String>,
+    /// The status to focus on for status specific operations
+    #[clap(short, long, value_enum)]
+    pub status: Option<ReactionStatus>,
+    /// The tag to focus on for tag specific operations
+    #[clap(short, long)]
+    pub tag: Option<String>,
+    /// The max number of reactions to delete
+    #[clap(short, long, default_value = "50")]
+    pub limit: u64,
+    /// The number of reactions to retrieve per request
+    #[clap(long, default_value = "50")]
+    pub page_size: u64,
+    /// Refrain from setting a limit when deleting reactions
+    #[clap(long, conflicts_with = "limit")]
+    pub no_limit: bool,
 }
 
 /// A command to describe particular reactions in full
@@ -762,28 +798,22 @@ pub async fn params_to_cursors(
     } else {
         params.groups.to_vec()
     };
-    let limit: u64 = if params.no_limit {
-        // TODO: use a really big limit if the user wants no limit; cursor doesn't currently
-        //       allow for no limits
-        super::traits::describe::CURSOR_BIG_LIMIT
-    } else {
-        params.limit as u64
-    };
     let mut cursors = Vec::new();
     if !pipelines.is_empty() {
         // add cursors to search for reactions for specific pipelines in every group
         let cursor_results =
             futures::future::join_all(pipelines.iter().cartesian_product(groups.iter()).map(
                 |(pipeline, group)| async {
-                    thorium
+                    let mut cursor = thorium
                         .reactions
                         .list(group, pipeline)
-                        .page(params.page_size as u64)
-                        .limit(limit)
-                        .details()
-                        // execute the cursors to check for 404 errors preemptively
-                        .exec()
-                        .await
+                        .page_size(params.page_size as u64)
+                        .details();
+                    if !params.no_limit {
+                        cursor = cursor.limit(params.limit as u64);
+                    }
+                    // execute the cursors to check for 404 errors preemptively
+                    cursor.exec().await
                 },
             ))
             .await;
@@ -811,12 +841,15 @@ pub async fn params_to_cursors(
                 .iter()
                 .cartesian_product(groups.iter())
                 .map(|(tag, group)| {
-                    thorium
+                    let mut cursor = thorium
                         .reactions
                         .list_tag(group, tag)
-                        .page(params.page_size as u64)
-                        .limit(limit)
-                        .details()
+                        .page_size(params.page_size as u64)
+                        .details();
+                    if !params.no_limit {
+                        cursor = cursor.limit(params.limit as u64);
+                    }
+                    cursor
                 }),
         );
     }

@@ -67,7 +67,7 @@ impl TriggerCache {
         // assume we will have at least 10 groups
         let mut triggers = HashMap::with_capacity(10);
         // get a cursor for all groups we can see
-        let mut groups_cursor = thorium.groups.list().page(100).exec().await?;
+        let mut groups_cursor = thorium.groups.list().page_size(100).exec().await?;
         // crawl over the groups in this cursor
         loop {
             // crawl over the groups on this page

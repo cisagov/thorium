@@ -34,7 +34,7 @@ async fn create() -> Result<(), thorium::Error> {
     let resp = client.groups.create(&group_req).await?;
     is!(resp.status().as_u16(), 204);
     // make sure our group request is in our created groups
-    let resp = client.groups.list().page(100).details().exec().await?;
+    let resp = client.groups.list().page_size(100).details().exec().await?;
     is_in!(resp.details, group_req);
     // retrieve group and check that the request matches
     let retrieved = client.groups.get(&group_req.name).await?;
@@ -105,7 +105,7 @@ async fn list() -> Result<(), thorium::Error> {
     // get the names of all the groups we have created
     let names: Vec<String> = groups.iter().map(|group| group.name.clone()).collect();
     // list the groups we just created
-    let resp = client.groups.list().page(500).exec().await?;
+    let resp = client.groups.list().page_size(500).exec().await?;
     // make sure all the groups we tried to create are in our list
     for group in names {
         is_in!(resp.names, group);
@@ -120,7 +120,7 @@ async fn list_details() -> Result<(), thorium::Error> {
     // create 20 random groups in Thorium
     let group_reqs = generators::groups(20, &client).await?;
     // list the groups we just created
-    let resp = client.groups.list().page(100).details().exec().await?;
+    let resp = client.groups.list().page_size(100).details().exec().await?;
     // make sure all the group details we tried to create are in our list
     vec_in_vec!(&group_reqs, &resp.details);
     Ok(())

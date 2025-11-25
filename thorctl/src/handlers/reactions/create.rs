@@ -270,7 +270,7 @@ async fn watch_group(thorium: Arc<Thorium>, group: String, batch: String) -> Res
         let mut cursor = thorium
             .reactions
             .list_tag(&group, &batch)
-            .page(100)
+            .page_size(100)
             .details();
         // crawl this cursor until its exhausted
         while !cursor.exhausted {

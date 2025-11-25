@@ -126,21 +126,15 @@ impl DescribeSealed for DescribeGroups {
         thorium: &thorium::Thorium,
     ) -> Result<Vec<Self::Cursor>, thorium::Error> {
         let params = self.get_search_params();
-        let limit: u64 = if params.no_limit {
-            // TODO: use a really big limit if the user wants no limit; cursor doesn't currently
-            //       allow for no limits
-            super::traits::describe::CURSOR_BIG_LIMIT
-        } else {
-            params.limit as u64
-        };
-        Ok(vec![
-            thorium
-                .groups
-                .list()
-                .details()
-                .page(params.page_size as u64)
-                .limit(limit),
-        ])
+        let mut cursor = thorium
+            .groups
+            .list()
+            .details()
+            .page_size(params.page_size as u64);
+        if !params.no_limit {
+            cursor = cursor.limit(params.limit as u64);
+        }
+        Ok(vec![cursor])
     }
 }
 

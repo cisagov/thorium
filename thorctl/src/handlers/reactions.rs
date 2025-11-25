@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
@@ -16,7 +16,7 @@ use super::progress::Bar;
 use super::update;
 use crate::Error;
 use crate::args::reactions::{
-    DescribeReactions, GetReactions, LogsReactions, ReactionTarget, Reactions,
+    DeleteReactions, DescribeReactions, GetReactions, LogsReactions, ReactionTarget, Reactions,
 };
 use crate::args::{self, Args, DescribeCommand, SearchParameterized};
 use crate::handlers::Controller;
@@ -34,16 +34,16 @@ Error: Invalid argument combination!
 
 Here are some valid examples:
 
-# Get a specific reaction
+# For specific reactions
 thorctl reactions <sub command> 69ff8820-f688-4968-bd6f-45a4cb0f78a9
 
-# Get reactions by pipeline
+# Reactions by pipeline
 thorctl reactions <sub command> --group static --pipeline identify-files
 
-# Get reactions by pipeline and status
+# Reactions by pipeline and status
 thorctl reactions <sub command> --group --pipeline identify-files --status Created
 
-# Get reactions by tag (like a samples sha256)
+# Reactions by tag (like a samples sha256)
 thorctl reactions <sub command> --tag 4f2bdeb982dad19cbc06dfe770d88a09a8542e34db9d92fbed21d4f2c4fa7525
 ";
 
@@ -62,6 +62,7 @@ struct InfoLine;
 
 impl InfoLine {
     /// Print this log lines header
+    #[allow(clippy::print_literal)]
     pub fn header() {
         println!(
             "{} | {:<25} | {:<9} | {:<64} | {:<15} | {:<36} | {:<32}",
@@ -156,14 +157,18 @@ impl InfoLine {
 /// * `cmd` - The full command for this operation
 macro_rules! crawl_pipeline {
     ($client:expr, $pipe:expr, $cmd:expr) => {
-        // build a cursor object
-        $client
-            .reactions
-            .list(&$cmd.group, $pipe)
-            .limit($cmd.limit)
-            .details()
-            .exec()
-            .await
+        async {
+            // build a cursor object
+            let mut cursor = $client
+                .reactions
+                .list(&$cmd.group, $pipe)
+                .page_size($cmd.page_size)
+                .details();
+            if !$cmd.no_limit {
+                cursor = cursor.limit($cmd.limit);
+            }
+            cursor.exec().await
+        }
     };
 }
 
@@ -176,14 +181,18 @@ macro_rules! crawl_pipeline {
 /// * `cmd` - The full command for this operation
 macro_rules! crawl_tag {
     ($client:expr, $tag:expr, $cmd:expr) => {
-        // build a cursor object
-        $client
-            .reactions
-            .list_tag(&$cmd.group, $tag)
-            .limit($cmd.limit)
-            .details()
-            .exec()
-            .await
+        async {
+            // build a cursor object
+            let mut cursor = $client
+                .reactions
+                .list_tag(&$cmd.group, $tag)
+                .page_size($cmd.page_size)
+                .details();
+            if !$cmd.no_limit {
+                cursor = cursor.limit($cmd.limit);
+            }
+            cursor.exec().await
+        }
     };
 }
 
@@ -196,20 +205,20 @@ macro_rules! crawl_tag {
 /// * `status` - The status to restrict our cursor too
 /// * `cmd` - The full command for this operation
 macro_rules! crawl_status {
-    ($client:expr, $pipe:expr, $status:expr, $cmd:expr) => {{
-        // try to cast our status string to a ReactionStatus
-        let Ok(status) = $status.parse() else {
-            panic!("status must be one of Created, Started, Completed, Failed")
-        };
-        // build a cursor object
-        $client
-            .reactions
-            .list_status(&$cmd.group, $pipe, &status)
-            .limit($cmd.limit)
-            .details()
-            .exec()
-            .await
-    }};
+    ($client:expr, $pipe:expr, $status:expr, $cmd:expr) => {
+        async {
+            // build a cursor object
+            let mut cursor = $client
+                .reactions
+                .list_status(&$cmd.group, $pipe, $status)
+                .page_size($cmd.page_size)
+                .details();
+            if !$cmd.no_limit {
+                cursor = cursor.limit($cmd.limit);
+            }
+            cursor.exec().await
+        }
+    };
 }
 
 /// Print information on specific reactions
@@ -242,7 +251,7 @@ async fn info_specific(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Erro
 ///
 /// * `thorium` - A Thorium client
 /// * `cmd` - The full get command/args
-async fn delete_specific(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
+async fn delete_specific(thorium: &Thorium, cmd: &DeleteReactions) -> Result<(), Error> {
     // print our info line header
     InfoLine::header();
     // crawl over all reaction ids and get info on them
@@ -277,11 +286,11 @@ async fn get(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Error> {
         // get info on specific reactions by id
         (false, None, None, None) => return info_specific(thorium, cmd).await,
         // get info on reactions for a specific pipeline
-        (true, Some(pipe), None, None) => crawl_pipeline!(thorium, pipe, cmd)?,
+        (true, Some(pipe), None, None) => crawl_pipeline!(thorium, pipe, cmd).await?,
         // get info on reactions for a specific pipeline
-        (true, Some(pipe), Some(status), None) => crawl_status!(thorium, pipe, status, cmd)?,
+        (true, Some(pipe), Some(status), None) => crawl_status!(thorium, pipe, status, cmd).await?,
         // get info on reactions for a specific tag
-        (true, None, None, Some(tag)) => crawl_tag!(thorium, tag, cmd)?,
+        (true, None, None, Some(tag)) => crawl_tag!(thorium, tag, cmd).await?,
         _ => {
             return Err(Error::new(HELPFUL_ARG_COMBO_ERROR));
         }
@@ -568,9 +577,9 @@ async fn write_reaction_logs_stdout(
 async fn logs_positionals(
     thorium: &Thorium,
     reactions: &[String],
-    output: &Option<PathBuf>,
+    output: Option<&PathBuf>,
     params: &ReactionListParams,
-    progress: &Option<Bar>,
+    progress: Option<&Bar>,
 ) -> Result<(), Error> {
     // concurrently retrieve reactions and write logs for each reaction
     futures::stream::iter(reactions)
@@ -608,9 +617,9 @@ async fn logs_positionals(
 async fn logs_list(
     thorium: &Thorium,
     list_file: &Path,
-    output: &Option<PathBuf>,
+    output: Option<&PathBuf>,
     params: &ReactionListParams,
-    progress: &Option<Bar>,
+    progress: Option<&Bar>,
 ) -> Result<(), Error> {
     // open the reaction list file
     let file = error_and_return!(
@@ -661,9 +670,9 @@ async fn logs_list(
 async fn write_cursor_logs(
     thorium: &Thorium,
     mut cursor: thorium::client::Cursor<Reaction>,
-    output: &Option<PathBuf>,
+    output: Option<&PathBuf>,
     params: &ReactionListParams,
-    progress: &Option<Bar>,
+    progress: Option<&Bar>,
 ) -> Result<(), Error> {
     loop {
         // concurrently retrieve and write logs all reactions in cursor
@@ -706,9 +715,9 @@ async fn write_cursor_logs(
 async fn logs_search(
     thorium: &Thorium,
     cmd: &LogsReactions,
-    output: &Option<PathBuf>,
+    output: Option<&PathBuf>,
     params: &ReactionListParams,
-    progress: &Option<Bar>,
+    progress: Option<&Bar>,
 ) -> Result<(), Error> {
     // generate reaction cursors based on the given command
     let cursors = args::reactions::params_to_cursors(thorium, cmd, &cmd.pipelines).await?;
@@ -737,14 +746,35 @@ async fn logs(thorium: &Thorium, cmd: &LogsReactions) -> Result<(), Error> {
     // create params for listing logs (specifically containing the max number of log lines)
     let params = ReactionListParams::default().limit(cmd.log_limit);
     // write logs for reactions in positional arguments
-    logs_positionals(thorium, &cmd.reactions, &cmd.output, &params, &progress).await?;
+    logs_positionals(
+        thorium,
+        &cmd.reactions,
+        cmd.output.as_ref(),
+        &params,
+        progress.as_ref(),
+    )
+    .await?;
     if let Some(list_file) = &cmd.reaction_list {
         // write logs for reactions in a list file if one was given
-        logs_list(thorium, list_file, &cmd.output, &params, &progress).await?;
+        logs_list(
+            thorium,
+            list_file,
+            cmd.output.as_ref(),
+            &params,
+            progress.as_ref(),
+        )
+        .await?;
     }
     if cmd.has_parameters() {
         // write logs with a search if the command has parameters
-        logs_search(thorium, cmd, &cmd.output, &params, &progress).await?;
+        logs_search(
+            thorium,
+            cmd,
+            cmd.output.as_ref(),
+            &params,
+            progress.as_ref(),
+        )
+        .await?;
     }
     // finish the progress bar if we have one
     progress.inspect(|p| p.finish_with_message("✅"));
@@ -759,7 +789,7 @@ async fn logs(thorium: &Thorium, cmd: &LogsReactions) -> Result<(), Error> {
 /// * `cmd` - The full get command/args
 async fn delete(
     thorium: &Thorium,
-    cmd: &GetReactions,
+    cmd: &DeleteReactions,
     args: &Args,
     conf: &CtlConf,
 ) -> Result<(), Error> {
@@ -768,12 +798,12 @@ async fn delete(
         // get info on specific reactions by id
         (false, None, None, None) => return delete_specific(thorium, cmd).await,
         // get info on reactions for a specific pipeline
-        (true, Some(pipe), None, None) => crawl_pipeline!(thorium, pipe, cmd)?,
+        (true, Some(pipe), None, None) => crawl_pipeline!(thorium, pipe, cmd).await?,
         // get info on reactions for a specific pipeline
-        (true, Some(pipe), Some(status), None) => crawl_status!(thorium, pipe, status, cmd)?,
+        (true, Some(pipe), Some(status), None) => crawl_status!(thorium, pipe, status, cmd).await?,
         // get info on reactions for a specific tag
-        (true, None, None, Some(tag)) => crawl_tag!(thorium, tag, cmd)?,
-        _ => panic!("UNKNOWN ARG COMBO"),
+        (true, None, None, Some(tag)) => crawl_tag!(thorium, tag, cmd).await?,
+        _ => return Err(Error::new(HELPFUL_ARG_COMBO_ERROR)),
     };
     // create a new worker controller
     let mut controller = Controller::<ReactionsDeleteWorker>::spawn(
@@ -793,7 +823,7 @@ async fn delete(
         for reaction in cursor.details.drain(..) {
             // if we already added the number of reactions we want to delete then stop adding more
             // this has to be done because redis cursors are a soft limit
-            if added == cmd.limit {
+            if !cmd.no_limit && added == cmd.limit {
                 break;
             }
             // try to add this delete reaction job

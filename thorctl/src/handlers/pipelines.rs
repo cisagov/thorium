@@ -93,7 +93,7 @@ async fn get(thorium: Thorium, cmd: &GetPipelines) -> Result<(), Error> {
             .pipelines
             .list(group)
             .limit(cmd.limit)
-            .page(cmd.page_size)
+            .page_size(cmd.page_size)
             .details()
     });
     // retrieve the pipelines in each cursor until we've reached our limit

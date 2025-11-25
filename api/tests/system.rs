@@ -54,7 +54,7 @@ async fn restore() -> Result<(), Error> {
     // make sure the user is correct
     is!(&user, &restored_user);
     // list the groups we just restored
-    let resp = client.groups.list().page(500).details().exec().await?;
+    let resp = client.groups.list().page_size(500).details().exec().await?;
     // make sure all the group details we tried to restored are in our list
     vec_in_vec!(&groups, &resp.details);
     // crawl over the groups we restored and check to make sure all our images/pipelines were restored
@@ -65,7 +65,7 @@ async fn restore() -> Result<(), Error> {
         let resp = client
             .images
             .list(&group.name)
-            .page(500)
+            .page_size(500)
             .details()
             .exec()
             .await?;
@@ -75,7 +75,7 @@ async fn restore() -> Result<(), Error> {
         let resp = client
             .pipelines
             .list(&group.name)
-            .page(500)
+            .page_size(500)
             .details()
             .exec()
             .await?;
@@ -105,7 +105,7 @@ async fn restore_create_reactions() -> Result<(), Error> {
         let resp = client
             .pipelines
             .list(&group.name)
-            .page(500)
+            .page_size(500)
             .details()
             .exec()
             .await?;

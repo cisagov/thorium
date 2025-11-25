@@ -34,7 +34,8 @@ where
     pub limit: Option<u64>,
     /// The current amount of data that has been retrieved from the server
     pub retrieved: u64,
-    /// Whether our cursor has been exhausted
+    /// Whether the cursor has reached its limit or the API has run out of
+    /// items to return
     pub exhausted: bool,
     /// The names returned by this cursor
     pub names: Vec<String>,
@@ -58,6 +59,7 @@ where
     /// * `url` - The url we will be using to build/rehydrate this cursor
     /// * `token` - The authentication token used for this cursor
     /// * `client` - The client this cursor should use
+    #[must_use]
     pub fn new(url: String, token: &str, client: &reqwest::Client) -> Self {
         Cursor {
             url,
@@ -79,18 +81,20 @@ where
     /// # Arguments
     ///
     /// * `cursor` - The new cursor value to use
+    #[must_use]
     pub fn cursor(mut self, cursor: u64) -> Self {
         self.cursor = cursor;
         self
     }
 
-    /// Sets the new page value to use in the next request
+    /// Sets the page size value to use in the next request
     ///
     /// # Arguments
     ///
-    /// * `page` - The new page value to use
-    pub fn page(mut self, page: u64) -> Self {
-        self.page_size = page;
+    /// * `page_size` - The page size to use
+    #[must_use]
+    pub fn page_size(mut self, page_size: u64) -> Self {
+        self.page_size = page_size;
         self
     }
 
@@ -99,6 +103,7 @@ where
     /// # Arguments
     ///
     /// * `limit` - The new limit value to use
+    #[must_use]
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
         self
@@ -108,6 +113,7 @@ where
     ///
     /// Calling this multiple times will result in multiple /details being added and so should not
     /// be done.
+    #[must_use]
     pub fn details(mut self) -> Self {
         self.url = format!("{}details/", self.url);
         self
@@ -118,6 +124,7 @@ where
     /// # Arguments
     ///
     /// * `page` - The new page value to use
+    #[must_use]
     pub fn retry(mut self, retry: bool) -> Self {
         self.retry = retry;
         self
@@ -157,8 +164,7 @@ where
                         // determine if this error could be transient or not
                         if error
                             .status()
-                            .map(|status| status.is_server_error())
-                            .unwrap_or(false)
+                            .is_some_and(|status| status.is_server_error())
                         {
                             continue;
                         }
@@ -174,9 +180,12 @@ where
         // update the current amount of total data retrieved
         self.retrieved += (self.names.len() + self.details.len()) as u64;
         // update our cursor if we got a new cursor
-        //match (raw.cursor, self.retrieved >= self.limit) {
         match (raw.cursor, self.limit) {
+            // only set the new cursor if we haven't hit our limit
             (Some(cursor), Some(limit)) if self.retrieved < limit => self.cursor = cursor,
+            // we have no limit, so set the new cursor
+            (Some(cursor), None) => self.cursor = cursor,
+            // otherwise this cursor is exhausted
             (_, _) => self.exhausted = true,
         }
         Ok(())

@@ -202,24 +202,20 @@ impl DescribeSealed for DescribePipelines {
             // otherwise use only the specified groups
             params.groups.to_vec()
         };
-        let limit: u64 = if params.no_limit {
-            // TODO: use a really big limit if the user wants no limit; cursor doesn't currently
-            //       allow for no limits
-            super::traits::describe::CURSOR_BIG_LIMIT
+        let cursors = groups.iter().map(|group| {
+            thorium
+                .pipelines
+                .list(group)
+                .details()
+                .page_size(params.page_size as u64)
+        });
+        if params.no_limit {
+            Ok(cursors.collect())
         } else {
-            params.limit as u64
-        };
-        Ok(groups
-            .iter()
-            .map(|group| {
-                thorium
-                    .pipelines
-                    .list(group)
-                    .details()
-                    .page(params.page_size as u64)
-                    .limit(limit)
-            })
-            .collect())
+            Ok(cursors
+                .map(|cursor| cursor.limit(params.limit as u64))
+                .collect())
+        }
     }
 }
 

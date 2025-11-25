@@ -773,28 +773,32 @@ pub struct StageLogs {
 }
 
 /// The different possible statuses for a reaction
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, enum_utils::FromStr)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    clap::ValueEnum,
+    strum::EnumString,
+    strum::Display,
+)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum ReactionStatus {
     /// This reaction is created, but is not yet running
+    #[strum(serialize = "Created")]
     Created,
     /// At least one stage of this reaction has started
+    #[strum(serialize = "Started")]
     Started,
     /// This reaction has completed
+    #[strum(serialize = "Completed")]
     Completed,
     /// This reaction has failed due to an error
+    #[strum(serialize = "Failed")]
     Failed,
-}
-
-impl std::fmt::Display for ReactionStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ReactionStatus::Created => write!(f, "Created"),
-            ReactionStatus::Started => write!(f, "Started"),
-            ReactionStatus::Completed => write!(f, "Completed"),
-            ReactionStatus::Failed => write!(f, "Failed"),
-        }
-    }
 }
 
 impl From<JobHandleStatus> for ReactionStatus {

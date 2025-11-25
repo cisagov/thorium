@@ -97,7 +97,7 @@ async fn get(thorium: Thorium, cmd: &GetImages) -> Result<(), Error> {
             .images
             .list(group)
             .limit(cmd.limit)
-            .page(cmd.page_size)
+            .page_size(cmd.page_size)
             .details()
     });
     // retrieve the images in each cursor until we've reached our limit

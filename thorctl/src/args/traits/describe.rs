@@ -18,10 +18,6 @@ use crate::{
     utils,
 };
 
-/// A really big limit to be used for [`thorium::client::Cursor`], as it doesn't support
-/// queries with no limits
-pub const CURSOR_BIG_LIMIT: u64 = 9_999_999;
-
 /// A makeshift adapter trait providing a consistent interface to both
 /// [`thorium::models::Cursor`] and [`thorium::client::Cursor`]
 pub trait CursorLike<T> {

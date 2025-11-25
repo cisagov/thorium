@@ -1,12 +1,11 @@
 use colored::Colorize;
-use http::StatusCode;
 use kanal::AsyncSender;
 use std::sync::Arc;
 use thorium::models::Reaction;
 use thorium::{CtlConf, Thorium};
 
 use crate::Args;
-use crate::args::reactions::GetReactions;
+use crate::args::reactions::DeleteReactions;
 use crate::handlers::progress::{Bar, BarKind, MultiBar};
 use crate::handlers::{Monitor, MonitorMsg, Worker};
 
@@ -58,7 +57,7 @@ pub struct ReactionsDeleteWorker {
     /// The progress bars to log progress with
     bar: Bar,
     /// The arguments for downloading repos
-    pub cmd: GetReactions,
+    pub cmd: DeleteReactions,
     /// The channel to send monitor updates on
     pub monitor_tx: AsyncSender<MonitorMsg<ReactionsDeleteMonitor>>,
 }
@@ -66,7 +65,7 @@ pub struct ReactionsDeleteWorker {
 #[async_trait::async_trait]
 impl Worker for ReactionsDeleteWorker {
     /// The cmd part of args for this specific worker
-    type Cmd = GetReactions;
+    type Cmd = DeleteReactions;
 
     /// The type of jobs to recieve
     type Job = Reaction;
