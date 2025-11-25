@@ -40,6 +40,7 @@ impl Spawned {
     /// * `req` - The requisition that led to this worker
     /// * `image` - The image for this worker
     /// * `pool` - The pool this worker was spawned in
+    #[expect(clippy::cast_possible_truncation)]
     pub fn new<T: Into<String>>(
         cluster: T,
         node: T,
@@ -50,17 +51,17 @@ impl Spawned {
         // generate a random name
         let append = helpers::gen_string(8);
         let name = format!("{}-{}-{}", &req.pipeline, &req.stage, append);
-        // allow for 3x this images standard execution time + 25%
-        let single_run_budget = 3.0 * image.runtime + (3.0 * image.runtime * 0.25);
+        // set a minimum bound on downscaling for at least 2 minutes
+        let single_run_budget = std::cmp::max(image.runtime.ceil() as i64, 120);
         // calculate when this worker can be safely scaled down
-        let down_scalable = Utc::now() + Duration::seconds(single_run_budget.ceil() as i64);
+        let down_scalable = Utc::now() + Duration::seconds(single_run_budget);
         // create our spawned object
         Spawned {
             req,
             cluster: cluster.into(),
             node: node.into(),
             name,
-            resources: image.resources.clone(),
+            resources: image.resources,
             pool,
             spawn: true,
             scaled_down: false,
@@ -111,7 +112,7 @@ impl From<&Spawned> for SpawnedUpdate {
             node: spawned.node.clone(),
             name: spawned.name.clone(),
             pool: spawned.pool,
-            resources: spawned.resources.clone(),
+            resources: spawned.resources,
             scaled_down: spawned.scaled_down,
         }
     }

@@ -115,6 +115,13 @@ impl PartialEq for EditableImage {
 
 impl From<Image> for EditableImage {
     fn from(image: Image) -> Self {
+        // get our environment variables in an easily editable format
+        let env = image
+            .env
+            .into_iter()
+            .map(|(key, value)| format!("{}={}", key, value.unwrap_or_default()))
+            .collect();
+        // build our editable image
         EditableImage {
             group: image.group,
             name: image.name,
@@ -124,19 +131,9 @@ impl From<Image> for EditableImage {
             image: image.image,
             lifetime: image.lifetime,
             timeout: image.timeout,
-            resources: ResourcesUpdate {
-                cpu: Some(format!("{}m", image.resources.cpu)),
-                memory: Some(format!("{}Mi", image.resources.memory)),
-                ephemeral_storage: Some(format!("{}Mi", image.resources.ephemeral_storage)),
-                nvidia_gpu: Some(image.resources.nvidia_gpu),
-                amd_gpu: Some(image.resources.amd_gpu),
-            },
+            resources: ResourcesUpdate::from(image.resources),
             spawn_limit: image.spawn_limit,
-            env: image
-                .env
-                .into_iter()
-                .map(|(key, value)| format!("{}={}", key, value.unwrap_or_default()))
-                .collect(),
+            env,
             runtime: image.runtime,
             volumes: image.volumes,
             args: image.args,

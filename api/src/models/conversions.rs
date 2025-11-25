@@ -66,7 +66,7 @@ pub fn storage<T: AsRef<str>>(raw: T) -> Result<u64, ConversionError> {
     // This is because we assume that any u64 value is # of bytes
     if let Ok(bytes) = raw.parse::<u64>() {
         // if parse was successful then convert to mebibytes
-        return Ok(bytes * 1_048_576);
+        return Ok(bytes / 1_048_576);
     }
 
     // u64 failed parse check lets find first occurence of a any valid char

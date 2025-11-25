@@ -2,23 +2,24 @@ use k8s_openapi::api::core::v1::Node;
 use kube::api::{Api, ListParams, ObjectList, Patch, PatchParams};
 use serde_json::json;
 use std::collections::HashSet;
-use thorium::models::Resources;
+use thorium::conf::BurstableNodeResources;
+use thorium::models::{BurstableResources, Resources};
 use thorium::{Conf, Error};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use super::Pods;
 use crate::libs::helpers;
 use crate::libs::schedulers::NodeAllocatableUpdate;
 
-// extract and convert a resource then subtract it
+// perform a saturating subtraction on a resource
 macro_rules! subtract {
-    ($orig:expr, $func:expr, $map:expr, $name:expr) => {
-        $orig = $orig.saturating_sub($func($map.get($name))?);
+    ($orig:expr, $consumed:expr) => {
+        $orig = $orig.saturating_sub($consumed);
     };
 }
 
 /// Get the resources for a specific node
-fn get_resources(node: &Node) -> Result<Resources, Error> {
+fn get_resources(node: &Node, config: &BurstableNodeResources) -> Result<Resources, Error> {
     // throw an error if this node doesn't have a status object
     if let Some(status) = &node.status {
         // extract this nodes allocatable resources
@@ -27,18 +28,25 @@ fn get_resources(node: &Node) -> Result<Resources, Error> {
             let mut cpu = helpers::cpu(alloc.get("cpu"))?;
             let mut memory = helpers::storage(alloc.get("memory"))?;
             let mut ephemeral_storage = helpers::storage(alloc.get("ephemeral-storage"))?;
+            let nvidia_gpu = helpers::u64_quantity(alloc.get("nvidia.com/gpu"))?;
+            let amd_gpu = helpers::u64_quantity(alloc.get("amd.com/gpu"))?;
+            // get the total number of pods that are allocatable
+            let worker_slots = helpers::u64_quantity(alloc.get("pods"))?;
             // take 2 cores or 2 Gibibytes from each of our resources
             cpu = cpu.saturating_sub(2000);
             memory = memory.saturating_sub(2048);
             ephemeral_storage = ephemeral_storage.saturating_sub(2048);
+            // calculate how many burstable resources this node has
+            let burstable = BurstableResources::new(cpu, memory, config);
             // build our resources objects
             return Ok(Resources {
                 cpu,
                 memory,
                 ephemeral_storage,
-                worker_slots: 100,
-                nvidia_gpu: 0,
-                amd_gpu: 0,
+                worker_slots,
+                nvidia_gpu,
+                amd_gpu,
+                burstable,
             });
         }
     }
@@ -113,6 +121,7 @@ impl Nodes {
     pub async fn resources_available(
         &self,
         node: Node,
+        config: &BurstableNodeResources,
     ) -> Result<Option<NodeAllocatableUpdate>, Error> {
         // get this nodes name
         let name = match node.metadata.name.clone() {
@@ -130,7 +139,7 @@ impl Nodes {
             }
         }
         // get the total available resources for this node
-        let total = get_resources(&node)?;
+        let total = get_resources(&node, config)?;
         event!(
             Level::INFO,
             node = &name,
@@ -161,21 +170,60 @@ impl Nodes {
                 // decrease this nodes pod slot number by 1 to account for this pod
                 available.worker_slots = available.worker_slots.saturating_sub(1);
                 // crawl over the resource requests for containers in this pod
-                for requests in spec
+                for (requests, limits) in spec
                     .containers
                     .into_iter()
                     .filter_map(|cont| cont.resources)
-                    .filter_map(|res| res.requests)
+                    .map(|res| (res.requests, res.limits))
                 {
-                    // subtract this containers resources from our resource count
-                    subtract!(available.cpu, helpers::cpu, requests, "cpu");
-                    subtract!(available.memory, helpers::storage, requests, "memory");
-                    subtract!(
-                        available.ephemeral_storage,
-                        helpers::storage,
-                        requests,
-                        "ephemeral-storage"
-                    );
+                    // get our requested resources and consume any burstable ones
+                    match (requests, limits) {
+                        // we have both requests and limits calculate
+                        (Some(requests), Some(limits)) => {
+                            // get our requests
+                            let cpu_req = helpers::cpu(requests.get("cpu"))?;
+                            let memory_req = helpers::storage(requests.get("memory"))?;
+                            let ephemeral_storage_req =
+                                helpers::storage(requests.get("ephemeral-storage"))?;
+                            let nvidia_gpu_req =
+                                helpers::u64_quantity(requests.get("nvidia.com/gpu"))?;
+                            let amd_gpu_req = helpers::u64_quantity(requests.get("amd.com/gpu"))?;
+                            // calculate our limits
+                            let cpu_lim = helpers::cpu(limits.get("cpu"))?;
+                            let memory_lim = helpers::storage(limits.get("memory"))?;
+                            // diff our requests against our limits and consume burstable resources
+                            let cpu_burst = cpu_lim.saturating_sub(cpu_req);
+                            let memory_burst = memory_lim.saturating_sub(memory_req);
+                            // consume burstable resources
+                            subtract!(available.burstable.cpu, cpu_burst);
+                            subtract!(available.burstable.memory, memory_burst);
+                            // consume our requested resources
+                            subtract!(available.cpu, cpu_req);
+                            subtract!(available.memory, memory_req);
+                            subtract!(available.ephemeral_storage, ephemeral_storage_req);
+                            subtract!(available.nvidia_gpu, nvidia_gpu_req);
+                            subtract!(available.amd_gpu, amd_gpu_req);
+                        }
+                        // We only have requests so no burstabl resources were used
+                        (Some(requests), None) => {
+                            // get our requests
+                            let cpu_req = helpers::cpu(requests.get("cpu"))?;
+                            let memory_req = helpers::storage(requests.get("memory"))?;
+                            let ephemeral_storage_req =
+                                helpers::storage(requests.get("ephemeral-storage"))?;
+                            let nvidia_gpu_req =
+                                helpers::u64_quantity(requests.get("nvidia.com/gpu"))?;
+                            let amd_gpu_req = helpers::u64_quantity(requests.get("amd.com/gpu"))?;
+                            // consume our requested resources
+                            subtract!(available.cpu, cpu_req);
+                            subtract!(available.memory, memory_req);
+                            subtract!(available.ephemeral_storage, ephemeral_storage_req);
+                            subtract!(available.nvidia_gpu, nvidia_gpu_req);
+                            subtract!(available.amd_gpu, amd_gpu_req);
+                        }
+                        // no requests found somehow just ignore it
+                        _ => continue,
+                    }
                     // log the resources of this node after subtracting this existing pod
                     event!(
                         Level::INFO,
@@ -236,7 +284,7 @@ impl Nodes {
         // make sure out patch was succesful
         if let Some(labels) = patched.metadata.labels {
             if labels.get(label) != Some(&value.to_owned()) {
-                let msg = format!("Failed to label node {} with {}:{}", node, label, value);
+                let msg = format!("Failed to label node {node} with {label}:{value}");
                 return Err(Error::new(msg));
             }
         }

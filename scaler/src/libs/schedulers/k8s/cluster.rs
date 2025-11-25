@@ -1,6 +1,7 @@
+use thorium::conf::BurstableNodeResources;
 use thorium::models::{NodeHealth, NodeUpdate, Resources};
 use thorium::{Conf, Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use super::Nodes;
 use crate::libs::schedulers::AllocatableUpdate;
@@ -45,7 +46,11 @@ impl Cluster {
     /// * `thorium` - A client for the Thorium api
     /// * `span` - The span to log traces under
     #[instrument(name = "k8s::Cluster::resources_available", skip_all)]
-    pub async fn resources_available(&self, thorium: &Thorium) -> Result<AllocatableUpdate, Error> {
+    pub async fn resources_available(
+        &self,
+        thorium: &Thorium,
+        config: &BurstableNodeResources,
+    ) -> Result<AllocatableUpdate, Error> {
         // create an empty cluster update
         let mut update = AllocatableUpdate::default();
         // build label/field filters for listing nodes
@@ -58,7 +63,7 @@ impl Cluster {
             // get this name of this node or skip it
             if let Some(name) = node.metadata.name.clone() {
                 // get the usable resources for this node
-                match self.nodes.resources_available(node).await? {
+                match self.nodes.resources_available(node, config).await? {
                     Some(node_alloc_update) => {
                         // build our node update to send to the API
                         let node_update = NodeUpdate::new(

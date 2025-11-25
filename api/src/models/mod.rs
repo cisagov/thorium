@@ -73,16 +73,16 @@ pub use groups::{
     GroupUsersRequest, GroupUsersUpdate, Roles,
 };
 pub use images::{
-    ArgStrategy, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings,
-    ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate,
-    DependencyPassStrategy, DependencySettingsUpdate, EphemeralDependencySettings,
-    EphemeralDependencySettingsUpdate, Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind,
-    ImageBanUpdate, ImageDetailsList, ImageJobInfo, ImageLifetime, ImageList, ImageListParams,
-    ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, ImageVersion, Kvm, KvmUpdate,
-    KwargDependency, RepoDependencySettings, Resources, ResourcesRequest, ResourcesUpdate,
-    ResultDependencySettings, ResultDependencySettingsUpdate, SampleDependencySettings,
-    SecurityContext, SecurityContextUpdate, SpawnLimits, TagDependencySettings,
-    TagDependencySettingsUpdate,
+    ArgStrategy, BurstableResources, BurstableResourcesRequest, BurstableResourcesUpdate,
+    ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate,
+    Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate, DependencyPassStrategy,
+    DependencySettingsUpdate, EphemeralDependencySettings, EphemeralDependencySettingsUpdate,
+    Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList,
+    ImageJobInfo, ImageLifetime, ImageList, ImageListParams, ImageNetworkPolicyUpdate,
+    ImageRequest, ImageScaler, ImageUpdate, ImageVersion, Kvm, KvmUpdate, KwargDependency,
+    RepoDependencySettings, Resources, ResourcesRequest, ResourcesUpdate, ResultDependencySettings,
+    ResultDependencySettingsUpdate, SampleDependencySettings, SecurityContext,
+    SecurityContextUpdate, SpawnLimits, TagDependencySettings, TagDependencySettingsUpdate,
 };
 pub use jobs::{
     Checkpoint, GenericJob, GenericJobArgs, GenericJobArgsUpdate, GenericJobKwargs, GenericJobOpts,

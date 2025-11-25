@@ -501,6 +501,28 @@ impl SpawnSlots {
         self.fairshare += rhs.fairshare;
     }
 }
+
+/// The amount of burstable resources on a per node basis
+///
+/// By default this will be 0% for all resources.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, Copy)]
+pub struct BurstableNodeResources {
+    /// The percent of burstable cores to allow for on this node
+    pub cpu: f64,
+    /// The percent of burstable memory to allow for on this node
+    pub memory: f64,
+}
+
+impl Default for BurstableNodeResources {
+    /// Default our burstable resources to 0%
+    fn default() -> Self {
+        BurstableNodeResources {
+            cpu: 0.0,
+            memory: 0.0,
+        }
+    }
+}
+
 /// The settings for a single k8s cluster
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct K8sCluster {
@@ -518,6 +540,8 @@ pub struct K8sCluster {
     /// The max numbers of pods to spawn per node
     #[serde(default)]
     pub spawn_slots: SpawnSlots,
+    /// What % of burstable resources to allow nodes in this cluster
+    pub burstable: BurstableNodeResources,
     /// The tls server name to use for cert validation
     #[serde(default)]
     pub tls_server_name: Option<String>,
@@ -548,6 +572,7 @@ impl Default for K8sCluster {
             filters: NodeFilters::default(),
             groups: vec![],
             spawn_slots: SpawnSlots::default(),
+            burstable: BurstableNodeResources::default(),
             tls_server_name: None,
             api_url: None,
             host_aliases: HashMap::default(),
@@ -1241,6 +1266,25 @@ impl Scaler {
                 .get(cluster)
                 .map_or_else(SpawnSlots::default, |c| c.spawn_slots),
             ImageScaler::External | ImageScaler::Windows => SpawnSlots::default(),
+        }
+    }
+
+    /// Get the burstable node resources config for a specific cluster
+    ///
+    /// # Arguments
+    ///
+    /// * `scaler` - The scaler to get the max sway of
+    pub fn burstable(&self, scaler: ImageScaler, cluster: &str) -> BurstableNodeResources {
+        match scaler {
+            ImageScaler::K8s => self
+                .k8s
+                .clusters
+                .get(cluster)
+                .map_or_else(BurstableNodeResources::default, |c| c.burstable),
+            ImageScaler::BareMetal
+            | ImageScaler::Kvm
+            | ImageScaler::External
+            | ImageScaler::Windows => BurstableNodeResources::default(),
         }
     }
 

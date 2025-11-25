@@ -15,13 +15,13 @@ use crate::models::system::{
     BARE_METAL_CACHE_KEY, EXTERNAL_CACHE_KEY, K8S_CACHE_KEY, KVM_CACHE_KEY, WINDOWS_CACHE_KEY,
 };
 use crate::models::{
-    ChildFilters, ChildFiltersUpdate, Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate,
-    Group, GroupAllowAction, Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind,
-    ImageBanUpdate, ImageDetailsList, ImageKey, ImageList, ImageListParams,
-    ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, Kvm, KvmUpdate,
-    NetworkPolicy, OutputCollection, OutputDisplayType, PipelineBan, PipelineBanKind,
-    PipelineBanUpdate, PipelineKey, Resources, ResourcesRequest, ResourcesUpdate, SecurityContext,
-    SecurityContextUpdate, SpawnLimits, SystemSettings, User,
+    BurstableResources, BurstableResourcesUpdate, ChildFilters, ChildFiltersUpdate, Cleanup,
+    CleanupUpdate, Dependencies, DependenciesUpdate, Group, GroupAllowAction, Image, ImageArgs,
+    ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageKey, ImageList,
+    ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, Kvm,
+    KvmUpdate, NetworkPolicy, OutputCollection, OutputDisplayType, PipelineBan, PipelineBanKind,
+    PipelineBanUpdate, PipelineKey, Resources, ResourcesUpdate, SecurityContext,
+    SecurityContextUpdate, SpawnLimits, SystemSettings, User, conversions,
 };
 use crate::utils::{ApiError, Shared, bounder};
 use crate::{
@@ -40,33 +40,8 @@ impl Resources {
             worker_slots: 0,
             nvidia_gpu: 0,
             amd_gpu: 0,
+            burstable: BurstableResources::default(),
         }
-    }
-}
-
-impl TryFrom<ResourcesRequest> for Resources {
-    type Error = ApiError;
-
-    /// Try to convert a resources request to a resources object
-    fn try_from(req: ResourcesRequest) -> Result<Self, ApiError> {
-        // bound cpu
-        let cpu = bounder::image_cpu(&req.cpu)?;
-        // bound memory
-        let memory = bounder::image_storage(&req.memory)?;
-        // bound ephemeral storage
-        let ephemeral_storage = match req.ephemeral_storage {
-            Some(val) => bounder::image_storage(&val)?,
-            None => 0,
-        };
-        let resources = Resources {
-            cpu,
-            memory,
-            ephemeral_storage,
-            nvidia_gpu: req.nvidia_gpu,
-            amd_gpu: req.amd_gpu,
-            worker_slots: 1,
-        };
-        Ok(resources)
     }
 }
 
@@ -232,6 +207,24 @@ macro_rules! update_resource {
     };
 }
 
+impl BurstableResourcesUpdate {
+    /// Update an images resources
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image to update
+    pub fn update(mut self, resources: &mut Resources) -> Result<(), ApiError> {
+        // update this images resources
+        update_resource!(resources.burstable.cpu, self.cpu, conversions::cpu);
+        update_resource!(
+            resources.burstable.memory,
+            self.memory,
+            conversions::storage
+        );
+        Ok(())
+    }
+}
+
 impl ResourcesUpdate {
     /// Update an images resources
     ///
@@ -240,15 +233,17 @@ impl ResourcesUpdate {
     /// * `image` - The image to update
     pub fn update(mut self, image: &mut Image) -> Result<(), ApiError> {
         // update this images resources
-        update_resource!(image.resources.cpu, self.cpu, bounder::image_cpu);
-        update_resource!(image.resources.memory, self.memory, bounder::image_storage);
+        update_resource!(image.resources.cpu, self.cpu, conversions::cpu);
+        update_resource!(image.resources.memory, self.memory, conversions::storage);
         update_resource!(
             image.resources.ephemeral_storage,
             self.ephemeral_storage,
-            bounder::image_storage
+            conversions::storage
         );
         update!(image.resources.nvidia_gpu, self.nvidia_gpu);
         update!(image.resources.amd_gpu, self.amd_gpu);
+        // update our burstable resources
+        self.burstable.update(&mut image.resources)?;
         Ok(())
     }
 }
@@ -593,7 +588,7 @@ impl ImageNetworkPolicyUpdate {
             ));
         }
         // check that all of the added network policies actually exist
-        let image_group_slice = &[image.group.clone()];
+        let image_group_slice = std::slice::from_ref(&image.group);
         let missing_policies =
             NetworkPolicy::exists_all(self.policies_added.iter(), image_group_slice, shared)
                 .await?;

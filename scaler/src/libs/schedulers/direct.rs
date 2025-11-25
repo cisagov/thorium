@@ -3,6 +3,7 @@
 use chrono::prelude::*;
 use hashbrown::HashMap;
 use std::collections::{BTreeMap, HashSet};
+use thorium::conf::BurstableNodeResources;
 use thorium::models::{
     ImageScaler, Node, NodeListParams, SystemSettings, WorkerStatus, WorkerUpdate,
 };
@@ -211,11 +212,13 @@ impl Scheduler for Direct {
     /// * `thorium` - A client for the Thorium api
     /// * `settings` - The current Thorium system settings
     /// * `span` - The span to log traces under
+    /// * `config` - The burstable resources config to use for this cluster
     #[instrument(name = "Scheduler<Direct>::resources_available", skip_all, fields(cluster = &self.cluster), err(Debug))]
     async fn resources_available(
         &mut self,
         thorium: &Thorium,
         _settings: &SystemSettings,
+        _config: &BurstableNodeResources,
     ) -> Result<AllocatableUpdate, Error> {
         // build the node list params for this cluster
         let params = NodeListParams::default()

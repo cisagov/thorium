@@ -4,6 +4,7 @@
 use chrono::prelude::*;
 use hashbrown::HashMap;
 use std::collections::{BTreeMap, HashSet};
+use thorium::conf::BurstableNodeResources;
 use thorium::models::{ImageScaler, SystemSettings};
 use thorium::{Conf, Error, Thorium};
 
@@ -55,6 +56,7 @@ pub trait Scheduler {
         &mut self,
         thorium: &Thorium,
         settings: &SystemSettings,
+        config: &BurstableNodeResources,
     ) -> Result<AllocatableUpdate, Error>;
 
     /// Schedulers need to be able to setup their environment before scheduling jobs

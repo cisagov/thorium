@@ -301,7 +301,7 @@ impl TreeSupport for TreeTags {
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
-        // build the opts to get everything tagged with this parent hash
+        // build the opts to get everything in the same groups this tag node is in
         let mut opts = crate::models::FileListOpts::default().groups(tree.groups.clone());
         // add this tag nodes filters to this listing opt
         // step over the keys and their values in this tag node

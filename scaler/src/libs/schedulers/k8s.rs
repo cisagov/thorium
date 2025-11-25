@@ -13,6 +13,7 @@ use k8s_openapi::api::networking::v1::NetworkPolicy;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
+use thorium::conf::BurstableNodeResources;
 use thorium::models::{ImageScaler, ScrubbedUser, SystemSettings, UserRole, WorkerDeleteMap};
 use thorium::{Conf, Error, Thorium};
 use tracing::{Level, event, instrument};
@@ -868,13 +869,15 @@ impl Scheduler for K8s {
     /// * `thorium` - A client for the Thorium api
     /// * `resources` - The resources to update
     /// * `settings` - The current Thorium system settings
+    /// * `config` - The burstable resources config to use for this cluster
     #[instrument(name = "Scheduler<K8s>::resources_available", skip_all, fields(cluster = &self.name), err(Debug))]
     async fn resources_available(
         &mut self,
         thorium: &Thorium,
         _settings: &SystemSettings,
+        config: &BurstableNodeResources,
     ) -> Result<AllocatableUpdate, Error> {
-        self.cluster.resources_available(thorium).await
+        self.cluster.resources_available(thorium, config).await
     }
 
     /// Setup the K8's cluster before scheduling any jobs, ensuring the

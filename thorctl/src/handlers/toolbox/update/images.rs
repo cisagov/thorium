@@ -2,8 +2,8 @@
 
 use thorium::Error;
 use thorium::models::{
-    Image, ImageBanUpdate, ImageRequest, ImageUpdate, Resources, ResourcesRequest, ResourcesUpdate,
-    SecurityContext, SecurityContextUpdate, conversions,
+    BurstableResourcesUpdate, Image, ImageBanUpdate, ImageRequest, ImageUpdate, Resources,
+    ResourcesRequest, ResourcesUpdate, SecurityContext, SecurityContextUpdate, conversions,
 };
 
 use crate::utils::diff;
@@ -61,27 +61,23 @@ fn calculate_resource_update(
     old: Resources,
     new: ResourcesRequest,
 ) -> Result<Option<ResourcesUpdate>, Error> {
-    // convert the resource request to a Resources struct and back to
-    // ensure units are the same
-    let new_cast = Resources {
-        cpu: conversions::cpu(&new.cpu).map_err(|err| Error::new(format!("Invalid CPU: {err}")))?,
-        memory: conversions::storage(&new.memory)
-            .map_err(|err| Error::new(format!("Invalid memory: {}", err.msg)))?,
-        ephemeral_storage: new
-            .ephemeral_storage
-            .as_ref()
-            .map(conversions::storage)
-            .transpose()
-            .map_err(|err| Error::new(format!("Invalid storage: {}", err.msg)))?
-            // set to 0 if it's None, following API behavior
-            .unwrap_or_default(),
-        // unused for request/update purposes, but put 0 as a placeholder
-        worker_slots: 0,
-        nvidia_gpu: new.nvidia_gpu,
-        amd_gpu: new.amd_gpu,
-    };
+    // convert our resources request to a resoruces object
+    let new_cast = Resources::try_from(new.clone())?;
+    // if our resources are identical then no update is needed
     if old == new_cast {
         return Ok(None);
+    }
+    // start with an empty burstable resources struct
+    let mut burstable = BurstableResourcesUpdate::default();
+    // if cpu is different then set that
+    if new_cast.burstable.cpu != old.burstable.cpu {
+        // our burstable cpu is different so add that to our update
+        burstable.cpu = Some(new.burstable.cpu);
+    }
+    // if memory is different then set that
+    if new_cast.burstable.memory != old.burstable.memory {
+        // our burstable memory is different so add that to our update
+        burstable.memory = Some(new.burstable.memory);
     }
     let new: ResourcesRequest = new_cast.into();
     // convert resources to a request for comparison
@@ -92,6 +88,7 @@ fn calculate_resource_update(
         ephemeral_storage: set_modified_opt!(old.ephemeral_storage, new.ephemeral_storage),
         nvidia_gpu: set_modified!(old.nvidia_gpu, new.nvidia_gpu),
         amd_gpu: set_modified!(old.amd_gpu, new.amd_gpu),
+        burstable,
     }))
 }
 

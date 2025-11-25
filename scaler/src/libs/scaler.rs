@@ -66,12 +66,14 @@ macro_rules! add_task {
 
 /// update the resources for all clusters this scaler can see
 macro_rules! update_resources {
-    ($thorium:expr, $schedulers:expr, $resources:expr, $cache:expr) => {
+    ($thorium:expr, $schedulers:expr, $resources:expr, $cache:expr, $conf:expr, $scaler_type:expr) => {
         // crawl over each cluster and get its available resources
         for (name, scheduler) in $schedulers.iter_mut() {
+            // get the burstable resources config for this cluster
+            let burstable_conf = $conf.thorium.scaler.burstable($scaler_type, name);
             // get the available resources for this cluster
             let update = scheduler
-                .resources_available(&$thorium, &$cache.settings)
+                .resources_available(&$thorium, &$cache.settings, &burstable_conf)
                 .await?;
             // update this clusters resources
             $resources.update(name, update);
@@ -437,7 +439,14 @@ impl Scaler {
                 // get the total amount of resources available in the cluster
                 Tasks::Resources => {
                     // update the resources for all clusters
-                    update_resources!(&self.thorium, self.schedulers, self.allocatable, self.cache);
+                    update_resources!(
+                        &self.thorium,
+                        self.schedulers,
+                        self.allocatable,
+                        self.cache,
+                        self.conf,
+                        self.scaler_type
+                    );
                     completed.push(Tasks::Resources);
                 }
                 // tell Thorium to update image runtimes
@@ -760,7 +769,14 @@ impl Scaler {
         // setup all clusters before we schedule jobs
         self.setup().await?;
         // get an initial count of resources in the cluster
-        update_resources!(self.thorium, self.schedulers, self.allocatable, self.cache);
+        update_resources!(
+            self.thorium,
+            self.schedulers,
+            self.allocatable,
+            self.cache,
+            self.conf,
+            self.scaler_type
+        );
         Ok(())
     }
 

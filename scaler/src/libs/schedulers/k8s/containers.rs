@@ -64,9 +64,15 @@ impl Containers {
     fn limit_conv(raw: &Resources) -> Result<BTreeMap<String, Quantity>, Error> {
         // creat btreemap of limits
         let mut btree = BTreeMap::default();
+        // if this image has burstable resources then add those
+        let cpu_burst = raw.cpu.saturating_add(raw.burstable.cpu);
+        let memory_burst = raw.memory.saturating_add(raw.burstable.memory);
         // build the resource memory map
-        btree.insert("cpu".to_owned(), quantity!(format!("{}m", raw.cpu))?);
-        btree.insert("memory".to_owned(), quantity!(format!("{}Mi", raw.memory))?);
+        btree.insert("cpu".to_owned(), quantity!(format!("{}m", cpu_burst))?);
+        btree.insert(
+            "memory".to_owned(),
+            quantity!(format!("{}Mi", memory_burst))?,
+        );
         // inject ephemeral storage if its greater then 0
         if raw.ephemeral_storage > 0 {
             btree.insert(

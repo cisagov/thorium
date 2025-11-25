@@ -47,7 +47,7 @@ macro_rules! extract {
     };
 }
 
-/// Bounds checks a cpu value and converts it to millicpu
+/// Converts a cpu quantity to millicpu
 ///
 /// # Arguments
 ///
@@ -58,87 +58,47 @@ pub fn cpu(raw: Option<&Quantity>) -> Result<u64, Error> {
         Some(raw) => raw,
         None => return Ok(0),
     };
-
     // cast quantity to string
     let raw: String = serde_json::from_value(serde_json::json!(raw))?;
-    // try to cast this directly to a f64
-    // This is because we assume that any f64 value is # of cores
-    // if parse was successful then convert to millicpu
-    if let Ok(cores) = raw.parse::<f64>() {
-        return Ok((cores * 1000.0).ceil() as u64);
-    }
-
-    // f64 parse failed check if it ends in a millicpu unit
-    if raw.ends_with('m') {
-        // try to parse as millicpu
-        let millicpu = raw[..raw.len() - 1].parse::<u64>();
-        if millicpu.is_err() {
-            return Err(Error::new(format!(
-                "Invalid cpu value: {}",
-                millicpu.unwrap()
-            )));
-        }
-        return Ok(millicpu.unwrap());
-    }
-    // error if all of the cpu handlers failed
-    Err(Error::new(format!("Failed to parse cpu value: {}", raw)))
+    // convert our raw value to millicpu
+    let converted = thorium::models::conversions::cpu(raw)?;
+    Ok(converted)
 }
 
-/// Bounds checks an image storage value and converts it to
+/// Converts a storage quantity to mebibytes
 ///
 /// # Arguments
 ///
-/// * `raw` - Raw cpu value
+/// * `raw` - Raw storage value
 pub fn storage(raw: Option<&Quantity>) -> Result<u64, Error> {
     // if raw is None then return 0
     let raw = match raw {
         Some(raw) => raw,
         None => return Ok(0),
     };
-
     // cast quantity to string
     let raw: String = serde_json::from_value(serde_json::json!(raw))?;
-    // try to cast this directly to a u64
-    // This is because we assume that any u64 value is # of bytes
-    // if parse was successful then convert to millicpu
-    if let Ok(bytes) = raw.parse::<u64>() {
-        // convert bytes to mebibytes
-        return Ok((bytes as f64 / 1.049e+6).ceil() as u64);
-    }
-
-    // u64 failed parse check lets find first occurence of a any valid char
-    let unit_regex = Regex::new(r"[KMGTPE]").unwrap();
-    // find index where unit starts
-    let reg = match unit_regex.find(&raw) {
-        Some(reg) => reg,
-        None => return Err(Error::new(format!("failed to find parse {}", raw))),
-    };
-    // split raw based on where unit was found
-    let (amt, unit) = raw.split_at(reg.start());
-    // cast amt to u64
-    let amt = amt.parse::<u64>()?;
-    // convert to mebibytes
-    let mebibytes = match unit {
-        "K" => amt / 1049,
-        "M" => (amt as f64 / 1.049).ceil() as u64,
-        "G" => amt * 954,
-        "T" => amt * 953674,
-        "P" => (amt as f64 * 9.537e+8).ceil() as u64,
-        "E" => (amt as f64 * 9.537e+11).ceil() as u64,
-        "Ki" => amt / 1024,
-        "Mi" => amt,
-        "Gi" => amt * 1024,
-        "Ti" => (amt as f64 * 1.049e+6).ceil() as u64,
-        "Pi" => (amt as f64 * 1.074e+9).ceil() as u64,
-        "Ei" => (amt as f64 * 1.1e+12).ceil() as u64,
-        _ => {
-            return Err(Error::new(format!(
-                "Failed to parse storage value: {}",
-                raw
-            )))
-        }
-    };
+    // convert our raw value to mebibytes
+    let mebibytes = thorium::models::conversions::storage(raw)?;
     Ok(mebibytes)
+}
+
+/// Converts an integer quantity to a ``u64``
+///
+/// # Arguments
+///
+/// * `raw` - Raw integer value
+pub fn u64_quantity(raw: Option<&Quantity>) -> Result<u64, Error> {
+    // if raw is None then return 0
+    let raw = match raw {
+        Some(raw) => raw,
+        None => return Ok(0),
+    };
+    // cast quantity to string
+    let raw: String = serde_json::from_value(serde_json::json!(raw))?;
+    // try to cast this quantity as a u64
+    let worker_slots = raw.parse::<u64>()?;
+    Ok(worker_slots)
 }
 
 /// Generates a random string from [a-z, 0-9]

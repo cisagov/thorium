@@ -4,9 +4,9 @@ use chrono::prelude::*;
 use std::collections::BTreeMap;
 use std::path::Path;
 use sysinfo::{Disks, System};
-use thorium::models::{NodeHealth, NodeUpdate, Resources};
+use thorium::models::{BurstableResources, NodeHealth, NodeUpdate, Resources};
 use thorium::{Error, Thorium};
-use tracing::{event, span, Level, Span};
+use tracing::{Level, Span, event, span};
 
 /// gets a timestamp N seconds from now
 #[doc(hidden)]
@@ -91,6 +91,7 @@ fn get_resources(system: &mut System, span: &Span) -> Result<Resources, Error> {
         worker_slots: 100,
         nvidia_gpu: 0,
         amd_gpu: 0,
+        burstable: BurstableResources::default(),
     };
     // reserve some resources for the host
     let reserve = Resources {
@@ -100,6 +101,7 @@ fn get_resources(system: &mut System, span: &Span) -> Result<Resources, Error> {
         worker_slots: 0,
         nvidia_gpu: 0,
         amd_gpu: 0,
+        burstable: BurstableResources::default(),
     };
     resources -= reserve;
     // log the resources that we have discovered

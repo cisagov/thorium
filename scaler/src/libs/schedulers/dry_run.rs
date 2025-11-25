@@ -3,6 +3,7 @@
 use chrono::prelude::*;
 use hashbrown::HashMap;
 use std::collections::{BTreeMap, HashSet};
+use thorium::conf::BurstableNodeResources;
 use thorium::conf::SpawnSlots;
 use thorium::models::{NodeHealth, SystemSettings};
 use thorium::{Conf, Error, Thorium};
@@ -115,11 +116,13 @@ impl Scheduler for DryRun {
     /// * `thorium` - A client for the Thorium api
     /// * `settings` - The current Thorium system settings
     /// * `span` - The span to log traces under
+    /// * `config` - The burstable resources config to use for this cluster
     #[instrument(name = "Scheduler<K8s>::resources_available", skip_all, err(Debug))]
     async fn resources_available(
         &mut self,
         _thorium: &Thorium,
         _settings: &SystemSettings,
+        _config: &BurstableNodeResources,
     ) -> Result<AllocatableUpdate, Error> {
         // start with a default cluster resource update
         let mut update = AllocatableUpdate::default();
