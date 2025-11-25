@@ -1,8 +1,8 @@
 //! Handles creating reactions
 
 use colored::Colorize;
-use futures::stream::{self, FuturesUnordered};
 use futures::StreamExt;
+use futures::stream::{self, FuturesUnordered};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -14,9 +14,9 @@ use thorium::models::{
 use thorium::{Error, Thorium};
 
 use crate::args::{
-    reactions::{CreateReactions, BUNDLE_DELIMITER},
-    repos::RepoTarget,
     SearchParameterized,
+    reactions::{BUNDLE_DELIMITER, CreateReactions},
+    repos::RepoTarget,
 };
 use crate::utils;
 

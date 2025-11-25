@@ -1144,8 +1144,14 @@ impl ClusterResources {
     ///
     /// * `name` - The name of this cluster
     pub fn new(scaler_type: ImageScaler, name: String, conf: &Conf) -> Self {
+        // get our clusters original name if we have an alias
+        let original = conf
+            .thorium
+            .scaler
+            .get_original_name(scaler_type, &name)
+            .unwrap_or(&name);
         // get this clusters max number of spawnable workers per node
-        let spawn_slots = conf.thorium.scaler.spawn_slots(scaler_type, &name);
+        let spawn_slots = conf.thorium.scaler.spawn_slots(scaler_type, original);
         // build our cluster resources object
         ClusterResources {
             name,

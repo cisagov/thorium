@@ -1177,6 +1177,47 @@ impl Default for Scaler {
 }
 
 impl Scaler {
+    /// Get a clusters original name by alias if this is not a clusters original name
+    ///
+    /// # Arguments
+    ///
+    /// * `alias` - The alias to check against
+    #[cfg(feature = "client")]
+    pub fn get_original_name<'a>(
+        &'a self,
+        scaler: ImageScaler,
+        alias: &'a String,
+    ) -> Result<&'a String, crate::client::Error> {
+        // check each scaler kind
+        let maybe_original = match scaler {
+            ImageScaler::K8s => {
+                // if this name is in our cluster map then assume it is not an alias
+                if self.k8s.clusters.contains_key(alias) {
+                    return Ok(alias);
+                }
+                // we did not find this cluster name so it must be an alias
+                // check each cluster until we find one that matches
+                self.k8s
+                    .clusters
+                    .iter()
+                    .find(|(_, cluster)| cluster.alias.as_ref() == Some(alias))
+                    .map(|(name, _)| name)
+            }
+            // these scaler types don't support aliases so just assume this is not an alias
+            ImageScaler::BareMetal
+            | ImageScaler::Kvm
+            | ImageScaler::External
+            | ImageScaler::Windows => Some(alias),
+        };
+        // if we didn't find a name then return an error
+        match maybe_original {
+            Some(original) => Ok(original),
+            None => Err(crate::client::Error::new(format!(
+                "Could not find {scaler} called {alias} by name or alias!"
+            ))),
+        }
+    }
+
     /// Get the spawn slots config for a specific cluster
     ///
     /// # Arguments

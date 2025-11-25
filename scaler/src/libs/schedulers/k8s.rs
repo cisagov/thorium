@@ -164,7 +164,7 @@ async fn from_service_account(
 
 /// A Kubernetes scheduler for Thorium
 pub struct K8s {
-    /// The name of this cluster
+    /// The name or alias if it exists of this cluster
     pub name: String,
     /// Cluster wrappers
     pub cluster: Cluster,

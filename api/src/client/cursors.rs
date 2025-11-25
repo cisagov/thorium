@@ -29,9 +29,9 @@ where
     /// The cursor we will use for the next hydration requestion
     pub cursor: u64,
     /// The amount of data to get per page of this cursor
-    pub page: u64,
+    pub page_size: u64,
     /// The total amount of data to get over the lifetime of this cursor
-    pub limit: u64,
+    pub limit: Option<u64>,
     /// The current amount of data that has been retrieved from the server
     pub retrieved: u64,
     /// Whether our cursor has been exhausted
@@ -64,9 +64,9 @@ where
             client: client.clone(),
             token: token.to_owned(),
             cursor: 0,
-            page: 50,
+            page_size: 50,
             retrieved: 0,
-            limit: 50,
+            limit: None,
             exhausted: false,
             names: Vec::default(),
             details: Vec::default(),
@@ -90,7 +90,7 @@ where
     ///
     /// * `page` - The new page value to use
     pub fn page(mut self, page: u64) -> Self {
-        self.page = page;
+        self.page_size = page;
         self
     }
 
@@ -100,7 +100,7 @@ where
     ///
     /// * `limit` - The new limit value to use
     pub fn limit(mut self, limit: u64) -> Self {
-        self.limit = limit;
+        self.limit = Some(limit);
         self
     }
 
@@ -136,7 +136,10 @@ where
     #[syncwrap::clone]
     pub async fn next(&mut self) -> Result<(), Error> {
         // make sure our page is not larger then our limit
-        let page_size = std::cmp::min(self.page, self.limit);
+        let page_size = match self.limit {
+            Some(limit) => std::cmp::min(self.page_size, limit - self.retrieved),
+            None => self.page_size,
+        };
         // retry sending our request for new data on transient errors if enabled
         let mut raw = loop {
             // build request
@@ -171,8 +174,9 @@ where
         // update the current amount of total data retrieved
         self.retrieved += (self.names.len() + self.details.len()) as u64;
         // update our cursor if we got a new cursor
-        match (raw.cursor, self.retrieved >= self.limit) {
-            (Some(cursor), false) => self.cursor = cursor,
+        //match (raw.cursor, self.retrieved >= self.limit) {
+        match (raw.cursor, self.limit) {
+            (Some(cursor), Some(limit)) if self.retrieved < limit => self.cursor = cursor,
             (_, _) => self.exhausted = true,
         }
         Ok(())
