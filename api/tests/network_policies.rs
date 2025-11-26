@@ -602,9 +602,9 @@ async fn list_details() -> Result<(), thorium::Error> {
         cursor.refill().await?;
     }
     // make sure we got all policies
-    is!(policies.len(), num_policies, "correct policy number");
+    is!(policies.len(), num_policies, "correct number of policies listed");
     vec_in_vec!(policies, policy_reqs, "listed all policies details");
-    // make sure the policies are sorted by name
+    // make sure the policies returned are sorted by name
     let mut policies_sorted = policies.clone();
     policies_sorted.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     is!(policies, policies_sorted, "policies details sorted by name");

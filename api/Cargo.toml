@@ -29,12 +29,15 @@ rkyv-support = ["rkyv", "bytecheck"]
 
 # include async client dependencies
 client = [
-  "syncwrap", "reqwest", "tokio", "tokio-util", "futures", "git2", "shellexpand", "elasticsearch",
+  "reqwest", "tokio", "tokio-util", "futures", "git2", "shellexpand", "elasticsearch",
   "tokio-tar", "http", "gix", "gix-date", "async-trait"
   ]
 
 # include sync client dependencies
-sync = []
+sync = ["thorium-derive/sync"]
+
+# include python dependencies (including the sync client)
+python = ["sync", "client", "pyo3", "thorium-derive/python"]
 
 # include the k8s errors
 k8s = ["kube", "k8s-openapi"]
@@ -60,7 +63,7 @@ dialoguer-err = ["dialoguer"]
 # include tracing support
 trace = ["tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-jaeger", "opentelemetry-otlp", "opentelemetry-semantic-conventions", "tracing", "tracing-subscriber", "tracing-core", "valuable"]
 
-# include test utilities for the Thorium api
+# include features required for integration tests
 test-utilities = ["api"]
 
 # Force openssl-sys to staticly link in the openssl library. Necessary when
@@ -154,7 +157,6 @@ rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid",
 bytecheck = { version = "=0.6.11", optional = true }
 
 # client dependencies
-syncwrap = { version = "0.4", optional = true }
 reqwest = { workspace = true, optional = true }
 tokio-util = { version = "0.7", default-features = false, features = ["codec", "io", "compat"], optional = true }
 git2 = { version = "0.20", optional = true }
@@ -162,6 +164,9 @@ gix = { version = "0.72", optional = true }
 gix-date = { version = "0.10", optional = true }
 shellexpand = { version = "3", optional = true }
 tokio-tar = { version = "0.3", optional = true }
+
+# python client dependencies
+pyo3 = { version = "0.27", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono"], optional = true }
 
 # tracing dependencies
 tracing = {  workspace = true, optional = true }

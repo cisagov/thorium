@@ -1,0 +1,23 @@
+[package]
+name = "thorpy"
+# version derived from main workspace version, but replacing pre-release
+# '-' suffix with '+' for compatibility with
+# [PEP440](<https://peps.python.org/pep-0440/#adding-local-version-identifiers)
+version = "1.106.0+0.22.0"
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+name = "thorium"
+# "cdylib" is necessary to produce a shared library for Python to import from.
+crate-type = ["cdylib"]
+
+[features]
+# Force openssl-sys to staticly link in the openssl library. Necessary when
+# cross compiling to x86_64-unknown-linux-musl.
+vendored-openssl = ["openssl/vendored"]
+
+[dependencies]
+thorium-api = { workspace = true, default-features = false, features = ["python"]}
+pyo3 = { version = "0.27", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono"] }
+openssl = { workspace = true }

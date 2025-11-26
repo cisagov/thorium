@@ -1359,3 +1359,44 @@ async fn list_tag_key_with_number() -> Result<(), thorium::Error> {
     let _files = client.files.list(&opts).await?;
     Ok(())
 }
+
+// Sync tests
+#[cfg(all(feature = "sync", not(feature = "python")))]
+use thorium::client::ResultsClientBlocking;
+
+#[cfg(all(feature = "sync", not(feature = "python")))]
+#[test]
+fn get_result_blocking() -> Result<(), thorium::Error> {
+    // get admin client
+    let client = test_utilities::admin_client_blocking()?;
+    // Create a group
+    let group = generators::groups_blocking(1, &client)?.remove(0).name;
+    // build a sample request
+    let file_req = SampleRequest::new_buffer(Buffer::new("GetResult"), vec![group])
+        .description("test file")
+        .tag("test", "file")
+        .origin(OriginRequest::downloaded(
+            "https://google.com",
+            Some("google".to_string()),
+        ));
+    // upload this file
+    let hashes = client.files.create(file_req)?;
+    // create some results for this file
+    let output_req = OutputRequest::new(
+        hashes.sha256.clone(),
+        "TestTool",
+        "I am a test result",
+        OutputDisplayType::String,
+    )
+    .tool_version(ImageVersion::SemVer(
+        semver::Version::parse("1.2.0").unwrap(),
+    ));
+    // send this result to the API
+    client.files.create_result(output_req.clone())?;
+    // get this result and make sure it matches
+    let params = ResultGetParams::default();
+    let output = client.files.get_results(&hashes.sha256, &params)?;
+    // make sure our output requests matches
+    is!(output, output_req);
+    Ok(())
+}

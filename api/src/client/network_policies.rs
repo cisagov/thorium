@@ -12,7 +12,12 @@ use crate::{add_query, add_query_list, send, send_build};
 #[cfg(feature = "trace")]
 use tracing::instrument;
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 /// A handler for the network policies routes in Thorium
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct NetworkPolicies {
     /// The host/url that Thorium can be reached at
@@ -23,6 +28,27 @@ pub struct NetworkPolicies {
     client: reqwest::Client,
 }
 
+/// Create a new list cursor; helpful because the list and `list_details` routes
+/// will likely always be identical except for their URL's
+macro_rules! list_cursor {
+    ($token:expr, $client:expr, $url:expr, $opts:expr) => {
+        async {
+            // get the correct page size if our limit is smaller then our page_size
+            let page_size = $opts.limit.map_or_else(
+                || $opts.page_size,
+                |limit| std::cmp::min($opts.page_size, limit),
+            );
+            // build our query params
+            let mut query = vec![("limit", page_size.to_string())];
+            add_query_list!(query, "groups[]", &$opts.groups);
+            add_query!(query, "cursor", &$opts.cursor);
+            // get the data for this request and create our cursor
+            Cursor::new($url, $opts.page_size, $opts.limit, $token, &query, $client).await
+        }
+    };
+}
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl NetworkPolicies {
     /// Creates a new network policies handler
     ///
@@ -52,73 +78,7 @@ impl NetworkPolicies {
             client: client.clone(),
         }
     }
-}
 
-// only include blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        #[derive(Clone)]
-        pub struct NetworkPoliciesBlocking {
-            host: String,
-            /// token to use for auth
-            token: String,
-            client: reqwest::Client,
-        }
-
-        impl NetworkPoliciesBlocking {
-            /// creates a new blocking network policies handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::NetworkPoliciesBlocking;
-            ///
-            /// let pipelines = NetworkPoliciesBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build network policies route handler
-                NetworkPoliciesBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-/// Create a new list cursor; helpful because the list and `list_details` routes
-/// will likely always be identical except for their URL's
-macro_rules! list_cursor {
-    ($token:expr, $client:expr, $url:expr, $opts:expr) => {
-        async {
-            // get the correct page size if our limit is smaller then our page_size
-            let page_size = $opts.limit.map_or_else(
-                || $opts.page_size,
-                |limit| std::cmp::min($opts.page_size, limit),
-            );
-            // build our query params
-            let mut query = vec![("limit", page_size.to_string())];
-            add_query_list!(query, "groups[]", &$opts.groups);
-            add_query!(query, "cursor", &$opts.cursor);
-            // get the data for this request and create our cursor
-            Cursor::new($url, $opts.page_size, $opts.limit, $token, &query, $client).await
-        }
-    };
-}
-
-#[syncwrap::clone_impl]
-impl NetworkPolicies {
     /// Creates a [`NetworkPolicy`] in Thorium
     ///
     /// # Arguments

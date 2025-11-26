@@ -9,6 +9,9 @@ use uuid::Uuid;
 use super::{ImageScaler, Reaction, RepoDependency, SystemComponents};
 use crate::{matches_adds, matches_opt, matches_removes, matches_removes_map, same};
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 /// A list of job ids with a cursor
 #[derive(Serialize, Debug)]
 pub struct JobList {
@@ -142,6 +145,7 @@ impl JobResets {
 
 /// The different possible statuses for a reaction
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "python", pyclass)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum JobStatus {
@@ -171,6 +175,7 @@ impl fmt::Display for JobStatus {
 
 /// The different possible statuses for a Job handle command
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "python", pyclass)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum JobHandleStatus {
     /// The current job completed but the reaction is still waiting for other jobs to complete
@@ -189,6 +194,7 @@ pub enum JobHandleStatus {
 
 /// response for handling Job command
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "python", pyclass)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct HandleJobResponse {
     /// status of executed command
@@ -259,6 +265,7 @@ fn default_false() -> bool {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct GenericJobOpts {
     /// Whether to always override all positional args in the original image
     #[serde(default = "default_false")]
@@ -328,6 +335,7 @@ impl GenericJobOpts {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct GenericJobArgs {
     /// The positional arguments to overlay onto the original cmd
     #[serde(default)]
@@ -611,6 +619,7 @@ impl GenericJobArgsUpdate {
 /// have a way to allow users to tell Thorium how to bounds check jobs. That
 /// will likely be its own type.
 #[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "python", pyclass)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct GenericJob {
     /// The reaction this job is apart of

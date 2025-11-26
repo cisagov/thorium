@@ -7,8 +7,8 @@ use crate::{
     add_query_bool, add_query_list,
     client::Error,
     models::{
-        backends::OutputSupport, Attachment, KeySupport, OutputMap, OutputRequest, OutputResponse,
-        ResultGetParams,
+        Attachment, KeySupport, OutputMap, OutputRequest, OutputResponse, ResultGetParams,
+        backends::OutputSupport,
     },
     send_build, send_bytes,
 };
@@ -121,6 +121,7 @@ pub trait ResultsClientHelper: GenericClient {
 /// given Thorium data type
 ///
 /// A client can implement these functions to provide specific docs for its implementation
+#[cfg_attr(feature = "sync", thorium_derive::blocking_trait)]
 #[allow(async_fn_in_trait)]
 pub trait ResultsClient {
     /// The underlying type that has the results/outputs (see [`OutputSupport`])

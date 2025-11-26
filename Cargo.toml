@@ -12,6 +12,22 @@ members = [
   "search-streamer",
   "operator",
   "thorium-derive",
+  "cart-rs",
+  "python/thorpy",
+  "python/thorpy-stubs"
+]
+
+default-members = [
+  "api",
+  "scaler",
+  "agent",
+  "thorctl",
+  "reactor",
+  "event-handler",
+  "thoradm",
+  "search-streamer",
+  "operator",
+  "thorium-derive",
   "cart-rs"
 ]
 

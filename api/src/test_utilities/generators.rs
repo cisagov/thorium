@@ -1134,3 +1134,54 @@ pub async fn network_policies(
     // return the created requests
     Ok(reqs)
 }
+
+// Generators for sync tests
+
+#[cfg(all(feature = "sync", not(feature = "python")))]
+use crate::ThoriumBlocking;
+
+/// Create a number of random groups in Thorium
+///
+/// # Arguments
+///
+/// * `cnt` - The number of groups to create
+/// * `client` - The client to use when creating these images
+#[cfg(all(feature = "sync", not(feature = "python")))]
+#[allow(dead_code)]
+pub fn groups_blocking(cnt: usize, client: &ThoriumBlocking) -> Result<Vec<GroupRequest>, Error> {
+    // create a 20 random groups
+    let groups: Vec<GroupRequest> = (0..cnt).map(|_| gen_group()).collect();
+    // create groups
+    for group in &groups {
+        client.groups.create(group)?;
+    }
+    Ok(groups)
+}
+
+/// Setup a number of random images in a group
+///
+/// # Arguments
+///
+/// * `group` - The group these images should be in
+/// * `cnt` - The number of images to create
+/// * `client` - The client to use when creating these images
+#[cfg(all(feature = "sync", not(feature = "python")))]
+#[allow(dead_code)]
+pub fn images_blocking(
+    group: &str,
+    cnt: usize,
+    external: bool,
+    client: &ThoriumBlocking,
+) -> Result<Vec<ImageRequest>, Error> {
+    // create a 20 random images then
+    let images: Vec<ImageRequest> = if external {
+        (0..cnt).map(|_| gen_ext_image(group)).collect()
+    } else {
+        (0..cnt).map(|_| gen_image(group)).collect()
+    };
+    // create images
+    for image in &images {
+        client.images.create(image)?;
+    }
+    Ok(images)
+}

@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 use super::Keys;
 use crate::Error;
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 /// The settings to use when cloning repos
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GitSettings {
@@ -25,12 +28,13 @@ impl GitSettings {
 }
 
 /// Help serde default our timeout to 600 seconds
-fn default_client_timeout() -> u64 {
+pub fn default_client_timeout() -> u64 {
     600
 }
 
 /// The config options for our [`reqwest::Client`]
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct ClientSettings {
     /// Ignore invalid certificates
     #[serde(default)]

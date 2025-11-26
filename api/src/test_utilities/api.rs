@@ -8,7 +8,7 @@ use aws_types::region::Region;
 use bb8_redis::{RedisConnectionManager, bb8::Pool};
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
-use std::{any::Any, sync::LazyLock, time::Duration};
+use std::{sync::LazyLock, time::Duration};
 use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 
@@ -351,4 +351,23 @@ pub async fn admin_client() -> Result<Thorium, Error> {
         .token(token.clone())
         .build()
         .await
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sync")] {
+        use crate::ThoriumBlocking;
+        use crate::RUNTIME;
+    }
+}
+
+#[cfg(all(feature = "sync", not(feature = "python")))]
+/// Get a blocking admin client, bootstrapping the API if needed
+pub fn admin_client_blocking() -> Result<ThoriumBlocking, Error> {
+    // start the API if it hasn't been started already and get a token
+    let token =
+        RUNTIME.block_on(async { ADMIN_TOKEN.get_or_try_init(bootstrap_test_api).await })?;
+    // build our admin client
+    ThoriumBlocking::build(ADDR.clone())
+        .token(token.clone())
+        .build_blocking()
 }

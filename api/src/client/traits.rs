@@ -9,6 +9,9 @@ pub(super) use notifications::NotificationsClient;
 pub use results::ResultsClient;
 pub(super) use results::ResultsClientHelper;
 
+#[cfg(feature = "sync")]
+pub use results::ResultsClientBlocking;
+
 /// A helper trait that returns the necessary information to send/receive for a
 /// particular client
 pub(super) trait GenericClient {

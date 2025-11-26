@@ -10,7 +10,16 @@ use crate::models::{
 };
 use crate::{send, send_build, send_bytes};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+// import python bindings
+#[cfg(feature = "python")]
+use pyo3::{pyclass, pymethods};
+
 /// An async Reactions handler for the Thorium client
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct(python))]
 #[derive(Clone)]
 pub struct Reactions {
     host: String,
@@ -19,6 +28,7 @@ pub struct Reactions {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Reactions {
     /// Creates a new reactions handler
     ///
@@ -50,51 +60,8 @@ impl Reactions {
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// A blocking Reactions handler for the Thorium client
-        #[derive(Clone)]
-        pub struct ReactionsBlocking {
-            host: String,
-            /// token to use for auth
-            token: String,
-            client: reqwest::Client,
-        }
-
-        impl ReactionsBlocking {
-            /// creates a new blocking reactions handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::ReactionsBlocking;
-            ///
-            /// let reactions = ReactionsBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                ReactionsBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
+// functions that natively support python
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct(python))]
 impl Reactions {
     /// Creates a [`Reaction`] in Thorium
     ///
@@ -147,6 +114,55 @@ impl Reactions {
         send_build!(self.client, req, ReactionCreation)
     }
 
+    /// Gets details about a [`Reaction`]
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group this reaction is in
+    /// * `id` - The id of the reaction to get details about
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // have an id for a reaction you want to retrieve
+    /// let id = Uuid::parse_str("d86ce41a-4a5b-43b5-aef9-bf90ff5d09ba")?;
+    /// // get details on this reaction
+    /// let reaction = thorium.reactions.get("Corn", id).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::get", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
+    pub async fn get(&self, group: &str, id: Uuid) -> Result<Reaction, Error> {
+        // build url
+        let url = format!(
+            "{host}/api/reactions/{group}/{id}",
+            host = &self.host,
+            group = group,
+            id = id
+        );
+        // build request
+        let req = self.client.get(&url).header("authorization", &self.token);
+        // send request and build a reaction
+        send_build!(self.client, req, Reaction)
+    }
+}
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
+impl Reactions {
     /// Create [`Reaction`]s in bulk
     ///
     /// # Arguments
@@ -270,52 +286,6 @@ impl Reactions {
             .json(&reqs);
         // send request and build a vector of reaction creations
         send_build!(self.client, req, HashMap<String, BulkReactionResponse>)
-    }
-
-    /// Gets details about a [`Reaction`]
-    ///
-    /// # Arguments
-    ///
-    /// * `group` - The group this reaction is in
-    /// * `id` - The id of the reaction to get details about
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::Thorium;
-    /// use uuid::Uuid;
-    /// # use thorium::Error;
-    ///
-    /// # async fn exec() -> Result<(), Error> {
-    /// // create Thorium client
-    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // have an id for a reaction you want to retrieve
-    /// let id = Uuid::parse_str("d86ce41a-4a5b-43b5-aef9-bf90ff5d09ba")?;
-    /// // get details on this reaction
-    /// let reaction = thorium.reactions.get("Corn", &id).await?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
-    /// ```
-    #[cfg_attr(
-        feature = "trace",
-        tracing::instrument(name = "Thorium::Reactions::get", skip(self), fields(id = id.to_string()), err(Debug))
-    )]
-    pub async fn get(&self, group: &str, id: &Uuid) -> Result<Reaction, Error> {
-        // build url
-        let url = format!(
-            "{host}/api/reactions/{group}/{id}",
-            host = &self.host,
-            group = group,
-            id = id
-        );
-        // build request
-        let req = self.client.get(&url).header("authorization", &self.token);
-        // send request and build a reaction
-        send_build!(self.client, req, Reaction)
     }
 
     /// Sends logs for a specific stage in a [`Reaction`] to Thorium
@@ -987,5 +957,27 @@ impl Reactions {
         let req = self.client.get(&url).header("authorization", &self.token);
         // send request
         send_bytes!(self.client, req)
+    }
+}
+
+// wrapper functions for python client
+#[cfg(feature = "python")]
+#[pymethods]
+impl ReactionsBlocking {
+    /// Create [`Reaction`]s in bulk
+    ///
+    /// # Arguments
+    ///
+    /// * `reqs` - The reaction requests to create reactions in bulk
+    #[allow(clippy::needless_pass_by_value)]
+    #[pyo3(
+        name = "create_bulk",
+        signature = (reqs: "list[ReactionRequest]") -> "BulkReactionResponse"
+    )]
+    pub fn create_bulk_py(
+        &self,
+        reqs: Vec<ReactionRequest>,
+    ) -> Result<BulkReactionResponse, Error> {
+        self.create_bulk(&reqs)
     }
 }

@@ -10,6 +10,10 @@ use uuid::Uuid;
 #[cfg(feature = "tokio-models")]
 use tokio::{fs::File, io::AsyncReadExt};
 
+// import python bindings if needed
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 use super::{
     GenericJobArgs, GenericJobArgsUpdate, JobHandleStatus, RepoDependency, RepoDependencyRequest,
 };
@@ -153,6 +157,7 @@ pub struct ReactionIdResponse {
 /// The response from creating reactions in bulk
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct BulkReactionResponse {
     /// Any errors that occured while creating reactions
     pub errors: HashMap<usize, String>,
@@ -189,6 +194,7 @@ pub type ReactionArgs = HashMap<String, GenericJobArgs>;
 /// A request to create a new reaction
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct ReactionRequest {
     /// The group the reaction is in
     pub group: String,
@@ -786,6 +792,7 @@ pub struct StageLogs {
     strum::Display,
 )]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum ReactionStatus {
     /// This reaction is created, but is not yet running
     #[strum(serialize = "Created")]
@@ -824,6 +831,7 @@ impl From<JobHandleStatus> for ReactionStatus {
 /// This is used to track jobs across a single run of a pipeline
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct Reaction {
     /// The uuidv4 that identifies this reaction
     pub id: Uuid,
@@ -896,6 +904,7 @@ impl PartialEq<ReactionRequest> for Reaction {
 
 /// The response given when creating a reaction
 #[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct ReactionCreation {
     /// The uuidv4 of the created reaction
     pub id: Uuid,

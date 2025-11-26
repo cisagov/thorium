@@ -5,25 +5,25 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use thorium::{
+    Thorium,
     client::{LogsCursor, ResultsClient},
     models::{Output, Pipeline, ReactionRequest, ReactionStatus, ResultGetParams},
-    Thorium,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tokio::{io::AsyncWriteExt, sync::mpsc};
 use uuid::Uuid;
 
 use super::update;
+use crate::Error;
 use crate::args::repos::RepoTarget;
 use crate::args::run::Run;
 use crate::args::{Args, Mode};
 use crate::utils;
-use crate::Error;
 
 /// The rate in seconds to poll the Thorium api for status updates
 const REFRESH_RATE: Duration = Duration::from_secs(1);
@@ -45,7 +45,7 @@ async fn watch_reaction_complete(
 ) -> Result<(), Error> {
     // Wait until the reaction is complete
     while !matches!(
-        thorium.reactions.get(&group, &id).await?.status,
+        thorium.reactions.get(&group, id).await?.status,
         ReactionStatus::Completed | ReactionStatus::Failed
     ) {
         sleep(REFRESH_RATE).await;

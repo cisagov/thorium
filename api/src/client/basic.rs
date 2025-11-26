@@ -1,12 +1,22 @@
 use super::Error;
 use crate::send;
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+// import python bindings
+#[cfg(feature = "python")]
+use pyo3::{pyclass, pymethods};
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct(python))]
 #[derive(Clone)]
 pub struct Basic {
     host: String,
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Basic {
     /// Creates a new async handler for basic routes in Thorium
     ///
@@ -24,52 +34,16 @@ impl Basic {
     /// let basic = Basic::new("http://127.0.0.1", &client);
     /// ```
     #[must_use]
-    pub fn new(host: &str, client: &reqwest::Client) -> Self {
+    pub fn new<T: Into<String>>(host: T, client: &reqwest::Client) -> Self {
         // build basic route handler
         Basic {
-            host: host.to_owned(),
+            host: host.into(),
             client: client.clone(),
         }
     }
 }
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        #[derive(Clone)]
-        pub struct BasicBlocking {
-            host: String,
-            client: reqwest::Client,
-        }
-
-
-        impl BasicBlocking {
-            /// Creates a new handler for basic routes in Thorium
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The host/url the Thorium api can be reached at
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::BasicBlocking;
-            ///
-            /// let basic = BasicBlocking::new("http://127.0.0.1");
-            /// ```
-            pub fn new<T: Into<String>>(host: T, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                BasicBlocking {
-                    host: host.into(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct(python))]
 impl Basic {
     /// Have the API identify itself with a static string
     ///

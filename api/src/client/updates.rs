@@ -10,7 +10,12 @@ use super::Error;
 use crate::models::{Arch, Component, Os, Version};
 use crate::send_build;
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 /// A handler for updates in Thorium
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Updates {
     /// The host/url that Thorium can be reached at
@@ -21,6 +26,7 @@ pub struct Updates {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Updates {
     /// Creates a new updates handler
     ///
@@ -50,9 +56,7 @@ impl Updates {
             client: client.clone(),
         }
     }
-}
 
-impl Updates {
     /// Get the current versions for Thorium
     ///
     /// # Examples
@@ -178,7 +182,7 @@ impl Updates {
                 return Err(Error::new(format!(
                     "Failed to get current exe path: {:#?}",
                     error
-                )))
+                )));
             }
         };
         // get the current os, arch, and component
@@ -268,7 +272,7 @@ impl Updates {
                 return Err(Error::new(format!(
                     "Failed to get exe name from {:#?}",
                     path.as_ref()
-                )))
+                )));
             }
         };
         // build a path to temp hidden update file

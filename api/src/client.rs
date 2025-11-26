@@ -55,7 +55,7 @@ pub use trees::Trees;
 pub use updates::Updates;
 pub use users::Users;
 
-// if the blocking client is enabled then also expose those
+// if the blocking client is enabled then expose blocking subclients
 cfg_if::cfg_if! {
     if #[cfg(feature = "sync")] {
         pub use basic::BasicBlocking;
@@ -71,9 +71,31 @@ cfg_if::cfg_if! {
         pub use system::SystemBlocking;
         pub use users::UsersBlocking;
         pub use events::EventsBlocking;
+        pub use network_policies::NetworkPoliciesBlocking;
         pub use trees::TreesBlocking;
+        pub use updates::UpdatesBlocking;
+
+        // expose blocking traits
+        pub use traits::ResultsClientBlocking;
+
+        // get needed imports
+        use std::sync::LazyLock;
+        use tokio::runtime::Runtime;
+
+        /// A global runtime the blocking client
+        pub static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+        });
     }
 }
+
+#[cfg(feature = "python")]
+mod python;
+#[cfg(feature = "python")]
+use pyo3::pyclass;
 
 /// Builds the Thorium client
 #[derive(Debug, Clone)]
@@ -269,81 +291,6 @@ impl ThoriumClientBuilder {
         };
         Ok(client)
     }
-
-    /// Builds a client with the configured auth settings
-    ///
-    /// This will panic if username/password or auth are not set
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::Thorium;
-    /// # use thorium::Error;
-    ///
-    /// # fn exec() -> Result<(), Error> {
-    /// let thorium = Thorium::build("http://127.0.0.1")
-    ///     .basic_auth("user", "password")
-    ///     .build_blocking()?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # exec();
-    /// ```
-    #[cfg(feature = "sync")]
-    pub fn build_blocking(self) -> Result<ThoriumBlocking, Error> {
-        // build a client
-        let client = helpers::build_blocking_reqwest_client(&self.settings).await?;
-        // get token if we have a username/password and no token
-        let (token, expires) = match self.token {
-            Some(token) => (token, None),
-            None => ThoriumBlocking::auth(&self.host, self.username, self.password, &client)?,
-        };
-        // convert our buffer into a Vec<u8> and base64 it
-        let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
-        // build token auth string
-        let auth_str = format!("token {encoded}");
-        // build a client
-        let client = helpers::build_blocking_reqwest_client(&self.settings)?;
-        // build handlers
-        let basic = BasicBlocking::new(&self.host, &client);
-        let jobs = JobsBlocking::new(&self.host, &auth_str, &client);
-        let reactions = ReactionsBlocking::new(&self.host, &auth_str, &client);
-        let pipelines = PipelinesBlocking::new(&self.host, &auth_str, &client);
-        let groups = GroupsBlocking::new(&self.host, &auth_str, &client);
-        let images = ImagesBlocking::new(&self.host, &auth_str, &client);
-        let streams = StreamsBlocking::new(&self.host, &auth_str, &client);
-        let users = UsersBlocking::new(&self.host, &auth_str, &client);
-        let system = SystemBlocking::new(&self.host, &auth_str, &client);
-        let search = SearchBlocking::new(&self.host, &auth_str, &client);
-        let files = FilesBlocking::new(&self.host, &auth_str, &client);
-        let repos = ReposBlocking::new(&self.host, &auth_str, &client);
-        let events = EventsBlocking::new(&self.host, &auth_str);
-        let network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str);
-        let trees = TreesBlocking::new(&self.host, &auth_str, &client);
-        // build Thorium client
-        let client = ThoriumBlocking {
-            basic,
-            jobs,
-            reactions,
-            pipelines,
-            groups,
-            images,
-            streams,
-            users,
-            system,
-            search,
-            files,
-            repos,
-            events,
-            network_policies,
-            trees,
-            host: self.host,
-            auth_str,
-            expires,
-            client,
-        };
-        Ok(client)
-    }
 }
 
 /// An asynchronous client for Thorium
@@ -391,51 +338,159 @@ pub struct Thorium {
     client: reqwest::Client,
 }
 
-/// An blocking client for Thorium
-#[cfg(feature = "sync")]
-#[derive(Clone)]
-pub struct ThoriumBlocking {
-    /// Handles basic routes in Thorium
-    pub basic: BasicBlocking,
-    /// Handles jobs routes in Thorium
-    pub jobs: JobsBlocking,
-    /// Handles reactions routes in Thorium
-    pub reactions: ReactionsBlocking,
-    /// Handles pipelines routes in Thorium
-    pub pipelines: PipelinesBlocking,
-    /// Handles groups routes in Thorium
-    pub groups: GroupsBlocking,
-    /// Handles images routes in Thorium
-    pub images: ImagesBlocking,
-    /// Handles streams routes in Thorium
-    pub streams: StreamsBlocking,
-    /// Handles users routes in Thorium
-    pub users: UsersBlocking,
-    /// Handles system routes in Thorium
-    pub system: SystemBlocking,
-    /// Handles search routes in Thorium
-    pub search: SearchBlocking,
-    /// Handles files routes in Thorium
-    pub files: FilesBlocking,
-    /// Handles repos routes in Thorium
-    pub repos: ReposBlocking,
-    /// Handles event routes in Thorium
-    pub events: EventsBlocking,
-    /// Handles network policies routes in Thorium
-    pub network_policies: NetworkPoliciesBlocking,
-    /// Handles tree routes in Thorium
-    pub trees: TreesBlocking,
-    /// The host/url to reach Thorium at
-    pub host: String,
-    /// The auth str to use when reverting from a masquerade
-    auth_str: String,
-    /// When our token expires if we have a token
-    pub expires: Option<DateTime<Utc>>,
-    // keep a copy of our client for faster masquerades and refreshes
-    client: reqwest::Client,
+// define the synchronous, blocking client
+cfg_if::cfg_if! {
+    // limit the blocking client to only the subclients that support python
+    // if the python feature is active
+    if #[cfg(feature = "python")] {
+        /// A synchronous client for Thorium
+        #[pyclass]
+        #[derive(Clone)]
+        pub struct ThoriumBlocking {
+            /// Handles basic routes in Thorium
+            #[pyo3(get)]
+            pub basic: BasicBlocking,
+            /// Handles jobs routes in Thorium
+            #[pyo3(get)]
+            pub jobs: JobsBlocking,
+            /// Handles reactions routes in Thorium
+            #[pyo3(get)]
+            pub reactions: ReactionsBlocking,
+            /// The host/url to reach Thorium at
+            pub host: String,
+            /// The auth str to use when reverting from a masquerade
+            _auth_str: String,
+            /// When our token expires if we have a token
+            pub expires: Option<DateTime<Utc>>,
+            // keep a copy of our client for faster masquerades and refreshes
+            _client: reqwest::Client,
+        }
+    } else if #[cfg(feature = "sync")] {
+        // otherwise provide the whole blocking client
+
+        /// A synchronous client for Thorium
+        #[derive(Clone)]
+        pub struct ThoriumBlocking {
+            /// Handles basic routes in Thorium
+            pub basic: BasicBlocking,
+            /// Handles jobs routes in Thorium
+            pub jobs: JobsBlocking,
+            /// Handles reactions routes in Thorium
+            pub reactions: ReactionsBlocking,
+            /// Handles pipelines routes in Thorium
+            pub pipelines: PipelinesBlocking,
+            /// Handles groups routes in Thorium
+            pub groups: GroupsBlocking,
+            /// Handles images routes in Thorium
+            pub images: ImagesBlocking,
+            /// Handles streams routes in Thorium
+            pub streams: StreamsBlocking,
+            /// Handles users routes in Thorium
+            pub users: UsersBlocking,
+            /// Handles system routes in Thorium
+            pub system: SystemBlocking,
+            /// Handles search routes in Thorium
+            pub search: SearchBlocking,
+            /// Handles files routes in Thorium
+            pub files: FilesBlocking,
+            /// Handles repos routes in Thorium
+            pub repos: ReposBlocking,
+            /// Handles binary update routes in Thorium
+            pub updates: UpdatesBlocking,
+            /// Handles event routes in Thorium
+            pub events: EventsBlocking,
+            /// Handles network policies routes in Thorium
+            pub network_policies: NetworkPoliciesBlocking,
+            /// Handles tree routes in Thorium
+            pub trees: TreesBlocking,
+            /// The host/url to reach Thorium at
+            pub host: String,
+            /// The auth str to use when reverting from a masquerade
+            _auth_str: String,
+            /// When our token expires if we have a token
+            pub expires: Option<DateTime<Utc>>,
+            // keep a copy of our client for faster masquerades and refreshes
+            _client: reqwest::Client,
+        }
+
+        impl ThoriumClientBuilder {
+            /// Builds a client with the configured auth settings
+            ///
+            /// This will panic if username/password or auth are not set
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use thorium::Thorium;
+            /// # use thorium::Error;
+            ///
+            /// # fn exec() -> Result<(), Error> {
+            /// let thorium = Thorium::build_blocking("http://127.0.0.1")
+            ///     .basic_auth("user", "password")
+            ///     .build_blocking()?;
+            /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+            /// # Ok(())
+            /// # }
+            /// # exec();
+            /// ```
+            pub fn build_blocking(self) -> Result<ThoriumBlocking, Error> {
+                // build a client
+                let client = helpers::build_blocking_reqwest_client(&self.settings)?;
+                // get token if we have a username/password and no token
+                let (token, expires) = match self.token {
+                    Some(token) => (token, None),
+                    None => ThoriumBlocking::auth(&self.host, self.username, self.password, &client)?,
+                };
+                // convert our buffer into a Vec<u8> and base64 it
+                let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
+                // build token auth string
+                let auth_str = format!("token {encoded}");
+                // build handlers
+                let basic = BasicBlocking::new(&self.host, &client);
+                let jobs = JobsBlocking::new(&self.host, &auth_str, &client);
+                let reactions = ReactionsBlocking::new(&self.host, &auth_str, &client);
+                let pipelines = PipelinesBlocking::new(&self.host, &auth_str, &client);
+                let groups = GroupsBlocking::new(&self.host, &auth_str, &client);
+                let images = ImagesBlocking::new(&self.host, &auth_str, &client);
+                let streams = StreamsBlocking::new(&self.host, &auth_str, &client);
+                let users = UsersBlocking::new(&self.host, &auth_str, &client);
+                let system = SystemBlocking::new(&self.host, &auth_str, &client);
+                let search = SearchBlocking::new(&self.host, &auth_str, &client);
+                let files = FilesBlocking::new(&self.host, &auth_str, &client);
+                let repos = ReposBlocking::new(&self.host, &auth_str, &client);
+                let updates = UpdatesBlocking::new(&self.host, &auth_str, &client);
+                let events = EventsBlocking::new(&self.host, &auth_str, &client);
+                let network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str, &client);
+                let trees = TreesBlocking::new(&self.host, &auth_str, &client);
+                // build Thorium client
+                let client = ThoriumBlocking {
+                    basic,
+                    jobs,
+                    reactions,
+                    pipelines,
+                    groups,
+                    images,
+                    streams,
+                    users,
+                    system,
+                    search,
+                    files,
+                    repos,
+                    updates,
+                    events,
+                    network_policies,
+                    trees,
+                    host: self.host,
+                    _auth_str: auth_str,
+                    expires,
+                    _client: client,
+                };
+                Ok(client)
+            }
+        }
+    }
 }
 
-#[syncwrap::clone_impl]
 impl Thorium {
     /// Create a new Thorium client builder
     ///
@@ -737,126 +792,85 @@ impl Thorium {
 
 #[cfg(feature = "sync")]
 impl ThoriumBlocking {
-    /// Create a Thorium client from a path on disk
+    /// Create a new Thorium client builder
+    ///
+    /// This can user either username/password or token. When using a token the client will not
+    /// known when it expires.
     ///
     /// # Arguments
     ///
-    /// * `path` - The path to load auth info from
-    pub fn from_file(path: &str) -> Result<ThoriumBlocking, Error> {
-        // load auth keys
-        let keys = Keys::new(path)?;
-        // create a Thorium client builder
-        let builder = ThoriumBlocking::build(keys.api);
-        // use the correct auth method based on what is defined in the config
-        let builder = match (keys.username, keys.password, keys.token) {
-            (Some(user), Some(pass), None) => builder.basic_auth(user, pass),
-            (_, _, Some(token)) => builder.token(token),
-            (_, _, _) => return Err(Error::new("Either username/password or token must be set")),
-        };
-        // build a new Thorium client
-        builder.build_blocking()
-    }
-
-    /// Refresh this clients token
+    /// * `host` - The host/url/ip the Thorium API can be reached at
     ///
-    /// This will invalidate the client current token and create a new one causing any other
-    /// clients using this token to fail.
-    ///
-    /// # Arguments
-    ///
-    /// * `username` - The username of the user to login as
-    /// * `password` - The password to authenticate with
     /// # Examples
     ///
     /// ```
     /// use thorium::ThoriumBlocking;
     /// # use thorium::Error;
     ///
-    /// # fn exec() -> Result<(), Error> {
-    /// // get Thorium client
-    /// let mut thorium = ThoriumBlocking::build("http://127.0.0.1")
-    ///     .token("token")
-    ///     .build_blocking()?;
-    /// // refresh our token
-    /// thorium.refresh("user", "password")?;
+    /// # async fn exec() -> Result<(), Error> {
+    /// let thorium = ThoriumBlocking::build("http://127.0.0.1")
+    ///     .basic_auth("user", "password")
+    ///     .build()
+    ///     .await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
     /// # }
-    /// # exec();
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
     /// ```
-    pub fn refresh<T: Into<String>>(&mut self, username: T, password: T) -> Result<(), Error> {
-        // logout and invalidate our token
-        self.users.logout()?;
-        // authenticate and get new token
-        let (token, expiration) =
-            Self::auth(&self.host, Some(username.into()), Some(password.into()))?;
-        // update token expiration
-        self.expires = expiration;
-        // convert our buffer into a Vec<u8> and base64 it
-        let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
-        // build token auth string
-        let auth_str = format!("token {}", encoded);
-        // update handlers
-        self.basic = BasicBlocking::new(&self.host, &self.client);
-        self.jobs = JobsBlocking::new(&self.host, &auth_str, &self.client);
-        self.reactions = ReactionsBlocking::new(&self.host, &auth_str, &self.client);
-        self.pipelines = PipelinesBlocking::new(&self.host, &auth_str, &self.client);
-        self.groups = GroupsBlocking::new(&self.host, &auth_str, &self.client);
-        self.images = ImagesBlocking::new(&self.host, &auth_str, &self.client);
-        self.streams = StreamsBlocking::new(&self.host, &auth_str, &self.client);
-        self.users = UsersBlocking::new(&self.host, &auth_str, &self.client);
-        self.system = SystemBlocking::new(&self.host, &auth_str, &self.client);
-        self.files = FilesBlocking::new(&self.host, &auth_str, &self.client);
-        self.repos = ReposBlocking::new(&self.host, &auth_str, &self.client);
-        self.events = EventsBlocking::new(&self.host, &auth_str, &self.client);
-        self.network_policies = NetworkPolicies::new(&self.host, &auth_str, &self.client);
-        self.trees = TreesBlocking::new(&self.host, &auth_str, &self.client);
-        Ok(())
+    pub fn build<T: Into<String>>(host: T) -> ThoriumClientBuilder {
+        ThoriumClientBuilder {
+            host: host.into(),
+            username: None,
+            password: None,
+            token: None,
+            settings: ClientSettings::default(),
+        }
     }
 
-    /// Masquerade as a another user
+    /// Authenticate using a username/password to Thorium
     ///
     /// # Arguments
     ///
-    /// * `user` - The user to masquerade as
-    pub fn masquerade(&mut self, user: &ScrubbedUser) {
-        // convert our buffer into a Vec<u8> and base64 it
-        let encoded = base64::engine::general_purpose::STANDARD.encode(user.token.as_bytes());
-        // build token auth string
-        let auth_str = format!("token {}", encoded);
-        // update handlers
-        self.basic = BasicBlocking::new(&self.host, &self.client);
-        self.jobs = JobsBlocking::new(&self.host, &auth_str, &self.client);
-        self.reactions = ReactionsBlocking::new(&self.host, &auth_str, &self.client);
-        self.pipelines = PipelinesBlocking::new(&self.host, &auth_str, &self.client);
-        self.groups = GroupsBlocking::new(&self.host, &auth_str, &self.client);
-        self.images = ImagesBlocking::new(&self.host, &auth_str, &self.client);
-        self.streams = StreamsBlocking::new(&self.host, &auth_str, &self.client);
-        self.users = UsersBlocking::new(&self.host, &auth_str, &self.client);
-        self.system = SystemBlocking::new(&self.host, &auth_str, &self.client);
-        self.files = FilesBlocking::new(&self.host, &auth_str, &self.client);
-        self.repos = ReposBlocking::new(&self.host, &auth_str, &self.client);
-        self.events = EventsBlocking::new(&self.host, &auth_str, &self.client);
-        self.network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str, &self.client);
-        self.trees = TreesBlocking::new(&self.host, &auth_str, &self.client);
-    }
+    /// * `host` - The host/url/ip the Thorium API can be reached at
+    /// * `username` - The username of the user to login as
+    /// * `password` - The password to authenticate with
+    /// * `client` - The client to authenticate with
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::ThoriumBlocking;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
+    /// let (token, expriation) = ThoriumBlocking::auth("http://127.0.0.1",
+    ///     Some("user".into()),
+    ///     Some("pass".into()),
+    ///     &client)
+    ///     .await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    pub fn auth(
+        host: &str,
+        username: Option<String>,
+        password: Option<String>,
+        client: &reqwest::Client,
+    ) -> Result<(String, Option<DateTime<Utc>>), Error> {
+        // make sure both username and password are specified
+        if username.is_none() || password.is_none() {
+            panic!("Both username and password must be specfied if token is not");
+        }
 
-    /// Revert back to our original user from a masquerade
-    pub fn revert_masquerade(&mut self) {
-        // update handlers
-        self.basic = BasicBlocking::new(&self.host, &self.client);
-        self.jobs = JobsBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.reactions = ReactionsBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.pipelines = PipelinesBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.groups = GroupsBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.images = ImagesBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.streams = StreamsBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.users = UsersBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.system = SystemBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.files = FilesBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.repos = ReposBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.events = EventsBlocking::new(&self.host, &self.auth_str, &self.client);
-        self.network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str, &self.client);
-        self.trees = TreesBlocking::new(&self.host, &auth_str, &self.client);
+        // create auth handler and get token
+        let resp = UsersBlocking::auth_basic(host, &username.unwrap(), &password.unwrap(), client)?;
+        Ok((resp.token, Some(resp.expires)))
     }
 }

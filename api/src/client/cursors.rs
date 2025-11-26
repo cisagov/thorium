@@ -5,6 +5,9 @@ use super::Error;
 use crate::models::StageLogs;
 use crate::send_build;
 
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 #[derive(Deserialize)]
 struct RawCursorData<T> {
     /// The optional cursor returned by api
@@ -133,14 +136,14 @@ where
     /// Executes a newly created cursor returning it
     ///
     /// This just wraps next which takes a mutable reference.
-    #[syncwrap::clone]
+    #[cfg_attr(feature = "sync", thorium_derive::blocking_fn)]
     pub async fn exec(mut self) -> Result<Self, Error> {
         self.next().await?;
         Ok(self)
     }
 
     /// Get the next page of data for this cursor
-    #[syncwrap::clone]
+    #[cfg_attr(feature = "sync", thorium_derive::blocking_fn)]
     pub async fn next(&mut self) -> Result<(), Error> {
         // make sure our page is not larger then our limit
         let page_size = match self.limit {
@@ -272,14 +275,14 @@ impl LogsCursor {
     /// Executes a newly created cursor returning it
     ///
     /// This just wraps next which takes a mutable reference.
-    #[syncwrap::clone]
+    #[cfg_attr(feature = "sync", thorium_derive::blocking_fn)]
     pub async fn exec(mut self) -> Result<Self, Error> {
         self.next().await?;
         Ok(self)
     }
 
     /// Get the next page of data for this cursor
-    #[syncwrap::clone]
+    #[cfg_attr(feature = "sync", thorium_derive::blocking_fn)]
     pub async fn next(&mut self) -> Result<(), Error> {
         // build request
         let req = self

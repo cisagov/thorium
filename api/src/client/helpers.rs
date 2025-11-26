@@ -54,7 +54,7 @@ pub(super) async fn build_reqwest_client(
 ///
 /// * `settings` - The settings for building a client
 #[cfg(feature = "sync")]
-pub(super) async fn build_blocking_reqwest_client(
+pub(super) fn build_blocking_reqwest_client(
     settings: &ClientSettings,
 ) -> Result<reqwest::Client, Error> {
     // start building our client

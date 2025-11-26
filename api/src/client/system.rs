@@ -7,7 +7,12 @@ use crate::models::{
 };
 use crate::{add_query, add_query_list, send, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 /// system handler for the Thorium client
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct System {
     /// url/ip of the Thorium ip
@@ -18,6 +23,7 @@ pub struct System {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl System {
     /// Creates a new system handler
     ///
@@ -47,56 +53,7 @@ impl System {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// system handler for the Thorium client
-        #[derive(Clone)]
-        pub struct SystemBlocking {
-            /// url/ip of the Thorium ip
-            host: String,
-            /// token to use for auth
-            token: String,
-            /// reqwest client object
-            client: reqwest::Client,
-        }
-
-        impl SystemBlocking {
-            /// creates a new blocking system handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::SystemBlocking;
-            ///
-            /// let system = SystemBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build system route handler
-                SystemBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl System {
     /// Inits [`SystemInfo`] in Thorium
     ///
     /// This will overwrite the current system info if its called on a already initalized Thorium

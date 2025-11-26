@@ -583,3 +583,22 @@ impl From<rmcp::service::ServiceError> for Error {
         Error::RmcpServiceError(error)
     }
 }
+
+#[cfg(feature = "python")]
+use pyo3::PyErr;
+
+#[cfg(feature = "python")]
+impl From<Error> for PyErr {
+    fn from(thorium_error: Error) -> Self {
+        use pyo3::exceptions::PyValueError;
+        use std::fmt::Write;
+        let mut msg = format!("Error kind: {}", thorium_error.kind());
+        if let Some(code) = thorium_error.status() {
+            write!(msg, " - Code: {code}").unwrap();
+        }
+        if let Some(err_msg) = thorium_error.msg() {
+            write!(msg, " - {err_msg}").unwrap();
+        }
+        PyValueError::new_err(msg)
+    }
+}

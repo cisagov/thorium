@@ -10,6 +10,9 @@ use uuid::Uuid;
 use crate::models::CensusKeys;
 use crate::models::InvalidEnum;
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 /// Info about a single commit for a repo
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -834,6 +837,7 @@ impl CommitishListParams {
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum CommitishKinds {
     /// A commit
     Commit,

@@ -25,7 +25,7 @@ async fn create() -> Result<(), Error> {
     let react_req = generators::gen_reaction(&group, &pipe, None);
     let resp = client.reactions.create(&react_req).await?;
     // get the created reaction
-    let created = client.reactions.get(&group, &resp.id).await?;
+    let created = client.reactions.get(&group, resp.id).await?;
     // make sure our reaction request matches what was created
     is!(created, react_req);
     Ok(())
@@ -63,7 +63,7 @@ async fn create_sub_reaction() -> Result<(), Error> {
     let react_req = react_req.parent(resp.id);
     client.reactions.create(&react_req).await?;
     // make sure that our sub reaction counter incremented
-    let reaction = client.reactions.get(&group, &resp.id).await?;
+    let reaction = client.reactions.get(&group, resp.id).await?;
     is!(reaction.sub_reactions, 1);
     Ok(())
 }
@@ -408,7 +408,7 @@ async fn claim() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &id.id).await?;
+        let react = client.reactions.get(&req.group, id.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // build random stage logs
@@ -462,7 +462,7 @@ async fn expires() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &id.id).await?;
+        let react = client.reactions.get(&req.group, id.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // build random stage logs
@@ -551,7 +551,7 @@ async fn claim_generator() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &id.id).await?;
+        let react = client.reactions.get(&req.group, id.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // build random stage logs
@@ -603,7 +603,7 @@ async fn claim_generator() -> Result<(), Error> {
         )
         .await?;
     // get our reactions data
-    let react = client.reactions.get(&req.group, &id.id).await?;
+    let react = client.reactions.get(&req.group, id.id).await?;
     // make sure this job matches our reaction
     is!(&jobs, react);
     // build random stage logs
@@ -624,7 +624,7 @@ async fn claim_generator() -> Result<(), Error> {
         )
         .await?;
     // get our reactions data
-    let react = client.reactions.get(&req.group, &id.id).await?;
+    let react = client.reactions.get(&req.group, id.id).await?;
     // make sure this job matches our reaction
     is!(&jobs, react);
     // build random stage logs
@@ -690,7 +690,7 @@ async fn claim_generator_fail() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &id.id).await?;
+        let react = client.reactions.get(&req.group, id.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // build random stage logs
@@ -727,7 +727,7 @@ async fn claim_generator_fail() -> Result<(), Error> {
         )
         .await?;
     // get our reactions data
-    let react = client.reactions.get(&req.group, &id.id).await?;
+    let react = client.reactions.get(&req.group, id.id).await?;
     // make sure this job matches our reaction
     is!(&jobs, react);
     // build random stage logs
@@ -869,7 +869,7 @@ async fn claim_sub_reacts() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &resp.id).await?;
+        let react = client.reactions.get(&req.group, resp.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // create 3 random sub reactions based on a random pipeline
@@ -989,7 +989,7 @@ async fn claim_sub_reacts_fail() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &resp.id).await?;
+        let react = client.reactions.get(&req.group, resp.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // create 3 random sub reactions based on a random pipeline
@@ -1109,7 +1109,7 @@ async fn claim_sub_reacts_race() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &resp.id).await?;
+        let react = client.reactions.get(&req.group, resp.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // create 3 random sub reactions based on a random pipeline
@@ -1230,7 +1230,7 @@ async fn claim_sub_reacts_race_fail() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&req.group, &resp.id).await?;
+        let react = client.reactions.get(&req.group, resp.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // create 3 random sub reactions based on a random pipeline
@@ -1441,7 +1441,7 @@ async fn ephemeral() -> Result<(), Error> {
         .await?;
     is!(download, "I am a test file");
     // get the created reaction
-    let created = client.reactions.get(&group, &resp.id).await?;
+    let created = client.reactions.get(&group, resp.id).await?;
     // make sure our reaction request matches what was created
     is!(created, react_req);
     // complete this reaction to make sure purging epehemeral files works
@@ -1471,7 +1471,7 @@ async fn ephemeral() -> Result<(), Error> {
             )
             .await?;
         // get our reactions data
-        let react = client.reactions.get(&group, &created.id).await?;
+        let react = client.reactions.get(&group, created.id).await?;
         // make sure this job matches our reaction
         is!(&jobs, react);
         // build random stage logs
@@ -1503,7 +1503,7 @@ async fn ephemeral_fail() -> Result<(), Error> {
         generators::gen_reaction(&group, &pipe, None).buffer("test-file", "I am a test file");
     let resp = client.reactions.create(&react_req).await?;
     // get the created reaction
-    let created = client.reactions.get(&group, &resp.id).await?;
+    let created = client.reactions.get(&group, resp.id).await?;
     // make sure our reaction request matches what was created
     is!(created, react_req);
     // get the next stage so we can claim the job and then fail it
@@ -1569,7 +1569,7 @@ async fn parent_ephemeral() -> Result<(), Error> {
         .await?;
     is!(download, "I am a child test file");
     // get the created reaction
-    let created = client.reactions.get(&group, &resp.id).await?;
+    let created = client.reactions.get(&group, resp.id).await?;
     // make sure our reaction request matches what was created
     is!(created, react_req);
     // make sure our parent ephemeral file was propogated

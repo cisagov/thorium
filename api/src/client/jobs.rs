@@ -11,6 +11,15 @@ use crate::models::{
 };
 use crate::{send, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+// import python bindings
+#[cfg(feature = "python")]
+use pyo3::{pyclass, pymethods};
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct(python))]
 #[derive(Clone)]
 pub struct Jobs {
     host: String,
@@ -19,6 +28,7 @@ pub struct Jobs {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Jobs {
     /// Creates a new jobs handler
     ///
@@ -48,53 +58,7 @@ impl Jobs {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        #[derive(Clone)]
-        pub struct JobsBlocking {
-            host: String,
-            /// token to use for auth
-            token: String,
-            client: reqwest::Client,
-        }
-
-        impl JobsBlocking {
-            /// creates a new blocking jobs handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::JobsBlocking;
-            ///
-            /// let jobs = JobsBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                JobsBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Jobs {
     /// Claims [`GenericJob`]s from Thorium for a specific stage in a pipeline if any exist
     ///
     /// # Arguments
@@ -599,5 +563,45 @@ impl Jobs {
             .json(&resets);
         // send this request
         send!(self.client, req)
+    }
+}
+
+// Python wrapper functions
+#[cfg(feature = "python")]
+#[pymethods]
+impl JobsBlocking {
+    /// Tell Thorium this generator should be slept instead of completed at the next complete
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The generator job to set as sleeping
+    /// * `checkpoint` - An optional checkpoint to set
+    #[pyo3(
+        name = "sleep",
+        signature = (job_id: "UUID", checkpoint: "str") -> "HandleJobResponse"
+    )]
+    pub fn sleep_py(&self, job_id: Uuid, checkpoint: &str) -> Result<HandleJobResponse, Error> {
+        self.sleep(&job_id, checkpoint)
+    }
+
+    /// Set a new checkpoint for this job
+    ///
+    /// This is mainly used by generators but it can be used by anything that can resume execution
+    /// based on a string.
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The generator job to set as sleeping
+    /// * `checkpoint` - The new checkpoint to set
+    #[pyo3(
+        name = "checkpoint",
+        signature = (job: "GenericJob", checkpoint: "str") -> "HandleJobResponse"
+    )]
+    pub fn checkpoint_py(
+        &self,
+        job: &GenericJob,
+        checkpoint: &str,
+    ) -> Result<HandleJobResponse, Error> {
+        self.checkpoint(job, checkpoint)
     }
 }

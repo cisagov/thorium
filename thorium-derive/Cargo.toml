@@ -12,8 +12,14 @@ name = "thorium_derive"
 path = "src/lib.rs"
 proc-macro = true
 
+[features]
+
+sync = []
+
+python = ["sync"]
+
 [dependencies]
-syn = { version = "2.0.101", features = ["full"] }
-quote = "1.0.40"
-proc-macro2 = "1.0.95"
-darling = "0.20.11"
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+darling = "0.21"

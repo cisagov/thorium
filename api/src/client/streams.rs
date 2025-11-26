@@ -4,6 +4,11 @@ use super::Error;
 use crate::models::StreamDepth;
 use crate::send_build;
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Streams {
     host: String,
@@ -12,6 +17,7 @@ pub struct Streams {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Streams {
     /// Creates a new streams handler
     ///
@@ -41,53 +47,7 @@ impl Streams {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        #[derive(Clone)]
-        pub struct StreamsBlocking {
-            host: String,
-            /// token to use for auth
-            token: String,
-            client: reqwest::Client,
-        }
-
-        impl StreamsBlocking {
-            /// creates a new blocking streams handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::StreamsBlocking;
-            ///
-            /// let streams = StreamsBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                StreamsBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Streams {
     /// Gets the the number of objects between two points in a stream
     ///
     /// # Arguments

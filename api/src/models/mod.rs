@@ -207,3 +207,7 @@ cfg_if::cfg_if! {
         pub use scylla_utils::keys::{KeySupport, PipelineKey, ImageKey};
     }
 }
+
+// python mappings
+#[cfg(feature = "python")]
+mod python;

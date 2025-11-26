@@ -7,7 +7,7 @@ use thorium::models::{
     PipelineUpdate,
 };
 use thorium::test_utilities::{self, generators};
-use thorium::{contains, fail, is, is_in, unwrap_variant, vec_in_vec, Error};
+use thorium::{Error, contains, fail, is, is_in, unwrap_variant, vec_in_vec};
 use uuid::Uuid;
 
 #[tokio::test]

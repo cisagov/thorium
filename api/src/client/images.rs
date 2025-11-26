@@ -8,6 +8,10 @@ use crate::models::{
 };
 use crate::{send, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 /// A handler for the image routes in Thorium
 ///
 /// Images are used to define what each stage of a pipeline look like. Each stage
@@ -15,6 +19,7 @@ use crate::{send, send_build};
 /// from pipeline declaration allows you to reuse images across pipelines
 /// without having to redefine an image every time. This also makes updating
 /// images easier as their is less duplicate information to update.
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Images {
     /// The host/url that Thorium can be reached at
@@ -25,6 +30,7 @@ pub struct Images {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Images {
     /// Creates a new images handler
     ///
@@ -54,62 +60,7 @@ impl Images {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// A blocking handler for the image routes in Thorium
-        ///
-        /// Images are used to define what each stage of a pipeline look like. Each stage
-        /// can have multiple images or a single image. Seperating the image declarations
-        /// from pipeline declaration allows you to reuse images across pipelines
-        /// without having to redefine an image every time. This also makes updating
-        /// images easier as their is less duplicate information to update.
-        #[derive(Clone)]
-        pub struct ImagesBlocking {
-            /// The host/url that Thorium can be reached at
-            host: String,
-            /// token to use for auth
-            token: String,
-            /// A reqwest client for reqwests
-            client: reqwest::Client,
-        }
-
-        impl ImagesBlocking {
-            /// creates a new blocking images handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::ImagesBlocking;
-            ///
-            /// let images = ImagesBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                ImagesBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Images {
     /// Creates an [`Image`] in Thorium
     ///
     /// # Arguments

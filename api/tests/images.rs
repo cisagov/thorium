@@ -1099,3 +1099,26 @@ async fn delete_notification_bad() -> Result<(), Error> {
     fail!(resp, 404);
     Ok(())
 }
+
+#[cfg(all(feature = "sync", not(feature = "python")))]
+#[test]
+fn create_notification_blocking() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client_blocking()?;
+    // Create a group
+    let group = generators::groups_blocking(1, &client)?.remove(0).name;
+    // setup a random image
+    let image = generators::images_blocking(&group, 1, false, &client)?.remove(0);
+    // create an image notification
+    let req = NotificationRequest::new("Test warning message!", NotificationLevel::Warn);
+    client
+        .images
+        .create_notification(&group, &image.name, &req, &NotificationParams::default())?;
+    // make sure the image notification is there
+    let notifications = client.images.get_notifications(&group, &image.name)?;
+    is!(notifications.len(), 1);
+    is!(notifications[0], req);
+    is!(notifications[0].key.group, group);
+    is!(notifications[0].key.image, image.name);
+    Ok(())
+}

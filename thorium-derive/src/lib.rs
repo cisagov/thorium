@@ -4,6 +4,12 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::Ident;
 
+#[cfg(feature = "sync")]
+mod sync;
+
+#[cfg(feature = "python")]
+mod python;
+
 /// Add the json based serialzie impl
 fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
@@ -153,4 +159,49 @@ pub fn derive_scylla_store_as_str(stream: TokenStream) -> TokenStream {
     add_as_str_serialize(&mut output, name);
     add_as_str_deserialize(&mut output, name);
     output.into()
+}
+
+/// Creates a blocking client by wrapping the async client and calling its
+/// async methods by blocking on a static runtime.
+///
+/// When applied to a struct, this creates a the blocking client wrapper with the
+/// suffix `Blocking` added.
+///
+/// When applied to an impl block, it duplicates all of the async client's methods,
+/// and sets the body to just calling the method on the inner async client. Async
+/// methods are blocked on the static runtime.
+#[cfg(feature = "sync")]
+#[proc_macro_attribute]
+pub fn blocking_struct(args_raw: TokenStream, input: TokenStream) -> TokenStream {
+    sync::blocking_struct(args_raw, input)
+}
+
+/// Create a wrapping, synchronous version of the given trait with the
+/// suffix `Blocking` appended
+///
+/// The trait has a GAT that implements the target trait and a method that
+/// returns an instance of the GAT from `&self`. Then all methods are just
+/// called on that inner GAT. Any asynchronous methods are blocked on the
+/// static runtime to ensure the trait is synchronous.
+#[cfg(feature = "sync")]
+#[proc_macro_attribute]
+pub fn blocking_trait(meta: TokenStream, input: TokenStream) -> TokenStream {
+    sync::blocking_trait(meta, input)
+}
+
+/// Create a blocking version of the async function
+///
+/// The body of the async function is just blocked on the static runtim
+#[cfg(feature = "sync")]
+#[proc_macro_attribute]
+pub fn blocking_fn(meta: TokenStream, input: TokenStream) -> TokenStream {
+    sync::blocking_fn(meta, input)
+}
+
+/// Set the struct to be a ``PyO3`` `pyclass`, applying `get` and `set` attributes to
+/// public fields depending on the given args
+#[cfg(feature = "python")]
+#[proc_macro_attribute]
+pub fn pyclass(meta: TokenStream, input: TokenStream) -> TokenStream {
+    python::pyclass(meta, input)
 }

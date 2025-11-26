@@ -3,8 +3,13 @@
 use crate::models::{
     Event, EventCacheStatus, EventCacheStatusOpts, EventIds, EventPopOpts, EventType,
 };
-use crate::{send, send_build, Error};
+use crate::{Error, send, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Events {
     host: String,
@@ -13,6 +18,7 @@ pub struct Events {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Events {
     /// Creates a new events handler
     ///
@@ -42,53 +48,7 @@ impl Events {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        #[derive(Clone)]
-        pub struct EventsBlocking {
-            host: String,
-            /// token to use for auth
-            token: String,
-            client: reqwest::Client,
-        }
-
-        impl EventsBlocking {
-            /// creates a new blocking events handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::EventsBlocking;
-            ///
-            /// let events = EventsBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                EventsBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Events {
     /// Pop some events to handle
     ///
     /// # Arguments

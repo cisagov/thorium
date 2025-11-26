@@ -1,10 +1,15 @@
 use base64::Engine as _;
 
-use super::{helpers, ClientSettings, Error};
+use super::{ClientSettings, Error, helpers};
 use crate::models::{AuthResponse, ScrubbedUser, UserCreate, UserUpdate};
 use crate::{send, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 /// users handler for the Thorium client
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Users {
     /// url/ip of the Thorium ip
@@ -15,6 +20,7 @@ pub struct Users {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Users {
     /// Creates a new users handler
     ///
@@ -44,56 +50,7 @@ impl Users {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// users handler for the Thorium client
-        #[derive(Clone)]
-        pub struct UsersBlocking {
-            /// url/ip of the Thorium ip
-            host: String,
-            /// reqwest client object
-            client: reqwest::Client,
-            /// token to use for auth
-            token: String,
-        }
-
-        impl UsersBlocking {
-            /// creates a new blocking users handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - The url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::UsersBlocking;
-            ///
-            /// let users = UsersBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                UsersBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Users {
     /// Creates a [`User`] in Thorium
     ///
     /// When adding an admin you must pass in the secret key.

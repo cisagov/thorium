@@ -4,9 +4,14 @@ use super::{Error, SearchEvents};
 use crate::models::{Cursor, ElasticDoc, ElasticSearchOpts};
 use crate::{add_date, add_query, add_query_list};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 pub mod events;
 
 /// A handler for the search routes in Thorium
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Search {
     /// The host/url that Thorium can be reached at
@@ -19,6 +24,7 @@ pub struct Search {
     pub events: events::SearchEvents,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Search {
     /// Creates a new search handler
     ///
@@ -49,57 +55,7 @@ impl Search {
             events: SearchEvents::new(host, token, client),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// A blocking handler for the results routes in Thorium
-        #[derive(Clone)]
-        #[allow(dead_code)]
-        pub struct SearchBlocking {
-            /// The host/url that Thorium can be reached at
-            host: String,
-            /// token to use for auth
-            token: String,
-            /// A reqwest client for reqwests
-            client: reqwest::Client,
-        }
-
-        impl SearchBlocking {
-            /// Creates a new blocking search handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - url/ip of the thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::SearchBlocking;
-            ///
-            /// let results = SearchBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                SearchBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Search {
     /// Executes a full text search query in Thorium
     ///
     /// # Arguments

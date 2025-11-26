@@ -32,7 +32,10 @@ pub mod client;
 #[cfg(feature = "client")]
 pub use client::{CtlConf, Cursor, Error, Keys, SearchDate, Thorium};
 
-// if the sync client is enabled then also rexport that
+// if the sync client is enabled then also rexport that along with the
+// static tokio runtime
+#[cfg(feature = "sync")]
+pub use client::RUNTIME;
 #[cfg(feature = "sync")]
 pub use client::ThoriumBlocking;
 

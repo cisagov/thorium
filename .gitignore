@@ -14,3 +14,7 @@ built
 # allow template and test configs
 !api/thorium-template.yml
 !api/tests/thorium-testing.yml
+
+# python
+**/.venv
+python/thorpy/main.py

@@ -78,7 +78,7 @@ async fn proceed() -> Result<(), thorium::Error> {
         is!(get_stats!(stats, group, pipe_req.name, stage).sleeping, 0);
         is!(get_stats!(stats, group, pipe_req.name, stage).total, 1);
         // get our reactions data
-        let react = client.reactions.get(&req.group, &id.id).await?;
+        let react = client.reactions.get(&req.group, id.id).await?;
         // try to claim a job
         let job = client
             .jobs
@@ -143,7 +143,7 @@ async fn error() -> Result<(), thorium::Error> {
     // make sure that we were able to create a reaction and our jobs
     let id = client.reactions.create(&req).await?;
     // get our reactions data
-    let react = client.reactions.get(&req.group, &id.id).await?;
+    let react = client.reactions.get(&req.group, id.id).await?;
     // get the name of the first stage of this pipeline
     let stage = &pipe.order[0][0];
     // register our test node
@@ -259,7 +259,7 @@ async fn external_reset() -> Result<(), thorium::Error> {
     let found = deadlines.iter().any(|item| item.job_id == id.id);
     is!(found, false);
     // get our reactions data
-    let react = client.reactions.get(&req.group, &id.id).await?;
+    let react = client.reactions.get(&req.group, id.id).await?;
     // get our stage name
     let stage = &pipe.order[0][0];
     // register our test worker
@@ -338,7 +338,7 @@ async fn external_proceed() -> Result<(), thorium::Error> {
     // attempt to claim a job for every stage of our reaction
     for stage in pipe.order.iter().flatten() {
         // get our reactions data
-        let react = client.reactions.get(&req.group, &id.id).await?;
+        let react = client.reactions.get(&req.group, id.id).await?;
         // register our test worker
         generators::worker_ext(
             "cluster0",
@@ -395,7 +395,7 @@ async fn checkpoint() -> Result<(), thorium::Error> {
     for stage in pipe.order.iter().flatten().take(1) {
         for i in 0..3 {
             // get our reactions data
-            let react = client.reactions.get(&req.group, &id.id).await?;
+            let react = client.reactions.get(&req.group, id.id).await?;
             // register our test worker
             generators::worker(
                 "cluster0",
@@ -468,7 +468,7 @@ async fn sleep() -> Result<(), thorium::Error> {
     for stage in pipe.order.iter().flatten().take(1) {
         for i in 0..3 {
             // get our reactions data
-            let react = client.reactions.get(&req.group, &id.id).await?;
+            let react = client.reactions.get(&req.group, id.id).await?;
             // register our test worker
             generators::worker(
                 "cluster0", "node0", "sleep", &group, &pipe.name, stage, &client,

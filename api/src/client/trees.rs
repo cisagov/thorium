@@ -8,6 +8,11 @@ use super::Error;
 use crate::models::{Tree, TreeGrowQuery, TreeOpts, TreeQuery};
 use crate::{add_query, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Trees {
     /// The host to talk to the Thorium api at
@@ -18,6 +23,7 @@ pub struct Trees {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Trees {
     /// Creates a new trees handler
     ///
@@ -47,55 +53,7 @@ impl Trees {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        #[derive(Clone)]
-        pub struct TreesBlocking {
-            /// The host to talk to the Thorium api at
-            host: String,
-            /// The token to use for auth
-            token: String,
-            /// A client to use when making requests
-            client: reqwest::Client,
-        }
-
-        impl TreesBlocking {
-            /// creates a new blocking jobs handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::TreesBlocking;
-            ///
-            /// let jobs = TreesBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                TreesBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Trees {
     /// Start a new tree of data in Thorium
     ///
     /// # Arguments

@@ -16,6 +16,9 @@ use crate::models::{KeySupport, TagMap, TreeBranch, TreeSupport};
 #[cfg(feature = "api")]
 use crate::models::{TagDeleteRequest, Tree, TreeNode, TreeQuery};
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 // api/client imports
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "api", feature = "client"))] {
@@ -1069,6 +1072,7 @@ pub struct RepoListLine {
 /// A request for a specic repo/commit to be downloaded executing a job
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct RepoDependencyRequest {
     /// The url to the repo to download
     pub url: String,
@@ -1123,6 +1127,7 @@ impl RepoDependencyRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get, set))]
 pub struct RepoDependency {
     /// The url to the repo to download
     pub url: String,

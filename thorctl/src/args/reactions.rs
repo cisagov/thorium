@@ -211,7 +211,7 @@ impl ReactionTarget {
             // get the reaction with a group if one was provided
             thorium
                 .reactions
-                .get(group, &self.reaction_id)
+                .get(group, self.reaction_id)
                 .await
                 .map_err(|err| {
                     thorium::Error::new(format!(

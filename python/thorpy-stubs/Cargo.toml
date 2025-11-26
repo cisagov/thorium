@@ -1,0 +1,11 @@
+[package]
+name = "thorpy-stubs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = "1.0"
+pyo3-introspection = "0.27"
+cargo_metadata = "0.23"
+walkdir = "2.5.0"

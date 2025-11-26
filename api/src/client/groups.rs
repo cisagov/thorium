@@ -9,7 +9,12 @@ use super::{Cursor, Error};
 use crate::models::{Group, GroupRequest, GroupUpdate};
 use crate::{send, send_build};
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
 /// group handler for the Thorium client
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Groups {
     /// url/ip of the Thorium ip
@@ -20,6 +25,7 @@ pub struct Groups {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Groups {
     /// Creates a new group handler
     ///
@@ -49,56 +55,7 @@ impl Groups {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// group handler for the Thorium client
-        #[derive(Clone)]
-        pub struct GroupsBlocking {
-            /// url/ip of the Thorium ip
-            host: String,
-            /// token to use for auth
-            token: String,
-            /// reqwest client object
-            client: reqwest::Client,
-        }
-
-        impl GroupsBlocking {
-            /// creates a new blocking group handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::GroupsBlocking;
-            ///
-            /// let groups = GroupsBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new<T: Into<String>>(host: T, token: T, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                GroupsBlocking {
-                    host: host.into(),
-                    token: token.into(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Groups {
     /// Creates a new [`Group`] in Thorium
     ///
     /// # Aguments

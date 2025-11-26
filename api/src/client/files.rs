@@ -27,7 +27,15 @@ use crate::{
     send_bytes,
 };
 
+// import our static runtime if we need a blocking client
+#[cfg(feature = "sync")]
+use super::RUNTIME;
+
+#[cfg(feature = "sync")]
+use super::traits::ResultsClientBlocking;
+
 /// A handler for the files routes in Thorium
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 #[derive(Clone)]
 pub struct Files {
     /// The host/url that Thorium can be reached at
@@ -38,6 +46,7 @@ pub struct Files {
     client: reqwest::Client,
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
 impl Files {
     /// Creates a new files handler
     ///
@@ -67,55 +76,7 @@ impl Files {
             client: client.clone(),
         }
     }
-}
 
-// only inlcude blocking structs if the sync feature is enabled
-cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
-        /// A blocking handler for the files routes in Thorium
-        #[derive(Clone)]
-        pub struct FilesBlocking {
-            /// The host/url that Thorium can be reached at
-            host: String,
-            /// token to use for auth
-            token: String,
-            /// A reqwest client for reqwests
-            client: reqwest::Client,
-        }
-        impl FilesBlocking {
-            /// creates a new blocking files handler
-            ///
-            /// Instead of directly creating this handler you likely want to simply create a
-            /// `thorium::ThoriumBlocking` and use the handler within that instead.
-            ///
-            ///
-            /// # Arguments
-            ///
-            /// * `host` - url/ip of the Thorium api
-            /// * `token` - The token used for authentication
-            /// * `client` - The reqwest client to use
-            ///
-            /// # Examples
-            ///
-            /// ```
-            /// use thorium::client::FilesBlocking;
-            ///
-            /// let files = FilesBlocking::new("http://127.0.0.1", "token");
-            /// ```
-            pub fn new(host: &str, token: &str, client: &reqwest::Client) -> Self {
-                // build basic route handler
-                FilesBlocking {
-                    host: host.to_owned(),
-                    token: token.to_owned(),
-                    client: client.clone(),
-                }
-            }
-        }
-    }
-}
-
-#[syncwrap::clone_impl]
-impl Files {
     /// Creates an [`Sample`] in Thorium by uploading a file
     ///
     /// # Arguments
@@ -979,6 +940,7 @@ impl ResultsClientHelper for Files {
     type OutputSupport = Sample;
 }
 
+#[cfg_attr(feature = "sync", thorium_derive::blocking_trait)]
 impl ResultsClient for Files {
     /// The underlying type that has the results/outputs (see [`crate::models::results::OutputSupport`])
     type OutputSupport = Sample;

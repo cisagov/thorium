@@ -2,16 +2,32 @@ FROM thorium-registry.sandia.gov/base/ubuntu:latest
 ARG TOKEN
 
 # update apt and install curl
-RUN apt install curl -y
+RUN apt update && apt install -y curl
 # install rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > installer && \
-      sh installer --default-toolchain nightly -y
+      sh installer --default-toolchain nightly-2025-08-01 -y
 # install build dependencies
-RUN apt update && apt install build-essential libssl-dev pkg-config libclang-dev clang-15 musl-tools cmake libvirt-dev jq -y
+RUN apt update && \
+      apt install -y \
+            build-essential \
+            libssl-dev \
+            pkg-config \
+            libclang-dev \
+            clang-15 \
+            musl-tools \
+            cmake \
+            libvirt-dev \
+            jq \
+            python3.10-dev \
+            python3.10-venv
+ENV PATH="/root/.local/bin:$PATH"
+RUN python3 -m pip install --no-cache-dir --user pipx && \
+      python3 -m pipx ensurepath --global && \
+      pipx install maturin && \
+      pipx install patchelf
 # add cargo to PATH and install rust nightly and musl builds
 ENV PATH=${PATH}:/root/.cargo/bin
-RUN rustup default nightly && \
-      rustup target add x86_64-unknown-linux-musl
+RUN rustup target add x86_64-unknown-linux-musl
 # download and install redis for integration testing
 RUN apt install wget -y  && \
       curl -L --output redis-6.2.4.tar.gz https://download.redis.io/releases/redis-6.2.4.tar.gz && \

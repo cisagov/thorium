@@ -233,7 +233,7 @@ async fn info_specific(thorium: &Thorium, cmd: &GetReactions) -> Result<(), Erro
     // crawl over all reaction ids and get info on them
     stream::iter(&cmd.targets)
         .map(|target| async move {
-            match thorium.reactions.get(&cmd.group, target).await {
+            match thorium.reactions.get(&cmd.group, target.clone()).await {
                 Ok(info) => InfoLine::info(&info),
                 Err(err) => InfoLine::error(target, &err),
             };
@@ -258,7 +258,7 @@ async fn delete_specific(thorium: &Thorium, cmd: &DeleteReactions) -> Result<(),
     stream::iter(&cmd.targets)
         .map(|target| async move {
             // get this reactions info
-            match thorium.reactions.get(&cmd.group, target).await {
+            match thorium.reactions.get(&cmd.group, target.clone()).await {
                 // delete this reaction
                 Ok(info) => match thorium.reactions.delete(&info.group, &info.id).await {
                     Ok(_) => InfoLine::info(&info),

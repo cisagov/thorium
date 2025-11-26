@@ -1,6 +1,6 @@
 //! Utility functions relating to reactions
 
-use thorium::{models::Reaction, Error, Thorium};
+use thorium::{Error, Thorium, models::Reaction};
 use uuid::Uuid;
 
 /// Search for a particular reaction in every group that a user is in; useful when
@@ -20,7 +20,7 @@ pub async fn find_reaction_no_group(
     let reaction_search_results = futures::future::join_all(
         groups
             .into_iter()
-            .map(|group| async move { thorium.reactions.get(&group, reaction_id).await }),
+            .map(|group| async move { thorium.reactions.get(&group, reaction_id.clone()).await }),
     )
     .await;
     // look for a valid reaction among the results

@@ -1,0 +1,16 @@
+[project]
+name = "thorium"
+description = "Thorium synchronous client"
+requires-python = ">=3.10"
+dependencies = []
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[build-system]
+requires = ["maturin>=1,<2"]
+build-backend = "maturin"
