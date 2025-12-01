@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use bb8_redis::redis::cmd;
 use chrono::prelude::*;
 use std::collections::{HashMap, HashSet};
-use tracing::{event, instrument, span, Level};
+use tracing::{Level, event, instrument, span};
 use uuid::Uuid;
 
 use super::keys::{images::ImageKeys, jobs::JobKeys, reactions::ReactionKeys, streams::StreamKeys};
@@ -75,9 +75,9 @@ pub async fn build<'a>(
         .cmd("hsetnx").arg(&keys.data).arg("status").arg(&serialize!(&cast.status))
         .cmd("hsetnx").arg(&keys.data).arg("deadline").arg(&serialize!(&cast.deadline))
         .cmd("hsetnx").arg(&keys.data).arg("worker").arg(&serialize!(&cast.worker))
-        .cmd("sadd").arg(&ReactionKeys::jobs(&cast.group, &cast.reaction, shared)).arg(&cast.id.to_string())
+        .cmd("sadd").arg(ReactionKeys::jobs(&cast.group, &cast.reaction, shared)).arg(&cast.id.to_string())
         .cmd("zadd").arg(&keys.status).arg(cast.deadline.timestamp()).arg(&serialize!(&job_claim))
-        .cmd("zadd").arg(&StreamKeys::system_scaler(cast.scaler, "deadlines", shared))
+        .cmd("zadd").arg(StreamKeys::system_scaler(cast.scaler, "deadlines", shared))
             .arg(stream_obj.timestamp).arg(stream_obj.data);
     // inject the parent field if this job has a parent
     if let Some(parent) = cast.parent {
@@ -85,11 +85,8 @@ pub async fn build<'a>(
     }
     // if this image is a generator then increment our reactions current active generators
     if cast.generator {
-        // build key to reaction data
-        let reaction_key = ReactionKeys::generators(&cast.group, &cast.reaction, shared);
         // increment number of active generators by 1
-        pipe.cmd("sadd").arg(reaction_key).arg(&cast.id.to_string())
-            .cmd("hset").arg(&keys.data).arg("generator").arg(serialize!(&true));
+        pipe.cmd("hset").arg(&keys.data).arg("generator").arg(serialize!(&true));
     } else {
         // This job is not a generator
         pipe.cmd("hset").arg(&keys.data).arg("generator").arg(serialize!(&false));
@@ -438,8 +435,6 @@ pub async fn claim(
                     event!(Level::ERROR, msg = "Missing reaction data", job = job.id.to_string());
                         // prune this dangling job
                         prune_dangling(scaler, &worker, &dest, job.id,  job.reaction, shared).await?;
-                        // try to claim another job
-                        continue;
                     }
                 }
             }
@@ -504,13 +499,20 @@ pub async fn sleep(
     }
     // build key to this jobs data
     let key = JobKeys::data(&job.id, shared);
-    // updat this jobs status to be Sleeping
-    let mut pipe = redis::pipe();
-    pipe.cmd("hset").arg(&key).arg("status").arg(serialize!(&JobStatus::Sleeping));
-    // inject in this jobs new checkpoint arg
+    // build key to reaction data
+    let sleeping_key = ReactionKeys::generators(&job.group, &job.reaction, shared);
+    // get our current args for this job
     let mut args: GenericJobArgs = deserialize!(&job.args);
+    // add our new checkpoint arg
     args.kwargs.insert("--checkpoint".to_owned(), vec!(checkpoint.data));
-    pipe.cmd("hset").arg(&key).arg("args").arg(serialize!(&args));
+    // build a redis pipeline update this jobs status
+    let mut pipe = redis::pipe();
+    // updatethis jobs status to be Sleeping
+    pipe.cmd("hset").arg(&key).arg("status").arg(serialize!(&JobStatus::Sleeping))
+        // add this job to our reactions sleeping generator set
+        .cmd("sadd").arg(sleeping_key).arg(job.id.to_string())
+        // add our new args
+        .cmd("hset").arg(&key).arg("args").arg(serialize!(&args));
     // execute this redis pipeline
     let _: () = pipe.query_async(conn!(shared)).await?;
     // current stage not yet complete wait
@@ -588,7 +590,7 @@ pub async fn proceed(
             if job.generator {
                 // build key to generator list
                 let gens = ReactionKeys::generators(&job.group, &job.reaction, shared);
-                pipe.cmd("srem").arg(gens).arg(&job.id.to_string());
+                pipe.cmd("srem").arg(gens).arg(job.id.to_string());
             }
     }
     // inject commands shared between sleeping/running jobs
@@ -624,7 +626,6 @@ pub async fn proceed(
         job.status == JobStatus::Sleeping
     };
     // check if we have completed all parts of the current stage or if this is a sleeping job
-    //if job.status == JobStatus::Sleeping || progress[0] >= progress[1] {
     if should_proceed {
         // get reaction data
         let reaction = reactions::get(&job.group, &job.reaction, shared).await?;
@@ -762,11 +763,13 @@ pub async fn find_in_running(stream: &str, uuids: &HashSet<&Uuid>, shared: &Shar
 /// # Arguments
 ///
 /// * `resets` - The jobs to reset
+/// * `generator_reset` - If we are resetting sleeping generators
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
 #[instrument(name = "db::jobs::bulk_reset", skip_all, fields(resets = resets.jobs.len()), err(Debug))]
 pub async fn bulk_reset(
     resets: JobResets,
+    generator_reset: bool,
     shared: &Shared,
 ) -> Result<(), ApiError> {
     // build list of jobs based on reset list
@@ -808,8 +811,15 @@ pub async fn bulk_reset(
                 // add to deadlines queue if its not already added
                 .cmd("zadd").arg(StreamKeys::system_scaler(job.scaler, "deadlines", shared)).arg(job.deadline.timestamp())
                     .arg(StreamObj::from(job).data);
+            // if this is a generator reset then also remove this job from the sleeping generators set
+        if generator_reset {
+            // build key to this jobs sleeping generators
+            let sleeping_key = ReactionKeys::generators(&job.group, &job.reaction, shared);
+            // remove this no longer sleeping generator
+            pipe.cmd("srem").arg(sleeping_key).arg(job.id.to_string());
+        }
     }
-    // if we missing jobs then try to get there data if possible
+    // if we missing jobs then try to get their data if possible
     if !missing.is_empty() {
         // build the key to the running job stream
         let stream_key = StreamKeys::stream("system", resets.scaler.as_str(), "running", shared);

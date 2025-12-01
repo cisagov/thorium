@@ -25,7 +25,7 @@ pub use images::ImageKeys;
 pub use jobs::JobKeys;
 pub use network_policies::NetworkPolicyKeys;
 pub use pipelines::PipelineKeys;
-pub use reactions::{ReactionKeys, SubReactionLists};
+pub use reactions::{ReactionCacheKind, ReactionKeys, SubReactionLists};
 pub use search::events::SearchEventKeys;
 pub use streams::StreamKeys;
 pub use system::SystemKeys;

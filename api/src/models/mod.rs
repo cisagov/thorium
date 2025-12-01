@@ -52,8 +52,8 @@ pub use events::{
     EventRequest, EventTrigger, EventType, TriggerPotential,
 };
 pub use files::{
-    Attachment, Buffer, CartedSample, CarvedOrigin, CarvedOriginTypes, Comment, CommentRequest,
-    CommentResponse, DeleteCommentParams, DeleteSampleParams, DownloadedSample, FileDeleteOpts,
+    Attachment, Buffer, CartedFile, CarvedOrigin, CarvedOriginTypes, Comment, CommentRequest,
+    CommentResponse, DeleteCommentParams, DeleteSampleParams, DownloadedFile, FileDeleteOpts,
     FileDownloadOpts, FileListOpts, FileListParams, Origin, OriginRequest, OriginTypes,
     PcapNetworkProtocol, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleRequest,
     SampleSubmissionResponse, Submission, SubmissionChunk, SubmissionUpdate, Tag, TagMap,
@@ -74,15 +74,17 @@ pub use groups::{
 };
 pub use images::{
     ArgStrategy, BurstableResources, BurstableResourcesRequest, BurstableResourcesUpdate,
-    ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate,
-    Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate, DependencyPassStrategy,
-    DependencySettingsUpdate, EphemeralDependencySettings, EphemeralDependencySettingsUpdate,
-    Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList,
-    ImageJobInfo, ImageLifetime, ImageList, ImageListParams, ImageNetworkPolicyUpdate,
-    ImageRequest, ImageScaler, ImageUpdate, ImageVersion, Kvm, KvmUpdate, KwargDependency,
-    RepoDependencySettings, Resources, ResourcesRequest, ResourcesUpdate, ResultDependencySettings,
-    ResultDependencySettingsUpdate, SampleDependencySettings, SecurityContext,
-    SecurityContextUpdate, SpawnLimits, TagDependencySettings, TagDependencySettingsUpdate,
+    CacheDependencySettings, CacheDependencySettingsUpdate, ChildFilters, ChildFiltersUpdate,
+    ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate,
+    Dependencies, DependenciesUpdate, DependencyPassStrategy, DependencySettingsUpdate,
+    EphemeralDependencySettings, EphemeralDependencySettingsUpdate, GenericCacheDependencySettings,
+    GenericCacheDependencySettingsUpdate, Image, ImageArgs, ImageArgsUpdate, ImageBan,
+    ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageJobInfo, ImageLifetime, ImageList,
+    ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate,
+    ImageVersion, Kvm, KvmUpdate, KwargDependency, RepoDependencySettings, Resources,
+    ResourcesRequest, ResourcesUpdate, ResultDependencySettings, ResultDependencySettingsUpdate,
+    SampleDependencySettings, SecurityContext, SecurityContextUpdate, SpawnLimits,
+    TagDependencySettings, TagDependencySettingsUpdate,
 };
 pub use jobs::{
     Checkpoint, GenericJob, GenericJobArgs, GenericJobArgsUpdate, GenericJobKwargs, GenericJobOpts,
@@ -101,9 +103,10 @@ pub use pipelines::{
     PipelineListParams, PipelineRequest, PipelineStats, PipelineUpdate, StageStats,
 };
 pub use reactions::{
-    BulkReactionResponse, HandleReactionResponse, Reaction, ReactionArgs, ReactionCreation,
-    ReactionDetailsList, ReactionExpire, ReactionIdResponse, ReactionList, ReactionListParams,
-    ReactionRequest, ReactionStatus, ReactionUpdate, StageLogLine, StageLogs, StageLogsAdd,
+    BulkReactionResponse, HandleReactionResponse, Reaction, ReactionArgs, ReactionCache,
+    ReactionCacheFileUpdate, ReactionCacheUpdate, ReactionCreation, ReactionDetailsList,
+    ReactionExpire, ReactionIdResponse, ReactionList, ReactionListParams, ReactionRequest,
+    ReactionStatus, ReactionUpdate, StageLogLine, StageLogs, StageLogsAdd,
 };
 pub use requisitions::{Requisition, ScopedRequisition, SpawnedUpdate};
 pub use results::{
@@ -144,7 +147,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "client")] {
         pub use git::UntarredRepo;
         pub use cursors::{Cursor, DateOpts, CountCursor, CountCursorSupport};
-        pub use files::UncartedSample;
+        pub use files::UncartedFile;
     }
 }
 

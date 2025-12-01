@@ -2,13 +2,15 @@
 
 use std::collections::{HashMap, HashSet};
 use thorium::models::{
-    AutoTag, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings,
-    ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate,
-    DependencySettingsUpdate, EphemeralDependencySettings, EphemeralDependencySettingsUpdate,
-    FilesHandler, FilesHandlerUpdate, ImageArgs, ImageArgsUpdate, ImageNetworkPolicyUpdate, Kvm,
-    KvmUpdate, OutputCollection, OutputCollectionUpdate, RepoDependencySettings,
-    ResultDependencySettings, ResultDependencySettingsUpdate, SampleDependencySettings,
-    SecurityContext, SecurityContextUpdate, TagDependencySettings, TagDependencySettingsUpdate,
+    AutoTag, AutoTagUpdate, CacheDependencySettings, CacheDependencySettingsUpdate, ChildFilters,
+    ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup,
+    CleanupUpdate, Dependencies, DependenciesUpdate, DependencySettingsUpdate,
+    EphemeralDependencySettings, EphemeralDependencySettingsUpdate, FilesHandler,
+    FilesHandlerUpdate, GenericCacheDependencySettingsUpdate, ImageArgs, ImageArgsUpdate,
+    ImageNetworkPolicyUpdate, Kvm, KvmUpdate, OutputCollection, OutputCollectionUpdate,
+    RepoDependencySettings, ResultDependencySettings, ResultDependencySettingsUpdate,
+    SampleDependencySettings, SecurityContext, SecurityContextUpdate, TagDependencySettings,
+    TagDependencySettingsUpdate,
 };
 
 use crate::{calc_remove_add_vec, set_clear, set_clear_vec, set_modified, set_modified_opt};
@@ -78,18 +80,18 @@ pub fn calculate_security_context_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
 fn calculate_sample_dependencies_update(
-    old_dependencies: SampleDependencySettings,
-    new_dependencies: SampleDependencySettings,
+    old: SampleDependencySettings,
+    new: SampleDependencySettings,
 ) -> DependencySettingsUpdate {
     DependencySettingsUpdate {
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
+        location: set_modified!(old.location, new.location),
+        clear_kwarg: set_clear!(old.kwarg, new.kwarg),
+        kwarg: set_modified_opt!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
     }
 }
 
@@ -98,21 +100,20 @@ fn calculate_sample_dependencies_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
 fn calculate_ephemeral_dependencies_update(
-    mut old_dependencies: EphemeralDependencySettings,
-    mut new_dependencies: EphemeralDependencySettings,
+    mut old: EphemeralDependencySettings,
+    mut new: EphemeralDependencySettings,
 ) -> EphemeralDependencySettingsUpdate {
     // calculate which names to remove/add
-    let (remove_names, add_names) =
-        calc_remove_add_vec!(old_dependencies.names, new_dependencies.names);
+    let (remove_names, add_names) = calc_remove_add_vec!(old.names, new.names);
     EphemeralDependencySettingsUpdate {
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
+        location: set_modified!(old.location, new.location),
+        clear_kwarg: set_clear!(old.kwarg, new.kwarg),
+        kwarg: set_modified_opt!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
         remove_names,
         add_names,
     }
@@ -123,28 +124,26 @@ fn calculate_ephemeral_dependencies_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
 fn calculate_results_dependencies_update(
-    mut old_dependencies: ResultDependencySettings,
-    mut new_dependencies: ResultDependencySettings,
+    mut old: ResultDependencySettings,
+    mut new: ResultDependencySettings,
 ) -> ResultDependencySettingsUpdate {
     // calculate which images to remove/add
-    let (remove_images, add_images) =
-        calc_remove_add_vec!(old_dependencies.images, new_dependencies.images);
+    let (remove_images, add_images) = calc_remove_add_vec!(old.images, new.images);
     // calculate which names to remove/add
-    let (remove_names, add_names) =
-        calc_remove_add_vec!(old_dependencies.names, new_dependencies.names);
+    let (remove_names, add_names) = calc_remove_add_vec!(old.names, new.names);
     ResultDependencySettingsUpdate {
         // remove images that are in the old but not in the new
         remove_images,
         // add images that are in the new but not in the old
         add_images,
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
+        location: set_modified!(old.location, new.location),
         // needs template
-        kwarg: set_modified!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
+        kwarg: set_modified!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
         remove_names,
         add_names,
     }
@@ -155,18 +154,18 @@ fn calculate_results_dependencies_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
 fn calculate_repo_dependencies_update(
-    old_dependencies: RepoDependencySettings,
-    new_dependencies: RepoDependencySettings,
+    old: RepoDependencySettings,
+    new: RepoDependencySettings,
 ) -> DependencySettingsUpdate {
     DependencySettingsUpdate {
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
+        location: set_modified!(old.location, new.location),
+        clear_kwarg: set_clear!(old.kwarg, new.kwarg),
+        kwarg: set_modified_opt!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
     }
 }
 
@@ -175,19 +174,19 @@ fn calculate_repo_dependencies_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
 fn calculate_tags_dependencies_update(
-    old_dependencies: TagDependencySettings,
-    new_dependencies: TagDependencySettings,
+    old: TagDependencySettings,
+    new: TagDependencySettings,
 ) -> TagDependencySettingsUpdate {
     TagDependencySettingsUpdate {
-        enabled: set_modified!(old_dependencies.enabled, new_dependencies.enabled),
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
+        enabled: set_modified!(old.enabled, new.enabled),
+        location: set_modified!(old.location, new.location),
+        clear_kwarg: set_clear!(old.kwarg, new.kwarg),
+        kwarg: set_modified_opt!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
     }
 }
 
@@ -196,24 +195,50 @@ fn calculate_tags_dependencies_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
 fn calculate_childen_dependencies_update(
-    mut old_dependencies: ChildrenDependencySettings,
-    mut new_dependencies: ChildrenDependencySettings,
+    mut old: ChildrenDependencySettings,
+    mut new: ChildrenDependencySettings,
 ) -> ChildrenDependencySettingsUpdate {
     // calculate which images to remove/add
-    let (remove_images, add_images) =
-        calc_remove_add_vec!(old_dependencies.images, new_dependencies.images);
+    let (remove_images, add_images) = calc_remove_add_vec!(old.images, new.images);
     ChildrenDependencySettingsUpdate {
-        enabled: set_modified!(old_dependencies.enabled, new_dependencies.enabled),
+        enabled: set_modified!(old.enabled, new.enabled),
         remove_images,
         add_images,
-        location: set_modified!(old_dependencies.location, new_dependencies.location),
-        clear_kwarg: set_clear!(old_dependencies.kwarg, new_dependencies.kwarg),
-        kwarg: set_modified_opt!(old_dependencies.kwarg, new_dependencies.kwarg),
-        strategy: set_modified!(old_dependencies.strategy, new_dependencies.strategy),
+        location: set_modified!(old.location, new.location),
+        clear_kwarg: set_clear!(old.kwarg, new.kwarg),
+        kwarg: set_modified_opt!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
+    }
+}
+
+/// Calculate a cache dependencies update by diffing old and
+/// new cache dependencies settings
+///
+/// # Arguments
+///
+/// * `old` - The old cache dependencies settings
+/// * `new` - The new cache dependencies settings
+#[allow(clippy::needless_pass_by_value)]
+fn calculate_cache_dependencies_update(
+    old: CacheDependencySettings,
+    new: CacheDependencySettings,
+) -> CacheDependencySettingsUpdate {
+    // calculate our generic dependency settings update first
+    let generic = GenericCacheDependencySettingsUpdate {
+        clear_kwarg: set_clear!(old.generic.kwarg, new.generic.kwarg),
+        kwarg: set_modified_opt!(old.generic.kwarg, new.generic.kwarg),
+        strategy: set_modified!(old.generic.strategy, new.generic.strategy),
+    };
+    // build the update for our cache dependency settings
+    CacheDependencySettingsUpdate {
+        location: set_modified!(old.location, new.location),
+        generic,
+        use_parent_cache: set_modified!(old.use_parent_cache, new.use_parent_cache),
+        enabled: set_modified!(old.enabled, new.enabled),
     }
 }
 
@@ -222,32 +247,27 @@ fn calculate_childen_dependencies_update(
 ///
 /// # Arguments
 ///
-/// * `old_dependencies` - The old dependencies settings
-/// * `new_dependencies` - The new dependencies settings
+/// * `old` - The old dependencies settings
+/// * `new` - The new dependencies settings
 #[allow(clippy::needless_pass_by_value)]
-pub fn calculate_dependencies_update(
-    old_dependencies: Dependencies,
-    new_dependencies: Dependencies,
-) -> DependenciesUpdate {
+pub fn calculate_dependencies_update(old: Dependencies, new: Dependencies) -> DependenciesUpdate {
+    // calculate the updates for our dependency settings
+    let samples = calculate_sample_dependencies_update(old.samples, new.samples);
+    let ephemeral = calculate_ephemeral_dependencies_update(old.ephemeral, new.ephemeral);
+    let results = calculate_results_dependencies_update(old.results, new.results);
+    let repos = calculate_repo_dependencies_update(old.repos, new.repos);
+    let tags = calculate_tags_dependencies_update(old.tags, new.tags);
+    let children = calculate_childen_dependencies_update(old.children, new.children);
+    let cache = calculate_cache_dependencies_update(old.cache, new.cache);
+    // build our dependencies update
     DependenciesUpdate {
-        samples: calculate_sample_dependencies_update(
-            old_dependencies.samples,
-            new_dependencies.samples,
-        ),
-        ephemeral: calculate_ephemeral_dependencies_update(
-            old_dependencies.ephemeral,
-            new_dependencies.ephemeral,
-        ),
-        results: calculate_results_dependencies_update(
-            old_dependencies.results,
-            new_dependencies.results,
-        ),
-        repos: calculate_repo_dependencies_update(old_dependencies.repos, new_dependencies.repos),
-        tags: calculate_tags_dependencies_update(old_dependencies.tags, new_dependencies.tags),
-        children: calculate_childen_dependencies_update(
-            old_dependencies.children,
-            new_dependencies.children,
-        ),
+        samples,
+        ephemeral,
+        results,
+        repos,
+        tags,
+        children,
+        cache,
     }
 }
 

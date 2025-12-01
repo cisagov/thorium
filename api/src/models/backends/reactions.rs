@@ -2,22 +2,48 @@
 //! Currently only Redis is supported
 
 use aws_sdk_s3::primitives::ByteStream;
+use axum::extract::Multipart;
 use chrono::prelude::*;
+use futures::StreamExt;
+use futures::stream;
 use std::collections::{HashMap, HashSet};
-use tracing::{event, instrument, span, Level, Span};
+use tracing::{Level, Span, event, instrument, span};
 use uuid::Uuid;
 
 use super::db;
 use crate::models::{
     BulkReactionResponse, GenericJobArgs, Group, GroupAllowAction, JobList, Pipeline, Reaction,
-    ReactionDetailsList, ReactionExpire, ReactionList, ReactionRequest, ReactionStatus,
-    ReactionUpdate, Repo, RepoDependency, Sample, StageLogs, StageLogsAdd, StatusUpdate, User,
+    ReactionCache, ReactionCacheUpdate, ReactionDetailsList, ReactionExpire, ReactionList,
+    ReactionRequest, ReactionStatus, ReactionUpdate, Repo, RepoDependency, Sample, StageLogs,
+    StageLogsAdd, StatusUpdate, User,
 };
-use crate::utils::{bounder, ApiError, Shared};
+use crate::utils::{ApiError, Shared, bounder};
 use crate::{
     bad, can_delete, can_modify, deserialize, deserialize_ext, deserialize_opt, extract, is_admin,
     not_found, unauthorized,
 };
+
+/// Updates to apply to cache files
+pub struct InternalReactionCacheFileUpdates {
+    /// New or updated reaction cache files
+    pub added: Vec<String>,
+    /// Any files that were deleted from our reaction cache
+    pub deleted: Vec<String>,
+}
+
+impl InternalReactionCacheFileUpdates {
+    /// Create an empty ``InternalReactionCacheFileUpdates``
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - The capacity to preallocate for added cache files
+    pub fn with_capacity(capacity: usize) -> Self {
+        InternalReactionCacheFileUpdates {
+            added: Vec::with_capacity(capacity),
+            deleted: Vec::default(),
+        }
+    }
+}
 
 impl ReactionRequest {
     /// Validate we are allowed to overwrite args for any images we try to
@@ -63,7 +89,8 @@ impl ReactionRequest {
     /// * `reactions` - The reaction to upload ephemeral files for
     /// * `files` - The files to save to s3
     /// * `shared` - Shared Thorium objects
-    pub async fn upload_files<'v>(
+    #[instrument(name = "ReactionRequest::upload_files", skip_all, err(Debug))]
+    pub async fn upload_files(
         reaction: &Uuid,
         files: HashMap<String, String>,
         shared: &Shared,
@@ -100,7 +127,7 @@ impl ReactionRequest {
         pipeline: &'a Pipeline,
         parent_ephemeral: HashMap<String, Uuid>,
         shared: &Shared,
-    ) -> Result<(Reaction, &'a Pipeline), ApiError> {
+    ) -> Result<(Reaction, ReactionCache, &'a Pipeline), ApiError> {
         // ensure that all args defined are contained in the pipeline
         for image in self.args.keys() {
             if !pipeline.order.iter().any(|stage| stage.contains(image)) {
@@ -162,8 +189,9 @@ impl ReactionRequest {
             parent_ephemeral,
             repos,
             trigger_depth: self.trigger_depth,
+            has_cache: !self.cache.is_empty(),
         };
-        Ok((cast, pipeline))
+        Ok((cast, self.cache, pipeline))
     }
 }
 
@@ -371,24 +399,16 @@ impl Reaction {
     /// * `group` - The group this reaction is in
     /// * `id` - The id of the reaction to retrieve
     /// * `shared` - Shared objects in Thorium
-    /// * `span` - The span to log traces under
+    #[instrument(name = "Reactions::get", skip_all, fields(reaction = id.to_string()), err(Debug))]
     pub async fn get(
         user: &User,
         group: &str,
         id: &Uuid,
         shared: &Shared,
-        span: &Span,
     ) -> Result<(Group, Self), ApiError> {
-        // start our get reaction span
-        span!(
-            parent: span,
-            Level::INFO,
-            "Get Reaction",
-            group = group,
-            id = id.to_string()
-        );
         // make sure we are a member of this group and it exists
         let group = Group::authorize(user, group, shared).await?;
+        // get our reactions info from the db
         let reaction = db::reactions::get(&group.name, id, shared).await?;
         Ok((group, reaction))
     }
@@ -400,16 +420,15 @@ impl Reaction {
     /// * `cursor` - The number of status logs to skip in the backend
     /// * `limit` - The max number of status logs to retrieve (strongly enforced)
     /// * `shared` - Shared objects in Thorium
-    /// * `span` - The span to log traces under
+    #[instrument(name = "Reactions::logs", skip(self, shared), err(Debug))]
     pub async fn logs(
         &self,
         cursor: usize,
         limit: usize,
         shared: &Shared,
-        span: &Span,
     ) -> Result<Vec<StatusUpdate>, ApiError> {
         // use correct backend to get reaction logs
-        db::reactions::logs(self, cursor, limit, shared, span).await
+        db::reactions::logs(self, cursor, limit, shared).await
     }
 
     /// Adds logs for a specific stage within a pipeline
@@ -422,7 +441,11 @@ impl Reaction {
     /// * `logs` - The logs to save into the backend
     /// * `shared` - Shared objects in Thorium
     /// * `span` - The span to log traces under
-    #[instrument(name = "Reactions::add_stage_logs", skip_all, err(Debug))]
+    #[instrument(
+        name = "Reactions::add_stage_logs",
+        skip(self, shared, logs),
+        err(Debug)
+    )]
     pub async fn add_stage_logs(
         &self,
         stage: &str,
@@ -442,6 +465,7 @@ impl Reaction {
     /// * `cursor` - The number of logs to skip in the backend
     /// * `limit` - The max number of logs to retrieve (strongly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::stage_logs", skip(self, shared), err(Debug))]
     pub async fn stage_logs(
         &self,
         stage: &str,
@@ -461,6 +485,7 @@ impl Reaction {
     /// * `cursor` - The page of reactions to retrieve
     /// * `limit` - The max number of reactions to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list", skip(pipeline, shared), err(Debug))]
     pub async fn list(
         pipeline: &Pipeline,
         cursor: usize,
@@ -481,6 +506,7 @@ impl Reaction {
     /// * `cursor` - The page of reactions to retrieve
     /// * `limit` - The max number of reactions to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_status", skip(group, pipeline, shared), fields(group = &group.name), err(Debug))]
     pub async fn list_status(
         group: &Group,
         pipeline: &Pipeline,
@@ -502,6 +528,7 @@ impl Reaction {
     /// * `cursor` - The page of reactions to retrieve
     /// * `limit` - The max number of reactions to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_tag", skip(group, shared), fields(group = &group.name), err(Debug))]
     pub async fn list_tag(
         group: &Group,
         tag: &str,
@@ -522,6 +549,7 @@ impl Reaction {
     /// * `cursor` - The page of reactions to retrieve
     /// * `limit` - The max number of reactions to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_group_set", skip(group, shared), fields(group = &group.name), err(Debug))]
     pub async fn list_group_set(
         group: &Group,
         status: &ReactionStatus,
@@ -541,6 +569,7 @@ impl Reaction {
     /// * `cursor` - The page of reactions to retrieve
     /// * `limit` - The max number of reactions to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_sub", skip(reaction, shared), err(Debug))]
     pub async fn list_sub(
         reaction: &Reaction,
         cursor: usize,
@@ -560,6 +589,7 @@ impl Reaction {
     /// * `cursor` - The page of reactions to retrieve
     /// * `limit` - The max number of reactions to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_sub_status", skip(reaction, shared), err(Debug))]
     pub async fn list_sub_status(
         reaction: &Reaction,
         status: &ReactionStatus,
@@ -579,6 +609,7 @@ impl Reaction {
     /// * `cursor` - The page of jobs to retrieve
     /// * `limit` - The max number of jobs to retrieve (weakly enforced)
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_jobs", skip(self, shared), err(Debug))]
     pub async fn list_jobs(
         &self,
         cursor: usize,
@@ -643,6 +674,7 @@ impl Reaction {
     /// * `user` - The user that is deleting this reaction
     /// * `group` - The group this reaction is in
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::delete", skip_all, err(Debug))]
     pub async fn delete(
         &self,
         user: &User,
@@ -666,6 +698,7 @@ impl Reaction {
     /// * `pipeline` - The pipeline to delete reactions for
     /// * `skip_check` - skip checking if this user can delete these reactions
     /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::delete_all", skip_all, err(Debug))]
     pub async fn delete_all(
         user: &User,
         group: &Group,
@@ -766,6 +799,7 @@ impl Reaction {
     ///
     /// * `name` - The name of the ephemeral file to download
     /// * `shared` - Shared Thorium objects
+    #[instrument(name = "Reaction::download_ephemeral", skip(self, shared), err(Debug))]
     pub async fn download_ephemeral(
         &self,
         name: &str,
@@ -782,6 +816,163 @@ impl Reaction {
             "Ephemeral file {} not found for reaction {}",
             name, self.id
         ))
+    }
+
+    /// Get this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "Reaction::get_cache", skip_all, err(Debug))]
+    pub async fn get_cache(&self, shared: &Shared) -> Result<ReactionCache, ApiError> {
+        // get this reactions cache if it has one
+        db::reactions::get_cache(&self.id, shared).await
+    }
+
+    /// Update this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is updating this reactions cache
+    /// * `group` - The group this reaction is in
+    /// * `update` - The update to apply to this reactions cache
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ReactionRequest::update_cache", skip_all, err(Debug))]
+    pub async fn update_cache(
+        &self,
+        user: &User,
+        group: &Group,
+        update: &ReactionCacheUpdate,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
+        // make sure we can edit/create reactions in this group
+        group.allowable(GroupAllowAction::Reactions)?;
+        // make sure this user can modify this reaction
+        can_modify!(self.creator, group, user);
+        // update this reactions cache
+        db::reactions::update_cache(&self.group, &self.id, update, shared).await
+    }
+
+    /// Help upload files from a reaction cache file update form
+    #[instrument(name = "ReactionRequest::add_cache_files_helper", skip_all, err(Debug))]
+    pub async fn add_cache_files_helper(
+        &self,
+        mut form: Multipart,
+        update: &mut InternalReactionCacheFileUpdates,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
+        // handle data fields until this multipart form is complete
+        while let Some(field) = form.next_field().await? {
+            // handle this field based on its name
+            let (s3_path, fname) = match (field.name(), field.file_name()) {
+                // build the path to save this file to s3 at
+                (Some("files"), Some(fname)) => {
+                    (format!("{}/files/{fname}", self.id), fname.to_owned())
+                }
+                // error on unknown field names
+                (Some(name), Some(_)) => return bad!(format!("Unknown field name: {name}")),
+                // error on fields that have filenames but not a field name
+                (None, Some(_)) => return bad!("Fields must have a field name".to_owned()),
+                // error on any fields that don't have filenames or we don't know about
+                (_, None) => return bad!("Fields must have a file name!".to_owned()),
+            };
+            // write this file to s3 and cart it
+            shared
+                .s3
+                .reaction_cache
+                .cart_and_stream(&s3_path, field)
+                .await?;
+            // add this uploaded file path to our tracking vec so we can clean up if needed
+            update.added.push(fname);
+        }
+        Ok(())
+    }
+
+    /// Add a file to our reaction cache
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is adding files to this reactions cache
+    /// * `group` - The group this reaction is in
+    /// * `form` - The form containing the files to add
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ReactionRequest::add_cache_files", skip_all, err(Debug))]
+    pub async fn add_cache_files(
+        &self,
+        user: &User,
+        group: &Group,
+        form: Multipart,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
+        // make sure we can edit/create reactions in this group
+        group.allowable(GroupAllowAction::Reactions)?;
+        // make sure this user can modify this reaction
+        can_modify!(self.creator, group, user);
+        // get our current cache info
+        let old = self.get_cache(shared).await?;
+        // start with an empty update and add files to it as we go
+        let mut update = InternalReactionCacheFileUpdates::with_capacity(1);
+        // upload this requests cache files
+        match self.add_cache_files_helper(form, &mut update, shared).await {
+            Ok(()) => {
+                // update our cache info
+                db::reactions::update_cache_files(&self.group, &self.id, &update, shared).await?;
+                // delete any of our old cache files from s3 in bulk
+                stream::iter(update.deleted)
+                    .map(|s3_path| async move { shared.s3.reaction_cache.delete(&s3_path).await })
+                    .buffer_unordered(10)
+                    .collect::<Vec<Result<(), ApiError>>>()
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<()>, ApiError>>()?;
+                Ok(())
+            }
+            Err(error) => {
+                // an error occured so delete any cache files we already uploaded
+                // skip any paths that were not already in our update for partially applied updates
+                // we don't delete existing data because we have already overwritten the old cache data
+                // we could use s3_ids for this instead but those are stored in scylla and the short term
+                // nature of these files make them unsuitable for storing in scylla
+                let only_new = update
+                    .added
+                    .into_iter()
+                    .filter(|s3_path| old.files.contains(s3_path));
+                // delete any of our old cache files from s3 in bulk
+                stream::iter(only_new)
+                    .map(|s3_path| async move { shared.s3.reaction_cache.delete(&s3_path).await })
+                    .buffer_unordered(10)
+                    .collect::<Vec<Result<(), ApiError>>>()
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<()>, ApiError>>()?;
+                // reraise our error
+                Err(error)
+            }
+        }
+    }
+
+    /// Downloads a cache file tied to a reaction
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - The path of the cache file to download
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "Reaction::download_cache_file", skip(self, shared), err(Debug))]
+    pub async fn download_cache_file(
+        &self,
+        file_path: &String,
+        shared: &Shared,
+    ) -> Result<ByteStream, ApiError> {
+        // get our current cache
+        let cache = self.get_cache(shared).await?;
+        // make sure this file is in our cache
+        if !cache.files.contains(file_path) {
+            return not_found!(format!("Cache file {file_path} not found for {}", self.id));
+        }
+        // build the path to this cache file since we know it exists
+        let s3_path = format!("{}/files/{file_path}", self.id);
+        // download this attachment
+        shared.s3.reaction_cache.download(&s3_path).await
     }
 }
 
@@ -849,6 +1040,7 @@ impl TryFrom<(HashMap<String, String>, Vec<String>, Vec<String>)> for Reaction {
             parent_ephemeral: deserialize_ext!(map, "parent_ephemeral", HashMap::default()),
             repos: deserialize_ext!(map, "repos", Vec::default()),
             trigger_depth: deserialize_opt!(map, "trigger_depth"),
+            has_cache: deserialize_ext!(map, "has_cache", false),
         };
         Ok(reaction)
     }

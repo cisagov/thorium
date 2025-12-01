@@ -34,7 +34,9 @@ pub async fn setup_mcp(
         None => return Err(Error::new("Please run thorctl login first!")),
     };
     // build the config to use with this transport
-    let config = StreamableHttpClientTransportConfig::with_uri(mcp_uri).auth_header(token);
+    let mut config = StreamableHttpClientTransportConfig::with_uri(mcp_uri).auth_header(token);
+    // make our mcp client stateless
+    config.allow_stateless = true;
     // setup our transport
     let transport = StreamableHttpClientTransport::from_config(config);
     // build our client

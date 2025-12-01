@@ -12,7 +12,7 @@ const excludeKeysAreDefault = (excludeKeys: string[]) => {
 
 // encode filters to search params
 export function encodeFiltersToParams(filters: Filters) {
-  const encodedFilters = [];
+  const encodedFilters: string[] = [];
   // encode limit
   if (filters.limit) {
     encodedFilters.push(`limit=${encodeURIComponent(filters.limit)}`);

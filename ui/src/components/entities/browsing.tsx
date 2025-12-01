@@ -121,7 +121,7 @@ export const EntityList: React.FC<EntityListProps> = ({
     // API responded, no longer waiting
     setLoading(false);
     // save any listed entities if request was successful
-    let allEntities = [];
+    let allEntities: string[] = [];
     if (reset) {
       allEntities = entitiesList;
     } else {

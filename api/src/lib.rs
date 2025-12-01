@@ -1,6 +1,7 @@
 //! The Thorium API, client, and objects
 
 #![feature(proc_macro_hygiene, decl_macro, io_error_more, round_char_boundary)]
+#![recursion_limit = "256"]
 
 #[macro_use]
 extern crate serde;

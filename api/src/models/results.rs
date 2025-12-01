@@ -211,7 +211,7 @@ impl<O: OutputSupport> OutputRequest<O> {
     ///
     /// # Arguments
     ///
-    /// * `path` - The path to add
+    /// * `file` - The on disk file to add
     ///
     /// # Examples
     ///
@@ -233,8 +233,7 @@ impl<O: OutputSupport> OutputRequest<O> {
     ///
     /// # Arguments
     ///
-    /// * `groups` - The groups to add
-    /// * `trim_prefix` - The prefix to trim from the start of our file paths
+    /// * `files` - The on disk files to add
     ///
     /// # Examples
     ///
@@ -335,10 +334,7 @@ impl<O: OutputSupport> OutputRequest<O> {
         let form = multipart_list!(form, "groups", self.groups);
         // add the version of the tool that created this result if it was set and serialize it
         let form = match self.tool_version.take() {
-            Some(tool_version) => form.text(
-                "tool_version",
-                serde_json::to_string(&tool_version).unwrap(),
-            ),
+            Some(tool_version) => form.text("tool_version", serde_json::to_string(&tool_version)?),
             None => form,
         };
         // add the command that created this result if it was set
@@ -354,14 +350,6 @@ impl<O: OutputSupport> OutputRequest<O> {
         }
         Ok(form)
     }
-    ///// build the url to post results too
-    /////
-    ///// # Arguments
-    /////
-    ///// * `host` - The host to use in this url
-    //pub fn build_post_url(&self, host: &str) -> String {
-    //    O::build_post_url(&self.key, host)
-    //}
 }
 
 /// Optional arameters for getting results

@@ -2654,16 +2654,16 @@ impl FileDownloadOpts {
     }
 }
 
-/// The carted data for a sample
+/// The carted data for a file
 #[derive(Debug, Clone)]
-pub struct CartedSample {
-    /// The path to the carted sample
+pub struct CartedFile {
+    /// The path to the carted file
     pub path: PathBuf,
 }
 
 #[cfg(feature = "client")]
-impl CartedSample {
-    /// Uncarts a sample into its unpacked bytes
+impl CartedFile {
+    /// Uncarts a file into its unpacked bytes
     ///
     /// # Arguments
     ///
@@ -2689,24 +2689,24 @@ impl CartedSample {
     }
 }
 
-/// An uncarted sample
+/// An uncarted file
 #[cfg(feature = "client")]
 #[derive(Debug)]
-pub struct UncartedSample {
-    /// The fild handle containing our uncarted sample
+pub struct UncartedFile {
+    /// The fild handle containing our uncarted file
     pub file: File,
 }
 
-/// A downloaded sample
-pub enum DownloadedSample {
-    /// An on disk sample that is still carted
-    Carted(CartedSample),
-    /// An on disk sample that is uncarted
-    Uncarted(UncartedSample),
+/// A downloaded file
+pub enum DownloadedFile {
+    /// An on disk file that is still carted
+    Carted(CartedFile),
+    /// An on disk file that is uncarted
+    Uncarted(UncartedFile),
 }
 
-impl DownloadedSample {
-    /// Uncarts this sample if it is carted to a target path
+impl DownloadedFile {
+    /// Uncarts this file if it is carted to a target path
     ///
     /// Trying to uncart an already carted file will return an error
     ///
@@ -2716,15 +2716,15 @@ impl DownloadedSample {
     #[allow(dead_code)]
     async fn uncart_to<P: AsRef<Path>>(self, path: P) -> Result<Self, Error> {
         match self {
-            DownloadedSample::Carted(carted) => {
-                // uncart our sample
+            DownloadedFile::Carted(carted) => {
+                // uncart our file
                 carted.uncart(&path).await?;
                 // get a handle to our newly uncarted file
                 let file = File::open(path).await?;
                 // return an uncarted version of this enum
-                Ok(Self::Uncarted(UncartedSample { file }))
+                Ok(Self::Uncarted(UncartedFile { file }))
             }
-            DownloadedSample::Uncarted(_) => Err(Error::new("Already uncarted")),
+            DownloadedFile::Uncarted(_) => Err(Error::new("Already uncarted")),
         }
     }
 
@@ -2735,8 +2735,8 @@ impl DownloadedSample {
     #[allow(dead_code)]
     async fn uncart(self) -> Result<Self, Error> {
         match self {
-            DownloadedSample::Carted(carted) => {
-                // get the current path to this sample
+            DownloadedFile::Carted(carted) => {
+                // get the current path to this file
                 let original = carted.path.clone();
                 // build a hidden file name (on linux at least for now)
                 let hidden = match original.file_name() {
@@ -2762,9 +2762,9 @@ impl DownloadedSample {
                 tokio::fs::rename(hidden, &original).await?;
                 // get a file handle to our newly uncarted file
                 let file = File::open(original).await?;
-                Ok(Self::Uncarted(UncartedSample { file }))
+                Ok(Self::Uncarted(UncartedFile { file }))
             }
-            DownloadedSample::Uncarted(uncarted) => Ok(Self::Uncarted(uncarted)),
+            DownloadedFile::Uncarted(uncarted) => Ok(Self::Uncarted(uncarted)),
         }
     }
 }

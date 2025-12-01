@@ -12,6 +12,7 @@ use crate::{not_found, unavailable};
 ///
 /// * `s3_id` - The s3 id to check for
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::s3::s3_id_exists", skip(s3_id, shared), err(Debug))]
 pub async fn s3_id_exists(
     objects: S3Objects,
     s3_id: &Uuid,
@@ -36,6 +37,7 @@ pub async fn s3_id_exists(
 /// * `object` - The type of objects to perform an existence check
 /// * `path` - The path to check against
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::s3::object_exists", skip(shared), err(Debug))]
 pub async fn object_exists(
     object: S3Objects,
     path: &str,
@@ -60,6 +62,7 @@ pub async fn object_exists(
 /// * `s3_id` - The s3 id to insert
 /// * `sha256` - The sha256 of the file this s3 id contains
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::s3::insert_s3_id", skip(s3_id, shared), err(Debug))]
 pub async fn insert_s3_id(
     objects: S3Objects,
     s3_id: &Uuid,
@@ -100,17 +103,15 @@ pub async fn generate_id(objects: S3Objects, shared: &Shared) -> Result<Uuid, Ap
 /// # Arguments
 ///
 /// * `s3_id` - The s3 id to check for
+/// * `key` - The key of the s3 id to get
 /// * `shared` - Shared Thorium objects
-pub async fn get_s3_id(
-    objects: S3Objects,
-    sha256: &str,
-    shared: &Shared,
-) -> Result<Uuid, ApiError> {
+#[instrument(name = "db::s3::get_s3_id", skip(shared), err(Debug))]
+pub async fn get_s3_id(objects: S3Objects, key: &str, shared: &Shared) -> Result<Uuid, ApiError> {
     // execute our query
     let query = shared
         .scylla
         .session
-        .execute_unpaged(&shared.scylla.prep.s3.get, (objects, sha256))
+        .execute_unpaged(&shared.scylla.prep.s3.get, (objects, key))
         .await?;
     // cast this query to a rows query
     let query_rows = query.into_rows_result()?;
@@ -121,7 +122,7 @@ pub async fn get_s3_id(
         // we didn't get any rows so this id does not exist
         not_found!(format!(
             "Failed to find an s3 object for {}:{}",
-            objects, sha256
+            objects, key
         ))
     }
 }

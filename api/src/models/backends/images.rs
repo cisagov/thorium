@@ -11,17 +11,18 @@ use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use crate::models::backends::{NotificationSupport, db};
+use crate::models::images::CacheDependencySettingsUpdate;
 use crate::models::system::{
     BARE_METAL_CACHE_KEY, EXTERNAL_CACHE_KEY, K8S_CACHE_KEY, KVM_CACHE_KEY, WINDOWS_CACHE_KEY,
 };
 use crate::models::{
-    BurstableResources, BurstableResourcesUpdate, ChildFilters, ChildFiltersUpdate, Cleanup,
-    CleanupUpdate, Dependencies, DependenciesUpdate, Group, GroupAllowAction, Image, ImageArgs,
-    ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageKey, ImageList,
-    ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, Kvm,
-    KvmUpdate, NetworkPolicy, OutputCollection, OutputDisplayType, PipelineBan, PipelineBanKind,
-    PipelineBanUpdate, PipelineKey, Resources, ResourcesUpdate, SecurityContext,
-    SecurityContextUpdate, SpawnLimits, SystemSettings, User,
+    BurstableResources, BurstableResourcesUpdate, CacheDependencySettings, ChildFilters,
+    ChildFiltersUpdate, Cleanup, CleanupUpdate, Dependencies, DependenciesUpdate, Group,
+    GroupAllowAction, Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate,
+    ImageDetailsList, ImageKey, ImageList, ImageListParams, ImageNetworkPolicyUpdate, ImageRequest,
+    ImageScaler, ImageUpdate, Kvm, KvmUpdate, NetworkPolicy, OutputCollection, OutputDisplayType,
+    PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineKey, Resources, ResourcesUpdate,
+    SecurityContext, SecurityContextUpdate, SpawnLimits, SystemSettings, User,
 };
 use crate::utils::{ApiError, Shared, bounder};
 use crate::{
@@ -133,7 +134,7 @@ impl ImageRequest {
     /// * `settings` - The Thorium [`SystemSettings`]
     pub fn cast(self, user: &User, settings: &SystemSettings) -> Result<Image, ApiError> {
         // make sure our resource requests are valid
-        let resources = Resources::try_from(self.resources)?;
+        let resources = Resources::from(self.resources);
         // validate all volumes
         for vol in &self.volumes {
             vol.validate(user, settings)?;
@@ -204,7 +205,7 @@ impl BurstableResourcesUpdate {
     /// # Arguments
     ///
     /// * `image` - The image to update
-    pub fn update(mut self, resources: &mut Resources) -> Result<(), ApiError> {
+    pub fn update(self, resources: &mut Resources) -> Result<(), ApiError> {
         // update this images resources
         update!(resources.burstable.cpu, self.cpu);
         update!(resources.burstable.memory, self.memory);
@@ -218,7 +219,7 @@ impl ResourcesUpdate {
     /// # Arguments
     ///
     /// * `image` - The image to update
-    pub fn update(mut self, image: &mut Image) -> Result<(), ApiError> {
+    pub fn update(self, image: &mut Image) -> Result<(), ApiError> {
         // update this images resources
         update!(image.resources.cpu, self.cpu);
         update!(image.resources.memory, self.memory);
@@ -253,6 +254,24 @@ impl SecurityContextUpdate {
         update_clear!(image.security_context.user, self.clear_user);
         update_clear!(image.security_context.group, self.clear_group);
         Ok(())
+    }
+}
+
+impl CacheDependencySettingsUpdate {
+    /// Update all of this images dependencies
+    ///
+    /// # Arguments
+    ///
+    /// * `settings` - The settings to apply our updates too
+    fn update(mut self, settings: &mut CacheDependencySettings) {
+        // update our cache settings
+        update!(settings.location, self.location);
+        update!(settings.use_parent_cache, self.use_parent_cache);
+        update!(settings.enabled, self.enabled);
+        // update our generic cache settings
+        update_opt!(settings.generic.kwarg, self.generic.kwarg);
+        update_clear!(settings.generic.kwarg, self.generic.clear_kwarg);
+        update!(settings.generic.strategy, self.generic.strategy);
     }
 }
 
@@ -336,6 +355,8 @@ impl DependenciesUpdate {
         update_opt!(image.dependencies.children.kwarg, self.children.kwarg);
         update_clear!(image.dependencies.children.kwarg, self.children.clear_kwarg);
         update!(image.dependencies.children.strategy, self.children.strategy);
+        // update our cache settings
+        self.cache.update(&mut image.dependencies.cache);
         // update children images
         image
             .dependencies
@@ -1020,11 +1041,12 @@ impl Image {
                 db::images::update_runtimes(&group, shared).await?;
             }
             // check if our cursor has been exhausted
-            if groups.cursor.is_none() {
-                break;
+            match groups.cursor {
+                // update our cursor and go to the next page
+                Some(inner_cursor) => cursor = inner_cursor,
+                // there is no more data to return so break
+                None => break,
             }
-            // update cursor
-            cursor = groups.cursor.unwrap();
         }
         Ok(())
     }

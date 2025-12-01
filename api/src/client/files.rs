@@ -1,8 +1,7 @@
 //! Support the files routes in the Thorium client
 
 use cart_rs::UncartStream;
-use futures::TryStreamExt;
-use futures::stream::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use std::path::{Path, PathBuf};
 use tokio::fs::OpenOptions;
@@ -16,11 +15,11 @@ use tracing::instrument;
 use super::Error;
 use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferProgress};
 use crate::models::{
-    Attachment, CartedSample, CommentRequest, CommentResponse, CountCursor, Cursor,
-    DeleteCommentParams, DownloadedSample, FileDeleteOpts, FileDownloadOpts, FileListOpts,
-    OutputMap, OutputRequest, OutputResponse, ResultGetParams, Sample, SampleCheck,
-    SampleCheckResponse, SampleListLine, SampleRequest, SampleSubmissionResponse, SubmissionUpdate,
-    TagCounts, TagDeleteRequest, TagRequest, UncartedSample,
+    Attachment, CartedFile, CommentRequest, CommentResponse, CountCursor, Cursor,
+    DeleteCommentParams, DownloadedFile, FileDeleteOpts, FileDownloadOpts, FileListOpts, OutputMap,
+    OutputRequest, OutputResponse, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
+    SampleListLine, SampleRequest, SampleSubmissionResponse, SubmissionUpdate, TagCounts,
+    TagDeleteRequest, TagRequest, UncartedFile,
 };
 use crate::{
     add_date, add_query, add_query_bool, add_query_list, add_query_list_clone, send, send_build,
@@ -275,7 +274,7 @@ impl Files {
         sha256: &str,
         path: P,
         opts: &mut FileDownloadOpts,
-    ) -> Result<DownloadedSample, Error> {
+    ) -> Result<DownloadedFile, Error> {
         // build url for getting info on a sample
         let url = format!(
             "{base}/api/files/sample/{sha256}/download",
@@ -320,7 +319,7 @@ impl Files {
                         }
                         None => tokio::io::copy(&mut uncart, &mut file).await?,
                     };
-                    Ok(DownloadedSample::Uncarted(UncartedSample { file }))
+                    Ok(DownloadedFile::Uncarted(UncartedFile { file }))
                 } else {
                     // leave this file in a carted format
                     // make a file to save the response too
@@ -343,7 +342,7 @@ impl Files {
                         opts.update_progress_bytes(&data);
                     }
                     // build our carted sample object from the bytes
-                    Ok(DownloadedSample::Carted(CartedSample { path }))
+                    Ok(DownloadedFile::Carted(CartedFile { path }))
                 }
             }
             // the response had an error status

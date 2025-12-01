@@ -6,6 +6,8 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::{tool, tool_router};
 use schemars::JsonSchema;
+use serde_json::json;
+use tracing::instrument;
 
 use super::ThoriumMCP;
 
@@ -27,6 +29,7 @@ impl ThoriumMCP {
         name = "list_pipelines",
         description = "List the pipelines or tools in Thorium."
     )]
+    #[instrument(name = "ThoriumMCP::list_pipelines", skip(self, parts), err(Debug))]
     pub async fn list_pipelines(
         &self,
         Parameters(params): Parameters<ListPipelines>,
@@ -38,11 +41,18 @@ impl ThoriumMCP {
         let mut cursor = thorium.pipelines.list(&params.group).details().limit(1000);
         // get this cursors data
         cursor.next().await?;
-        // serialize our list of tools
-        let serialized = serde_json::to_value(&cursor.details).unwrap();
+        // serialize our list of pipelines
+        let serialized = serde_json::to_value(json!({"data": &cursor.details})).unwrap();
+        // instance a content that is sized for our info
+        let mut content = Vec::with_capacity(cursor.details.len());
+        // add each of our pipelines to our content
+        for pipeline in &cursor.details {
+            // add this pipeline to our content
+            content.push(Content::json(pipeline)?);
+        }
         // build our result
         let result = CallToolResult {
-            content: vec![Content::json(&cursor.details)?],
+            content,
             structured_content: Some(serialized),
             is_error: Some(false),
             meta: None,

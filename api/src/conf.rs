@@ -508,8 +508,10 @@ impl SpawnSlots {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, Copy)]
 pub struct BurstableNodeResources {
     /// The percent of burstable cores to allow for on this node
+    #[serde(default)]
     pub cpu: f64,
     /// The percent of burstable memory to allow for on this node
+    #[serde(default)]
     pub memory: f64,
 }
 
@@ -541,6 +543,7 @@ pub struct K8sCluster {
     #[serde(default)]
     pub spawn_slots: SpawnSlots,
     /// What % of burstable resources to allow nodes in this cluster
+    #[serde(default)]
     pub burstable: BurstableNodeResources,
     /// The tls server name to use for cert validation
     #[serde(default)]
@@ -1656,8 +1659,7 @@ impl Tags {
         }
     }
 }
-
-/// Helps serde default the files bucket to thorium-files
+/// Helps serde default the files cart password
 fn default_files_password() -> String {
     "SecretCornIsBest".to_owned()
 }
@@ -1761,6 +1763,36 @@ impl Default for Ephemeral {
     fn default() -> Self {
         Ephemeral {
             bucket: default_ephemeral_bucket(),
+        }
+    }
+}
+
+/// Helps serde default the reaction cache cart password
+fn default_reaction_cache_password() -> String {
+    "SecretCornIsBest".to_owned()
+}
+
+/// Helps serde default the reaction_cache files bucket to thorium-reaction-cache-files
+fn default_reaction_cache_bucket() -> String {
+    "thorium-reaction-cache-files".to_owned()
+}
+
+/// The settings for saving reaction-cache files to the backend
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct ReactionCache {
+    /// The password to use when encrypting carted files
+    #[serde(default = "default_files_password")]
+    pub password: String,
+    /// The bucket to write extras files to
+    #[serde(default = "default_reaction_cache_bucket")]
+    pub bucket: String,
+}
+
+impl Default for ReactionCache {
+    fn default() -> Self {
+        ReactionCache {
+            password: default_reaction_cache_password(),
+            bucket: default_reaction_cache_bucket(),
         }
     }
 }
@@ -2215,6 +2247,9 @@ pub struct Thorium {
     /// The settings for ephemeral files
     #[serde(default)]
     pub ephemeral: Ephemeral,
+    /// The settings for the reaction cache
+    #[serde(default)]
+    pub reaction_cache: ReactionCache,
     /// The settings for attachments
     #[serde(default)]
     pub attachments: Attachments,

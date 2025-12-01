@@ -625,6 +625,10 @@ impl Tree {
     }
 
     /// Add our ring relationships to our tree
+    ///
+    /// # Arguments
+    ///
+    /// * `relationships` - The relationships to add to this tree
     fn add_relationships(
         &mut self,
         relationships: DashMap<u64, DashSet<UnhashedTreeBranch>>,
@@ -647,6 +651,13 @@ impl Tree {
     }
 
     /// Grow this tree in parallel
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is growing this tree
+    /// * `params` - The params used to grow this tree
+    /// * `ring` - The current tree ring of growth
+    /// * `shared` - Shared Thorium objects
     async fn parallel_grow(
         &self,
         user: &User,
@@ -659,7 +670,7 @@ impl Tree {
         // build futures to crawl
         for hash in &self.growable {
             // try to grow the tree from this node
-            futs.push(self.grow_from_node(user, *hash, &ring, params, shared));
+            futs.push(self.grow_from_node(user, *hash, ring, params, shared));
         }
         // convert this list of futures into a stream
         let mut grow_stream = stream::iter(futs).buffer_unordered(10);
@@ -672,6 +683,12 @@ impl Tree {
     }
 
     /// Build a tree based on data in Thorium's database
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is growing this tree
+    /// * `params` - The params used to grow this tree
+    /// * `shared` - Shared thorium objects
     pub async fn grow(
         &mut self,
         user: &User,

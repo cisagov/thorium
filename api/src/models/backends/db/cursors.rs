@@ -511,8 +511,8 @@ async fn ties_tags_query_helper<'a, D: CursorCore>(
 /// A query for data based on tags
 #[instrument(
     name = "ScyllaCursor::tags_query_helper",
-    skip(kind, group, buckets, start, end, shared),
-    fields(buckets_len = buckets.len()),
+    skip_all,
+    fields(kind, key, value, buckets_len = buckets.len()),
     err(Debug)
 )]
 async fn tags_query_helper<'a, D: CursorCore>(

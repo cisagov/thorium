@@ -23,7 +23,7 @@ pub mod thorium {
     #[pymodule_export]
     pub use thorium::models::{
         BulkReactionResponse, CommitishKinds, GenericJob, GenericJobArgs, GenericJobOpts,
-        HandleJobResponse, JobHandleStatus, Reaction, ReactionCreation, ReactionRequest,
-        ReactionStatus, RepoDependency, RepoDependencyRequest,
+        HandleJobResponse, JobHandleStatus, Reaction, ReactionCache, ReactionCreation,
+        ReactionRequest, ReactionStatus, RepoDependency, RepoDependencyRequest,
     };
 }

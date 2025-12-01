@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use axum::Router;
-use axum::extract::{Json, Path, Query, State};
+use axum::extract::{Json, Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum_extra::body::AsyncReadBody;
-use tracing::{Level, Span, instrument, span};
+use tracing::instrument;
 use utoipa::OpenApi;
 use uuid::Uuid;
 
@@ -15,10 +15,10 @@ use super::OpenApiSecurity;
 use crate::bad;
 use crate::models::{
     Actions, BulkReactionResponse, CommitishKinds, Group, HandleReactionResponse, ImageScaler,
-    JobResetRequestor, Pipeline, Reaction, ReactionDetailsList, ReactionIdResponse, ReactionList,
-    ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency,
-    RepoDependencyRequest, StageLogLine, StageLogs, StageLogsAdd, StatusUpdate, SystemComponents,
-    User,
+    JobResetRequestor, Pipeline, Reaction, ReactionCache, ReactionCacheUpdate, ReactionDetailsList,
+    ReactionIdResponse, ReactionList, ReactionListParams, ReactionRequest, ReactionStatus,
+    ReactionUpdate, RepoDependency, RepoDependencyRequest, StageLogLine, StageLogs, StageLogsAdd,
+    StatusUpdate, SystemComponents, User,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -137,16 +137,168 @@ async fn create_bulk_by_user(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::get", skip_all, err(Debug))]
 async fn get_reaction(
     user: User,
     Path((group, id)): Path<(String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<Json<Reaction>, ApiError> {
-    // start our get reaction span
-    let span = span!(Level::INFO, "Get Reaction Route");
     // get reaction from backend
-    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
     Ok(Json(reaction))
+}
+
+/// Update a reactions cache
+///
+/// # Arguments
+///
+/// * `user` - The user that is updating reaction cache info
+/// * `group` - The group for the reaction to update
+/// * `id` - The Uuid of the reaction to update
+/// * `state` - Shared Thorium objects
+/// * `cache_update` - The update to apply to this reactions cache
+#[utoipa::path(
+    patch,
+    path = "/api/reactions/:group/:id/cache",
+    params(
+        ("group" = String, Path, description = "The group this reaction is in"),
+        ("id" = Uuid, Path, description = "The uuid of the reaction to update"),
+        ("cache_update" = ReactionCacheUpdate, description = "The update to apply to this reactions cache"),
+    ),
+    responses(
+        (status = 204, description = "Reaction has been updated"),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::update_cache", skip_all, err(Debug))]
+async fn update_cache(
+    user: User,
+    Path((group, id)): Path<(String, Uuid)>,
+    State(state): State<AppState>,
+    Json(cache_update): Json<ReactionCacheUpdate>,
+) -> Result<StatusCode, ApiError> {
+    // get reaction from backend
+    let (group, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
+    // update this reactions cache
+    reaction
+        .update_cache(&user, &group, &cache_update, &state.shared)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Add files to a reactions cache
+///
+/// # Arguments
+///
+/// * `user` - The user that is adding files to this reactions cache
+/// * `group` - The group this reaction is in
+/// * `id` - The id of the reaction to add files too
+/// * `state` - Shared Thorium state
+/// * `multipart` - The multipart form containing the files to upload
+#[utoipa::path(
+    patch,
+    path = "/api/reactions/:group/:id/cache/files/",
+    params(
+        ("group" = String, Path, description = "The group this reaction is in"),
+        ("id" = Uuid, Path, description = "The uuid of the reaction to add a file too"),
+        ("multipart", description = "The multipart form containing the cache file upload")
+    ),
+    responses(
+        (status = 204, description = "Reaction file has been added"),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::update_cache_files", skip_all, err(Debug))]
+async fn update_cache_files(
+    user: User,
+    Path((group, id)): Path<(String, Uuid)>,
+    State(state): State<AppState>,
+    multipart: Multipart,
+) -> Result<StatusCode, ApiError> {
+    // get this reaction from backend
+    let (group, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
+    // update this reactions cache files
+    reaction
+        .add_cache_files(&user, &group, multipart, &state.shared)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Get a reactions cache
+#[utoipa::path(
+    patch,
+    path = "/api/reactions/:group/:id/cache",
+    params(
+        ("group" = String, Path, description = "The group this reaction is in"),
+        ("id" = Uuid, Path, description = "The uuid of the reaction to get info for"),
+    ),
+    responses(
+        (status = 200, description = "This reactions cache", body = ReactionCache),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::get_cache", skip_all, err(Debug))]
+async fn get_cache(
+    user: User,
+    Path((group, id)): Path<(String, Uuid)>,
+    State(state): State<AppState>,
+) -> Result<Json<ReactionCache>, ApiError> {
+    // get reaction from backend
+    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
+    // get this reactions cache
+    let cache = reaction.get_cache(&state.shared).await?;
+    Ok(Json(cache))
+}
+
+/// Downloads an cache file for a reaction
+///
+/// # Arguments
+///
+/// * `user` - The user that is downloading this ephemeral file
+/// * `group` - The group this reaction is in
+/// * `reaction` - The uuid of the reaction to download an ephemeral file from
+/// * `name` - The name of the ephemeral file
+/// * `state` - Shared Thorium objects
+//#[utoipa::path(
+//    get,
+//    path = "/api/reactions/:group/:id/cache/files/:repo_path",
+//    params(
+//        ("group" = String, Path, description = "The group this reaction is in"),
+//        ("reaction" = Uuid, Path, description = "The uuid of the reaction to download a cache file from"),
+//        ("path" = String, Path, description = "The path or name of the cache file")
+//    ),
+//    responses(
+//        (status = 200, description = "cache file byte stream", body = Vec<u8>),
+//        (status = 401, description = "This user is not authorized to access this route"),
+//    ),
+//    security(
+//        ("basic" = []),
+//    )
+//)]
+#[instrument(name = "routes::reactions::download_cache_file", skip_all, err(Debug))]
+async fn download_cache_file(
+    user: User,
+    Path((group, reaction, file_path)): Path<(String, Uuid, String)>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    // cast to to uuid then get reaction using id
+    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
+    // start streaming an ephemeral file from s3
+    let stream = reaction
+        .download_cache_file(&file_path, &state.shared)
+        .await?;
+    // convert our byte stream to a streamable body
+    let body = AsyncReadBody::new(stream.into_async_read());
+    Ok(body)
 }
 
 /// Handle a command for a reaction
@@ -182,10 +334,8 @@ async fn handle(
     Path((group, id, cmd)): Path<(String, Uuid, String)>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
-    // get our current span
-    let span = Span::current();
     // get reaction object
-    let (group, reaction) = Reaction::get(&user, &group, &id, &state.shared, &span).await?;
+    let (group, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
     // call correct handler
     let status = match cmd.as_ref() {
         "proceed" => reaction.proceed(&user, &group, &state.shared).await?,
@@ -224,19 +374,18 @@ async fn handle(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::logs", skip_all, err(Debug))]
 async fn logs(
     user: User,
     Path((group, id)): Path<(String, Uuid)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<StatusUpdate>>, ApiError> {
-    // start our handle reaction command span
-    let span = span!(Level::INFO, "Get Reaction Logs Route");
     // get reaction object
-    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
     // get the reaction logs
     let logs = reaction
-        .logs(params.cursor, params.limit, &state.shared, &span)
+        .logs(params.cursor, params.limit, &state.shared)
         .await?;
     Ok(Json(logs))
 }
@@ -275,10 +424,8 @@ async fn add_stage_logs(
     State(state): State<AppState>,
     Json(logs): Json<StageLogsAdd>,
 ) -> Result<StatusCode, ApiError> {
-    // get our current span
-    let span = Span::current();
     // get reaction object
-    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
     // append stage logs
     reaction.add_stage_logs(&stage, logs, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -318,10 +465,8 @@ async fn stage_logs(
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<StageLogs>, ApiError> {
-    // get our current span
-    let span = Span::current();
     // get reaction object
-    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &id, &state.shared).await?;
     // get stage logs
     let logs = reaction
         .stage_logs(&stage, params.cursor, params.limit, &state.shared)
@@ -705,16 +850,15 @@ async fn list_group_set_details(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::list_sub", skip_all, err(Debug))]
 async fn list_sub(
     user: User,
     Path((group, reaction)): Path<(String, Uuid)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<ReactionList>, ApiError> {
-    // start our list sub reactions span
-    let span = span!(Level::INFO, "List Sub Reactions Route");
     // get reaction data
-    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // list sub reactions
     let names = Reaction::list_sub(&reaction, params.cursor, params.limit, &state.shared).await?;
     Ok(Json(names))
@@ -747,16 +891,15 @@ async fn list_sub(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::list_sub_status", skip_all, err(Debug))]
 async fn list_sub_status(
     user: User,
     Path((group, reaction, status)): Path<(String, Uuid, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<ReactionList>, ApiError> {
-    // start our list sub reactions by status span
-    let span = span!(Level::INFO, "List Sub Reactions By Status Route");
     // get reaction data
-    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // list sub reactions
     let names = Reaction::list_sub_status(
         &reaction,
@@ -794,16 +937,15 @@ async fn list_sub_status(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::list_sub_details", skip_all, err(Debug))]
 async fn list_sub_details(
     user: User,
     Path((group, reaction)): Path<(String, Uuid)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<ReactionDetailsList>, ApiError> {
-    // start our list sub reaction details span
-    let span = span!(Level::INFO, "List Sub Reaction Details Route");
     // get reaction data
-    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // list reactions in a group with details
     let details = Reaction::list_sub(&reaction, params.cursor, params.limit, &state.shared)
         .await?
@@ -839,16 +981,19 @@ async fn list_sub_details(
         ("basic" = []),
     )
 )]
+#[instrument(
+    name = "routes::reactions::list_sub_stats_details",
+    skip_all,
+    err(Debug)
+)]
 async fn list_sub_status_details(
     user: User,
     Path((group, reaction, status)): Path<(String, Uuid, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<ReactionDetailsList>, ApiError> {
-    // start our list sub reaction details by status span
-    let span = span!(Level::INFO, "List Sub Reaction Details By Status Route");
     // get reaction data
-    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // list reactions in a group with details
     let details = Reaction::list_sub_status(
         &reaction,
@@ -888,16 +1033,15 @@ async fn list_sub_status_details(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::update", skip_all, err(Debug))]
 async fn update(
     user: User,
     Path((group, reaction)): Path<(String, Uuid)>,
     State(state): State<AppState>,
     Json(update): Json<ReactionUpdate>,
 ) -> Result<Json<Reaction>, ApiError> {
-    // start our update reaction span
-    let span = span!(Level::INFO, "Update Reaction Route");
     // cast to to uuid then get reaction using id
-    let (group, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (group, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // update our reaction
     let reaction = reaction
         .update(&user, &group, update, &state.shared)
@@ -931,15 +1075,14 @@ async fn update(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::delete_reaction", skip_all, err(Debug))]
 async fn delete_reaction(
     user: User,
     Path((group, reaction)): Path<(String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
-    // start our update reaction span
-    let span = span!(Level::INFO, "Delete Reaction Route");
     // cast to to uuid then get reaction using id
-    let (group, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (group, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // delete reaction from backend
     reaction.delete(&user, &group, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -955,7 +1098,7 @@ async fn delete_reaction(
 /// * `name` - The name of the ephemeral file
 /// * `state` - Shared Thorium objects
 #[utoipa::path(
-    delete,
+    get,
     path = "/api/reactions/ephemeral/:group/:id/:name",
     params(
         ("group" = String, Path, description = "The group this reaction is in"),
@@ -970,15 +1113,14 @@ async fn delete_reaction(
         ("basic" = []),
     )
 )]
+#[instrument(name = "routes::reactions::download_ephemeral", skip_all, err(Debug))]
 async fn download_ephemeral(
     user: User,
     Path((group, reaction, name)): Path<(String, Uuid, String)>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // start our update reaction span
-    let span = span!(Level::INFO, "Download Ephemeral File For Reaction Route");
     // cast to to uuid then get reaction using id
-    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared, &span).await?;
+    let (_, reaction) = Reaction::get(&user, &group, &reaction, &state.shared).await?;
     // start streaming an ephemeral file from s3
     let stream = reaction.download_ephemeral(&name, &state.shared).await?;
     // convert our byte stream to a streamable body
@@ -993,7 +1135,7 @@ async fn download_ephemeral(
           list, list_details, list_status, list_status_details, list_tag, list_tag_details, list_group_set,
           list_group_set_details, list_sub, list_sub_details, list_sub_status_details, list_sub_status,
           download_ephemeral),
-    components(schemas(Actions, BulkReactionResponse, CommitishKinds, HandleReactionResponse, ImageScaler, JobResetRequestor, Reaction, ReactionIdResponse, ReactionList, ReactionDetailsList, ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency, RepoDependencyRequest, StageLogs, StageLogsAdd, StageLogLine, StatusUpdate, SystemComponents)),
+    components(schemas(Actions, BulkReactionResponse, CommitishKinds, HandleReactionResponse, ImageScaler, JobResetRequestor, Reaction, ReactionIdResponse, ReactionList, ReactionDetailsList, ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency, RepoDependencyRequest, StageLogs, StageLogsAdd, StageLogLine, StatusUpdate, SystemComponents, ReactionCache, ReactionCacheUpdate)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct ReactionApiDocs;
@@ -1017,6 +1159,18 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/reactions/{group}/{id}",
             get(get_reaction).patch(update).delete(delete_reaction),
+        )
+        .route(
+            "/reactions/{group}/{id}/cache",
+            get(get_cache).patch(update_cache),
+        )
+        .route(
+            "/reactions/{group}/{id}/cache/files/",
+            patch(update_cache_files),
+        )
+        .route(
+            "/reactions/{group}/{id}/cache/files/{*path}",
+            get(download_cache_file),
         )
         .route("/reactions/handle/{group}/{id}/{cmd}", post(handle))
         .route("/reactions/logs/{group}/{id}", get(logs))

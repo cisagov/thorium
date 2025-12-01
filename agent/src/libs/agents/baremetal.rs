@@ -3,15 +3,16 @@
 use crossbeam::channel::Sender;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use thorium::models::{DependencyPassStrategy, GenericJob, Image};
+use thorium::models::{GenericJob, Image};
 use thorium::{Error, Thorium};
 use tokio::process::Command;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
-use super::{registry, setup, AgentExecutor, InFlight};
+use super::cmd::CmdBuilder;
+use super::{AgentExecutor, InFlight, setup};
 use crate::libs::children::{self, Children};
-use crate::libs::{results, tags, RawResults, TagBundle, Target};
-use crate::{build_path_args, log, purge, purge_parent};
+use crate::libs::{DownloadedCache, RawResults, TagBundle, Target, results, tags};
+use crate::{log, purge, purge_parent};
 
 /// Isolate a path to target folder or file
 ///
@@ -65,6 +66,8 @@ pub struct BareMetal {
     pub tags_path: PathBuf,
     /// The path to write children to
     pub children_path: PathBuf,
+    /// The path to write cache info to
+    pub cache_path: PathBuf,
     /// The paths to any downloaded sample files
     samples: Vec<PathBuf>,
     /// The paths to any downloaded ephemeral files
@@ -77,6 +80,8 @@ pub struct BareMetal {
     tags: Vec<PathBuf>,
     /// The paths to any downloaded children
     children: Vec<PathBuf>,
+    /// The paths to any downloaded cache info
+    cache: DownloadedCache,
 }
 
 impl BareMetal {
@@ -95,6 +100,7 @@ impl BareMetal {
         let result_files_path = isolate(&target.image.output_collection.files.result_files, &id)?;
         let tags_path = isolate(&target.image.output_collection.files.tags, &id)?;
         let children_path = isolate(&target.image.output_collection.children, &id)?;
+        let cache_path = isolate(&target.image.dependencies.cache.location, &id)?;
         // build our baremetal object
         let bare_metal = BareMetal {
             thorium: target.thorium.clone(),
@@ -109,12 +115,14 @@ impl BareMetal {
             result_files_path,
             tags_path,
             children_path,
+            cache_path,
             samples: Vec::default(),
             ephemerals: Vec::default(),
             repos: Vec::default(),
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            cache: DownloadedCache::default(),
         };
         Ok(bare_metal)
     }
@@ -172,11 +180,15 @@ impl AgentExecutor for BareMetal {
         std::fs::create_dir_all(&self.ephemerals_path)?;
         std::fs::create_dir_all(&self.repos_path)?;
         // setup results/tags/children paths
-        std::fs::create_dir_all(&self.results_path.parent().unwrap())?;
+        std::fs::create_dir_all(self.results_path.parent().unwrap())?;
         std::fs::create_dir_all(&self.result_files_path)?;
         std::fs::create_dir_all(&self.tags_path)?;
         // build the paths for storing children files
         children::setup(&self.children_path).await?;
+        // download our cache if we have one and if its enabled
+        self.cache =
+            setup::download_cache(&self.thorium, image, job, &self.cache_path, &mut self.logs)
+                .await?;
         // download any data required for this job
         self.samples = setup::download_samples(
             &self.thorium,
@@ -265,64 +277,65 @@ impl AgentExecutor for BareMetal {
         job: &GenericJob,
         log_path: &str,
     ) -> Result<InFlight, Error> {
-        // get the correct way to pass our dependency paths to our job
-        let sample_args = build_path_args!(job.samples, self.samples, image.dependencies.samples);
-        let ephemeral_args =
-            build_path_args!(job.ephemeral, self.ephemerals, image.dependencies.ephemeral);
-        let repo_args = build_path_args!(job.repos, self.repos, image.dependencies.repos, url);
-        let result_args = build_path_args!(
-            image.dependencies.results.images,
-            self.results,
-            image.dependencies.results
-        );
-        let tag_args = build_path_args!(self.tags, image.dependencies.tags);
-        let children_args = build_path_args!(self.children, image.dependencies.children);
-        // build the path to our results dir
-        let output = self
-            .results_path
-            .parent()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-        // start building the command we want to execute
+        // convert our output path to a string
+        let output = self.results_path.to_string_lossy().to_string();
+        // get a ref to our dependency settings
+        let dep_conf = &image.dependencies;
+        // build our initial command based on our configured entrypoints
         let cmd = match (&image.args.entrypoint, &image.args.command) {
-            (Some(ep), Some(cmd)) => registry::Cmd::new(image, job, ep, cmd),
-            (Some(ep), None) => registry::Cmd::new(image, job, ep, &[]),
-            _ => {
+            (Some(ep), Some(cmd)) => CmdBuilder::new(image, job, ep, cmd),
+            (Some(ep), None) => CmdBuilder::new(image, job, ep, &[]),
+            (None, Some(cmd)) => CmdBuilder::new(image, job, &[], cmd),
+            (None, None) => {
                 return Err(Error::new(
-                    "Bare Metal jobs require an entrypoint!".to_owned(),
-                ))
+                    "Bare Metal jobs require an entrypoint or command!".to_owned(),
+                ));
             }
         };
-        // build the command we want to execute
-        let built = cmd
-            .build(
-                sample_args,
-                ephemeral_args,
-                repo_args,
-                result_args,
-                tag_args,
-                children_args,
-                &output,
-                image,
-                job,
+        // build the command this worker should execute
+        let cmd = cmd
+            .add_ephemeral(&job.ephemeral, &self.ephemerals, &dep_conf.ephemeral)
+            .add_samples(&job.samples, &self.samples, &dep_conf.samples)
+            .add_repos(image, &job.repos, &self.repos)
+            .add_results(
+                &image.dependencies.results.images,
+                &self.results,
+                &dep_conf.results,
                 &mut self.logs,
             )
-            .await?;
+            .await?
+            .add_tags(&self.tags, &dep_conf.tags)
+            .add_children(&self.children, &dep_conf.children)
+            .add_cache(&self.cache, &dep_conf.cache)
+            .build(image, Some(&output))?;
         // cast our command to a str
-        let built_str = built.join(" ");
+        let built_str = cmd.join(" ");
         // log the command we are executing
         log!(self.logs, built_str);
         event!(Level::INFO, cmd = built_str);
         // open a file handle to this file
         let log_file = std::fs::File::create(log_path)?;
-        // execute built command
-        let child = Command::new(built[0].clone())
-            .args(&built[1..])
-            .stdout(log_file.try_clone()?)
-            .stderr(log_file)
-            .spawn()?;
-        Ok(InFlight::Child(child))
+        // build the comamnd to execute
+        let mut cmd_builder = Command::new(cmd[0].clone());
+        // if we have more then just one arg then add those
+        if cmd.len() > 1 {
+            // add any remaining args
+            cmd_builder.args(&cmd[1..]);
+        }
+        // setup our stdout/stderr
+        cmd_builder.stdout(log_file.try_clone()?);
+        cmd_builder.stderr(log_file);
+        // spawn our overlayed command and log any errors
+        match cmd_builder.spawn() {
+            Ok(child) => Ok(InFlight::Child(child)),
+            // we failed to execute this entrypoint/command
+            Err(error) => {
+                // log this was a entrypoint/command execution error
+                log!(self.logs, "Failed to execute entrypoint/command");
+                // return our error
+                Err(Error::from(error))
+            }
+        }
     }
 
     /// Collect any result from a completed job
@@ -378,6 +391,26 @@ impl AgentExecutor for BareMetal {
         Children::collect(&self.children_path, &mut self.logs).await
     }
 
+    /// Sync any updates to our cache
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image this agent is executing jobs under
+    /// * `job` - The job that is being executed
+    async fn sync_cache(&mut self, image: &Image, job: &GenericJob) -> Result<(), Error> {
+        // sync our cache data
+        super::cache::sync(
+            &self.thorium,
+            image,
+            job,
+            &image.dependencies.cache.location,
+            &self.cache,
+            &mut self.logs,
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Clean up after this job
     #[instrument(name = "AgentExecutor<BareMetal>::clean_up", skip_all, err(Debug))]
     async fn clean_up(&mut self, _: &Image, _: &GenericJob) -> Result<(), Error> {
@@ -391,6 +424,7 @@ impl AgentExecutor for BareMetal {
         purge_parent!(self.result_files_path);
         purge_parent!(self.tags_path);
         purge_parent!(self.children_path);
+        purge_parent!(self.cache_path);
         Ok(())
     }
 }

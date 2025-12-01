@@ -39,7 +39,7 @@ export async function fetchImages(
 ) {
   if (typeof setLoading == 'function') setLoading(true);
 
-  const images = [];
+  const images: any[] = [];
   if (groups && Array.isArray(groups) && groups.length) {
     // Get image details for each group
     for (const group of groups) {

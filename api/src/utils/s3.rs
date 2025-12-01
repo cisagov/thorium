@@ -92,6 +92,8 @@ pub struct S3 {
     pub results: S3Client,
     /// The s3 bucket for ephemeral files
     pub ephemeral: S3Client,
+    /// The s3 bucket for reaction cache files
+    pub reaction_cache: S3Client,
     /// The s3 bucket for comment attachemnts
     pub attachments: S3Client,
     /// The s3 bucket for zipped repositories
@@ -121,6 +123,11 @@ impl S3 {
             &config.thorium.files.password,
             &config.thorium.s3,
         );
+        let reaction_cache = S3Client::new(
+            &config.thorium.reaction_cache.bucket,
+            &config.thorium.reaction_cache.password,
+            &config.thorium.s3,
+        );
         let attachments = S3Client::new(
             &config.thorium.attachments.bucket,
             // these aren't password protected so just use the files password
@@ -144,6 +151,7 @@ impl S3 {
             files,
             results,
             ephemeral,
+            reaction_cache,
             attachments,
             repos,
             graphics,
@@ -687,16 +695,16 @@ impl S3Client {
     ///
     /// # Arguments
     ///
-    /// * `s3_id` - The id to use for this object in s3
+    /// * `path` - The path to write this file to in s3
     /// * `field` - The field to stream to s3
     #[instrument(name = "S3Client::cart_and_stream", skip(self, field), err(Debug))]
-    pub async fn cart_and_stream<'a>(
+    pub async fn cart_and_stream<'a, P: Into<String> + std::fmt::Debug>(
         &self,
-        s3_id: &Uuid,
+        path: P,
         field: Field<'a>,
     ) -> Result<(), ApiError> {
-        // build the path to write this file too
-        let path = s3_id.to_string();
+        // convert our path into a string
+        let path = path.into();
         // initiate a multipart upload to s3
         let init = self
             .client

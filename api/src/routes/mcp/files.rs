@@ -8,6 +8,7 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::{tool, tool_router};
 use schemars::JsonSchema;
+use tracing::instrument;
 
 use crate::client::ResultsClient;
 use crate::models::ResultGetParams;
@@ -33,6 +34,7 @@ impl ThoriumMCP {
         name = "get_sample",
         description = "Get basic info about a specific sample/file by sha256."
     )]
+    #[instrument(name = "ThoriumMCP::get_sample", skip(self, parts), err(Debug))]
     pub async fn get_sample(
         &self,
         Parameters(Sha256 { sha256 }): Parameters<Sha256>,
@@ -64,6 +66,7 @@ impl ThoriumMCP {
         name = "get_sample_results",
         description = "Get tool results for a specific sample/file by sha256."
     )]
+    #[instrument(name = "ThoriumMCP::get_sample_results", skip(self, parts), err(Debug))]
     pub async fn get_sample_results(
         &self,
         Parameters(Sha256 { sha256 }): Parameters<Sha256>,

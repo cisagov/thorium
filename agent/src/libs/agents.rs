@@ -11,20 +11,21 @@ use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::time::{Duration, Instant};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 pub mod baremetal;
+mod cmd;
 pub mod k8s;
-mod registry;
 mod setup;
 
 pub use baremetal::BareMetal;
 pub use k8s::K8s;
 
 use crate::args::Envs;
+use crate::libs::cache;
 use crate::libs::children::Children;
-use crate::libs::{results, tags, Target};
-use crate::{from_now, log, Worker};
+use crate::libs::{Target, results, tags};
+use crate::{Worker, from_now, log};
 
 use super::results::RawResults;
 use super::tags::TagBundle;
@@ -151,7 +152,7 @@ pub struct Agent {
     pub thorium: Thorium,
     /// The image we are executing a job for
     pub image: Image,
-    /// The Job thisresults_path agent is executing
+    /// The Job this agent is executing
     pub job: GenericJob,
     /// The stage logs to send to Thorium
     stage_logs: StageLogsAdd,
@@ -343,7 +344,7 @@ impl Agent {
                     return Ok(JobStatus::Failed(code));
                 }
                 JobStatus::OnGoing => (),
-            };
+            }
             // check if we this job should be timed out or not
             if timeout.is_some() && Some(Instant::now()) > timeout {
                 // log this timeout
@@ -453,6 +454,14 @@ pub trait AgentExecutor {
         log_file: &str,
     ) -> Result<InFlight, Error>;
 
+    /// Sync any updates to our cache
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image this agent is executing jobs under
+    /// * `job` - The job that is being executed
+    async fn sync_cache(&mut self, image: &Image, job: &GenericJob) -> Result<(), Error>;
+
     /// Collect any result from a completed job
     ///
     /// # Arguments
@@ -519,6 +528,7 @@ async fn create_log_file<P: AsRef<Path>>(log_path: P) -> Result<File, Error> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(&path)
         .await?;
     Ok(file)
@@ -597,13 +607,15 @@ pub async fn sub_execute(
                     &mut agent.sender,
                 )
                 .await?;
+            // sync any updated cache files
+            agent.executor.sync_cache(&agent.image, &agent.job).await?;
             // mark this job as completed
             agent.completed = true;
             code
         }
         JobStatus::Failed(code) => code,
         JobStatus::OnGoing => {
-            return Err(Error::new(format!("Job {} is still ongoing", agent.job.id)))
+            return Err(Error::new(format!("Job {} is still ongoing", agent.job.id)));
         }
     };
     // log that we have finished this job
@@ -612,7 +624,7 @@ pub async fn sub_execute(
     match code {
         Some(code) => agent.sender.send(format!("Return Code: {code}"))?,
         None => agent.sender.send("Return Code: None".to_string())?,
-    };
+    }
     // send any remaining channel logs
     agent.send_channel_logs().await?;
     agent.executor.clean_up(&agent.image, &agent.job).await?;

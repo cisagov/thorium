@@ -251,13 +251,12 @@ impl ReactionKeys {
         )
     }
 
-    /// Builds key to the currently active set of generators
+    /// Builds key to the currently sleeping set of generators
     ///
     /// # Arguments
     ///
     /// * `group` - The group the reaction is in
     /// * `reaction` - The parent reaction id
-    /// * `status` - The current status of this reaction
     /// * `shared` - Shared Thorium objects
     pub fn generators(group: &str, reaction: &Uuid, shared: &Shared) -> String {
         format!(
@@ -268,7 +267,7 @@ impl ReactionKeys {
         )
     }
 
-    /// Builds key to the currently active set of generators
+    /// Builds key to the currently sleeping set of generators
     ///
     /// # Arguments
     ///
@@ -337,4 +336,38 @@ impl SubReactionLists {
             failed,
         }
     }
+}
+
+/// The different kind of cache data to get
+#[derive(Clone, Copy, Debug)]
+pub enum ReactionCacheKind {
+    /// Generic flexible cache data
+    Generic,
+    /// Files for our cache
+    Files,
+}
+
+impl std::fmt::Display for ReactionCacheKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Generic => write!(f, "Generic"),
+            Self::Files => write!(f, "Files"),
+        }
+    }
+}
+
+/// The key to a reactions cache
+///
+/// # Arguments
+///
+/// * `id` - The uuidv4 of the reaction to get/set cache info for
+/// * `kind` - The kind of cache info to get/set within this reaction cache
+/// * `shared` - Shared Thorium objects
+pub fn cache(id: &Uuid, kind: ReactionCacheKind, shared: &Shared) -> String {
+    format!(
+        "{ns}:reaction_cache:{id}:{kind}",
+        ns = shared.config.thorium.namespace,
+        id = id,
+        kind = kind,
+    )
 }

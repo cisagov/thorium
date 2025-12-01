@@ -1,4 +1,3 @@
-use regex::Regex;
 use serde::Deserialize;
 use serde::Serializer;
 use serde::de::{self, Deserializer, Visitor};

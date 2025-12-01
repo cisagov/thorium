@@ -6,7 +6,7 @@ use thorium::models::{
     ReactionUpdate, Resources,
 };
 use thorium::test_utilities::{self, generators};
-use thorium::{fail, is, is_empty, is_in, is_not_in, vec_in_vec, Error};
+use thorium::{Error, fail, is, is_empty, is_in, is_not_in, vec_in_vec};
 use uuid::Uuid;
 
 #[tokio::test]

@@ -1,18 +1,23 @@
 //! Setup an environment for executing a Thorium job
 
 use crossbeam::channel::Sender;
+use futures::{StreamExt, stream};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use thorium::client::ResultsClient;
-use thorium::models::{
-    DependencyPassStrategy, FileDownloadOpts, GenericJob, Image, RepoDownloadOpts, ResultGetParams,
-};
+use std::time::SystemTime;
 use thorium::Error;
 use thorium::Thorium;
+use thorium::client::ResultsClient;
+use thorium::models::{
+    DependencyPassStrategy, FileDownloadOpts, GenericJob, Image, ReactionCache, RepoDownloadOpts,
+    ResultGetParams,
+};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
+use uuid::Uuid;
 
+use crate::libs::DownloadedCache;
 use crate::log;
 
 /// Create any required parent dirs for this file
@@ -21,7 +26,7 @@ use crate::log;
 ///
 /// * `path` - The path to check the parent dirs for
 /// * `created_dirs` - The set of directories we have already created
-async fn create_parents(path: &PathBuf, created_dirs: &mut HashSet<PathBuf>) -> Result<(), Error> {
+async fn create_parents(path: &Path, created_dirs: &mut HashSet<PathBuf>) -> Result<(), Error> {
     // get this result files parent dir
     if let Some(parent) = path.parent() {
         // if this parent dir isn't already in our created map then create it
@@ -33,6 +38,195 @@ async fn create_parents(path: &PathBuf, created_dirs: &mut HashSet<PathBuf>) -> 
         }
     }
     Ok(())
+}
+
+/// Download a reactions generic cache
+///
+/// # Arguments
+///
+/// * `location` - The path to download cache data too
+/// * `cache` - This reactions cache
+/// * `downloading` - The cache data that has been downloaded
+/// * `logs` - This jobs logs
+#[instrument(name = "setup::write_generic_cache", skip_all, err(Debug))]
+pub async fn write_generic_cache(
+    location: &Path,
+    cache: &ReactionCache,
+    downloaded: &mut DownloadedCache,
+    logs: &mut Sender<String>,
+) -> Result<(), Error> {
+    // Only write if our cache contains data
+    if !cache.generic.is_empty() {
+        // build the path to store our generic cache info
+        let cache_path = location.join("generic.json");
+        // serialize our generic cache
+        let serialized = serde_json::to_string(&cache.generic)?;
+        // download and uncart this file to disk
+        log!(
+            logs,
+            format!("Writing generic cache to {}", cache_path.display())
+        );
+        // write our generic cache to disk
+        tokio::fs::write(&cache_path, &serialized).await?;
+        // set the path that we downloaded our cache too
+        downloaded.generic = Some(cache_path);
+    }
+    Ok(())
+}
+
+/// Help download cache files
+///
+/// # Arguments
+///
+/// * `thorium` - A thorium client
+/// * `job` - The current job we are executing
+/// * `reaction` - The id of the reaction we are downloading cache files from
+/// * `sub` - The relative path for the cache file we are downloading
+/// * `write_path` - The path to write this downloaded file too
+/// * `logs` - This jobs logs
+#[instrument(
+    name = "setup::download_cache_file_helper",
+    skip(thorium, job, write_path),
+    err(Debug)
+)]
+async fn download_cache_file_helper(
+    thorium: &Thorium,
+    job: &GenericJob,
+    reaction: Uuid,
+    sub: &str,
+    write_path: PathBuf,
+    mut logs: Sender<String>,
+) -> Result<(), Error> {
+    // build our options for downloading this file
+    // make sure to always uncart these files
+    let mut opts = FileDownloadOpts::default().uncart();
+    // log that we are downloading this cache file
+    log!(&mut logs, format!("Downloading cache file {sub}"));
+    // make any required sub folders if needed
+    if let Some(parent) = write_path.parent() {
+        // create our parent folders
+        tokio::fs::create_dir_all(parent)
+            .await
+            // give our error some extra context on what failed
+            .map_err(|error| {
+                Error::new(format!(
+                    "Failed to create parent dir {}: {error}",
+                    parent.display()
+                ))
+            })?;
+    }
+    // create a future download this cache file and stream it to disk
+    thorium
+        .reactions
+        .download_from_cache(&job.group, reaction, sub, write_path, &mut opts)
+        .await
+        // give our error some extra context on what failed
+        .map_err(|error| Error::new(format!("Failed to download cache file '{sub}' : {error}")))?;
+    Ok(())
+}
+
+/// Download our reactiosn cache file to disk
+///
+/// # Arguments
+///
+/// * `thorium` - A thorium client
+/// * `location` - The path to download cache data too
+/// * `cache` - This reactions cache
+/// * `job` - The current job we are executing
+/// * `reaction` - The id of the reaction we are downloading cache files from
+/// * `downloading` - The cache data that has been downloaded
+/// * `logs` - This jobs logs
+#[instrument(name = "setup::download_cache_files", skip_all, err(Debug))]
+pub async fn download_cache_files(
+    thorium: &Thorium,
+    location: &Path,
+    cache: &ReactionCache,
+    job: &GenericJob,
+    reaction: Uuid,
+    downloaded: &mut DownloadedCache,
+    logs: &mut Sender<String>,
+) -> Result<(), Error> {
+    // build a path to store our cache files at
+    let file_root = location.join("files");
+    // create a folder for our cache files
+    tokio::fs::create_dir(&file_root).await?;
+    // only download cache files if we have some
+    if !cache.files.is_empty() {
+        // build a set of futures for downloading our files
+        let mut futs = Vec::with_capacity(cache.files.len());
+        // build a future for downloading all of our cache files
+        for sub in &cache.files {
+            // get the path to write this file to on disk
+            let write_path = file_root.join(sub);
+            // add this path to our downloaded paths
+            downloaded.files.push(write_path.clone());
+            // clone our logs channel
+            let local_logs = logs.clone();
+            // download this cache file
+            let fut =
+                download_cache_file_helper(thorium, job, reaction, sub, write_path, local_logs);
+            // add this to our download futures
+            futs.push(fut);
+        }
+        // download our cache files in parallel
+        stream::iter(futs)
+            .buffer_unordered(3)
+            .collect::<Vec<Result<(), Error>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<()>, Error>>()?;
+    }
+    Ok(())
+}
+
+/// Download our reactions cache from for Thorium
+///
+/// # Arguments
+///
+/// * `thorium` - A thorium client
+/// * `image` - The image this worker is executing
+/// * `job` - The current job we are executing
+/// * `location` - The path to download cache data too
+/// * `logs` - This jobs logs
+#[instrument(name = "setup::download_cache", skip_all, err(Debug))]
+pub async fn download_cache<P: AsRef<Path>>(
+    thorium: &Thorium,
+    image: &Image,
+    job: &GenericJob,
+    location: P,
+    logs: &mut Sender<String>,
+) -> Result<DownloadedCache, Error> {
+    // start with a default empty cache download object
+    let mut downloaded = DownloadedCache::default();
+    // don't bother downloading our cache if its not enabled
+    if image.dependencies.cache.enabled {
+        // get our reaction id or our parents reaction id if we are using our parent cache
+        let reaction = image.dependencies.cache.get_reaction_id(job);
+        // download our reaction cache
+        let cache = thorium.reactions.get_cache(&job.group, reaction).await?;
+        // convert our location to a path
+        let location = location.as_ref();
+        // create our cache folder
+        tokio::fs::create_dir_all(&location).await?;
+        // write our generic cache to disk
+        write_generic_cache(location, &cache, &mut downloaded, logs).await?;
+        // download our cache files
+        download_cache_files(
+            thorium,
+            location,
+            &cache,
+            job,
+            reaction,
+            &mut downloaded,
+            logs,
+        )
+        .await?;
+        // add our full cache to our downloaded cache object
+        downloaded.cache = Some(cache);
+        // update our cache downloaded at time
+        downloaded.downloaded_at = Some(SystemTime::now());
+    }
+    Ok(downloaded)
 }
 
 /// Downloads any requested samples or ephemeral files from Thorium
@@ -60,7 +254,7 @@ pub async fn download_samples<P: AsRef<Path>>(
     // build the options for downloading this file
     let mut opts = FileDownloadOpts::default().uncart();
     // crawl over any samples and try to download them
-    for sha256 in job.samples.iter() {
+    for sha256 in &job.samples {
         // log the sha256 we are downloading
         event!(Level::INFO, sha256 = sha256);
         // build the target path for this upload
@@ -71,7 +265,7 @@ pub async fn download_samples<P: AsRef<Path>>(
         // only pass in downloaded samples if its enabled
         if image.dependencies.samples.strategy != DependencyPassStrategy::Disabled {
             // add this downloaded sample to our list
-            samples.push(target.clone())
+            samples.push(target.clone());
         }
         // pop this samples hash
         target.pop();
@@ -101,7 +295,7 @@ pub async fn download_ephemeral<P: AsRef<Path>>(
     // create a list to the paths to our downloaded ephemeral files
     let mut ephemerals = Vec::with_capacity(job.ephemeral.len() + job.parent_ephemeral.len());
     // crawl over any ephemeral files and download them
-    for name in job.ephemeral.iter() {
+    for name in &job.ephemeral {
         // check if this image restricts what files to download or not
         if !image.dependencies.ephemeral.names.is_empty() {
             // this image restricts what ephemeral files it depends on so check if this file is
@@ -155,7 +349,7 @@ pub async fn download_parent_ephemeral<P: AsRef<Path>>(
     logs: &mut Sender<String>,
 ) -> Result<(), Error> {
     // crawl over any ephemeral files and download them
-    for (name, parent) in job.parent_ephemeral.iter() {
+    for (name, parent) in &job.parent_ephemeral {
         // check if this image restricts what files to download or not
         if !image.dependencies.ephemeral.names.is_empty() {
             // this image restricts what ephemeral files it depends on so check if this file is
@@ -217,7 +411,7 @@ pub async fn download_repos<P: AsRef<Path>>(
     // create a list to the paths to our downloaded repos
     let mut repos = Vec::with_capacity(job.repos.len());
     // crawl over any samples and try to download them
-    for repo in job.repos.iter() {
+    for repo in &job.repos {
         // log that we are downloading this repo
         event!(Level::INFO, repo = repo.url);
         log!(logs, "Downloading repo {}", repo.url);
@@ -225,7 +419,7 @@ pub async fn download_repos<P: AsRef<Path>>(
         let mut opts = RepoDownloadOpts::default();
         // if we have a commitish then set that
         if let Some(commitish) = &repo.commitish {
-            opts.commitish = Some(commitish.to_string());
+            opts.commitish = Some(commitish.clone());
         }
         // set our commitish kind if it exists
         if let Some(kind) = repo.kind {
@@ -268,7 +462,7 @@ pub async fn download_tags<P: AsRef<Path>>(
     // create a list to the paths to our downloaded tags
     let mut tags = Vec::with_capacity(job.samples.len());
     // crawl over any samples and try to download them
-    for sha256 in job.samples.iter() {
+    for sha256 in &job.samples {
         // log the sha256 we are getting tags for
         event!(Level::INFO, sha256 = sha256);
         // build the target path for this download
@@ -290,13 +484,13 @@ pub async fn download_tags<P: AsRef<Path>>(
         // only pass in downloaded tags if its enabled
         if image.dependencies.tags.strategy != DependencyPassStrategy::Disabled {
             // add this downloaded tag to our list
-            tags.push(target.clone())
+            tags.push(target.clone());
         }
         // pop this samples hash
         target.pop();
     }
     // crawl over any repos and try to download them
-    for repo in job.repos.iter() {
+    for repo in &job.repos {
         // log the sha256 we are gettting tags for
         event!(Level::INFO, repo = &repo.url);
         // convert this url to a path
@@ -322,7 +516,7 @@ pub async fn download_tags<P: AsRef<Path>>(
         // only pass in downloaded tags if its enabled
         if image.dependencies.tags.strategy != DependencyPassStrategy::Disabled {
             // add this downloaded tag to our list
-            tags.push(target.clone())
+            tags.push(target.clone());
         }
         // pop this repos hash
         target.pop();
@@ -417,8 +611,7 @@ pub async fn download_results<P: Into<PathBuf>>(
 /// * `params` - The params to use when downloading results
 /// * `root` - The root directory all results should be stored in
 /// * `logs` - The channel to send logs to
-/// * `created_dirs` - The set of directories we've already created
-///                    while downloading results
+/// * `created_dirs` - The set of directories we've already created while downloading results
 async fn download_results_helper(
     key: ResultKey<'_>,
     thorium: &Thorium,
@@ -572,12 +765,12 @@ pub async fn download_children<P: Into<PathBuf>>(
                     // create all of our parent dirs
                     tokio::fs::create_dir_all(&target).await?;
                     // download these children
-                    for (child, _) in &output.children {
+                    for child in output.children.keys() {
                         // add this childs sha256
                         target.push(child);
                         log!(logs, "Downloading child: {}", child);
                         // download this child
-                        thorium.files.download(&child, &target, &mut opts).await?;
+                        thorium.files.download(child, &target, &mut opts).await?;
                         // add this path to our downloaded children
                         downloaded.push(target.clone());
                         // remove our childs sha256
@@ -594,7 +787,7 @@ pub async fn download_children<P: Into<PathBuf>>(
     // download children for all repos we depended on
     for repo_dep in &job.repos {
         // get our repo name
-        if let Some(repo) = repo_dep.url.split('/').last() {
+        if let Some(repo) = repo_dep.url.split('/').next_back() {
             // get the results for this repo
             let results = thorium.repos.get_results(repo, &result_params).await?;
             // add this repos name
@@ -612,12 +805,12 @@ pub async fn download_children<P: Into<PathBuf>>(
                         // create all of our parent dirs
                         tokio::fs::create_dir_all(&target).await?;
                         // download these children
-                        for (child, _) in &output.children {
+                        for child in output.children.keys() {
                             // add this childs sha256
                             target.push(child);
                             log!(logs, "Downloading child: {}", child);
                             // download this child
-                            thorium.files.download(&child, &target, &mut opts).await?;
+                            thorium.files.download(child, &target, &mut opts).await?;
                             // add this path to our downloaded children
                             downloaded.push(target.clone());
                             // remove our childs sha256

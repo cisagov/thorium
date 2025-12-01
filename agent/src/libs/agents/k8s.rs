@@ -3,16 +3,17 @@
 use crossbeam::channel::Sender;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use thorium::models::{DependencyPassStrategy, GenericJob, Image};
+use thorium::models::{GenericJob, Image};
 use thorium::{Error, Thorium};
 use tokio::process::Command;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
-use super::{registry, setup, AgentExecutor, InFlight};
+use super::cmd::CmdBuilder;
+use super::{AgentExecutor, InFlight, setup};
 use crate::args;
 use crate::libs::children::{self, Children};
-use crate::libs::{results, tags, RawResults, TagBundle, Target};
-use crate::{build_path_args, deserialize, log, purge};
+use crate::libs::{DownloadedCache, RawResults, TagBundle, Target, results, tags};
+use crate::{deserialize, log, purge};
 
 /// An execution of a single job in k8s
 pub struct K8s {
@@ -36,6 +37,8 @@ pub struct K8s {
     tags: Vec<PathBuf>,
     /// The paths to any downloaded children
     children: Vec<PathBuf>,
+    /// The paths to any downloaded cache info
+    cache: DownloadedCache,
     /// whether this is a windows container or not
     pub windows: bool,
 }
@@ -63,6 +66,7 @@ impl K8s {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            cache: DownloadedCache::default(),
             windows: false,
         };
         Ok(k8s)
@@ -96,6 +100,7 @@ impl K8s {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            cache: DownloadedCache::default(),
             windows: true,
         };
         Ok(k8s)
@@ -130,6 +135,7 @@ impl K8s {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            cache: DownloadedCache::default(),
             windows: true,
         };
         Ok(k8s)
@@ -195,6 +201,15 @@ impl AgentExecutor for K8s {
         }
         // build the paths for storing children files
         children::setup(&image.output_collection.children).await?;
+        // download our cache if we have one and if its enabled
+        self.cache = setup::download_cache(
+            &self.thorium,
+            image,
+            job,
+            &image.dependencies.cache.location,
+            &mut self.logs,
+        )
+        .await?;
         // download any data required for this job
         self.samples = setup::download_samples(
             &self.thorium,
@@ -283,54 +298,43 @@ impl AgentExecutor for K8s {
         job: &GenericJob,
         log_path: &str,
     ) -> Result<InFlight, Error> {
-        // get the correct way to pass our dependency paths to our job
-        let sample_args = build_path_args!(job.samples, self.samples, image.dependencies.samples);
-        let ephemeral_args =
-            build_path_args!(job.ephemeral, self.ephemerals, image.dependencies.ephemeral);
-        let repo_args = build_path_args!(job.repos, self.repos, image.dependencies.repos, url);
-        let result_args = build_path_args!(
-            image.dependencies.results.images,
-            self.results,
-            image.dependencies.results
-        );
-        let tag_args = build_path_args!(self.tags, image.dependencies.tags);
-        let children_args = build_path_args!(self.children, image.dependencies.children);
-        // build command to execute
-        let built = registry::Cmd::new(image, job, &self.entrypoint, &self.cmd)
-            .build(
-                sample_args,
-                ephemeral_args,
-                repo_args,
-                result_args,
-                tag_args,
-                children_args,
-                &image.output_collection.files.results,
-                image,
-                job,
+        // get a ref to our dependency settings
+        let dep_conf = &image.dependencies;
+        // build the command this worker should execute
+        let cmd = CmdBuilder::new(image, job, &self.entrypoint, &self.cmd)
+            .add_ephemeral(&job.ephemeral, &self.ephemerals, &dep_conf.ephemeral)
+            .add_samples(&job.samples, &self.samples, &dep_conf.samples)
+            .add_repos(image, &job.repos, &self.repos)
+            .add_results(
+                &image.dependencies.results.images,
+                &self.results,
+                &dep_conf.results,
                 &mut self.logs,
             )
-            .await?;
-        log!(self.logs, built.join(" "));
+            .await?
+            .add_tags(&self.tags, &dep_conf.tags)
+            .add_children(&self.children, &dep_conf.children)
+            .add_cache(&self.cache, &dep_conf.cache)
+            // if this is a windows job then change our command to run in windows
+            .windows(self.windows)
+            .build(image, None)?;
+        // log our built command
+        log!(self.logs, cmd.join(" "));
+        event!(Level::INFO, cmd = cmd.join(" "));
         // create a file to buffer our logs in
         let log_file = std::fs::File::create(log_path)?;
-        // if we are in a windows container then adjust our built command
-        let built = if self.windows {
-            // prepend the cmd.exe command
-            let mut prepended = vec!["C:\\Windows\\system32\\cmd.exe".to_owned(), "/C".to_owned()];
-            prepended.extend(built.into_iter());
-            prepended
-        } else {
-            built
-        };
-        event!(Level::INFO, cmd = built.join(" "));
-        // execute built command
-        let cmd_spawn = Command::new(built[0].clone())
-            .args(&built[1..])
-            .stdout(log_file.try_clone()?)
-            .stderr(log_file)
-            .spawn();
-        // log any errors
-        match cmd_spawn {
+        // build the comamnd to execute
+        let mut cmd_builder = Command::new(cmd[0].clone());
+        // if we have more then just one arg then add those
+        if cmd.len() > 1 {
+            // add any remaining args
+            cmd_builder.args(&cmd[1..]);
+        }
+        // setup our stdout/stderr
+        cmd_builder.stdout(log_file.try_clone()?);
+        cmd_builder.stderr(log_file);
+        // spawn our overlayed command and log any errors
+        match cmd_builder.spawn() {
             Ok(child) => Ok(InFlight::Child(child)),
             // we failed to execute this entrypoint/command
             Err(error) => {
@@ -396,6 +400,26 @@ impl AgentExecutor for K8s {
         Children::collect(&image.output_collection.children, &mut self.logs).await
     }
 
+    /// Sync any updates to our cache
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image this agent is executing jobs under
+    /// * `job` - The job that is being executed
+    async fn sync_cache(&mut self, image: &Image, job: &GenericJob) -> Result<(), Error> {
+        // sync our cache data
+        super::cache::sync(
+            &self.thorium,
+            image,
+            job,
+            &image.dependencies.cache.location,
+            &self.cache,
+            &mut self.logs,
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Clean up after this job
     ///
     /// # Arguments
@@ -409,6 +433,7 @@ impl AgentExecutor for K8s {
         purge!(image.dependencies.results.location);
         purge!(image.dependencies.repos.location);
         purge!(image.dependencies.tags.location);
+        purge!(image.dependencies.cache.location);
         // remove any results files/dirs
         purge!(image.output_collection.files.results);
         purge!(image.output_collection.files.result_files);

@@ -5,15 +5,19 @@ use futures::future::try_join_all;
 use futures::stream::{self, StreamExt};
 use scylla::DeserializeRow;
 use std::collections::HashMap;
-use tracing::{event, instrument, span, Level, Span};
+use tracing::{Level, Span, event, instrument, span};
 use uuid::Uuid;
 
-use super::keys::{logs, ImageKeys, JobKeys, ReactionKeys, StreamKeys, SubReactionLists};
+use super::keys::{
+    ImageKeys, JobKeys, ReactionCacheKind, ReactionKeys, StreamKeys, SubReactionLists, logs,
+};
 use super::{images, jobs, pipelines, streams};
+use crate::models::backends::reactions::InternalReactionCacheFileUpdates;
 use crate::models::{
     BulkReactionResponse, Group, JobHandleStatus, JobList, JobResetRequestor, JobResets, Pipeline,
-    RawJob, Reaction, ReactionActions, ReactionExpire, ReactionList, ReactionRequest,
-    ReactionStatus, StageLogs, StageLogsAdd, StatusRequest, StatusUpdate, SystemComponents, User,
+    RawJob, Reaction, ReactionActions, ReactionCache, ReactionCacheUpdate, ReactionExpire,
+    ReactionList, ReactionRequest, ReactionStatus, StageLogs, StageLogsAdd, StatusRequest,
+    StatusUpdate, SystemComponents, User,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
@@ -64,6 +68,7 @@ macro_rules! pipe_key {
 pub async fn build<'a>(
     pipe: &'a mut redis::Pipeline,
     cast: Reaction,
+    cache: ReactionCache,
     pipeline: &Pipeline,
     shared: &Shared,
 ) -> Result<(Reaction, JobHandleStatus), ApiError> {
@@ -117,6 +122,18 @@ pub async fn build<'a>(
             .cmd("sadd").arg(&sub_key).arg(cast.id.to_string())
             // add sub reaction to sub reaction status set
             .cmd("sadd").arg(&status_key).arg(cast.id.to_string());
+    }
+    // set our cache info if we have any initial cache data
+    if !cache.is_empty() {
+        // set that this reaction has cache data
+        pipe.cmd("hsetnx").arg(&keys.data).arg("has_cache").arg("true");
+        // build the key to this reactions generic cache
+        let generic_key = super::keys::reactions::cache(&cast.id, ReactionCacheKind::Generic, shared);
+        // add each different key for our generic cache
+        for (sub_key, value) in &cache.generic {
+            // add this cache key/value to our reactions generic cache
+            pipe.cmd("hset").arg(&generic_key).arg(sub_key).arg(value);
+        }
     }
     // set our trigger depth info if it needs to be set
     if let Some(trigger_depth) = cast.trigger_depth {
@@ -188,10 +205,10 @@ pub async fn create(
     let map = HashMap::default();
     let ephemeral = get_parent_ephemeral(&request.group, &request.parent, map, shared).await?;
     // cast to a reaction
-    let (cast, _) = request.cast(user, pipeline, ephemeral, shared).await?;
+    let (cast, cache, _) = request.cast(user, pipeline, ephemeral, shared).await?;
     // build reaction creation pipeline
     let mut pipe = redis::pipe();
-    let (reaction, _) = build(&mut pipe, cast.clone(), pipeline, shared).await?;
+    let (reaction, _) = build(&mut pipe, cast.clone(), cache, pipeline, shared).await?;
     // create reaction along with its jobs in redis
     let _: () = pipe.atomic().query_async(conn!(shared)).await?;
     Ok(reaction)
@@ -213,7 +230,7 @@ pub async fn create_bulk(
     shared: &Shared,
 ) -> Result<BulkReactionResponse, ApiError> {
     // build a vector to store all of our casted reactions
-    let mut casts: Vec<(Reaction, &Pipeline)> = Vec::with_capacity(requests.len());
+    let mut casts: Vec<(Reaction, ReactionCache, &Pipeline)> = Vec::with_capacity(requests.len());
     // build a response object allocated to the right size
     let mut response = BulkReactionResponse::with_capacity(requests.len());
     // try to cast all of our requests to a reaction
@@ -241,9 +258,10 @@ pub async fn create_bulk(
     }
     // build all reactions
     let mut pipe = redis::pipe();
-    for (cast, pipeline) in casts.iter() {
+    // add the commands to create all of these reactions to our redis pipeline
+    for (cast, cache, pipeline) in casts {
         // add this reaction to our redis pipeline
-        let (reaction, _) = build(&mut pipe, cast.clone(), pipeline, shared).await?;
+        let (reaction, _) = build(&mut pipe, cast, cache, pipeline, shared).await?;
         // add this newly created reactions id to our response object
         response.created.push(reaction.id)
     }
@@ -648,6 +666,15 @@ fn build_expire<'a>(
     let group_key = ReactionKeys::group_set(&reaction.group, &reaction.status, shared);
     // add comamnd to expire out of the group status set
     add_expire!(pipe, expiration, "zrem", &group_key, &reaction.id, shared);
+    // also set our cache data to expire if we have any
+    if reaction.has_cache {
+        // build our cache keys
+        let files_key = super::keys::reactions::cache(&reaction.id, ReactionCacheKind::Files, shared);
+        let generic_key = super::keys::reactions::cache(&reaction.id, ReactionCacheKind::Generic, shared);
+        // expire all cache keys
+        pipe.cmd("expire").arg(files_key).arg(shared.config.thorium.retention.data)
+            .cmd("expire").arg(generic_key).arg(shared.config.thorium.retention.data);
+    }
     // build key to sub reaction lists
     let sub_reacts = SubReactionLists::new(reaction, shared);
     // add command to expire all tags
@@ -665,9 +692,7 @@ fn build_expire<'a>(
     pipe.cmd("expire").arg(&keys.data).arg(shared.config.thorium.retention.data)
         .cmd("expire").arg(&keys.jobs).arg(shared.config.thorium.retention.data)
         .cmd("expire").arg(&keys.logs).arg(shared.config.thorium.retention.data)
-        .cmd("expire")
-        .arg(&keys.sub)
-        .arg(shared.config.thorium.retention.data)
+        .cmd("expire").arg(&keys.sub).arg(shared.config.thorium.retention.data)
         // expire all sub reaction status lists
         .cmd("expire").arg(&sub_reacts.created).arg(shared.config.thorium.retention.data)
         .cmd("expire").arg(&sub_reacts.started).arg(shared.config.thorium.retention.data)
@@ -736,7 +761,7 @@ pub async fn complete<'a>(
     // handle parent reaction incrementing if we have a parent
     incr_parent(&reaction, pipe, shared);
     // try to delete any ephemeral files
-    delete_ephemeral(&reaction, shared).await?;
+    delete_ephemeral_and_cache_files(&reaction, shared).await?;
     Ok(reaction)
 }
 
@@ -830,8 +855,10 @@ async fn parent_proceed(
         if progress[len - 2] == progress[len - 1] {
             // get our parent reaction
             let parent = get(&reaction.group, &parent, shared).await?;
-            // check if we should proceed with our parent or not
-            if parent.current_stage_progress == parent.current_stage_length
+            // if we have any sleeping generators or we are done with our current jobs
+            // then proceed or reset our generators
+            if (parent.current_stage_progress == parent.current_stage_length
+                || !parent.generators.is_empty())
                 && parent.status == ReactionStatus::Started
             {
                 proceed(parent, shared).await?;
@@ -887,26 +914,50 @@ pub async fn proceed(mut reaction: Reaction, shared: &Shared) -> Result<JobHandl
                 jobs,
             };
             // reset the jobs for our active generators
-            jobs::bulk_reset(resets, shared).await?;
+            jobs::bulk_reset(resets, true, shared).await?;
         }
         // respond that we are waiting since we reset our generators
         Ok(JobHandleStatus::Waiting)
     }
 }
 
-/// Deletes any ephemeral files in s3 tied to a specific reaction
+/// Deletes any ephemeral/cache files in s3 tied to a specific reaction
 ///
 /// # Arguments
 ///
 /// * `reaction` - The reaction to delete epemeral files from
 /// * `shared` - Shared Thorium objects
-async fn delete_ephemeral(reaction: &Reaction, shared: &Shared) -> Result<(), ApiError> {
+#[instrument(
+    name = "db::reactions::delete_ephemeral_and_cache_files",
+    skip_all,
+    err(Debug)
+)]
+async fn delete_ephemeral_and_cache_files(
+    reaction: &Reaction,
+    shared: &Shared,
+) -> Result<(), ApiError> {
     // crawl over any ephemeral files and delete them
-    for name in reaction.ephemeral.iter() {
+    for name in &reaction.ephemeral {
         // build the path to this file
         let path = format!("{}/{}", reaction.id, name);
         // delete this ephemeral file
         shared.s3.ephemeral.delete(&path).await?;
+    }
+    // get our reaction cache if we have one
+    if reaction.has_cache {
+        // get our cache
+        let cache = get_cache(&reaction.id, shared).await?;
+        // delete all of our existing cache files
+        stream::iter(cache.files)
+            // build path to each cache file
+            .map(|sub_path| format!("{}/files/{sub_path}", reaction.id))
+            // delete these cache files from s3
+            .map(|s3_path| async move { shared.s3.reaction_cache.delete(&s3_path).await })
+            .buffer_unordered(10)
+            .collect::<Vec<Result<(), ApiError>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<()>, ApiError>>()?;
     }
     Ok(())
 }
@@ -973,7 +1024,7 @@ pub async fn fail(
     // proceed with our parent reactions
     parent_proceed(&reaction, progress, shared).await?;
     // try to delete any ephemeral files
-    delete_ephemeral(&reaction, shared).await?;
+    delete_ephemeral_and_cache_files(&reaction, shared).await?;
     Ok(ReactionStatus::Failed)
 }
 
@@ -1035,6 +1086,7 @@ struct LogLine {
 /// * `limit` - The max number of log lines to return (strongly enforced)
 /// * `stage` - The stage to get logs for
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::reactions::stage_logs", skip(reaction, shared), err(Debug))]
 pub async fn stage_logs(
     reaction: &Reaction,
     stage: &str,
@@ -1091,22 +1143,13 @@ pub async fn stage_logs(
 /// * `cursor` - The number of status logs to skip
 /// * `limit` - The max number of status logs to return (weakly enforced)
 /// * `shared` - Shared Thorium objects
-/// * `span` - The span to log traces under
+#[instrument(name = "db::reactions::logs", skip(reaction, shared), err(Debug))]
 pub async fn logs(
     reaction: &Reaction,
     cursor: usize,
     limit: usize,
     shared: &Shared,
-    span: &Span,
 ) -> Result<Vec<StatusUpdate>, ApiError> {
-    // Start our get reaction logs span
-    span!(
-        parent: span,
-        Level::INFO,
-        "Get Reaction Logs From Redis",
-        cursor = cursor,
-        limit = limit
-    );
     // build reaction data keys
     let keys = ReactionKeys::new(reaction, shared);
     // get end range based on cursor
@@ -1131,6 +1174,7 @@ pub async fn logs(
 /// * `cursor` - The cursor to use when paging through jobs in this reaction
 /// * `limit` - The number of jobs to try and return (weakly enforced)
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::reactions::list_jobs", skip(reaction, shared), err(Debug))]
 pub async fn list_jobs(
     reaction: &Reaction,
     cursor: usize,
@@ -1308,7 +1352,7 @@ pub async fn expire_lists(shared: &Shared) -> Result<(), ApiError> {
 }
 
 /// Updates the remaining stages of this reaction
-    ///
+///
 /// # Arguments
 ///
 /// * `reaction` - The updated reaction data
@@ -1316,6 +1360,7 @@ pub async fn expire_lists(shared: &Shared) -> Result<(), ApiError> {
 /// * `old_tags` - The old tags to remove
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
+#[instrument(name = "db::reactions::update", skip_all, err(Debug))]
 pub async fn update(
     reaction: &Reaction,
     new_tags: &[String],
@@ -1341,5 +1386,109 @@ pub async fn update(
                 .arg(&reaction.id.to_string()));
     // execute pipeline updating this reactions data
     let _: () = pipe.atomic().query_async(conn!(shared)).await?;
+    Ok(())
+}
+
+/// Get a reactions cache
+///
+/// # Arguments
+///
+/// * `reaction` - The id of the reaction to get
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::reactions::get_cache", skip_all, err(Debug))]
+pub async fn get_cache(reaction: &Uuid, shared: &Shared) -> Result<ReactionCache, ApiError> {
+    // build the key to this reactions cache info
+    let files_key = super::keys::reactions::cache(reaction, ReactionCacheKind::Files, shared);
+    let generic_key = super::keys::reactions::cache(reaction, ReactionCacheKind::Generic, shared);
+    // build a pipeline for getting our reaction cache data
+    let mut pipe = redis::pipe();
+    // add the command to get our reaction cache files to our pipe
+    pipe.cmd("smembers").arg(files_key);
+    // get this reaction generic cache
+    pipe.cmd("hgetall").arg(generic_key);
+    // try to get this reactions cache
+    let (files, generic): (Option<Vec<String>>, Option<HashMap<String, String>>) =
+        pipe.query_async(conn!(shared)).await?;
+    // build our reaction cache
+    let cache = ReactionCache {
+        generic: generic.unwrap_or_default(),
+        files: files.unwrap_or_default(),
+    };
+    Ok(cache)
+}
+
+/// Update a specific reactions cache
+///
+/// # Arguments
+///
+/// * `group` - The group this reaction is in
+/// * `reaction` - The id of the reaction to update
+/// * `cache` - The cache to update
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::reactions::update_cache", skip_all, err(Debug))]
+pub async fn update_cache(
+    group: &str,
+    reaction: &Uuid,
+    cache: &ReactionCacheUpdate,
+    shared: &Shared,
+) -> Result<(), ApiError> {
+    // build a pipeline to update our cache with
+    let mut pipe = redis::pipe();
+    // build the key to this reactions cache
+    let generic_key = super::keys::reactions::cache(reaction, ReactionCacheKind::Generic, shared);
+    // add each different key for values in our generic cache
+    for (sub_key, value) in &cache.generic {
+        // add this cache key/value to our reactions generic cache
+        pipe.cmd("hset").arg(&generic_key).arg(sub_key).arg(value);
+    }
+    // remove any requested keys
+    for sub_key in &cache.remove_generic {
+        // add this cache key/value to our reactions generic cache
+        pipe.cmd("hdel").arg(&generic_key).arg(sub_key);
+    }
+    // build the key to our reaction data
+    let data_key = super::keys::reactions::ReactionKeys::data(group, reaction, shared);
+    // set that this reaction has cache data
+    pipe.cmd("hset").arg(data_key).arg("has_cache").arg("true");
+    // execute the redis pipeline for updating our cache info
+    pipe.atomic().exec_async(conn!(shared)).await?;
+    Ok(())
+}
+
+/// Update a specific reactions cache
+///
+/// # Arguments
+///
+/// * `group` - The group this reaction is in
+/// * `reaction` - The id of the reaction to update
+/// * `cache` - The cache to update
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::reactions::update_cache_files", skip_all, err(Debug))]
+pub async fn update_cache_files(
+    group: &str,
+    reaction: &Uuid,
+    update: &InternalReactionCacheFileUpdates,
+    shared: &Shared,
+) -> Result<(), ApiError> {
+    // build a pipeline to update our cache with
+    let mut pipe = redis::pipe();
+    // build the key to this reactions cache files
+    let files_key = super::keys::reactions::cache(reaction, ReactionCacheKind::Files, shared);
+    // add any new cache files
+    for fname in &update.added {
+        // add this file and its it to our cache info
+        pipe.cmd("sadd").arg(&files_key).arg(fname);
+    }
+    // remove any deleted cache files
+    for fname in &update.deleted {
+        // delete this file from our cache
+        pipe.cmd("srem").arg(&files_key).arg(fname);
+    }
+    // build the key to our reaction data
+    let data_key = super::keys::reactions::ReactionKeys::data(group, reaction, shared);
+    // set that this reaction has cache data
+    pipe.cmd("hset").arg(data_key).arg("has_cache").arg("true");
+    // execute the redis pipeline for updating our cache info
+    pipe.atomic().exec_async(conn!(shared)).await?;
     Ok(())
 }

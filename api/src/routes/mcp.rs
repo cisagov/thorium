@@ -8,8 +8,6 @@ use rmcp::transport::StreamableHttpServerConfig;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::{ErrorData, tool_handler};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use std::str::FromStr;
 

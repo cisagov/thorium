@@ -2,7 +2,7 @@ use pyo3::pymethods;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::models::{ReactionArgs, ReactionRequest, RepoDependencyRequest};
+use crate::models::{ReactionArgs, ReactionCache, ReactionRequest, RepoDependencyRequest};
 
 #[pymethods]
 impl ReactionRequest {
@@ -25,6 +25,7 @@ impl ReactionRequest {
             buffers: "dict[str, str]" = HashMap::new(),
             repos: "list[RepoDependencyRequest]" = Vec::new(),
             trigger_depth = None,
+            cache: "ReactionCache" = ReactionCache::default(),
         ) -> "ReactionRequest"
     )]
     #[allow(clippy::too_many_arguments)]
@@ -39,6 +40,7 @@ impl ReactionRequest {
         buffers: HashMap<String, String>,
         repos: Vec<RepoDependencyRequest>,
         trigger_depth: Option<u8>,
+        cache: ReactionCache,
     ) -> Self {
         Self {
             group,
@@ -51,6 +53,27 @@ impl ReactionRequest {
             buffers,
             repos,
             trigger_depth,
+            cache,
         }
+    }
+}
+
+#[pymethods]
+impl ReactionCache {
+    /// Defines a [`ReactionCache`] of information for a reaction
+    ///
+    /// # Arguments
+    ///
+    /// * `generic` - A generic key/value cache of info across this reaction
+    /// * `files` - Files in this reaction cache
+    #[new]
+    #[pyo3(signature =
+        (
+            generic: "dict[str, str]" = HashMap::new(),
+            files: "list[str]" = Vec::new(),
+        ) -> "ReactionCache"
+    )]
+    fn new_py(generic: HashMap<String, String>, files: Vec<String>) -> Self {
+        Self { generic, files }
     }
 }

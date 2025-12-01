@@ -3419,6 +3419,109 @@ impl PartialEq<ResultDependencySettingsUpdate> for ResultDependencySettings {
     }
 }
 
+/// The settings to use when getting generic cache info for a reaction
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct GenericCacheDependencySettings {
+    /// The kwarg to pass this cache in with if one is set (otherwise use positional args)
+    pub kwarg: Option<String>,
+    /// The strategy the agent should use when passing the downloaded cache to jobs
+    pub strategy: DependencyPassStrategy,
+}
+
+impl Default for GenericCacheDependencySettings {
+    /// Create a default ``GenericCacheDependencySettings``
+    fn default() -> Self {
+        GenericCacheDependencySettings {
+            kwarg: None,
+            strategy: DependencyPassStrategy::Disabled,
+        }
+    }
+}
+
+/// The updated settings to use when getting generic cache info for a reaction
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct GenericCacheDependencySettingsUpdate {
+    /// The kwarg to pass this cache in with if one is set (otherwise use positional args)
+    pub kwarg: Option<String>,
+    /// Clear the kwarg for our generic cache
+    #[serde(default)]
+    pub clear_kwarg: bool,
+    /// The strategy the agent should use when passing the downloaded cache to jobs
+    pub strategy: Option<DependencyPassStrategy>,
+}
+
+/// The default location the agent should download samples too
+fn default_cache_location() -> String {
+    "/tmp/thorium/cache".to_owned()
+}
+
+/// Cache support should be enabled by default
+fn default_cache_enabled() -> bool {
+    true
+}
+
+/// The settings to use when getting cache info for a reaction
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct CacheDependencySettings {
+    /// The location to write our generic cache too
+    #[serde(default = "default_cache_location")]
+    pub location: String,
+    /// The settings to use for the generic cache
+    #[serde(default)]
+    pub generic: GenericCacheDependencySettings,
+    /// Whether to use our parents cache if we have one or not
+    #[serde(default)]
+    pub use_parent_cache: bool,
+    /// Whether cache is enabled for this image
+    #[serde(default = "default_cache_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for CacheDependencySettings {
+    /// Create a default ``CacheDependencySettings``
+    fn default() -> Self {
+        CacheDependencySettings {
+            location: default_cache_location(),
+            generic: GenericCacheDependencySettings::default(),
+            use_parent_cache: false,
+            enabled: true,
+        }
+    }
+}
+
+impl CacheDependencySettings {
+    /// Get our parent reaction id or our own if we aren't using our parents cache
+    #[must_use]
+    pub fn get_reaction_id(&self, job: &GenericJob) -> Uuid {
+        // if using our parent cache is enabled then check if we have a parent
+        if self.use_parent_cache {
+            // if we have a parent then return that id
+            job.parent.unwrap_or(job.reaction)
+        } else {
+            // we aren't using parent cache so just return our own job id
+            job.reaction
+        }
+    }
+}
+
+/// The iupdated settings to use when getting cache info for a reaction
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct CacheDependencySettingsUpdate {
+    /// The location to write our generic cache too
+    pub location: Option<String>,
+    /// The settings to use for the generic cache
+    #[serde(default)]
+    pub generic: GenericCacheDependencySettingsUpdate,
+    /// Whether to use our parents cache if we have one or not
+    pub use_parent_cache: Option<bool>,
+    /// Whether cache is enabled for this image
+    pub enabled: Option<bool>,
+}
+
 /// How this image should handle dependencies it needs for jobs
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -3441,6 +3544,9 @@ pub struct Dependencies {
     /// The settings the agent should use when passing children files from past tools
     #[serde(default)]
     pub children: ChildrenDependencySettings,
+    /// The settings to use when getting cache info
+    #[serde(default)]
+    pub cache: CacheDependencySettings,
 }
 
 impl Dependencies {
@@ -3562,6 +3668,9 @@ pub struct DependenciesUpdate {
     /// The settings the agent should use when passing children files from past tools
     #[serde(default)]
     pub children: ChildrenDependencySettingsUpdate,
+    /// The updated settings to use for a reactions cache
+    #[serde(default)]
+    pub cache: CacheDependencySettingsUpdate,
 }
 
 impl DependenciesUpdate {

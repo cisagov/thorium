@@ -3,7 +3,7 @@
 
 use chrono::prelude::*;
 use std::collections::HashMap;
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::db;
@@ -295,7 +295,7 @@ impl RawJob {
         // make sure we are an admin
         is_admin!(user);
         // use correct backend to handle starting job
-        db::jobs::bulk_reset(resets, shared).await
+        db::jobs::bulk_reset(resets, false, shared).await
     }
 
     /// Lists running jobs between two timestamps
@@ -343,13 +343,10 @@ impl RawJob {
     pub fn stream_data(&self) -> String {
         // cast deadline data to stream data without timestamp
         // were using a format macro so we get a consistent order
-        format!("{{\"group\":\"{}\",\"pipeline\":\"{}\",\"stage\":\"{}\",\"creator\":\"{}\",\"job_id\":\"{}\",\"reaction\":\"{}\"}}",
-            self.group,
-            self.pipeline,
-            self.stage,
-            self.creator,
-            self.id,
-            self.reaction)
+        format!(
+            "{{\"group\":\"{}\",\"pipeline\":\"{}\",\"stage\":\"{}\",\"creator\":\"{}\",\"job_id\":\"{}\",\"reaction\":\"{}\"}}",
+            self.group, self.pipeline, self.stage, self.creator, self.id, self.reaction
+        )
     }
 }
 

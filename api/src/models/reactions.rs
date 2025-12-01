@@ -15,7 +15,8 @@ use tokio::{fs::File, io::AsyncReadExt};
 use pyo3::pyclass;
 
 use super::{
-    GenericJobArgs, GenericJobArgsUpdate, JobHandleStatus, RepoDependency, RepoDependencyRequest,
+    Buffer, GenericJobArgs, GenericJobArgsUpdate, JobHandleStatus, OnDiskFile, RepoDependency,
+    RepoDependencyRequest,
 };
 use crate::{matches_adds, matches_removes, matches_vec, same};
 
@@ -111,6 +112,9 @@ cfg_if::cfg_if! {
             pub repos: Vec<RepoDependencyRequest>,
             /// This reactions depth in triggers if this reaction was caused by a trigger
             pub trigger_depth: Option<u8>,
+            /// Any initial cache for this reaction
+            #[serde(default)]
+            pub cache: ReactionCache,
         }
 
         impl TryFrom<RawReactionRequest> for ReactionRequest {
@@ -139,6 +143,7 @@ cfg_if::cfg_if! {
                     buffers: raw.buffers,
                     repos: raw.repos,
                     trigger_depth: raw.trigger_depth,
+                    cache: raw.cache,
                 };
                 Ok(converted)
             }
@@ -220,6 +225,9 @@ pub struct ReactionRequest {
     pub repos: Vec<RepoDependencyRequest>,
     /// This reactions depth in triggers if this reaction was caused by a trigger
     pub trigger_depth: Option<u8>,
+    /// Any initial cache for this reaction
+    #[serde(default)]
+    pub cache: ReactionCache,
 }
 
 impl ReactionRequest {
@@ -262,6 +270,7 @@ impl ReactionRequest {
             buffers: HashMap::default(),
             repos: Vec::default(),
             trigger_depth: None,
+            cache: ReactionCache::default(),
         }
     }
 
@@ -533,6 +542,29 @@ impl ReactionRequest {
     #[must_use]
     pub fn trigger_depth(mut self, trigger_depth: u8) -> Self {
         self.trigger_depth = Some(trigger_depth);
+        self
+    }
+
+    /// Set some initial reaction cache data
+    ///
+    /// # Arguments
+    ///
+    /// * `cache` - The initial cache data to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{ReactionRequest, ReactionCache};
+    ///
+    /// // build some initial cache data to set
+    /// let mut cache = ReactionCache::default();
+    /// cache.generic.insert("CombineProblems".to_owned(), "Hydraulics".to_owned());
+    /// // create a reaction with that depends on a repository
+    /// let request = ReactionRequest::new("Combine", "fill_gas").cache(cache);
+    /// ```
+    #[must_use]
+    pub fn cache(mut self, cache: ReactionCache) -> Self {
+        self.cache = cache;
         self
     }
 }
@@ -863,7 +895,7 @@ pub struct Reaction {
     pub sub_reactions: u64,
     /// The number of completed subreactions for this reaction
     pub completed_sub_reactions: u64,
-    /// Whether the currently active stage of this reaction contains generators or not
+    /// The job id for any generators this reaction currently has active
     pub generators: Vec<Uuid>,
     /// A list of sample sha256s to download before executing this reactions jobs
     pub samples: Vec<String>,
@@ -875,6 +907,8 @@ pub struct Reaction {
     pub repos: Vec<RepoDependency>,
     /// This reactions depth in triggers if this reaction was caused by a trigger
     pub trigger_depth: Option<u8>,
+    /// Whether this reaction has any cache data set
+    pub has_cache: bool,
 }
 
 impl PartialEq<ReactionRequest> for Reaction {
@@ -1041,5 +1075,179 @@ impl PartialEq<ReactionUpdate> for Reaction {
             .all(|(stage, arg)| &self.args[stage] == arg);
         same!(args_check, true);
         true
+    }
+}
+
+/// An ephemeral cache of information across this entire reaction
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct ReactionCache {
+    /// A generic key/value cache of info across this reaction
+    pub generic: HashMap<String, String>,
+    /// Files in this reaction cache
+    pub files: Vec<String>,
+}
+
+impl ReactionCache {
+    /// Check if this cache is empty
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        // check if our cache is empty
+        self.generic.is_empty() && self.files.is_empty()
+    }
+}
+
+/// A non file update to a reaction cache
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct ReactionCacheUpdate {
+    /// A generic key/value cache of info across this reaction
+    #[serde(default)]
+    pub generic: HashMap<String, String>,
+    /// The cache keys to remove
+    #[serde(default)]
+    pub remove_generic: Vec<String>,
+}
+
+impl ReactionCacheUpdate {
+    /// Add a generic key to this update
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to add to our cache
+    /// * `value` - The value to add to our generic cache
+    #[must_use]
+    pub fn generic<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
+        self.generic.insert(key.into(), value.into());
+        self
+    }
+
+    /// A key to remove from our cache
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to remove from our cache
+    #[must_use]
+    pub fn remove<K: Into<String>>(mut self, key: K) -> Self {
+        self.remove_generic.push(key.into());
+        self
+    }
+}
+
+/// An update to files in a reactions cache
+#[derive(Debug, Clone, Default)]
+pub struct ReactionCacheFileUpdate {
+    /// Any files tied to this result
+    pub files_on_disk: Vec<OnDiskFile>,
+    /// Any buffers to upload as result files
+    pub files_buffers: Vec<Buffer>,
+    /// The files to remove from our cache
+    pub remove_files: Vec<String>,
+}
+
+impl ReactionCacheFileUpdate {
+    /// Adds a path to a file to upload to this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - The on disk file to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{OnDiskFile, ReactionCacheFileUpdate};
+    ///
+    /// let update = ReactionCacheFileUpdate::default()
+    ///     .file(OnDiskFile::new("/corn/bushel1"));
+    /// ```
+    #[must_use]
+    pub fn file(mut self, file: OnDiskFile) -> Self {
+        // convert our path and add it
+        self.files_on_disk.push(file);
+        self
+    }
+
+    /// Adds paths to files to upload to this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `files` - The on disk files to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{OnDiskFile, ReactionCacheFileUpdate};
+    ///
+    /// let update = ReactionCacheFileUpdate::default()
+    ///     .files(vec!(OnDiskFile::new("/corn/bushel1"), OnDiskFile::new("/corn/bushel2")));
+    /// ```
+    #[must_use]
+    pub fn files(mut self, files: Vec<OnDiskFile>) -> Self {
+        // convert our paths and add them
+        self.files_on_disk.extend(files);
+        self
+    }
+
+    /// Adds a buffer to upload to this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer` - The buffer to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{Buffer, ReactionCacheFileUpdate};
+    ///
+    /// let update = ReactionCacheFileUpdate::default()
+    ///     .buffer(Buffer::new("buffer").name("buffer.txt"));
+    /// ```
+    #[must_use]
+    pub fn buffer(mut self, buffer: Buffer) -> Self {
+        // add our buffer to our list of buffers to upload
+        self.files_buffers.push(buffer);
+        self
+    }
+
+    /// Adds multiple buffers to upload to this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `buffers` - The buffers to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{Buffer, ReactionCacheFileUpdate};
+    ///
+    /// let update = ReactionCacheFileUpdate::default()
+    ///     .buffers(vec!(Buffer::new("buffer0"), Buffer::new("buffer1")));
+    /// ```
+    #[must_use]
+    pub fn buffers(mut self, mut buffers: Vec<Buffer>) -> Self {
+        // append our new buffers on to our list of buffers to upload
+        self.files_buffers.append(&mut buffers);
+        self
+    }
+
+    /// Create a multipart form from this ``ReactionCacheFileUpdate``
+    #[cfg(feature = "client")]
+    pub async fn to_form(mut self) -> Result<reqwest::multipart::Form, crate::client::Error> {
+        // build the form we are going to send
+        // disable percent encoding, as the API natively supports UTF-8
+        let mut form = reqwest::multipart::Form::new().percent_encode_noop();
+        // add the cache files to remove
+        form = crate::multipart_list!(form, "remove_files", self.remove_files);
+        // add any files that were added by path
+        for on_disk in self.files_on_disk {
+            // a path was set so read in that file and add it to the form
+            form = crate::multipart_file!(form, "files", on_disk.path, on_disk.trim_prefix);
+        }
+        // add any buffers that were added directly
+        for buff in self.files_buffers {
+            form = form.part("files", buff.to_part()?);
+        }
+        Ok(form)
     }
 }

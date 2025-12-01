@@ -1,12 +1,21 @@
-use std::collections::HashMap;
-
 use bytes::Bytes;
+use cart_rs::UncartStream;
+use futures::{StreamExt, TryStreamExt};
+use http::StatusCode;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncWriteExt;
+use tokio_util::io::StreamReader;
 use uuid::Uuid;
 
+use super::traits::TransferProgress;
 use super::{Cursor, Error, LogsCursor};
 use crate::models::{
-    BulkReactionResponse, Reaction, ReactionCreation, ReactionListParams, ReactionRequest,
-    ReactionStatus, ReactionUpdate, StageLogs, StageLogsAdd, StatusUpdate,
+    BulkReactionResponse, CartedFile, DownloadedFile, FileDownloadOpts, Reaction, ReactionCache,
+    ReactionCacheFileUpdate, ReactionCacheUpdate, ReactionCreation, ReactionListParams,
+    ReactionRequest, ReactionStatus, ReactionUpdate, StageLogs, StageLogsAdd, StatusUpdate,
+    UncartedFile,
 };
 use crate::{send, send_build, send_bytes};
 
@@ -286,6 +295,296 @@ impl Reactions {
             .json(&reqs);
         // send request and build a vector of reaction creations
         send_build!(self.client, req, HashMap<String, BulkReactionResponse>)
+    }
+
+    /// Update the cache for a reaction
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group this reaction is in
+    /// * `id` - The id of the reaction to update the cache for
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::models::ReactionCacheUpdate;
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // have an id for a reaction whose cache you want to update
+    /// let id = Uuid::parse_str("d86ce41a-4a5b-43b5-aef9-bf90ff5d09ba")?;
+    /// // have an update to apply to this reactions cache
+    /// let update = ReactionCacheUpdate::default().generic("Catfish", "IsTasty");
+    /// // update this reaction's cache
+    /// thorium.reactions.update_cache("Corn", id, &update).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::update_cache", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
+    pub async fn update_cache(
+        &self,
+        group: &str,
+        id: Uuid,
+        cache: &ReactionCacheUpdate,
+    ) -> Result<reqwest::Response, Error> {
+        // build url
+        let url = format!(
+            "{host}/api/reactions/{group}/{id}/cache",
+            host = &self.host,
+            group = group,
+            id = id
+        );
+        // build request
+        let req = self
+            .client
+            .patch(&url)
+            .header("authorization", &self.token)
+            .json(cache);
+        // send this request
+        send!(self.client, req)
+    }
+
+    /// Gets the cache for a reaction
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group this reaction is in
+    /// * `id` - The id of the reaction to get the cache for
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // have an id for a reaction whose cache you want to retrieve
+    /// let id = Uuid::parse_str("d86ce41a-4a5b-43b5-aef9-bf90ff5d09ba")?;
+    /// // get this reaction's cache
+    /// let reaction = thorium.reactions.get_cache("Corn", id).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::get_cache", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
+    pub async fn get_cache(&self, group: &str, id: Uuid) -> Result<ReactionCache, Error> {
+        // build url
+        let url = format!(
+            "{host}/api/reactions/{group}/{id}/cache",
+            host = &self.host,
+            group = group,
+            id = id
+        );
+        // build request
+        let req = self.client.get(&url).header("authorization", &self.token);
+        // send request and build a reaction
+        send_build!(self.client, req, ReactionCache)
+    }
+
+    /// Update the files in this reactions cache
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group this reaction is in
+    /// * `id` - The id of the reaction to get the cache for
+    /// * `update` - The update to apply to this reactions cache
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::models::{ReactionCacheFileUpdate, OnDiskFile};
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // have an id for a reaction whose cache you want to retrieve
+    /// let id = Uuid::parse_str("d86ce41a-4a5b-43b5-aef9-bf90ff5d09ba")?;
+    /// // build the cache files update to apply
+    /// let update = ReactionCacheFileUpdate::default().file(OnDiskFile::new("/tmp/cache.json"));
+    /// // get this reaction's cache
+    /// let reaction = thorium.reactions.update_cache_files("Corn", id, update).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::update_cache_files", skip(self), fields(id = id.to_string()), err(Debug))
+    )]
+    pub async fn update_cache_files(
+        &self,
+        group: &str,
+        id: Uuid,
+        update: ReactionCacheFileUpdate,
+    ) -> Result<reqwest::Response, Error> {
+        // build url
+        let url = format!(
+            "{host}/api/reactions/{group}/{id}/cache/files/",
+            host = &self.host,
+            group = group,
+            id = id
+        );
+        // build request
+        let req = self
+            .client
+            .patch(&url)
+            .multipart(update.to_form().await?)
+            .header("authorization", &self.token)
+            // use a really long timeout for really large files
+            // this is probably done better some otherway
+            // 86,400 seconds == a day
+            .timeout(std::time::Duration::from_secs(86_400));
+        // send request and build a reaction
+        send!(self.client, req)
+    }
+
+    /// Downloads a specific cache file
+    ///
+    /// The options are not truly modified but updating a progress bar if one is set
+    /// requires an &mut.
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group to download a reaction cache file from
+    /// * `id` - The id of the reaction to download a cache file from
+    /// * `file` - The name or path of the cache file to download
+    /// * `path` - where to write this cache file to disk at after downloading
+    /// * `opts` - The options to use when downloading this file
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::models::FileDownloadOpts;
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // have a reaction we want to download cache files from
+    /// let reaction = Uuid::new_v4();
+    /// // use default options
+    /// let mut opts = FileDownloadOpts::default();
+    /// // download this cache file in CART format
+    /// thorium.reactions.download_from_cache("corn", reaction, "cache.json", "/tmp/cache.json", &mut opts).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Files::download", skip(self, path), fields(id = id.to_string(), uncart = opts.uncart), err(Debug))
+    )]
+    pub async fn download_from_cache<P: Into<PathBuf>>(
+        &self,
+        group: &str,
+        id: Uuid,
+        file: &str,
+        path: P,
+        opts: &mut FileDownloadOpts,
+    ) -> Result<DownloadedFile, Error> {
+        // build url for downloading this reaction cache file
+        let url = format!(
+            "{base}/api/reactions/{group}/{id}/cache/files/{file}",
+            base = self.host,
+        );
+        // build and send the request
+        let resp = self
+            .client
+            .get(&url)
+            .header("authorization", &self.token)
+            .send()
+            .await?;
+        // make sure we got a 200
+        match resp.status() {
+            StatusCode::OK => {
+                // convert our path to a path buf
+                let path = path.into();
+                // check if this file should be downloaded in an uncarted format or not
+                if opts.uncart {
+                    // get our response as a stream of bytes
+                    let stream = resp
+                        .bytes_stream()
+                        .map_err(|err| std::io::Error::other(err.to_string()));
+                    // convert our async read to a buf reader
+                    let reader = StreamReader::new(stream);
+                    // start uncarting this stream of data
+                    let mut uncart = UncartStream::new(reader);
+                    // make a file to save the response too
+                    let mut file = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(&path)
+                        .await?;
+                    // write our uncart stream to disk
+                    match &mut opts.progress {
+                        Some(bar) => {
+                            // wrap this read so our progress bar is updated
+                            tokio::io::copy(&mut bar.wrap_async_read(uncart), &mut file).await?
+                        }
+                        None => tokio::io::copy(&mut uncart, &mut file).await?,
+                    };
+                    Ok(DownloadedFile::Uncarted(UncartedFile { file }))
+                } else {
+                    // leave this file in a carted format
+                    // make a file to save the response too
+                    let mut file = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(&path)
+                        .await?;
+                    // get our response as a stream of bytes
+                    let mut stream = resp.bytes_stream();
+                    // crawl over this stream and write it to the file
+                    while let Some(data) = stream.next().await {
+                        // check if we had an error getting bytes
+                        let data = data?;
+                        // write this part of the stream to disk
+                        file.write_all(&data).await?;
+                        // update our progress bar if we have one
+                        opts.update_progress_bytes(&data);
+                    }
+                    // build our carted file object from the bytes
+                    Ok(DownloadedFile::Carted(CartedFile { path }))
+                }
+            }
+            // the response had an error status
+            _ => Err(Error::from(resp)),
+        }
     }
 
     /// Sends logs for a specific stage in a [`Reaction`] to Thorium
