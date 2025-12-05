@@ -1,7 +1,7 @@
 //! The keys used for sample data in redis
 
 use crate::models::CensusKeys;
-use crate::utils::{ApiError, Shared};
+use crate::utils::Shared;
 
 /// Build the count key for this partition
 ///

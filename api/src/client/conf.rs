@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use super::Keys;
-use serde_derive::Deserialize;
-
 use crate::Error;
 
 /// The settings to use when cloning repos

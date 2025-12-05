@@ -36,9 +36,8 @@ schemars = { version = "1.0.4", features = ["uuid1"] }
 tracing = { version = "0.1" }
 opentelemetry = { version = "0.30", features = ["trace"] }
 clap = { version = "4", features = ["derive", "wrap_help", "string"] }
-serde = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_derive = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 cart-rs = { version = "1.2.5", path = "cart-rs"}
 openssl = "0.10"

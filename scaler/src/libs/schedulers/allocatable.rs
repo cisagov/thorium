@@ -207,6 +207,8 @@ impl Allocatable {
             ephemeral_storage = self.deadlines_pool.resources.ephemeral_storage,
             nvidia_gpu = self.deadlines_pool.resources.nvidia_gpu,
             amd_gpu = self.deadlines_pool.resources.amd_gpu,
+            burstable_cpu = self.deadlines_pool.resources.burstable.cpu,
+            burstable_mem = self.deadlines_pool.resources.burstable.memory,
         );
         // log our fairshare pools resources
         event!(
@@ -217,6 +219,8 @@ impl Allocatable {
             ephemeral_storage = self.fairshare_pool.resources.ephemeral_storage,
             nvidia_gpu = self.fairshare_pool.resources.nvidia_gpu,
             amd_gpu = self.fairshare_pool.resources.amd_gpu,
+            burstable_cpu = self.fairshare_pool.resources.burstable.cpu,
+            burstable_mem = self.fairshare_pool.resources.burstable.memory,
         );
         // crawl each cpu group
         for cpu_group in self.clusters.values() {
@@ -245,6 +249,8 @@ impl Allocatable {
                             ephemeral_storage = resources.ephemeral_storage,
                             nvidia_gpu = resources.nvidia_gpu,
                             amd_gpu = resources.amd_gpu,
+                            burstable_cpu = resources.burstable.cpu,
+                            burstable_mem = resources.burstable.memory,
                             spawn_slots_deadlines = node_info.spawn_slots.deadlines,
                             spawn_slots_fairshare = node_info.spawn_slots.fairshare,
                         );
@@ -259,6 +265,8 @@ impl Allocatable {
                     ephemeral_storage = cluster_info.resources.ephemeral_storage,
                     nvidia_gpu = cluster_info.resources.nvidia_gpu,
                     amd_gpu = cluster_info.resources.amd_gpu,
+                    burstable_cpu = cluster_info.resources.burstable.cpu,
+                    burstable_mem = cluster_info.resources.burstable.memory,
                 );
             }
         }

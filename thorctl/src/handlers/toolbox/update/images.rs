@@ -3,7 +3,7 @@
 use thorium::Error;
 use thorium::models::{
     BurstableResourcesUpdate, Image, ImageBanUpdate, ImageRequest, ImageUpdate, Resources,
-    ResourcesRequest, ResourcesUpdate, SecurityContext, SecurityContextUpdate, conversions,
+    ResourcesRequest, ResourcesUpdate, SecurityContext, SecurityContextUpdate,
 };
 
 use crate::utils::diff;
@@ -57,15 +57,12 @@ pub enum ToolboxImageUpdateOp {
 /// * `old` - The old image's resources that we're updating
 /// * `new` - The new image's resources to update to
 #[allow(clippy::needless_pass_by_value)]
-fn calculate_resource_update(
-    old: Resources,
-    new: ResourcesRequest,
-) -> Result<Option<ResourcesUpdate>, Error> {
+fn calculate_resource_update(old: Resources, new: ResourcesRequest) -> Option<ResourcesUpdate> {
     // convert our resources request to a resoruces object
-    let new_cast = Resources::try_from(new.clone())?;
+    let new_cast = Resources::from(new.clone());
     // if our resources are identical then no update is needed
     if old == new_cast {
-        return Ok(None);
+        return None;
     }
     // start with an empty burstable resources struct
     let mut burstable = BurstableResourcesUpdate::default();
@@ -82,14 +79,14 @@ fn calculate_resource_update(
     let new: ResourcesRequest = new_cast.into();
     // convert resources to a request for comparison
     let old: ResourcesRequest = old.into();
-    Ok(Some(ResourcesUpdate {
+    Some(ResourcesUpdate {
         cpu: set_modified!(old.cpu, new.cpu),
         memory: set_modified!(old.memory, new.memory),
-        ephemeral_storage: set_modified_opt!(old.ephemeral_storage, new.ephemeral_storage),
+        ephemeral_storage: set_modified!(old.ephemeral_storage, new.ephemeral_storage),
         nvidia_gpu: set_modified!(old.nvidia_gpu, new.nvidia_gpu),
         amd_gpu: set_modified!(old.amd_gpu, new.amd_gpu),
         burstable,
-    }))
+    })
 }
 
 /// Calculate the updates to a security context
@@ -137,18 +134,16 @@ fn calculate_security_context_update(
 ///
 /// * `image` - The current state of the image in Thorium
 /// * `req` - The image request from the toolbox manifest
-pub fn calculate_image_update(
-    mut image: Image,
-    mut req: ImageRequest,
-) -> Result<Option<ImageUpdate>, Error> {
+pub fn calculate_image_update(mut image: Image, mut req: ImageRequest) -> Option<ImageUpdate> {
     // if the request is the same as the image, no update is needed
     if image == req {
-        return Ok(None);
+        return None;
     }
     let (remove_volumes, add_volumes) =
         calc_remove_add_vec!(image.volumes, |vol| vol.name, req.volumes, |vol| vol);
     let (remove_env, add_env) = calc_remove_add_map!(image.env, req.env);
-    Ok(Some(ImageUpdate {
+    // build the image update to send to the api
+    let update = ImageUpdate {
         // calculate clears first before we move things
         clear_version: set_clear!(image.version, req.version),
         clear_image: set_clear!(image.image, req.image),
@@ -161,7 +156,7 @@ pub fn calculate_image_update(
         scaler: set_modified!(image.scaler, req.scaler),
         lifetime: set_modified_opt!(image.lifetime, req.lifetime),
         timeout: set_modified_opt!(image.timeout, req.timeout),
-        resources: calculate_resource_update(image.resources, req.resources)?,
+        resources: calculate_resource_update(image.resources, req.resources),
         spawn_limit: set_modified!(image.spawn_limit, req.spawn_limit),
         add_volumes,
         remove_volumes,
@@ -197,5 +192,6 @@ pub fn calculate_image_update(
             image.network_policies,
             req.network_policies,
         ),
-    }))
+    };
+    Some(update)
 }

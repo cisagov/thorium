@@ -6,7 +6,9 @@ use std::hash::Hasher;
 use thorium_derive::ScyllaStoreJson;
 use uuid::Uuid;
 
-use crate::models::{Association, AssociationKind, AssociationTarget, Entity, TreeSupport};
+use crate::models::{
+    Association, AssociationKind, AssociationTarget, Directionality, Entity, TreeSupport,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, ScyllaStoreJson, Eq, PartialEq, Hash)]
 pub enum AssociationTargetColumn {
@@ -69,8 +71,8 @@ pub struct AssociationListRow {
     pub submitter: String,
     /// When this association was created
     pub created: DateTime<Utc>,
-    /// Whether this direction is to our source object or away from it
-    pub to_source: bool,
+    /// The direction for this association
+    pub direction: Directionality,
     /// Any extra info needed for the source column in this row
     pub extra_source: Option<String>,
     /// Any extra info needed for the target column in this row
@@ -90,8 +92,8 @@ pub struct ListableAssociation {
     pub groups: Vec<String>,
     // When this association was created
     pub created: DateTime<Utc>,
-    /// Whether this direction is to our source object or away from it
-    pub to_source: bool,
+    /// The direction for this association
+    pub direction: Directionality,
     /// Any extra info needed for the target column in this row
     pub extra_other: Option<String>,
 }
@@ -120,13 +122,17 @@ impl ListableAssociation {
         &self,
         possible: &AssociationTargetColumn,
     ) -> Result<AssociationTargetColumn, crate::utils::ApiError> {
-        // if our to_source flag is set then other is the source for this association
-        if self.to_source {
-            // deserialize our target column
-            let other = crate::deserialize!(&self.other);
-            Ok(other)
-        } else {
-            Ok(possible.to_owned())
+        // get the correct source
+        match self.direction {
+            // If this association is to the other item then source is ourselves
+            // If this association is biderectional then just use ourselves as the source
+            Directionality::To | Directionality::Bidirectional => Ok(possible.to_owned()),
+            // If this association is from then the source is other
+            Directionality::From => {
+                // deserialize our target column
+                let other = crate::deserialize!(&self.other);
+                Ok(other)
+            }
         }
     }
 }
@@ -145,7 +151,7 @@ impl From<AssociationListRow> for ListableAssociation {
             submitter: row.submitter,
             groups: vec![row.group],
             created: row.created,
-            to_source: row.to_source,
+            direction: row.direction,
             extra_other: row.extra_other,
         }
     }
@@ -171,7 +177,7 @@ impl TryFrom<ListableAssociation> for Association {
             submitter: row.submitter,
             groups: row.groups,
             created: row.created,
-            to_source: row.to_source,
+            direction: row.direction,
         };
         Ok(association)
     }

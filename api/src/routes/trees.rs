@@ -87,13 +87,13 @@ async fn grow_tree(
     // load our existing tree
     let mut tree = Tree::load(&user, &cursor, &state.shared).await?;
     // set our growable nodes
-    tree.growable = query.growable.clone();
+    tree.growable.clone_from(&query.growable);
     // grow this tree
     let added = tree.grow(&user, &params, &state.shared).await?;
     // save the latest info on this tree
     tree.save(&user, &state.shared).await?;
     // trim to only the new info for this tree
-    tree.trim(query.growable, added);
+    tree.trim(&query.growable, &added);
     // clear any non user facing info
     tree.clear_non_user_facing();
     Ok(Json(tree))

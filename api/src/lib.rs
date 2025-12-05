@@ -3,7 +3,7 @@
 #![feature(proc_macro_hygiene, decl_macro, io_error_more, round_char_boundary)]
 
 #[macro_use]
-extern crate serde_derive;
+extern crate serde;
 
 // import any API only structures
 cfg_if::cfg_if! {

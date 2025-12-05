@@ -186,6 +186,8 @@ pub fn gen_image(group: &str) -> ImageRequest {
             ResourcesRequest::default()
                 .cores(2.0)
                 .memory("1Gi")
+                // this will never fail as 1Gi is valid and hardcoded
+                .unwrap()
                 .nvidia_gpu(1)
                 .amd_gpu(5),
         )

@@ -19,11 +19,12 @@ use super::db::{self, CursorCore, ScyllaCursorSupport, TagCountCursorSupport};
 use crate::models::backends::db::ScyllaCursor;
 use crate::models::{
     ApiCursor, CarvedOrigin, CarvedOriginTypes, Comment, CommentForm, CommentResponse, CommentRow,
-    DeleteCommentParams, DeleteSampleParams, FileListParams, Group, GroupAllowAction, Origin,
-    OriginForm, OriginRequest, OriginTypes, S3Objects, Sample, SampleCheck, SampleCheckResponse,
-    SampleForm, SampleListLine, SampleSubmissionResponse, Submission, SubmissionChunk,
-    SubmissionListRow, SubmissionRow, SubmissionUpdate, TagCounts, TagListRow, TagMap, TagType,
-    User, ZipDownloadParams,
+    DeleteCommentParams, DeleteSampleParams, Directionality, FileListParams, Group,
+    GroupAllowAction, Origin, OriginForm, OriginRequest, OriginTypes, S3Objects, Sample,
+    SampleCheck, SampleCheckResponse, SampleForm, SampleListLine, SampleSubmissionResponse,
+    Submission, SubmissionChunk, SubmissionListRow, SubmissionRow, SubmissionUpdate, TagCounts,
+    TagListRow, TagMap, TagType, TreeRelationships, TreeSupport, UnhashedTreeBranch, User,
+    ZipDownloadParams,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
@@ -766,6 +767,35 @@ impl Sample {
         // add current submission as submission chunk
         sample.add(groups, sub, shared).await?;
         Ok(sample)
+    }
+
+    /// Find relationships by checking origin info for a node
+    ///
+    /// # Arguments
+    ///
+    /// * `parents` - The parents to check against
+    /// * `relationship` - A map of relationships to add new branches too
+    pub fn check_origins(
+        &self,
+        parents: &HashMap<&String, u64>,
+        relationships: &dashmap::DashMap<u64, dashmap::DashSet<UnhashedTreeBranch>>,
+    ) {
+        // get our current nodes hash
+        let hash = self.tree_hash();
+        // check the origins this sample to see if we have any relationships that need to be added
+        for sub in &self.submissions {
+            // get parents for this submission origin if they exist
+            if let Some(parent_hash) = sub.origin.is_child_of_any(parents) {
+                // build the relationship for this origin
+                let relationship = TreeRelationships::Origin(sub.origin.clone());
+                // build our to_from relationships
+                let unhashed = UnhashedTreeBranch::new(hash, relationship, Directionality::To);
+                // get an entry to this parent nodes relationships
+                let entry = relationships.entry(parent_hash).or_default();
+                // insert our relationship
+                entry.insert(unhashed);
+            }
+        }
     }
 }
 

@@ -20,7 +20,6 @@ config = { version = "0.15", features = ["yaml"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
-serde_derive = { workspace = true }
 colored = "3"
 owo-colors = "4"
 http = "1.3"

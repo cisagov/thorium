@@ -1,13 +1,17 @@
 //! A Tree of data in Thorium
 
+use gxhash::GxHasher;
 use serde::Deserialize;
 use serde::Deserializer;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::hash::Hash;
 use std::hash::Hasher;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::models::Association;
 use crate::models::Entity;
+use crate::models::InvalidEnum;
 use crate::models::Repo;
 
 use super::{Origin, Sample};
@@ -100,6 +104,7 @@ impl TreeOpts {
     ///
     /// let opts = TreeOpts::default().limit(100);
     /// ```
+    #[must_use]
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = limit;
         self
@@ -118,6 +123,7 @@ impl TreeOpts {
     ///
     /// let opts = TreeOpts::default().gather_parents(true);
     /// ```
+    #[must_use]
     pub fn gather_parents(mut self, enabled: bool) -> Self {
         self.gather_parents = Some(enabled);
         self
@@ -136,6 +142,7 @@ impl TreeOpts {
     ///
     /// let opts = TreeOpts::default().gather_related(true);
     /// ```
+    #[must_use]
     pub fn gather_related(mut self, enabled: bool) -> Self {
         self.gather_related = Some(enabled);
         self
@@ -154,6 +161,7 @@ impl TreeOpts {
     ///
     /// let opts = TreeOpts::default().gather_tag_children(true);
     /// ```
+    #[must_use]
     pub fn gather_tag_children(mut self, enabled: bool) -> Self {
         self.gather_tag_children = Some(enabled);
         self
@@ -165,78 +173,6 @@ impl TreeOpts {
 pub struct TreeTags {
     /// The tags to start building a tree with in aggregate
     pub tags: BTreeMap<String, BTreeSet<String>>,
-}
-
-/// Gather all files with some tag for a tree
-#[cfg(feature = "api")]
-pub(crate) async fn gather_samples_with_tags(
-    user: &super::User,
-    tags: &BTreeMap<String, BTreeSet<String>>,
-    children: &mut Vec<(TreeNode, Vec<TreeRelationships>)>,
-    shared: &crate::utils::Shared,
-) -> Result<(), crate::utils::ApiError> {
-    // build the params for listing files with these tags
-    let mut opts = super::FileListOpts::default();
-    // build our listing opts with all of our tag keys
-    for (key, values) in tags {
-        // get the values for this tag key
-        for value in values {
-            // add this tag key/value to our list opts
-            opts.tag_ref(key, value);
-        }
-    }
-    // list all samples with these tags
-    let list = Sample::list(user, opts, true, shared).await?;
-    // get the details on these samples
-    let details = list.details(user, shared).await?;
-    // All nodes we find will be related by tags
-    let relationships = vec![TreeRelationships::Tags];
-    // reserve space for any new children
-    children.reserve(details.data.len());
-    // for each sample in this details list build and add a node
-    for sample in details.data {
-        // build a tree node for samples
-        let node = TreeNode::Sample(sample);
-        // add this to our list of children nodes
-        children.push((node, relationships.clone()));
-    }
-    Ok(())
-}
-
-/// Gather all repos with some tag for a tree
-#[cfg(feature = "api")]
-pub(crate) async fn gather_repos_with_tags(
-    user: &super::User,
-    tags: &BTreeMap<String, BTreeSet<String>>,
-    children: &mut Vec<(TreeNode, Vec<TreeRelationships>)>,
-    shared: &crate::utils::Shared,
-) -> Result<(), crate::utils::ApiError> {
-    // build the params for listing files with these tags
-    let mut opts = super::RepoListOpts::default();
-    // build our listing opts with all of our tag keys
-    for (key, values) in tags {
-        // get the values for this tag key
-        for value in values {
-            // add this tag key/value to our list opts
-            opts.tag_ref(key, value);
-        }
-    }
-    // list all repos with these tags
-    let list = Repo::list(user, opts, shared).await?;
-    // get the details on these repos
-    let details = list.details(user, shared).await?;
-    // All nodes we find will be related by tags
-    let relationships = vec![TreeRelationships::Tags];
-    // reserve space for any new children
-    children.reserve(details.data.len());
-    // for each sample in this details list build and add a node
-    for repo in details.data {
-        // build a tree node for repos
-        let node = TreeNode::Repo(repo);
-        // add this to our list of children nodes
-        children.push((node, relationships.clone()));
-    }
-    Ok(())
 }
 
 impl TreeSupport for TreeTags {
@@ -252,12 +188,9 @@ impl TreeSupport for TreeTags {
     ///
     /// # Arguments
     ///
-    /// * `seed` - The seed to set the hasher to use
-    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64 {
-        // get our hash seed
-        let seed = Self::tree_seed();
-        // build a hasher
-        let mut hasher = gxhash::GxHasher::with_seed(seed);
+    /// * `input` - The data needed to generate this nodes tree hash
+    /// * `hasher` - The hasher to write data to
+    fn tree_hash_direct_with_hasher(input: Self::HashType<'_>, hasher: &mut GxHasher) {
         // hash all of our keys
         for (key, values) in input {
             // hash our key
@@ -268,8 +201,6 @@ impl TreeSupport for TreeTags {
                 hasher.write(value.as_bytes());
             }
         }
-        // finalize our hasher
-        hasher.finish()
     }
 
     /// Gather any initial nodes for a tree
@@ -301,6 +232,8 @@ impl TreeSupport for TreeTags {
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
+        // get our tag nodes hash
+        let tag_hash = self.tree_hash();
         // build the opts to get everything in the same groups this tag node is in
         let mut opts = crate::models::FileListOpts::default().groups(tree.groups.clone());
         // add this tag nodes filters to this listing opt
@@ -309,7 +242,7 @@ impl TreeSupport for TreeTags {
             // get an entry to this tag keys values
             let entry = opts.tags.entry(key.clone()).or_default();
             // add this keys values
-            entry.extend(values.iter().map(|value| value.to_owned()));
+            entry.extend(values.iter().map(std::borrow::ToOwned::to_owned));
         }
         // convert our file list opts to params
         let params = crate::models::FileListParams::from(opts);
@@ -324,7 +257,7 @@ impl TreeSupport for TreeTags {
                 .map(|line| line.sha256)
                 .collect::<Vec<String>>();
             // filter out any nodes that we already have in our tree
-            sha256s.retain(|sha256| !ring.contains(tree, Sample::tree_hash_direct(&sha256)));
+            sha256s.retain(|sha256| !ring.contains(tree, Sample::tree_hash_direct(sha256)));
             // only list details if there are node details to list
             if !sha256s.is_empty() {
                 // get the details on these samples
@@ -335,8 +268,24 @@ impl TreeSupport for TreeTags {
                 for sample in details {
                     // wrap this sample in a node data object
                     let node = TreeNode::Sample(sample);
+                    // get our sample nodes hash
+                    let node_hash = node.hash();
                     // add this node to our tree ring
                     ring.add_node(node);
+                    // build the branch to and from our target node
+                    let to = UnhashedTreeBranch::new(
+                        tag_hash,
+                        TreeRelationships::Tags,
+                        Directionality::To,
+                    );
+                    let from = UnhashedTreeBranch::new(
+                        node_hash,
+                        TreeRelationships::Tags,
+                        Directionality::From,
+                    );
+                    // add these relationships to our ring
+                    ring.add_branch(node_hash, to);
+                    ring.add_branch(tag_hash, from);
                 }
             }
             // if our cursor is exhausted then stop crawling
@@ -368,6 +317,7 @@ pub struct TreeRelatedQuery {
 
 impl TreeRelatedQuery {
     /// Check if we have any related queries set
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tags.is_empty()
     }
@@ -408,6 +358,7 @@ impl TreeQuery {
     /// # Arguments
     ///
     /// * `sha256` - The sha256 of a sample to build a tree from
+    #[must_use]
     pub fn sample<T: Into<String>>(mut self, sha256: T) -> Self {
         // convert this sha256 into a string and add it
         self.samples.push(sha256.into());
@@ -424,6 +375,7 @@ pub trait TreeSupport:
     /// The seed for hashing this tree object
     ///
     /// You should basically never change this
+    #[must_use]
     fn tree_seed() -> i64 {
         1234
     }
@@ -436,7 +388,24 @@ pub trait TreeSupport:
     /// # Arguments
     ///
     /// * `input` - The data needed to generate this nodes tree hash
-    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64;
+    fn tree_hash_direct(input: Self::HashType<'_>) -> u64 {
+        // get our hash seed
+        let seed = Self::tree_seed();
+        // instance a default gx hasher
+        let mut hasher = GxHasher::with_seed(seed);
+        // hash our tree node
+        Self::tree_hash_direct_with_hasher(input, &mut hasher);
+        // get our hash
+        hasher.finish()
+    }
+
+    /// Hash a child object directly
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The data needed to generate this nodes tree hash
+    /// * `hasher` - The hasher to write data to
+    fn tree_hash_direct_with_hasher(input: Self::HashType<'_>, hasher: &mut GxHasher);
 
     /// Gather any initial nodes for a tree
     #[cfg(feature = "api")]
@@ -477,20 +446,6 @@ pub trait TreeSupport:
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError>;
-
-    /// Find relationships by checking origin info for a node
-    ///
-    /// # Arguments
-    ///
-    /// * `parents` - The parents to check against
-    #[cfg(feature = "api")]
-    fn check_origins(
-        &self,
-        parents: &HashMap<&String, u64>,
-        relationships: &dashmap::DashMap<u64, dashmap::DashSet<TreeBranch>>,
-    ) {
-        // most things have no origins
-    }
 
     /// Build an association target column for an object
     #[cfg(feature = "api")]
@@ -566,6 +521,7 @@ pub enum TreeNode {
 
 impl TreeNode {
     /// Get the hash of each node
+    #[must_use]
     pub fn hash(&self) -> u64 {
         // hash this node with a static seed to ensure consistent hashing
         match self {
@@ -576,7 +532,27 @@ impl TreeNode {
         }
     }
 
+    /// Get the hash of each node
+    ///
+    /// # Arguments
+    ///
+    /// * `hasher` - The hasher to use
+    pub fn hash_with_hasher(&self, hasher: &mut GxHasher) {
+        // hash this node with a static seed to ensure consistent hashing
+        match self {
+            Self::Sample(sample) => Sample::tree_hash_direct_with_hasher(&sample.sha256, hasher),
+            Self::Repo(repo) => Repo::tree_hash_direct_with_hasher(&repo.url, hasher),
+            Self::Tag(tags) => TreeTags::tree_hash_direct_with_hasher(&tags.tags, hasher),
+            Self::Entity(entity) => Entity::tree_hash_direct_with_hasher(&entity.id, hasher),
+        }
+    }
+
     /// Check if this node has this tag filter
+    ///
+    /// # Arguments
+    ///
+    /// * `tag_filter` - The tag filters to check for
+    #[must_use]
     pub fn has_tag_filters(&self, tag_filter: &BTreeMap<String, BTreeSet<String>>) -> bool {
         // if we have no tag filters then return false
         if tag_filter.is_empty() {
@@ -602,16 +578,16 @@ impl TreeNode {
                 None => return false,
             }
         }
-        return true;
+        true
     }
 
     /// Get a nodes parent to check origin info against if possible
+    #[must_use]
     pub fn get_origin_parent(&self) -> Option<&String> {
         match self {
             Self::Sample(sample) => Some(&sample.sha256),
             Self::Repo(repo) => Some(&repo.url),
-            Self::Tag(_) => None,
-            Self::Entity(_) => None,
+            Self::Tag(_) | Self::Entity(_) => None,
         }
     }
 }
@@ -629,25 +605,100 @@ pub enum TreeRelationships {
     Association(Association),
 }
 
+/// The direction this branch is going
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Copy)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
+pub enum Directionality {
+    /// This association/relationship/branch is from the parent to a child
+    To,
+    /// This association/relationship/branch is from the child to the parent
+    From,
+    /// This association/relationship/branch is bidirectional
+    Bidirectional,
+}
+
+impl Directionality {
+    /// Get the opposite direction of ourselves
+    ///
+    /// Bidirectional will just return biderectional
+    #[must_use]
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::To => Self::From,
+            Self::From => Self::To,
+            Self::Bidirectional => Self::Bidirectional,
+        }
+    }
+
+    /// Cast this notification level to a str
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::To => "To",
+            Self::From => "From",
+            Self::Bidirectional => "Bidirectional",
+        }
+    }
+}
+
+impl FromStr for Directionality {
+    type Err = InvalidEnum;
+
+    /// Conver this str to a ``Directionality``
+    ///
+    /// # Arguments
+    ///
+    /// * `raw` - The str to convert from
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw {
+            "To" => Ok(Directionality::To),
+            "From" => Ok(Directionality::From),
+            "Directionality" => Ok(Directionality::Bidirectional),
+            _ => Err(InvalidEnum(format!("Unknown Directionality: {raw}"))),
+        }
+    }
+}
+
+/// A branch between nodes in a relationship tree
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct TreeBranch {
-    /// Whether this branch results in a loop
-    pub is_loop: bool,
+pub struct UnhashedTreeBranch {
     /// The relationship for this branch
     pub relationship: TreeRelationships,
     // The node this is a branch too
     pub node: u64,
+    /// The direction for this branch
+    pub direction: Directionality,
 }
 
-impl TreeBranch {
-    pub(super) fn new(node: u64, relationship: TreeRelationships) -> Self {
-        TreeBranch {
-            is_loop: false,
+impl UnhashedTreeBranch {
+    pub(super) fn new(
+        node: u64,
+        relationship: TreeRelationships,
+        direction: Directionality,
+    ) -> Self {
+        // hash this relationship
+        UnhashedTreeBranch {
             relationship,
             node,
+            direction,
         }
     }
+}
+
+/// A branch between nodes in a relationship tree
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct TreeBranch {
+    /// The relationship for this branch
+    pub relationship: TreeRelationships,
+    /// A hash for this relationship
+    pub relationship_hash: u64,
+    // The node this is a branch too
+    pub node: u64,
+    /// The direction for this branch
+    pub direction: Directionality,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -709,56 +760,5 @@ impl Tree {
         self.data_map.insert(hash, node);
         // add this node to our sent nodes
         self.sent.insert(hash);
-    }
-
-    /// Add a child node
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - The node that we are adding
-    /// * `parents` - The parents of the node we are adding
-    pub fn add_node(
-        &mut self,
-        node: TreeNode,
-        relationships: Vec<TreeRelationships>,
-        parent: u64,
-    ) -> Option<u64> {
-        // hash our node
-        let hash = node.hash();
-        // add this node to our data map if it doesn't already exist
-        let existing = self.data_map.insert(hash, node).is_some();
-        // build and add the branch to this child from our parent
-        for relationship in relationships {
-            // build our branch
-            let branch = TreeBranch {
-                is_loop: false,
-                relationship,
-                node: hash,
-            };
-            // get an entry to this parents children
-            let entry = self.branches.entry(parent).or_default();
-            // add this child
-            entry.insert(branch);
-        }
-        if existing { None } else { Some(hash) }
-    }
-
-    /// Add a child node by hash
-    ///
-    /// # Arguments
-    ///
-    /// * `hash` - The hash for the node we are adding relationships for
-    /// * `parents` - The parents of the node we are adding
-    pub fn add_node_by_hash(&mut self, hash: u64, relationship: TreeRelationships, parent: u64) {
-        // build our branch
-        let branch = TreeBranch {
-            is_loop: false,
-            relationship,
-            node: hash,
-        };
-        // get an entry to this parents children
-        let entry = self.branches.entry(parent).or_default();
-        // add this child
-        entry.insert(branch);
     }
 }

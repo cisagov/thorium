@@ -15,8 +15,6 @@ pub struct AssociationsPreparedStatements {
     pub list_ties: PreparedStatement,
     /// Get a page of data for a associations cursor
     pub list_pull: PreparedStatement,
-    ///// Insert an association into the to table
-    //pub insert_to: PreparedStatement,
 }
 
 impl AssociationsPreparedStatements {
@@ -56,14 +54,14 @@ async fn setup_associations_table(session: &Session, config: &Conf) {
           year INT, \
           bucket INT, \
           created TIMESTAMP, \
-          inverted BOOLEAN, \
+          direction TEXT, \
           kind TEXT, \
           source TEXT, \
           target TEXT, \
           submitter TEXT, \
           extra_source TEXT, \
           extra_target TEXT, \
-          PRIMARY KEY ((group, year, bucket, source), created, target, inverted))
+          PRIMARY KEY ((group, year, bucket, source), created, target, direction))
           WITH CLUSTERING ORDER BY (created DESC)",
         ns = &config.thorium.namespace
     );
@@ -72,31 +70,6 @@ async fn setup_associations_table(session: &Session, config: &Conf) {
         .await
         .expect("Failed to add assocations table");
 }
-
-///// The the associations to table for Thorium
-/////
-///// This table contains the associations to a specific object or entity
-//async fn setup_associations_to_table(session: &Session, config: &Conf) {
-//    // build the command for creating this table
-//    let table_create = format!(
-//        "CREATE TABLE IF NOT EXISTS {ns}.associations_to ( \
-//          group TEXT, \
-//          year INT, \
-//          bucket INT, \
-//          created TIMESTAMP, \
-//          kind TEXT, \
-//          target TEXT, \
-//          source TEXT, \
-//          submitter TEXT, \
-//          PRIMARY KEY ((group, year, bucket, target), created))
-//          WITH CLUSTERING ORDER BY (created DESC)",
-//        ns = &config.thorium.namespace
-//    );
-//    session
-//        .query_unpaged(table_create, &[])
-//        .await
-//        .expect("Failed to add assocations_to table");
-//}
 
 /// build the associations insert prepared statement
 ///
@@ -109,7 +82,7 @@ async fn insert(session: &Session, config: &Conf) -> PreparedStatement {
     session
         .prepare(format!(
             "INSERT INTO {}.associations \
-                (group, year, bucket, created, inverted, kind, source, target, submitter, extra_source, extra_target) \
+                (group, year, bucket, created, direction, kind, source, target, submitter, extra_source, extra_target) \
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             &config.thorium.namespace
         ))
@@ -134,7 +107,7 @@ async fn delete(session: &Session, config: &Conf) -> PreparedStatement {
                 AND source = ? \
                 AND created = ? \
                 AND target = ? \
-                AND inverted = ?",
+                AND direction = ?",
             &config.thorium.namespace
         ))
         .await
@@ -151,7 +124,7 @@ async fn list_ties(session: &Session, config: &Conf) -> PreparedStatement {
     // build associations list ties prepared statement
     session
         .prepare(format!(
-            "SELECT group, kind, source, target, created, submitter, inverted, extra_source, extra_target \
+            "SELECT group, kind, source, target, created, submitter, direction, extra_source, extra_target \
                 FROM {}.associations \
                 WHERE group = ? \
                 AND year = ? \
@@ -176,7 +149,7 @@ async fn list_pull(session: &Session, config: &Conf) -> PreparedStatement {
     // build associations list ties prepared statement
     session
         .prepare(format!(
-            "SELECT group, kind, source, target, submitter, created, inverted, extra_source, extra_target \
+            "SELECT group, kind, source, target, submitter, created, direction, extra_source, extra_target \
                 FROM {}.associations \
                 WHERE group = ? \
                 AND year = ? \
@@ -190,22 +163,3 @@ async fn list_pull(session: &Session, config: &Conf) -> PreparedStatement {
         .await
         .expect("Failed to prepare scylla associations list pull statement")
 }
-
-///// build the associations_to insert prepared statement
-/////
-///// # Arguments
-/////
-///// * `session` - The scylla session to use
-///// * `config` - The Thorium config
-//async fn insert_to(session: &Session, config: &Conf) -> PreparedStatement {
-//    // build associations_to insert prepared statement
-//    session
-//        .prepare(format!(
-//            "INSERT INTO {}.associations_to \
-//                (group, year, bucket, created, kind, target, source, submitter) \
-//                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-//            &config.thorium.namespace
-//        ))
-//        .await
-//        .expect("Failed to prepare associations_to insert statement")
-//}

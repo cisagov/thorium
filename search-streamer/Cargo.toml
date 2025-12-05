@@ -17,7 +17,6 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
-serde_derive = { workspace = true }
 kanal = "0.1.1"
 async-trait = "0.1"
 url = "2"

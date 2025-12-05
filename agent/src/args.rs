@@ -1,5 +1,5 @@
 use clap::Parser;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use thorium::models::ImageScaler;
 use thorium::{Error, Thorium};
 use tracing::{Level, event, instrument};

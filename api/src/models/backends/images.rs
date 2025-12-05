@@ -21,7 +21,7 @@ use crate::models::{
     ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, Kvm,
     KvmUpdate, NetworkPolicy, OutputCollection, OutputDisplayType, PipelineBan, PipelineBanKind,
     PipelineBanUpdate, PipelineKey, Resources, ResourcesUpdate, SecurityContext,
-    SecurityContextUpdate, SpawnLimits, SystemSettings, User, conversions,
+    SecurityContextUpdate, SpawnLimits, SystemSettings, User,
 };
 use crate::utils::{ApiError, Shared, bounder};
 use crate::{
@@ -198,15 +198,6 @@ impl ImageArgsUpdate {
     }
 }
 
-/// Updates a resource request or limit
-macro_rules! update_resource {
-    ($orig:expr, $update:expr, $translator:expr) => {
-        if let Some(update) = $update.take() {
-            $orig = $translator(&update)?;
-        }
-    };
-}
-
 impl BurstableResourcesUpdate {
     /// Update an images resources
     ///
@@ -215,12 +206,8 @@ impl BurstableResourcesUpdate {
     /// * `image` - The image to update
     pub fn update(mut self, resources: &mut Resources) -> Result<(), ApiError> {
         // update this images resources
-        update_resource!(resources.burstable.cpu, self.cpu, conversions::cpu);
-        update_resource!(
-            resources.burstable.memory,
-            self.memory,
-            conversions::storage
-        );
+        update!(resources.burstable.cpu, self.cpu);
+        update!(resources.burstable.memory, self.memory);
         Ok(())
     }
 }
@@ -233,13 +220,9 @@ impl ResourcesUpdate {
     /// * `image` - The image to update
     pub fn update(mut self, image: &mut Image) -> Result<(), ApiError> {
         // update this images resources
-        update_resource!(image.resources.cpu, self.cpu, conversions::cpu);
-        update_resource!(image.resources.memory, self.memory, conversions::storage);
-        update_resource!(
-            image.resources.ephemeral_storage,
-            self.ephemeral_storage,
-            conversions::storage
-        );
+        update!(image.resources.cpu, self.cpu);
+        update!(image.resources.memory, self.memory);
+        update!(image.resources.ephemeral_storage, self.ephemeral_storage);
         update!(image.resources.nvidia_gpu, self.nvidia_gpu);
         update!(image.resources.amd_gpu, self.amd_gpu);
         // update our burstable resources

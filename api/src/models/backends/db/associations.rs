@@ -3,13 +3,12 @@
 use chrono::prelude::*;
 use futures::stream::{self, StreamExt};
 use scylla::errors::ExecutionError;
-use scylla::response::query_result::QueryResult;
 use tracing::instrument;
 
 use super::{ScyllaCursor, keys};
 use crate::models::{
-    Association, AssociationKind, AssociationListParams, AssociationListRow, AssociationTarget,
-    AssociationTargetColumn, ListableAssociation, User,
+    AssociationKind, AssociationListParams, AssociationTarget, AssociationTargetColumn,
+    Directionality, ListableAssociation, User,
 };
 use crate::serialize;
 use crate::utils::{ApiError, Shared, helpers};
@@ -26,6 +25,7 @@ async fn create_helper(
     target_str: String,
     extra_source: Option<String>,
     extra_target: Option<String>,
+    direction: Directionality,
     shared: &Shared,
 ) -> Result<(), ExecutionError> {
     // This row is in the source -> target direction
@@ -39,7 +39,7 @@ async fn create_helper(
                 year,
                 bucket,
                 now,
-                false,
+                direction,
                 kind,
                 &source_str,
                 &target_str,
@@ -49,6 +49,8 @@ async fn create_helper(
             ),
         )
         .await?;
+    // get our opposite direction
+    let opposite_dir = direction.opposite();
     // This row is in the target  -> source direction
     shared
         .scylla
@@ -60,7 +62,7 @@ async fn create_helper(
                 year,
                 bucket,
                 now,
-                true,
+                opposite_dir,
                 kind,
                 target_str,
                 &source_str,
@@ -84,6 +86,7 @@ pub async fn create(
     kind: AssociationKind,
     source: AssociationTarget,
     targets: &Vec<(AssociationTarget, Vec<String>)>,
+    direction: Directionality,
     shared: &Shared,
 ) -> Result<(), ApiError> {
     // get the current time for when we are inserting these rows
@@ -139,45 +142,11 @@ pub async fn create(
                 target_str.clone(),
                 extra_src.clone(),
                 extra_targ.clone(),
+                direction,
                 shared,
             );
             // add this to our futures
             futs.push(fut);
-            //// create a future for inserting this info into the associations table
-            //// This row is in the source -> target direction
-            //let fut = shared.scylla.session.execute_unpaged(
-            //    &shared.scylla.prep.associations.insert,
-            //    (
-            //        group,
-            //        year,
-            //        bucket,
-            //        now,
-            //        false,
-            //        kind,
-            //        &source_str,
-            //        target_str.clone(),
-            //        &user.username,
-            //    ),
-            //);
-            //// add this future
-            //futs.push(fut);
-            //// This row is in the target  -> source direction
-            //let fut = shared.scylla.session.execute_unpaged(
-            //    &shared.scylla.prep.associations.insert,
-            //    (
-            //        group,
-            //        year,
-            //        bucket,
-            //        now,
-            //        true,
-            //        kind,
-            //        target_str.clone(),
-            //        &source_str,
-            //        &user.username,
-            //    ),
-            //);
-            //// add this future
-            //futs.push(fut);
         }
     }
     // execute our to/from futures
@@ -214,10 +183,12 @@ async fn delete_helper(
                 &source_serialized,
                 association.created,
                 &association.other,
-                association.to_source,
+                association.direction,
             ),
         )
         .await?;
+    // get our opposite direction
+    let opposite_dir = association.direction.opposite();
     // build the future to delete this association
     shared
         .scylla
@@ -231,7 +202,7 @@ async fn delete_helper(
                 &association.other,
                 association.created,
                 &source_serialized,
-                !association.to_source,
+                opposite_dir,
             ),
         )
         .await?;

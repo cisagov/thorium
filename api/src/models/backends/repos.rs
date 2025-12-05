@@ -592,7 +592,7 @@ impl Repo {
     #[instrument(name = "Repo::list", skip(user, shared), err(Debug))]
     pub async fn list<P: Into<RepoListParams> + std::fmt::Debug>(
         user: &User,
-        mut params: P,
+        params: P,
         shared: &Shared,
     ) -> Result<ApiCursor<RepoListLine>, ApiError> {
         // convert our params if needed

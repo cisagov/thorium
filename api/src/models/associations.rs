@@ -6,7 +6,7 @@ use chrono::prelude::*;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::models::InvalidEnum;
+use crate::models::{Directionality, InvalidEnum};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -132,8 +132,8 @@ pub struct Association {
     pub groups: Vec<String>,
     /// When this association was created
     pub created: DateTime<Utc>,
-    /// Whether this direction is to our source object or away from it
-    pub to_source: bool,
+    /// The direction for this association
+    pub direction: Directionality,
 }
 
 /// A request to associate one piece of data with another
@@ -148,6 +148,8 @@ pub struct AssociationRequest {
     /// The groups for this association
     #[serde(default)]
     pub groups: Vec<String>,
+    /// Whether this is a bidirecitonal relationship or not
+    pub is_bidirectional: bool,
 }
 
 impl AssociationRequest {
@@ -163,6 +165,7 @@ impl AssociationRequest {
             source,
             targets: Vec::default(),
             groups: Vec::default(),
+            is_bidirectional: false,
         }
     }
 
@@ -183,6 +186,7 @@ impl AssociationRequest {
             source,
             targets: Vec::with_capacity(capacity),
             groups: Vec::with_capacity(capacity),
+            is_bidirectional: false,
         }
     }
 
@@ -195,6 +199,12 @@ impl AssociationRequest {
         // extend our groups with our new groups
         self.groups
             .extend(groups.into_iter().map(|group| group.into()));
+        self
+    }
+
+    /// Set this association to be bidirectional
+    pub fn biderectional(mut self) -> Self {
+        self.is_bidirectional = true;
         self
     }
 }

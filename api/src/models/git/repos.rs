@@ -1,6 +1,7 @@
 //! A repository is a collection of source code for a project
 
 use chrono::prelude::*;
+use gxhash::GxHasher;
 use indicatif::ProgressBar;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hasher;
@@ -623,17 +624,10 @@ impl TreeSupport for Repo {
     /// # Arguments
     ///
     /// * `input` - The data needed to generate this nodes tree hash
-    /// * `seed` - The seed to set the hasher to use
-    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64 {
-        // get our hash seed
-        let seed = Self::tree_seed();
-        // build a hasher
-        let mut hasher = gxhash::GxHasher::with_seed(seed);
+    /// * `hasher` - The hasher to write data to
+    fn tree_hash_direct_with_hasher(input: Self::HashType<'_>, hasher: &mut GxHasher) {
         // hash this samples sha
         hasher.write(input.as_bytes());
-        // finalize our hasher
-        let hash = hasher.finish();
-        hash
     }
 
     /// Gather any initial nodes for a tree

@@ -12,8 +12,7 @@ use uuid::Uuid;
 use crate::models::backends::TagSupport;
 use crate::models::backends::db::ScyllaCursor;
 use crate::models::{
-    AssociationListOpts, AssociationListParams, AssociationTargetColumn, Entity, EntityForm,
-    EntityListLine, EntityListParams, EntityListSupplementRow, EntityMetadata, EntityRow,
+    Entity, EntityForm, EntityListLine, EntityListParams, EntityListSupplementRow, EntityRow,
     KeySupport, TagDeleteRequest, TagRequest, User,
 };
 use crate::utils::{ApiError, Shared, helpers};

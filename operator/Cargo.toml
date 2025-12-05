@@ -16,7 +16,6 @@ thorium-api = { workspace=true, features = ["scylla-utils", "client", "k8s"] }
 reqwest = { workspace=true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_derive = { workspace = true }
 serde_yaml = "0.9"
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = "0.1"

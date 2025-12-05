@@ -14,7 +14,6 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tokio = { version = "1.45", features = ["full"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_derive = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 dirs = "6"
 config = { version = "0.15", features = ["yaml"] }

@@ -78,16 +78,7 @@ impl ToolboxUpdate {
         {
             Ok(image) => {
                 let group = image_version.config.group.clone();
-                match images::calculate_image_update(image, image_version.config).map_err(
-                    |err| {
-                        Error::new(format!(
-                            "Error diffing image '{}:{}': {}",
-                            image_name,
-                            image_version_name,
-                            err.msg().unwrap_or_default()
-                        ))
-                    },
-                )? {
+                match images::calculate_image_update(image, image_version.config) {
                     Some(image_update) => Ok(ToolboxImageUpdate::new(
                         image_name,
                         image_version_name,
@@ -498,7 +489,7 @@ pub async fn update(thorium: Thorium, conf: CtlConf, cmd: &UpdateToolbox) -> Res
             )));
         }
         // return a set with just our group override since we replaced it
-        HashSet::from([group_override.to_string()])
+        HashSet::from([group_override.clone()])
     } else {
         // get all of the groups the manifest refers to
         manifest.groups()

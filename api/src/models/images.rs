@@ -121,8 +121,8 @@ impl PartialEq<BurstableResourcesRequest> for BurstableResources {
     /// * `req` - The request to compare against
     fn eq(&self, req: &BurstableResourcesRequest) -> bool {
         // make sure all resources were set correctly
-        same!(self.cpu, &req.cpu, conversions::cpu);
-        same!(self.memory, &req.memory, conversions::storage);
+        same!(self.cpu, req.cpu);
+        same!(self.memory, req.memory);
         true
     }
 }
@@ -135,23 +135,19 @@ impl PartialEq<BurstableResourcesUpdate> for BurstableResources {
     /// * `update` - The update to compare against
     fn eq(&self, update: &BurstableResourcesUpdate) -> bool {
         // make sure all resources were set correctly
-        matches_update!(self.cpu, &update.cpu, conversions::cpu);
-        matches_update!(self.memory, &update.memory, conversions::storage);
+        matches_update!(self.cpu, update.cpu);
+        matches_update!(self.memory, update.memory);
         true
     }
 }
 
-impl TryFrom<BurstableResourcesRequest> for BurstableResources {
-    type Error = ConversionError;
-
-    fn try_from(req: BurstableResourcesRequest) -> Result<Self, Self::Error> {
-        // bound cpu
-        let cpu = conversions::cpu(&req.cpu)?;
-        // bound memory
-        let memory = conversions::storage(&req.memory)?;
+impl From<BurstableResourcesRequest> for BurstableResources {
+    fn from(req: BurstableResourcesRequest) -> Self {
         // build our burstable resources req
-        let burstable = BurstableResources { cpu, memory };
-        Ok(burstable)
+        BurstableResources {
+            cpu: req.cpu,
+            memory: req.memory,
+        }
     }
 }
 
@@ -159,29 +155,26 @@ impl TryFrom<BurstableResourcesRequest> for BurstableResources {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct BurstableResourcesRequest {
-    /// Cpu cores in millicpus or cores
-    pub cpu: String,
+    /// Cpu cores in millicpu
+    #[serde(
+        deserialize_with = "conversions::deserialize_cpu",
+        serialize_with = "conversions::serialize_cpu"
+    )]
+    pub cpu: u64,
     /// Ram in mebibytes
-    pub memory: String,
+    #[serde(
+        deserialize_with = "conversions::deserialize_storage",
+        serialize_with = "conversions::serialize_storage"
+    )]
+    pub memory: u64,
 }
 
 impl BurstableResourcesRequest {
-    /// Create a new [`ResourceRequest`]
-    ///
-    /// # Arguments
-    ///
-    /// * `cpu` - The amount of cpu to require
-    /// * `memory` - The amount of memory to require
-    #[must_use]
-    pub fn new(cpu: String, memory: String) -> Self {
-        BurstableResourcesRequest { cpu, memory }
-    }
-
     /// Sets the cpu value to request in millicpu
     ///
     /// # Arguments
     ///
-    /// * `cpu` - The CPU value in millicpu to set
+    /// * `millicpu` - The CPU value in millicpu to set
     ///
     /// # Examples
     ///
@@ -191,8 +184,8 @@ impl BurstableResourcesRequest {
     /// BurstableResourcesRequest::default().millicpu(2500);
     /// ```
     #[must_use]
-    pub fn millicpu(mut self, cpu: u64) -> Self {
-        self.cpu = format!("{cpu}m");
+    pub fn millicpu(mut self, millicpu: u64) -> Self {
+        self.cpu = millicpu;
         self
     }
 
@@ -212,7 +205,7 @@ impl BurstableResourcesRequest {
     #[must_use]
     #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn cores(mut self, cores: f64) -> Self {
-        self.cpu = format!("{}m", (cores * 1000.0) as u64);
+        self.cpu = (cores * 1000.0) as u64;
         self
     }
 
@@ -229,20 +222,17 @@ impl BurstableResourcesRequest {
     ///
     /// BurstableResourcesRequest::default().memory("2Gi");
     /// ```
-    #[must_use]
-    pub fn memory<T: Into<String>>(mut self, memory: T) -> Self {
-        self.memory = memory.into();
-        self
+    pub fn memory<M: AsRef<str>>(mut self, memory: M) -> Result<Self, ConversionError> {
+        // try to deserialize our value
+        self.memory = conversions::storage(memory)?;
+        Ok(self)
     }
 }
 
 impl Default for BurstableResourcesRequest {
     /// Create a default empty ``BurstableResourcesRequest``
     fn default() -> Self {
-        BurstableResourcesRequest {
-            cpu: "0".to_owned(),
-            memory: "0Mi".to_owned(),
-        }
+        BurstableResourcesRequest { cpu: 0, memory: 0 }
     }
 }
 
@@ -254,8 +244,8 @@ impl PartialEq<BurstableResources> for BurstableResourcesRequest {
     /// * `res` - The resources to compare against
     fn eq(&self, res: &BurstableResources) -> bool {
         // make sure all resources were set correctly
-        same!(res.cpu, &self.cpu, conversions::cpu);
-        same!(res.memory, &self.memory, conversions::storage);
+        same!(res.cpu, self.cpu);
+        same!(res.memory, self.memory);
         true
     }
 }
@@ -264,8 +254,8 @@ impl From<BurstableResources> for BurstableResourcesRequest {
     /// Convert a resources object to a resources request object
     fn from(burstable: BurstableResources) -> Self {
         BurstableResourcesRequest {
-            cpu: format!("{}m", burstable.cpu),
-            memory: format!("{}Mi", burstable.memory),
+            cpu: burstable.cpu,
+            memory: burstable.memory,
         }
     }
 }
@@ -275,9 +265,19 @@ impl From<BurstableResources> for BurstableResourcesRequest {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct BurstableResourcesUpdate {
     /// Cpu cores in millicpus
-    pub cpu: Option<String>,
+    #[serde(
+        deserialize_with = "conversions::deserialize_cpu_opt",
+        serialize_with = "conversions::serialize_cpu_opt",
+        default
+    )]
+    pub cpu: Option<u64>,
     /// Ram in mebibytes
-    pub memory: Option<String>,
+    #[serde(
+        deserialize_with = "conversions::deserialize_storage_opt",
+        serialize_with = "conversions::serialize_storage_opt",
+        default
+    )]
+    pub memory: Option<u64>,
 }
 
 impl BurstableResourcesUpdate {
@@ -285,7 +285,7 @@ impl BurstableResourcesUpdate {
     ///
     /// # Arguments
     ///
-    /// * `cpu` - The CPU value in millicpu to set
+    /// * `millicpu` - The CPU value in millicpu to set
     ///
     /// # Examples
     ///
@@ -295,8 +295,8 @@ impl BurstableResourcesUpdate {
     /// BurstableResourcesUpdate::default().millicpu(2500);
     /// ```
     #[must_use]
-    pub fn millicpu(mut self, cpu: u64) -> Self {
-        self.cpu = Some(format!("{cpu}m"));
+    pub fn millicpu(mut self, millicpu: u64) -> Self {
+        self.cpu = Some(millicpu);
         self
     }
 
@@ -316,7 +316,7 @@ impl BurstableResourcesUpdate {
     #[must_use]
     #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn cores(mut self, cores: f64) -> Self {
-        self.cpu = Some(format!("{}m", (cores * 1000.0) as u64));
+        self.cpu = Some((cores * 1000.0).ceil() as u64);
         self
     }
 
@@ -333,10 +333,10 @@ impl BurstableResourcesUpdate {
     ///
     /// BurstableResourcesUpdate::default().memory("2Gi");
     /// ```
-    #[must_use]
-    pub fn memory<T: Into<String>>(mut self, memory: T) -> Self {
-        self.memory = Some(memory.into());
-        self
+    pub fn memory<M: AsRef<str>>(mut self, memory: M) -> Result<Self, ConversionError> {
+        // try to deserialize our raw memory value
+        self.memory = Some(conversions::storage(memory)?);
+        Ok(self)
     }
 }
 
@@ -347,11 +347,10 @@ impl From<BurstableResources> for BurstableResourcesUpdate {
     ///
     /// * `burstable` - The burstable resources to convert
     fn from(burstable: BurstableResources) -> Self {
-        // cpu is always in millicpu so just format it back to that
-        let cpu = Some(format!("{}m", burstable.cpu));
-        // memory is always in mebibytes so just format it back to that
-        let memory = Some(format!("{}Mi", burstable.memory));
-        BurstableResourcesUpdate { cpu, memory }
+        BurstableResourcesUpdate {
+            cpu: Some(burstable.cpu),
+            memory: Some(burstable.memory),
+        }
     }
 }
 
@@ -444,7 +443,7 @@ impl Resources {
             return false;
         }
         // make sure we have enough remaining burstable resources
-        if self.burstable.enough(&resources.burstable) {
+        if !self.burstable.enough(&resources.burstable) {
             return false;
         }
         true
@@ -547,13 +546,9 @@ impl PartialEq<ResourcesRequest> for Resources {
     /// * `req` - The request to compare against
     fn eq(&self, req: &ResourcesRequest) -> bool {
         // make sure all resources were set correctly
-        same!(self.cpu, &req.cpu, conversions::cpu);
-        same!(self.memory, &req.memory, conversions::storage);
-        matches_update!(
-            self.ephemeral_storage,
-            req.ephemeral_storage,
-            conversions::storage
-        );
+        same!(self.cpu, req.cpu);
+        same!(self.memory, req.memory);
+        same!(self.ephemeral_storage, req.ephemeral_storage);
         same!(self.nvidia_gpu, req.nvidia_gpu);
         same!(self.amd_gpu, req.amd_gpu);
         same!(self.burstable, req.burstable);
@@ -569,52 +564,30 @@ impl PartialEq<ResourcesUpdate> for Resources {
     /// * `update` - The update to compare against
     fn eq(&self, update: &ResourcesUpdate) -> bool {
         // make sure all resources were set correctly
-        matches_update!(self.cpu, &update.cpu, conversions::cpu);
-        matches_update!(self.memory, &update.memory, conversions::storage);
-        matches_update!(
-            self.ephemeral_storage,
-            update.ephemeral_storage,
-            conversions::storage
-        );
+        matches_update!(self.cpu, update.cpu);
+        matches_update!(self.memory, update.memory);
+        matches_update!(self.ephemeral_storage, update.ephemeral_storage);
         matches_update!(self.nvidia_gpu, update.nvidia_gpu);
         matches_update!(self.amd_gpu, update.amd_gpu);
-        matches_update!(self.burstable.cpu, update.burstable.cpu, conversions::cpu);
-        matches_update!(
-            self.burstable.memory,
-            update.burstable.memory,
-            conversions::storage
-        );
+        matches_update!(self.burstable.cpu, update.burstable.cpu);
+        matches_update!(self.burstable.memory, update.burstable.memory);
         true
     }
 }
 
-impl TryFrom<ResourcesRequest> for Resources {
-    type Error = ConversionError;
-
+impl From<ResourcesRequest> for Resources {
     /// Try to convert a resources request to a resources object
-    fn try_from(req: ResourcesRequest) -> Result<Self, Self::Error> {
-        // bound cpu
-        let cpu = conversions::cpu(&req.cpu)?;
-        // bound memory
-        let memory = conversions::storage(&req.memory)?;
-        // bound ephemeral storage
-        let ephemeral_storage = match req.ephemeral_storage {
-            Some(val) => conversions::storage(&val)?,
-            None => 0,
-        };
-        // get our burstable resources
-        let burstable = BurstableResources::try_from(req.burstable)?;
+    fn from(req: ResourcesRequest) -> Self {
         // build our validated resources object
-        let resources = Resources {
-            cpu,
-            memory,
-            ephemeral_storage,
+        Resources {
+            cpu: req.cpu,
+            memory: req.memory,
+            ephemeral_storage: req.ephemeral_storage,
             nvidia_gpu: req.nvidia_gpu,
             amd_gpu: req.amd_gpu,
             worker_slots: 1,
-            burstable,
-        };
-        Ok(resources)
+            burstable: BurstableResources::from(req.burstable),
+        }
     }
 }
 
@@ -623,11 +596,24 @@ impl TryFrom<ResourcesRequest> for Resources {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ResourcesRequest {
     /// Cpu cores in millicpus or cores
-    pub cpu: String,
+    #[serde(
+        deserialize_with = "conversions::deserialize_cpu",
+        serialize_with = "conversions::serialize_cpu"
+    )]
+    pub cpu: u64,
     /// Ram in mebibytes
-    pub memory: String,
+    #[serde(
+        deserialize_with = "conversions::deserialize_storage",
+        serialize_with = "conversions::serialize_storage"
+    )]
+    pub memory: u64,
     /// Ephemeral storage in mebibytes
-    pub ephemeral_storage: Option<String>,
+    #[serde(
+        deserialize_with = "conversions::deserialize_storage",
+        serialize_with = "conversions::serialize_storage",
+        default
+    )]
+    pub ephemeral_storage: u64,
     /// The total number of Nvidia GPUs
     #[serde(default)]
     pub nvidia_gpu: u64,
@@ -640,29 +626,11 @@ pub struct ResourcesRequest {
 }
 
 impl ResourcesRequest {
-    /// Create a new [`ResourceRequest`]
-    ///
-    /// # Arguments
-    ///
-    /// * `cpu` - The amount of cpu to require
-    /// * `memory` - The amount of memory to require
-    #[must_use]
-    pub fn new(cpu: String, memory: String) -> Self {
-        ResourcesRequest {
-            cpu,
-            memory,
-            ephemeral_storage: None,
-            nvidia_gpu: 0,
-            amd_gpu: 0,
-            burstable: BurstableResourcesRequest::default(),
-        }
-    }
-
     /// Sets the cpu value to request in millicpu
     ///
     /// # Arguments
     ///
-    /// * `cpu` - The CPU value in millicpu to set
+    /// * `millicpu` - The CPU value in millicpu to set
     ///
     /// # Examples
     ///
@@ -672,8 +640,8 @@ impl ResourcesRequest {
     /// ResourcesRequest::default().millicpu(2500);
     /// ```
     #[must_use]
-    pub fn millicpu(mut self, cpu: u64) -> Self {
-        self.cpu = format!("{cpu}m");
+    pub fn millicpu(mut self, millicpu: u64) -> Self {
+        self.cpu = millicpu;
         self
     }
 
@@ -693,7 +661,7 @@ impl ResourcesRequest {
     #[must_use]
     #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn cores(mut self, cores: f64) -> Self {
-        self.cpu = format!("{}m", (cores * 1000.0) as u64);
+        self.cpu = (cores * 1000.0).ceil() as u64;
         self
     }
 
@@ -710,10 +678,10 @@ impl ResourcesRequest {
     ///
     /// ResourcesRequest::default().memory("2Gi");
     /// ```
-    #[must_use]
-    pub fn memory<T: Into<String>>(mut self, memory: T) -> Self {
-        self.memory = memory.into();
-        self
+    pub fn memory<M: AsRef<str>>(mut self, memory: M) -> Result<Self, ConversionError> {
+        // try to deserialize our raw memory value
+        self.memory = conversions::storage(memory)?;
+        Ok(self)
     }
 
     /// Sets the ephemeral storage to request
@@ -729,10 +697,10 @@ impl ResourcesRequest {
     ///
     /// ResourcesRequest::default().storage("32Gi");
     /// ```
-    #[must_use]
-    pub fn storage<T: Into<String>>(mut self, storage: T) -> Self {
-        self.ephemeral_storage = Some(storage.into());
-        self
+    pub fn storage<S: AsRef<str>>(mut self, storage: S) -> Result<Self, ConversionError> {
+        // try to deserialize our raw ephemeral storage value
+        self.ephemeral_storage = conversions::storage(storage)?;
+        Ok(self)
     }
 
     /// Sets the number of Nvidia GPUs to require to spawn this pod
@@ -784,11 +752,14 @@ impl ResourcesRequest {
     /// ```
     /// use thorium::models::{ResourcesRequest, BurstableResourcesRequest};
     ///
+    /// # fn result_wrap() -> Result<(), thorium::Error> {
     /// ResourcesRequest::default()
     ///   .burstable(
     ///     BurstableResourcesRequest::default()
     ///       .cores(2.0)
-    ///       .memory("2Gi"));
+    ///       .memory("2Gi")?);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn burstable(mut self, burstable: BurstableResourcesRequest) -> Self {
@@ -798,12 +769,12 @@ impl ResourcesRequest {
 }
 
 impl Default for ResourcesRequest {
-    /// Create a default resource request with 250m cpu and 256Mi of ram
+    /// Create a default resource request with 1 core and 4Gi of ram
     fn default() -> Self {
         ResourcesRequest {
-            cpu: "1".to_owned(),
-            memory: "4Gi".to_owned(),
-            ephemeral_storage: None,
+            cpu: 1000,
+            memory: 4096,
+            ephemeral_storage: 0,
             nvidia_gpu: 0,
             amd_gpu: 0,
             burstable: BurstableResourcesRequest::default(),
@@ -819,13 +790,9 @@ impl PartialEq<Resources> for ResourcesRequest {
     /// * `res` - The resources to compare against
     fn eq(&self, res: &Resources) -> bool {
         // make sure all resources were set correctly
-        same!(res.cpu, &self.cpu, conversions::cpu);
-        same!(res.memory, &self.memory, conversions::storage);
-        matches_update!(
-            res.ephemeral_storage,
-            self.ephemeral_storage,
-            conversions::storage
-        );
+        same!(res.cpu, self.cpu);
+        same!(res.memory, self.memory);
+        same!(res.ephemeral_storage, self.ephemeral_storage);
         same!(res.nvidia_gpu, self.nvidia_gpu);
         same!(res.amd_gpu, self.amd_gpu);
         true
@@ -836,9 +803,9 @@ impl From<Resources> for ResourcesRequest {
     /// Convert a resources object to a resources request object
     fn from(resources: Resources) -> Self {
         ResourcesRequest {
-            cpu: format!("{}m", resources.cpu),
-            memory: format!("{}Mi", resources.memory),
-            ephemeral_storage: Some(format!("{}Mi", resources.ephemeral_storage)),
+            cpu: resources.cpu,
+            memory: resources.memory,
+            ephemeral_storage: resources.ephemeral_storage,
             nvidia_gpu: resources.nvidia_gpu,
             amd_gpu: resources.amd_gpu,
             burstable: BurstableResourcesRequest::from(resources.burstable),
@@ -851,11 +818,26 @@ impl From<Resources> for ResourcesRequest {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ResourcesUpdate {
     /// Cpu cores in millicpus
-    pub cpu: Option<String>,
+    #[serde(
+        deserialize_with = "conversions::deserialize_cpu_opt",
+        serialize_with = "conversions::serialize_cpu_opt",
+        default
+    )]
+    pub cpu: Option<u64>,
     /// Ram in mebibytes
-    pub memory: Option<String>,
+    #[serde(
+        deserialize_with = "conversions::deserialize_storage_opt",
+        serialize_with = "conversions::serialize_storage_opt",
+        default
+    )]
+    pub memory: Option<u64>,
     /// Ephemeral storage in mebibytes
-    pub ephemeral_storage: Option<String>,
+    #[serde(
+        deserialize_with = "conversions::deserialize_storage_opt",
+        serialize_with = "conversions::serialize_storage_opt",
+        default
+    )]
+    pub ephemeral_storage: Option<u64>,
     /// The total number of Nvidia GPUs
     pub nvidia_gpu: Option<u64>,
     /// The total number of AMD GPUs
@@ -870,7 +852,7 @@ impl ResourcesUpdate {
     ///
     /// # Arguments
     ///
-    /// * `cpu` - The CPU value in millicpu to set
+    /// * `millicpu` - The CPU value in millicpu to set
     ///
     /// # Examples
     ///
@@ -880,8 +862,8 @@ impl ResourcesUpdate {
     /// ResourcesUpdate::default().millicpu(2500);
     /// ```
     #[must_use]
-    pub fn millicpu(mut self, cpu: u64) -> Self {
-        self.cpu = Some(format!("{cpu}m"));
+    pub fn millicpu(mut self, millicpu: u64) -> Self {
+        self.cpu = Some(millicpu);
         self
     }
 
@@ -901,7 +883,7 @@ impl ResourcesUpdate {
     #[must_use]
     #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub fn cores(mut self, cores: f64) -> Self {
-        self.cpu = Some(format!("{}m", (cores * 1000.0) as u64));
+        self.cpu = Some((cores * 1000.0).ceil() as u64);
         self
     }
 
@@ -918,10 +900,10 @@ impl ResourcesUpdate {
     ///
     /// ResourcesUpdate::default().memory("2Gi");
     /// ```
-    #[must_use]
-    pub fn memory<T: Into<String>>(mut self, memory: T) -> Self {
-        self.memory = Some(memory.into());
-        self
+    pub fn memory<M: AsRef<str>>(mut self, memory: M) -> Result<Self, ConversionError> {
+        // try to deserialize our raw memory value
+        self.memory = Some(conversions::storage(memory)?);
+        Ok(self)
     }
 
     /// Sets the ephemeral storage to request
@@ -937,10 +919,10 @@ impl ResourcesUpdate {
     ///
     /// ResourcesUpdate::default().storage("32Gi");
     /// ```
-    #[must_use]
-    pub fn storage<T: Into<String>>(mut self, storage: T) -> Self {
-        self.ephemeral_storage = Some(storage.into());
-        self
+    pub fn storage<S: AsRef<str>>(mut self, storage: S) -> Result<Self, ConversionError> {
+        // try to deserialize our raw ephemeral_storage value
+        self.ephemeral_storage = Some(conversions::storage(storage)?);
+        Ok(self)
     }
 
     /// Sets the number of Nvidia GPUs to require to spawn this pod
@@ -990,13 +972,9 @@ impl PartialEq<Resources> for ResourcesUpdate {
     /// * `res` - The resources to compare against
     fn eq(&self, res: &Resources) -> bool {
         // make sure all resources were set correctly
-        matches_update!(res.cpu, &self.cpu, conversions::cpu);
-        matches_update!(res.memory, &self.memory, conversions::storage);
-        matches_update!(
-            res.ephemeral_storage,
-            self.ephemeral_storage,
-            conversions::storage
-        );
+        matches_update!(res.cpu, self.cpu);
+        matches_update!(res.memory, self.memory);
+        matches_update!(res.ephemeral_storage, self.ephemeral_storage);
         matches_update!(res.nvidia_gpu, self.nvidia_gpu);
         matches_update!(res.amd_gpu, self.amd_gpu);
         true
@@ -1010,21 +988,14 @@ impl From<Resources> for ResourcesUpdate {
     ///
     /// * `resources` - The resources to convert
     fn from(resources: Resources) -> Self {
-        // get our burstable resources
-        let burstable = BurstableResourcesUpdate::from(resources.burstable);
-        // cpu is always in millicpu so just format it back to that
-        let cpu = Some(format!("{}m", resources.cpu));
-        // memory and storage is always in mebibytes so just format it back to that
-        let memory = Some(format!("{}Mi", resources.memory));
-        let ephemeral_storage = Some(format!("{}Mi", resources.ephemeral_storage));
         // build our resources update
         ResourcesUpdate {
-            cpu,
-            memory,
-            ephemeral_storage,
+            cpu: Some(resources.cpu),
+            memory: Some(resources.memory),
+            ephemeral_storage: Some(resources.ephemeral_storage),
             nvidia_gpu: Some(resources.nvidia_gpu),
             amd_gpu: Some(resources.amd_gpu),
-            burstable,
+            burstable: BurstableResourcesUpdate::from(resources.burstable),
         }
     }
 }
@@ -4528,6 +4499,7 @@ impl ImageRequest {
     ///     SampleDependencySettings, SecurityContext, Cleanup, ArgStrategy, ChildFilters
     /// };
     ///
+    /// # fn result_wrap() -> Result<(), thorium::Error> {
     /// // create an image request for an image in the Corn group called harvester
     /// // This image is built ontop of the Thorium:CornHarvester docker image
     /// // It has a lifetime of 1 job
@@ -4541,7 +4513,7 @@ impl ImageRequest {
     ///     .timeout(300)
     ///     .resources(ResourcesRequest::default()
     ///         .millicpu(2000)
-    ///         .memory("1Gi"))
+    ///         .memory("1Gi")?)
     ///     .env("Field", "1")
     ///     .unset_env("Soybeans")
     ///     .volume(Volume::new("corn-vol", "/files", VolumeTypes::ConfigMap))
@@ -4554,6 +4526,8 @@ impl ImageRequest {
     ///         .job_id(ArgStrategy::Append))
     ///     .child_filters(ChildFilters::default()
     ///         .mime("image"));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new<T: Into<String>>(group: T, name: T) -> Self {
         ImageRequest {
@@ -5249,12 +5223,16 @@ impl ImageUpdate {
     /// ```
     /// use thorium::models::{ImageUpdate, ResourcesUpdate};
     ///
+    ///
+    /// # fn result_wrap() -> Result<(), thorium::Error> {
     /// // build resource requests with 2 cores, 4Gi of ram and 128Gi of storage
     /// let resources = ResourcesUpdate::default()
     ///     .millicpu(2000)
-    ///     .memory("4Gi")
-    ///     .storage("128Gi");
+    ///     .memory("4Gi")?
+    ///     .storage("128Gi")?;
     /// ImageUpdate::default().resources(resources);
+    /// # Ok(())
+    /// # }
     /// ```
     #[must_use]
     pub fn resources(mut self, resources: ResourcesUpdate) -> Self {

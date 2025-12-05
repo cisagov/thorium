@@ -1,21 +1,21 @@
 //! Build out trees based on data in Thorium's database
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use dashmap::{DashMap, DashSet};
+use gxhash::GxHasher;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 use super::db;
-use crate::bad;
-use crate::models::trees::TreeTags;
 use crate::models::{
-    Association, AssociationListParams, AssociationTargetColumn, Entity, FileListOpts,
-    FileListParams, Repo, Sample, Tree, TreeBranch, TreeNode, TreeParams, TreeQuery,
-    TreeRelationships, TreeSupport, User,
+    Association, AssociationListParams, AssociationTargetColumn, Directionality, Entity,
+    FileListOpts, FileListParams, Repo, Sample, Tree, TreeBranch, TreeNode, TreeParams, TreeQuery,
+    TreeRelationships, TreeSupport, TreeTags, UnhashedTreeBranch, User,
 };
 use crate::utils::{ApiError, Shared};
+use crate::{bad, internal_err};
 
 impl TreeQuery {
     /// Make sure our query is not empty and error if it is
@@ -79,6 +79,7 @@ impl TreeNode {
     }
 
     /// Get the tags for this node
+    #[must_use]
     pub fn get_tags(&self) -> Option<&HashMap<String, HashMap<String, HashSet<String>>>> {
         // get the tags for each object if they have tags
         match self {
@@ -95,7 +96,7 @@ impl TreeNode {
     ///
     /// * `tree` - The tree to gather related nodes for
     /// * `ring` - The current tree growth ring
-    pub async fn gather_related(
+    pub fn gather_related(
         &self,
         tree: &Tree,
         ring: &TreeRing,
@@ -119,7 +120,9 @@ impl TreeNode {
                                 // get an entry to this keys values
                                 let entry = tag_node.tags.entry(key.to_owned()).or_default();
                                 // we have no values so just add all of the matching tags we do have to this filter
-                                entry.extend(found_values.keys().map(|value| value.to_owned()));
+                                entry.extend(
+                                    found_values.keys().map(std::borrow::ToOwned::to_owned),
+                                );
                             } else {
                                 // we have specific values to look for so make sure all of those match
                                 if !values.iter().all(|value| found_values.contains_key(value)) {
@@ -152,7 +155,8 @@ impl TreeNode {
                     // create this tags relationship
                     let relationship = TreeRelationships::Tags;
                     // wrap our relationship in a branch
-                    let branch = TreeBranch::new(tag_hash, relationship);
+                    let branch =
+                        UnhashedTreeBranch::new(tag_hash, relationship, Directionality::To);
                     // add this tag relationship
                     entry.insert(branch);
                 }
@@ -170,20 +174,17 @@ impl TreeNode {
     pub fn check_origins(
         &self,
         parents: &HashMap<&String, u64>,
-        relationships: &DashMap<u64, DashSet<TreeBranch>>,
+        relationships: &DashMap<u64, DashSet<UnhashedTreeBranch>>,
     ) {
         match self {
             TreeNode::Sample(sample) => sample.check_origins(parents, relationships),
-            // repo nodes do not have origins
-            TreeNode::Repo(_) => (),
-            // tag nodes do not have origins
-            TreeNode::Tag(_) => (),
-            // entities do not have origins
-            TreeNode::Entity(_) => (),
+            // repo/tag/entity nodes do not have origins
+            TreeNode::Repo(_) | TreeNode::Tag(_) | TreeNode::Entity(_) => (),
         }
     }
 
     /// gather all of the associations for this node
+    #[must_use]
     pub fn build_association_target(&self) -> Option<AssociationTargetColumn> {
         match &self {
             TreeNode::Sample(sample) => sample.build_association_target_column(),
@@ -234,19 +235,83 @@ impl TreeNode {
     }
 }
 
-/// Gather any children for this child node
-async fn gather_tag_filter_children(
-    user: &User,
-    tags: &BTreeMap<String, BTreeSet<String>>,
-    shared: &Shared,
-) -> Result<Vec<(TreeNode, Vec<TreeRelationships>)>, crate::utils::ApiError> {
-    // start with empty children
-    let mut children = Vec::default();
-    // get any children for for files
-    crate::models::trees::gather_samples_with_tags(user, tags, &mut children, shared).await?;
-    // get any children for repos
-    crate::models::trees::gather_repos_with_tags(user, tags, &mut children, shared).await?;
-    Ok(children)
+/// Get a node from a data map if it exists
+///
+/// # Arguments
+///
+/// * `hash` - The hash of the node to get
+/// * `data_map` - A map of node data
+fn get_node(hash: u64, data_map: &HashMap<u64, TreeNode>) -> Result<&TreeNode, ApiError> {
+    // Get this nodes data if it exists
+    match data_map.get(&hash) {
+        Some(other_node) => Ok(other_node),
+        // we are missing this tag node somehow
+        None => internal_err!(format!("Missing node: {}", hash)),
+    }
+}
+
+impl UnhashedTreeBranch {
+    /// Convert this ``UnhashedTreeBranch`` to a ``TreeBranch``
+    ///
+    /// # Arguments
+    ///
+    pub fn to_branch(
+        self,
+        src_hash: u64,
+        data_map: &HashMap<u64, TreeNode>,
+    ) -> Result<TreeBranch, ApiError> {
+        // instance a hasher
+        let mut hasher = GxHasher::default();
+        // convert our unhashed branch into a hashed branch
+        match &self.relationship {
+            TreeRelationships::Tags => {
+                // get the hash for tag node
+                let tag_hash = if self.direction == Directionality::To {
+                    // tag relationship always go from the tag to the other node
+                    src_hash
+                } else {
+                    self.node
+                };
+                // get our tag nodes data
+                let tag_node = get_node(tag_hash, data_map)?;
+                // hash our tag node
+                tag_node.hash_with_hasher(&mut hasher);
+            }
+            TreeRelationships::Association(association) => {
+                // always add the kind of association to this relationships hash
+                association.kind.hash(&mut hasher);
+                // get the other nodes info
+                let our_node = get_node(src_hash, data_map)?;
+                // get the other nodes info
+                let other_node = get_node(self.node, data_map)?;
+                // we need ot always hash these nodes in the same order regardless of our direction
+                // otherwise we won't have consistent relationship ids
+                if self.direction == Directionality::To {
+                    // this is a to relationship so hash our node then the other node
+                    our_node.hash_with_hasher(&mut hasher);
+                    other_node.hash_with_hasher(&mut hasher);
+                } else {
+                    // this is a to relationship so hash the other node then our node
+                    other_node.hash_with_hasher(&mut hasher);
+                    our_node.hash_with_hasher(&mut hasher);
+                }
+            }
+            // just use our normal branch hash as thats always consistent
+            TreeRelationships::Initial | TreeRelationships::Origin(_) => {
+                self.relationship.hash(&mut hasher);
+            }
+        }
+        // get our normalized relationship hash
+        let relationship_hash = hasher.finish();
+        // convert our unhashed branch into a full branch
+        let branch = TreeBranch {
+            relationship: self.relationship,
+            relationship_hash,
+            node: self.node,
+            direction: self.direction,
+        };
+        Ok(branch)
+    }
 }
 
 /// The data to add to our tree for a single grow round
@@ -259,7 +324,7 @@ pub struct TreeRing {
     /// The new associations populate
     pub associations: DashMap<u64, DashSet<Association>>,
     /// The newly added relationships during this grow round
-    pub relationships: DashMap<u64, DashSet<TreeBranch>>,
+    pub relationships: DashMap<u64, DashSet<UnhashedTreeBranch>>,
 }
 
 impl TreeRing {
@@ -269,6 +334,7 @@ impl TreeRing {
     ///
     /// * `tree` - The tree to check
     /// * `hash` - The node has to look for
+    #[must_use]
     pub fn contains(&self, tree: &Tree, hash: u64) -> bool {
         self.nodes.contains_key(&hash) || tree.data_map.contains_key(&hash)
     }
@@ -284,6 +350,19 @@ impl TreeRing {
         self.nodes.insert(hash, node);
         // add our new node to our added set
         self.added.insert(hash);
+    }
+
+    /// Add a relationship
+    ///
+    /// # Arguments
+    ///
+    /// * `parent_hash` - The hash for the parent node
+    /// * `branch` - The branch to add
+    pub fn add_branch(&self, parent_hash: u64, branch: UnhashedTreeBranch) {
+        // get an entry to this parent nodes branches
+        let entry = self.relationships.entry(parent_hash).or_default();
+        // add our new branch
+        entry.insert(branch);
     }
 
     /// Gather any file nodes with a specific parent value
@@ -312,13 +391,11 @@ impl TreeRing {
         // crawl this cursor and add its nodes to our tree
         loop {
             // we don't need to get any data we already have again
-            let mut sha256s = cursor
+            let sha256s = cursor
                 .data
                 .drain(..)
                 .map(|line| line.sha256)
                 .collect::<Vec<String>>();
-            // filter out any nodes that we already have in our tree
-            sha256s.retain(|sha256| !self.contains(tree, Sample::tree_hash_direct(&sha256)));
             // get the details on these samples
             let details = db::files::list_details(&tree.groups, sha256s, shared).await?;
             // wrap these samples in a tree node
@@ -401,7 +478,7 @@ impl Tree {
             .map(|(hash, _)| *hash)
             .collect::<Vec<u64>>();
         // step over all branches and remove any childless non growable nodes
-        for (_, branches) in self.branches.iter_mut() {
+        for branches in self.branches.values_mut() {
             // remove our childless nodes
             branches.retain(|branch| !childless.contains(&branch.node));
         }
@@ -443,7 +520,7 @@ impl Tree {
                 // check if we want to gather this nodes related nodes
                 if params.gather_related {
                     // gather any related nodes based on our related queries
-                    node.gather_related(self, ring).await?;
+                    node.gather_related(self, ring)?;
                 }
                 // gather any relationships or children from this nodes associations
                 node.gather_associations(self, ring, shared).await?;
@@ -482,18 +559,14 @@ impl Tree {
                     // add this node to our ring
                     ring.add_node(node);
                 }
-                // get the source and target hash
-                let (source, target) = if association.to_source {
-                    (source_hash, other_hash)
-                } else {
-                    (other_hash, source_hash)
-                };
+                // get this associationals direction
+                let direction = association.direction;
                 // build the relationship for this node
                 let relationship = TreeRelationships::Association(association);
                 // wrap this relationship in a branch
-                let branch = TreeBranch::new(target, relationship);
+                let branch = UnhashedTreeBranch::new(other_hash, relationship, direction);
                 // get an entry to the source nodes branches
-                let entry = ring.relationships.entry(source).or_default();
+                let entry = ring.relationships.entry(source_hash).or_default();
                 // add this association to our relationships map in this tree ring
                 entry.insert(branch);
             }
@@ -516,7 +589,7 @@ impl Tree {
         // get our current ring nodes
         let nodes = std::mem::take(&mut ring.nodes);
         // merge our new nodes into our tree
-        self.data_map.extend(nodes.into_iter());
+        self.data_map.extend(nodes);
         // instance our parents and their node hashes
         let mut parents = HashMap::with_capacity(self.data_map.len());
         // build a set of parents to check origin info against
@@ -531,9 +604,14 @@ impl Tree {
         self.growable.clear();
         // crawl over our new nodes and build relationships back to any existing parents
         for hash in new_hashes {
-            // add this new hash to our growable set
-            self.growable.push(hash);
-            // if we already have this nodes info then get it
+            // only add nodes to our growable set that have not already been returned
+            if !self.sent.contains(&hash) {
+                // add this new hash to our growable set
+                self.growable.push(hash);
+                // add this node to our sent set
+                self.sent.insert(hash);
+            }
+            // check this node for any parent relationships that still need to be added
             match self.data_map.get(&hash) {
                 // this node exists so check its origins for relationships
                 Some(node) => node.check_origins(&parents, &ring.relationships),
@@ -545,7 +623,10 @@ impl Tree {
     }
 
     /// Add our ring relationships to our tree
-    fn add_relationships(&mut self, relationships: DashMap<u64, DashSet<TreeBranch>>) {
+    fn add_relationships(
+        &mut self,
+        relationships: DashMap<u64, DashSet<UnhashedTreeBranch>>,
+    ) -> Result<(), ApiError> {
         // clear any existing branches
         self.branches.clear();
         // step over our current relationships and add them
@@ -553,14 +634,14 @@ impl Tree {
             // get an entry to this nodes branches
             let entry = self.branches.entry(hash).or_default();
             // ignore any branches that loop back to themselves
-            for branch in branches {
-                // only add branchs that do not loop back to themselves
-                if branch.node != hash {
-                    // add our branches
-                    entry.insert(branch);
-                }
+            for unhashed in branches {
+                // convert our unhashed branch to a hashed one
+                let branch = unhashed.to_branch(hash, &self.data_map)?;
+                // add our branches
+                entry.insert(branch);
             }
         }
+        Ok(())
     }
 
     /// Build a tree based on data in Thorium's database
@@ -594,7 +675,7 @@ impl Tree {
             rings += 1;
         }
         // replace our relationships in our tree
-        self.add_relationships(ring.relationships);
+        self.add_relationships(ring.relationships)?;
         // return our newly added nodes
         Ok(ring.added)
     }
@@ -605,7 +686,7 @@ impl Tree {
     ///
     /// * `grown` - The nodes that we grew on this tree
     /// * `added` - The nodes that were newly added to this tree
-    pub fn trim(&mut self, grown: Vec<u64>, added: DashSet<u64>) {
+    pub fn trim(&mut self, grown: &[u64], added: &DashSet<u64>) {
         // drop any info from nodes that we have already sent
         self.data_map.retain(|key, _| added.contains(key));
         self.branches
@@ -614,13 +695,13 @@ impl Tree {
 
     /// Save this trees info to the db
     pub async fn save(&mut self, user: &User, shared: &Shared) -> Result<(), ApiError> {
-        db::trees::save(&user, self, shared).await
+        db::trees::save(user, self, shared).await
     }
 
     /// Load an existing tree
     pub async fn load(user: &User, id: &Uuid, shared: &Shared) -> Result<Self, ApiError> {
         // Load this tree from the db
-        db::trees::load(&user, id, shared).await
+        db::trees::load(user, id, shared).await
     }
 
     /// Clear any info that we don't send to users

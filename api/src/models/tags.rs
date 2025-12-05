@@ -622,6 +622,7 @@ impl TagCounts {
     /// # Arguments
     ///
     /// * `capacity` - The capacity to set
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         TagCounts {
             cursor: None,

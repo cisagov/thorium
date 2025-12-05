@@ -1,6 +1,6 @@
 //! Backend api support for associations
 
-use axum::extract::{FromRequestParts, Multipart};
+use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use chrono::prelude::*;
 use futures_util::Future;
@@ -8,50 +8,18 @@ use scylla::errors::ExecutionError;
 use scylla::response::query_result::QueryResult;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
-use std::ops::Deref;
 use uuid::Uuid;
 
 use super::db;
-use crate::models::backends::OutputSupport;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
 use crate::models::{
     ApiCursor, Association, AssociationListParams, AssociationListRow, AssociationRequest,
-    AssociationTarget, AssociationTargetColumn, Entity, ListableAssociation, Repo, Sample,
-    TreeNode, User,
+    AssociationTarget, AssociationTargetColumn, Directionality, Entity, ListableAssociation, Repo,
+    Sample, TreeNode, User,
 };
 use crate::utils::{ApiError, Shared};
 
 impl AssociationTarget {
-    ///// Validate an association target exists
-    //pub async fn is_valid(
-    //    &self,
-    //    user: &User,
-    //    groups: &mut Vec<String>,
-    //    shared: &Shared,
-    //) -> Result<(), ApiError> {
-    //    // make sure this target exists and is editable
-    //    match self {
-    //        AssociationTarget::File(sha256) => {
-    //            // get our target file
-    //            let file = Sample::get(user, sha256, shared).await?;
-    //            // make sure this file is editable
-    //            file.validate_groups_editable(user, groups, shared).await?;
-    //        }
-    //        AssociationTarget::Entity { id, .. } => {
-    //            // get a specific entity
-    //            let entity = Entity::get(id, user, shared).await?;
-    //            // make su
-    //        }
-    //        AssociationTarget::Repo(url) => {
-    //            // get our target repo
-    //            let repo = Repo::get(user, url, shared).await?;
-    //            // make sure this repo is editable
-    //            repo.validate_groups_editable(user, groups, shared).await?;
-    //        }
-    //    }
-    //    Ok(())
-    //}
-
     /// Make sure this target exists and get its groups
     pub async fn get_groups(&self, user: &User, shared: &Shared) -> Result<Vec<String>, ApiError> {
         match self {
@@ -122,6 +90,12 @@ impl AssociationRequest {
             // add our target and its validated editable groups
             target_list.push((target, target_groups));
         }
+        // get the direction for this association
+        let direction = if self.is_bidirectional {
+            Directionality::Bidirectional
+        } else {
+            Directionality::To
+        };
         // save this association
         db::associations::create(
             user,
@@ -129,6 +103,7 @@ impl AssociationRequest {
             self.kind,
             self.source,
             &target_list,
+            direction,
             shared,
         )
         .await?;
@@ -234,7 +209,7 @@ impl CursorCore for ListableAssociation {
         for group in &self.groups {
             // if this group doesn't already have a tie entry then add it
             ties.entry(group.clone())
-                .or_insert_with(|| (self.other.clone()));
+                .or_insert_with(|| self.other.clone());
         }
     }
 
@@ -264,7 +239,7 @@ impl ScyllaCursorSupport for ListableAssociation {
     type IntermediateRow = AssociationListRow;
 
     /// The unique key for this cursors row
-    type UniqueType<'a> = (&'a String, bool);
+    type UniqueType<'a> = (&'a String, Directionality);
 
     /// Get the timestamp from this items intermediate row
     ///
@@ -292,12 +267,12 @@ impl ScyllaCursorSupport for ListableAssociation {
     fn get_intermediate_unique_key<'a>(
         intermediate: &'a Self::IntermediateRow,
     ) -> Self::UniqueType<'a> {
-        (&intermediate.other, intermediate.to_source)
+        (&intermediate.other, intermediate.direction)
     }
 
     /// Get the unique key for this row if it exists
     fn get_unique_key<'a>(&'a self) -> Self::UniqueType<'a> {
-        (&self.other, self.to_source)
+        (&self.other, self.direction)
     }
 
     /// Add a group to a specific returned line
@@ -508,24 +483,3 @@ where
         }
     }
 }
-
-//impl AssociationTargetColumn {
-//    /// get the data for this association
-//    pub async fn get_tree_node(&self, user: &User, shared: &Shared) -> Result<TreeNode, ApiError> {
-//        match self {
-//            AssociationTargetColumn::File(sha256) => {
-//                // get this samples data
-//                let sample = Sample::get(user, sha256, shared).await?;
-//                Ok(TreeNode::Sample(sample))
-//            }
-//            AssociationTargetColumn::Repo(url) => {
-//                // get this repos data
-//                let repo = Repo::get(user, url, shared).await?;
-//                Ok(TreeNode::Repo(repo))
-//            }
-//            AssociationTargetColumn::Entity(id) => {
-//
-//            },
-//        }
-//    }
-//}

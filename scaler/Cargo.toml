@@ -21,7 +21,6 @@ async-trait = "0.1"
 futures = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_derive = { workspace = true }
 clap = { workspace = true }
 itertools = "0.14.0"
 rand = "0.9.1"

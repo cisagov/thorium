@@ -7,6 +7,7 @@
 use bytes::Bytes;
 use cart_rs::UncartStream;
 use chrono::prelude::*;
+use gxhash::GxHasher;
 use indicatif::ProgressBar;
 use schemars::JsonSchema;
 use std::borrow::Cow;
@@ -21,7 +22,6 @@ use uuid::Uuid;
 use super::{OnDiskFile, TreeSupport};
 #[cfg(feature = "api")]
 use crate::models::Tree;
-use crate::models::{TreeBranch, TreeRelationships};
 use crate::{matches_adds, matches_removes, matches_update_opt, same};
 
 // api only imports
@@ -30,6 +30,7 @@ cfg_if::cfg_if! {
         use crate::utils::{ApiError, Shared};
         use super::{User, TagDeleteRequest};
         use std::str::FromStr;
+        use crate::models::{TreeRelationships, Directionality};
     }
 }
 
@@ -2482,16 +2483,10 @@ impl TreeSupport for Sample {
     /// # Arguments
     ///
     /// * `input` - The data needed to generate this nodes tree hash
-    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64 {
-        // get our hash seed
-        let seed = Self::tree_seed();
-        // build a hasher
-        let mut hasher = gxhash::GxHasher::with_seed(seed);
+    /// * `hasher` - The hasher to write data to
+    fn tree_hash_direct_with_hasher(input: Self::HashType<'_>, hasher: &mut GxHasher) {
         // hash this samples sha
         hasher.write(input.as_bytes());
-        // finalize our hasher
-        let hash = hasher.finish();
-        hash
     }
 
     /// Gather any initial nodes for a tree
@@ -2536,13 +2531,15 @@ impl TreeSupport for Sample {
         // step over our submissions and find any parents
         for sub in &self.submissions {
             // check if this is a dangling parent
+
+            use crate::models::UnhashedTreeBranch;
             if sub.origin.is_dangling_parent() {
                 // this parent is dangling so just skip it for now
                 // TODO: in the future we should have a dangling node
                 continue;
             }
             // get our parent sha256 or repo if it exists
-            let (tree_hash, node) = match sub.origin.get_parent_sha256_or_repo() {
+            let (parent_hash, node) = match sub.origin.get_parent_sha256_or_repo() {
                 Some(FileOrRepo::File(sha256)) => {
                     // calculate this samples tree hash
                     let tree_hash = Sample::tree_hash_direct(sha256);
@@ -2582,7 +2579,7 @@ impl TreeSupport for Sample {
             // build the relationship for this node
             let relationship = TreeRelationships::Origin(sub.origin.clone());
             // wrap our relationship in a branch
-            let branch = TreeBranch::new(tree_hash, relationship);
+            let branch = UnhashedTreeBranch::new(parent_hash, relationship, Directionality::From);
             // get an entry to this parent nodes relationships
             let entry = ring.relationships.entry(node_hash).or_default();
             // insert our relationship
@@ -2603,35 +2600,6 @@ impl TreeSupport for Sample {
         // get any children of this sample
         ring.gather_files_from_parent(tree, "Parent", &self.sha256, shared)
             .await
-    }
-
-    /// Find relationships by checking origin info for a node
-    ///
-    /// # Arguments
-    ///
-    /// * `parents` - The parents to check against
-    #[cfg(feature = "api")]
-    fn check_origins(
-        &self,
-        parents: &HashMap<&String, u64>,
-        relationships: &dashmap::DashMap<u64, dashmap::DashSet<TreeBranch>>,
-    ) {
-        // get our current nodes hash
-        let hash = self.tree_hash();
-        // check the origins this sample to see if we have any relationships that need to be added
-        for sub in &self.submissions {
-            // get parents for this submission origin if they exist
-            if let Some(parent_hash) = sub.origin.is_child_of_any(parents) {
-                // build the relationship for this origin
-                let relationship = TreeRelationships::Origin(sub.origin.clone());
-                // wrap our relationship in a branch
-                let branch = TreeBranch::new(hash, relationship);
-                // get an entry to this parent nodes relationships
-                let entry = relationships.entry(parent_hash).or_default();
-                // insert our relationship
-                entry.insert(branch);
-            }
-        }
     }
 
     /// Build an association target column for an object

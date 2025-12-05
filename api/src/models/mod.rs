@@ -126,8 +126,8 @@ pub use system::{
 };
 pub use tags::{TagCounts, TagKeyCounts};
 pub use trees::{
-    Tree, TreeBranch, TreeGrowQuery, TreeNode, TreeOpts, TreeParams, TreeQuery, TreeRelatedQuery,
-    TreeRelationships, TreeSupport,
+    Directionality, Tree, TreeBranch, TreeGrowQuery, TreeNode, TreeOpts, TreeParams, TreeQuery,
+    TreeRelatedQuery, TreeRelationships, TreeSupport,
 };
 pub use users::{
     AuthResponse, Key, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings,
@@ -159,6 +159,7 @@ cfg_if::cfg_if! {
         pub use jobs::JobReactionIds;
         pub use backends::results::ResultFileDownloadParams;
         pub(crate) use backends::search::events::SearchEventBackend;
+        pub use trees::{UnhashedTreeBranch, TreeTags};
     }
 }
 

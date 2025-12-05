@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream};
 use thorium::models::{
     ArgStrategy, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, CleanupUpdate,
     DependenciesUpdate, DependencyPassStrategy, DependencySettingsUpdate,
@@ -16,7 +16,7 @@ use thorium::models::{
     SystemSettingsUpdateParams, Volume, VolumeTypes,
 };
 use thorium::test_utilities::{self, generators};
-use thorium::{contains, fail, is, is_in, unwrap_variant, vec_in_vec, Error};
+use thorium::{Error, contains, fail, is, is_in, unwrap_variant, vec_in_vec};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -382,8 +382,8 @@ async fn update() -> Result<(), Error> {
         .resources(
             ResourcesUpdate::default()
                 .millicpu(2600)
-                .memory("4Gi")
-                .storage("128Gi")
+                .memory("4Gi")?
+                .storage("128Gi")?
                 .nvidia_gpu(3)
                 .amd_gpu(1),
         )
@@ -494,8 +494,8 @@ async fn update_bad_name() -> Result<(), Error> {
         .resources(
             ResourcesUpdate::default()
                 .millicpu(2600)
-                .memory("4Gi")
-                .storage("128Gi")
+                .memory("4Gi")?
+                .storage("128Gi")?
                 .nvidia_gpu(3)
                 .amd_gpu(1),
         )
@@ -527,8 +527,8 @@ async fn update_user() -> Result<(), Error> {
         .resources(
             ResourcesUpdate::default()
                 .millicpu(2600)
-                .memory("4Gi")
-                .storage("128Gi")
+                .memory("4Gi")?
+                .storage("128Gi")?
                 .nvidia_gpu(3)
                 .amd_gpu(1),
         )

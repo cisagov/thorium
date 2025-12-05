@@ -79,7 +79,7 @@ pub fn storage(raw: Option<&Quantity>) -> Result<u64, Error> {
     // cast quantity to string
     let raw: String = serde_json::from_value(serde_json::json!(raw))?;
     // convert our raw value to mebibytes
-    let mebibytes = thorium::models::conversions::storage(raw)?;
+    let mebibytes = thorium::models::conversions::storage_bytes_as_base(raw)?;
     Ok(mebibytes)
 }
 

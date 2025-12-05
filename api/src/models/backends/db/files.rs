@@ -13,13 +13,13 @@ use crate::models::backends::db::ScyllaTagCountCursor;
 use crate::models::{
     Comment, CommentForm, CommentRow, Event, FileListParams, ResultSearchEvent, Sample,
     SampleCheck, SampleCheckResponse, SampleForm, SampleListLine, SampleSubmissionResponse,
-    Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate, TagCounts, TagDeleteRequest,
-    TagRequest, TagSearchEvent, User,
+    Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate, TagDeleteRequest, TagRequest,
+    TagSearchEvent, User,
 };
 use crate::utils::s3::StandardHashes;
 use crate::utils::{ApiError, Shared, helpers};
 use crate::{
-    conflict, conn, for_groups, internal_err, log_scylla_err, not_found, same_vec, serialize,
+    conflict, for_groups, internal_err, log_scylla_err, not_found, same_vec, serialize,
     unauthorized,
 };
 

@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use futures::stream::{self, StreamExt};
+use gxhash::GxHasher;
 use std::collections::{BTreeSet, HashSet};
 use std::hash::Hasher;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
@@ -26,7 +27,7 @@ use std::str::FromStr;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
-        use super::{TagRequest, User, TagDeleteRequest, Group, GroupAllowAction};
+        use super::{TagRequest, User, TagDeleteRequest, Group, GroupAllowAction, UnhashedTreeBranch};
         use crate::utils::{ApiError, Shared};
         use chrono::TimeZone;
         use crate::models::Tree;
@@ -151,16 +152,10 @@ impl TreeSupport for Entity {
     /// # Arguments
     ///
     /// * `input` - The data needed to generate this nodes tree hash
-    fn tree_hash_direct<'a>(input: Self::HashType<'a>) -> u64 {
-        // get our hash seed
-        let seed = Self::tree_seed();
-        // build a hasher
-        let mut hasher = gxhash::GxHasher::with_seed(seed);
+    /// * `hasher` - The hasher to write data to
+    fn tree_hash_direct_with_hasher(input: Self::HashType<'_>, hasher: &mut GxHasher) {
         // hash this samples sha
         hasher.write_u128(input.as_u128());
-        // finalize our hasher
-        let hash = hasher.finish();
-        hash
     }
 
     /// Gather any initial nodes for a tree
@@ -231,10 +226,12 @@ impl TreeSupport for Entity {
                 for association in associations {
                     // get the tree hash for what this association points too
                     let target_hash = association.tree_hash();
+                    // get this associations direction
+                    let direction = association.direction;
                     // build the relationship for this branch
                     let relationship = crate::models::TreeRelationships::Association(association);
                     // wrap our relationship in a branch
-                    let branch = TreeBranch::new(target_hash, relationship);
+                    let branch = UnhashedTreeBranch::new(target_hash, relationship, direction);
                     // insert our relationship
                     entry.insert(branch);
                 }
