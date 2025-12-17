@@ -11,6 +11,7 @@ import styled from 'styled-components';
 import { OverlayTipRight } from '@components';
 import { RequireAuth, useAuth, getApiUrl, clearTagDataFromLocalStorage } from '@utilities';
 import { RoleKey, UserInfo } from '@models';
+import { CanvasMargin } from '@styles';
 
 const NavBanner = () => {
   const { userInfo, logout } = useAuth();
@@ -95,7 +96,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, short, full }) => {
 const NavPanel = styled.div`
   z-index: 0;
   left: 0;
-  top: 47px;
+  top: ${CanvasMargin.top};
   padding: 0.5rem 1rem;
   position: fixed;
   height: 100%;

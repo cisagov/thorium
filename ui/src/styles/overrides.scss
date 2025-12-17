@@ -307,6 +307,12 @@ a.dropdown-toggle.nav-link {
   }
 }
 
+.text-area {
+  color: var(--thorium-text);
+  background-color: var(--thorium-panel-bg);
+  border-color: var(--thorium-panel-border);
+}
+
 .form-check-input {
   color: var(--thorium-text);
   background-color: var(--thorium-panel-bg);

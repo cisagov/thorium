@@ -45,6 +45,7 @@ function useAuthProvider() {
   const [token, setToken] = useState(getCookie('THORIUM_TOKEN'));
   // set time of last userInfo update
   const [lastUpdateDate, setLastUpdateDate] = useState(Date.now());
+
   // options for set/get of a secure cookie
   const getUserInfo = async () => {
     // get user details
@@ -196,7 +197,7 @@ function useAuthProvider() {
 /**
  * Wrap application in a shared auth provider
  */
-export const AuthProvider: React.FC<AuthHookProps> = ({ children }) => {
+export const Auth: React.FC<AuthHookProps> = ({ children }) => {
   const auth = useAuthProvider();
   return <authContext.Provider value={auth}>{children}</authContext.Provider>;
 };

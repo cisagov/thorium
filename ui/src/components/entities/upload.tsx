@@ -60,7 +60,6 @@ function handleAssociationUpdate(
 ) {
   const newAssociationList: AssociationCreate[] = [];
   if (entity) {
-    console.log('entity exists, create associations');
     associationKeys.map((type) => {
       const newAssociation = structuredClone(BlankAssociationCreate);
       newAssociation.kind = type.replaceAll(' ', '') as unknown as AssociationKind;
@@ -68,13 +67,11 @@ function handleAssociationUpdate(
       newAssociation.groups = groups;
       newAssociationList.push(newAssociation);
     });
-    console.log(newAssociationList);
     updatePendingAssociations(newAssociationList);
   }
 }
 
 async function createFileAssociations(sha256: string, groups: string[], associations: AssociationCreate[]): Promise<void> {
-  console.log('creating associations');
   for (let i = 0; i < associations.length; i++) {
     // groups not set, now set them
     associations[i].groups = groups;
@@ -83,7 +80,6 @@ async function createFileAssociations(sha256: string, groups: string[], associat
         File: sha256,
       },
     ];
-    console.log(associations[i]);
     await createAssociation(associations[i], console.log);
   }
 }
@@ -1391,7 +1387,6 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
       </Card>
     );
   };
-
   return (
     <>
       {showUploadStatus && (

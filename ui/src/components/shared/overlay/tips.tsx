@@ -14,7 +14,6 @@ interface OverlayTipProps {
   wide?: boolean;
   className?: string;
 }
-//  placement: Placement;
 
 type OverlayTipBaseProps = OverlayTipProps & { placement: Placement };
 

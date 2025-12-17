@@ -4,13 +4,14 @@ export * from './shared/group';
 export * from './pages/navigation';
 export * from './pages/page';
 export * from './reactions';
+export * from './shared/windows/index';
 export * from './shared/alerts';
 export * from './shared/titles';
 export * from './shared/card';
 export * from './shared/time';
 export * from './shared/uploaddropzone';
 export * from './shared/loading_spinner';
-export * from './shared/overlaytips';
+export * from './shared/overlay/tips';
 export { default as SelectableDictionary } from './shared/selectable/selectable_dictionary';
 export { default as SelectableArray } from './shared/selectable/selectable_array';
 export { default as SelectInputArray } from './shared/selectable/select_input_array';
@@ -32,7 +33,8 @@ export * from './tags/utilities';
 // ---------------------------------------------------------
 
 // ----------------------- Entities ------------------------
-export * from './entities/filters/filters';
+export * from './entities/filters/browsing_filters';
+export * from './entities/filters/utilities';
 export * from './entities/browsing';
 export * from './entities/create';
 export * from './entities/details';

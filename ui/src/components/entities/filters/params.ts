@@ -1,7 +1,7 @@
 // project imports
 import { Filters, FilterTags } from 'models';
-import { DEFAULT_HIDE_TAG_KEYS } from './filters';
 import { tagIsInvalid } from '@utilities';
+import { DEFAULT_HIDE_TAG_KEYS } from './utilities';
 
 // verify defaults and excluded arrays are equal sets of keys
 const excludeKeysAreDefault = (excludeKeys: string[]) => {

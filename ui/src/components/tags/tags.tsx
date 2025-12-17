@@ -3,8 +3,9 @@ import { Button, Modal } from 'react-bootstrap';
 
 // project imports
 import { OverlayTipBottom } from '@components';
-import { getTagColorClass, getTagBadgeText, TagUpperKeyEnum } from './utilities';
+import { TagUpperKeyEnum, getTagColorClass, getTagBadgeText } from './utilities';
 import { Entities } from '@models';
+import { useSearchParams } from 'react-router';
 
 interface TagBadgeProps {
   tag: string; // tag key string
@@ -16,8 +17,8 @@ interface TagBadgeProps {
 
 const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, resource }) => {
   const [showRedirectModal, setShowRedirectModal] = useState(false);
-
   const badgeClass = getTagColorClass(tag, value);
+  const [_, setSearchParams] = useSearchParams();
   const tagText = getTagBadgeText(tag, value, condensed);
   const upperTag = tag.toUpperCase() as TagUpperKeyEnum;
 
@@ -64,7 +65,6 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
             <i>{redirectURL}</i>
           </Modal.Body>
           <Modal.Footer className="d-flex justify-content-center">
-            {/* @ts-ignore */}
             <Button
               variant=""
               className="warning-btn"
@@ -148,11 +148,12 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
               console.log('Error: No resource type provided for link');
               return;
             }
-            // we are already browsing and want to append tags to current search params
-            if (window.location.pathname.startsWith(resource.toLowerCase(), 1)) {
+            // we need to change locations in addition to adding query params
+            if (window.location.pathname.startsWith(resource.toLowerCase() + 's', 1)) {
               const query = new URLSearchParams(window.location.search);
               query.append(`tags[${tag}]`, value);
-              window.location.href = `/${resource.toLowerCase()}s?${query.toString()}`;
+              setSearchParams(query, { replace: true });
+              // we are already browsing and want to append tags to current search params
             } else {
               const query = new URLSearchParams();
               query.append('limit', '10');

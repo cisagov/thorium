@@ -30,11 +30,9 @@ const TagSelect: React.FC<TagSelectProps> = ({ tags, setTags, placeholderText = 
   //Delete modal for deleting all tags.
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const tagSelectRef = useRef<HTMLDivElement>(null);
-
   //computed properties
   const currTypedText = getCurrTypedText(tags, focusState);
   const dropdownOptions = getDropdownOptions(tags, dropdownData, focusState, currTypedText);
-
   //get dropdown data on component load
   useEffect(() => {
     let timeoutFn: ReturnType<typeof setTimeout>;

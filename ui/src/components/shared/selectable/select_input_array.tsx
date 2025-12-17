@@ -69,14 +69,32 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
   // update internal options if prop options change
   useEffect(() => {
     const initialOptionValues = formatInitialValues(options ? options : [], valuesMap);
-    setValueOptions((prev) => [...prev, ...initialOptionValues]);
-  }, [options]);
+    setValueOptions((prev) => {
+      const seen = new Set<string>();
+      return [...prev, ...initialOptionValues].filter((entry: SelectOption) => {
+        const key = `${entry.value}||${entry.label}`;
+        // already seen in label/value pair, filter out
+        if (seen.has(key)) {
+          return false;
+        }
+        // add it to our set and ensure its not filtered out
+        seen.add(key);
+        return true;
+      });
+
+    });
+  }, [options, valuesMap]);
 
   // control optional props to prevent menu from opening
   const selectProps: any = {};
   if (valueOptions.length == 0) {
     selectProps['menuIsOpen'] = false;
   }
+
+  // in case values change externally, update them
+  useEffect(() => {
+    setValue(formatInitialValues(values, valuesMap));
+  }, [values]);
 
   // control updates to the select component through key presses
   const handleKeyDown: KeyboardEventHandler = (event) => {

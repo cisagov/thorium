@@ -2,13 +2,14 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ToastContainer } from 'react-toastify';
+import styled from 'styled-components';
 import 'react-toastify/dist/ReactToastify.css';
 
 // project imports
-import { AuthProvider } from '@utilities';
-import { PageWrapper, RenderErrorAlert, NavBanner, SidebarColumn } from '@components';
+import { Auth } from '@utilities';
+import { PageWrapper, RenderErrorAlert, NavBanner, SidebarColumn, WindowManager } from '@components';
 import '@styles/main.scss';
-import styled from 'styled-components';
+import { CanvasMargin } from '@styles';
 
 // import pages lazily
 const Home = lazy(() => import('./pages/home'));
@@ -40,45 +41,43 @@ const SystemSettings = lazy(() => import('./pages/system/system_settings'));
 // Data loading ui empty for now
 const FallbackView = <h1 />;
 
-const Resources = () => {
-  return (
-    <Routes>
-      <Route path="/files" element={<PageWrapper Contents={FilesBrowsing} />} />
-      <Route path="/file" element={<PageWrapper Contents={FileDetails} />} />
-      <Route path="/file/:sha256" element={<PageWrapper Contents={FileDetails} />} />
-      <Route path="/files/:sha256" element={<PageWrapper Contents={FileDetails} />} />
-      <Route path="/devices" element={<PageWrapper Contents={DeviceBrowsing} />} />
-      <Route path="/devices/" element={<PageWrapper Contents={DeviceBrowsing} />} />
-      <Route path="/device" element={<PageWrapper Contents={DeviceDetails} />} />
-      <Route path="/device/:entityID" element={<PageWrapper Contents={DeviceDetails} />} />
-      <Route path="/vendors" element={<PageWrapper Contents={VendorBrowsing} />} />
-      <Route path="/vendor" element={<PageWrapper Contents={VendorBrowsing} />} />
-      <Route path="/vendor/:entityID" element={<PageWrapper Contents={VendorDetails} />} />
-      <Route path="/create/vendor" element={<PageWrapper Contents={CreateVendor} />} />
-      <Route path="/create/device" element={<PageWrapper Contents={CreateDevice} />} />
-      <Route path="/create/image" element={<PageWrapper Contents={CreateImage} />} />
-      <Route path="/graph" element={<PageWrapper Contents={GraphBuilder} />} />
-      <Route path="/upload" element={<PageWrapper Contents={UploadFiles} />} />
-      <Route path="/repos" element={<PageWrapper Contents={RepoBrowsing} />} />
-      <Route path="/repo/*" element={<PageWrapper Contents={RepoDetails} />} />
-      <Route path="/reaction/:group/:reactionID" element={<PageWrapper Contents={ReactionStatus} />} />
-      <Route path="/reactions/:group/:reactionID" element={<PageWrapper Contents={ReactionStatus} />} />
-      <Route path="/reaction/logs/:group/:reactionID/:stage" element={<PageWrapper Contents={ReactionStageLogs} />} />
-      <Route path="/reactions/logs/:group/:reactionID/:stage" element={<PageWrapper Contents={ReactionStageLogs} />} />
-      <Route path="/profile" element={<PageWrapper Contents={Profile} />} />
-      <Route path="/pipelines" element={<PageWrapper Contents={Pipelines} />} />
-      <Route path="/images" element={<PageWrapper Contents={Images} />} />
-      <Route path="/groups" element={<PageWrapper Contents={Groups} />} />
-      <Route path="/users" element={<PageWrapper admin Contents={Users} />} />
-      <Route path="/settings" element={<PageWrapper admin Contents={SystemSettings} />} />
-      <Route path="/stats" element={<PageWrapper Contents={SystemStats} />} />
-      <Route path="/auth" element={<PageWrapper auth={false} Contents={Login} />} />
-      <Route path="/" element={<PageWrapper Contents={Home} />} />
-      <Route path="*" element={<PageWrapper Contents={NotFound} />} />
-      <Route index element={<PageWrapper Contents={Home} />} />
-    </Routes>
-  );
-};
+const Resources = () => (
+  <Routes>
+    <Route path="/files" element={<PageWrapper Contents={FilesBrowsing} />} />
+    <Route path="/file" element={<PageWrapper Contents={FileDetails} />} />
+    <Route path="/file/:sha256" element={<PageWrapper Contents={FileDetails} />} />
+    <Route path="/files/:sha256" element={<PageWrapper Contents={FileDetails} />} />
+    <Route path="/devices" element={<PageWrapper Contents={DeviceBrowsing} />} />
+    <Route path="/devices/" element={<PageWrapper Contents={DeviceBrowsing} />} />
+    <Route path="/device" element={<PageWrapper Contents={DeviceDetails} />} />
+    <Route path="/device/:entityID" element={<PageWrapper Contents={DeviceDetails} />} />
+    <Route path="/vendors" element={<PageWrapper Contents={VendorBrowsing} />} />
+    <Route path="/vendor" element={<PageWrapper Contents={VendorBrowsing} />} />
+    <Route path="/vendor/:entityID" element={<PageWrapper Contents={VendorDetails} />} />
+    <Route path="/create/vendor" element={<PageWrapper Contents={CreateVendor} />} />
+    <Route path="/create/device" element={<PageWrapper Contents={CreateDevice} />} />
+    <Route path="/create/image" element={<PageWrapper Contents={CreateImage} />} />
+    <Route path="/graph" element={<PageWrapper Contents={GraphBuilder} />} />
+    <Route path="/upload" element={<PageWrapper Contents={UploadFiles} />} />
+    <Route path="/repos" element={<PageWrapper Contents={RepoBrowsing} />} />
+    <Route path="/repo/*" element={<PageWrapper Contents={RepoDetails} />} />
+    <Route path="/reaction/:group/:reactionID" element={<PageWrapper Contents={ReactionStatus} />} />
+    <Route path="/reactions/:group/:reactionID" element={<PageWrapper Contents={ReactionStatus} />} />
+    <Route path="/reaction/logs/:group/:reactionID/:stage" element={<PageWrapper Contents={ReactionStageLogs} />} />
+    <Route path="/reactions/logs/:group/:reactionID/:stage" element={<PageWrapper Contents={ReactionStageLogs} />} />
+    <Route path="/profile" element={<PageWrapper Contents={Profile} />} />
+    <Route path="/pipelines" element={<PageWrapper Contents={Pipelines} />} />
+    <Route path="/images" element={<PageWrapper Contents={Images} />} />
+    <Route path="/groups" element={<PageWrapper Contents={Groups} />} />
+    <Route path="/users" element={<PageWrapper admin Contents={Users} />} />
+    <Route path="/settings" element={<PageWrapper admin Contents={SystemSettings} />} />
+    <Route path="/stats" element={<PageWrapper Contents={SystemStats} />} />
+    <Route path="/auth" element={<PageWrapper auth={false} Contents={Login} />} />
+    <Route path="/" element={<PageWrapper Contents={Home} />} />
+    <Route path="*" element={<PageWrapper Contents={NotFound} />} />
+    <Route index element={<PageWrapper Contents={Home} />} />
+  </Routes>
+);
 
 const Body = styled.div`
   color: var(--thorium-text);
@@ -89,33 +88,37 @@ const Body = styled.div`
   // overflow-x: hidden;
 `;
 
-const Thorium = () => {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Body>
-          <ToastContainer
-            position="top-right"
-            autoClose={2000}
-            hideProgressBar={true}
-            newestOnTop={true}
-            closeOnClick={true}
-            pauseOnHover={false}
-            draggable={false}
-            rtl={false}
-            theme="dark"
-          />
-          <NavBanner />
-          <SidebarColumn />
-          <Suspense fallback={FallbackView}>
-            <ErrorBoundary fallback={<RenderErrorAlert />}>
-              <Resources />
-            </ErrorBoundary>
-          </Suspense>
-        </Body>
-      </AuthProvider>
-    </BrowserRouter>
-  );
-};
+const Site = () => (
+  <Body>
+    <ToastContainer
+      position="top-right"
+      autoClose={2000}
+      hideProgressBar={true}
+      newestOnTop={true}
+      closeOnClick={true}
+      pauseOnHover={false}
+      draggable={false}
+      rtl={false}
+      theme="dark"
+    />
+    <NavBanner />
+    <SidebarColumn />
+    <Suspense fallback={FallbackView}>
+      <ErrorBoundary fallback={<RenderErrorAlert />}>
+        <Resources />
+      </ErrorBoundary>
+    </Suspense>
+  </Body>
+);
+
+const Thorium = () => (
+  <BrowserRouter>
+    <Auth>
+      <WindowManager name="thorium" zRange={{ start: 1000, end: 4000, step: 5 }} canvasMargin={CanvasMargin}>
+        <Site />
+      </WindowManager>
+    </Auth>
+  </BrowserRouter>
+);
 
 export default Thorium;

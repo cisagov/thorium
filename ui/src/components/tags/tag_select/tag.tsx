@@ -1,4 +1,4 @@
-import { useEffect, useRef, KeyboardEvent, FocusEvent } from 'react';
+import { useEffect, useRef, KeyboardEvent, FocusEvent, useLayoutEffect } from 'react';
 import { styled } from 'styled-components';
 import { TagEntry } from 'models';
 import { EditingMode } from './editing_types';
@@ -52,7 +52,7 @@ const TagField: React.FC<TagFieldProps> = ({ value, isEditing, className, placeh
   }, [isEditing]);
 
   //keep input ref the same width as the hidden span
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (inputRef.current && spanRef.current) {
       inputRef.current.style.width = `${spanRef.current.offsetWidth}px`;
     }
@@ -84,7 +84,7 @@ const TagContainer = styled.div<{ $focused?: boolean; $error?: boolean }>`
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  margin: 2px 5px;
+  margin: 1px;
   padding: 0 3px;
   ${(props) => props.$focused && ` box-shadow: 2px 2px 5px 2px rgba(0, 0, 0, .3);`};
   ${(props) => props.$error && `box-shadow: 0px 0px 3px 2px rgb(255, 0, 0);`};
@@ -119,7 +119,6 @@ export const Tag: React.FC<TagProps> = ({
   handleFocusTrash,
 }) => {
   const tagClass = getTagColorClass(data.key, data.value);
-
   return (
     <TagContainer
       className={tagClass}

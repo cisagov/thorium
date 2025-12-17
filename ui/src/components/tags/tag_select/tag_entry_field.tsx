@@ -17,6 +17,7 @@ const TagEntryFieldDiv = styled.div`
   min-height: 40px;
   cursor: text;
   overflow: hidden;
+  padding: 2px 5px;
 `;
 
 const TagContainer = styled.div`
