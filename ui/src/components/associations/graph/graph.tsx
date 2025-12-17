@@ -470,7 +470,7 @@ const AssociationGraph: React.FC<AssociationGraphProps> = ({ initial, inView }) 
         renderer: {
           name: 'canvas',
           webgl: true,
-          showFps: true,
+          showFps: false,
         },
         container: cyRef.current,
         elements: elementsRef.current,
@@ -520,11 +520,9 @@ const AssociationGraph: React.FC<AssociationGraphProps> = ({ initial, inView }) 
 
   return (
     <GraphWindow>
-      {/* @ts-ignore */}
       <GraphDiv ref={cyRef} />
-      {/* @ts-ignore */}
+      <div className="ps-4 ms-2">Node Count: {nodeCount}</div>
       <GraphControls graphId={graphId} controls={controls} updateControls={updateControls} cyInstance={cyInstance} />
-      Node Count: {nodeCount}
       <DataPreview>
         {controls.selectedElement && isNode(controls.selectedElement) && controls.selectedElement.data.id != '' && (
           <NodeInfo node={graphRef.current.data_map[controls.selectedElement.data.id]} />

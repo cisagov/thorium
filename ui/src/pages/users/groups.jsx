@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Accordion, Alert, Button, Badge, ButtonGroup, ButtonToolbar, Col, Container, Form, Modal, Row } from 'react-bootstrap';
+import { useEffect, useState } from 'react';
+import { Accordion, Alert, Button, Badge, ButtonGroup, ButtonToolbar, Col, Form, Modal, Row } from 'react-bootstrap';
 import { FaQuestionCircle } from 'react-icons/fa';
 import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
@@ -566,7 +566,7 @@ const Groups = () => {
     const ModifyGroupButtons = ({ group, admin }) => {
       // only owners, managers and Thorium admins can modify a group
       return (
-        <Container>
+        <>
           <Row>
             <ButtonToolbar className="d-flex justify-content-center">
               <ButtonGroup>
@@ -576,14 +576,14 @@ const Groups = () => {
               </ButtonGroup>
             </ButtonToolbar>
           </Row>
-        </Container>
+        </>
       );
     };
 
     if (!groupAdmin) {
       // return non-editable group info component
       return (
-        <Container>
+        <>
           <Row>
             <Col className="header-col">
               <OverlayTipRight
@@ -732,12 +732,12 @@ const Groups = () => {
               ))}
             </Col>
           </Row>
-        </Container>
+        </>
       );
     } else {
       // return an editable admin group info component
       return (
-        <Container>
+        <>
           <Row>
             <Form>
               <Row>
@@ -979,7 +979,7 @@ const Groups = () => {
           <Row>
             <ModifyGroupButtons group={group} admin={groupAdmin} />
           </Row>
-        </Container>
+        </>
       );
     }
   };
@@ -1063,7 +1063,7 @@ const Groups = () => {
 
   return (
     <Page title="Groups · Thorium">
-      <div className="accordion-list">
+      <div className="d-flex justify-content-between">
         <div>
           <OverlayTipRight tip={`You have access to view ${Object.keys(groups).length} group(s).`}>
             <h2>
@@ -1088,21 +1088,19 @@ const Groups = () => {
             .map((group) => (
               <Accordion.Item key={group} eventKey={group}>
                 <Accordion.Header>
-                  <Container className="accordion-list">
-                    <Col className="accordion-item-name mt-2">
-                      <div className="text">{group}</div>
-                    </Col>
-                    <Col className="accordion-item-relation sm-members d-flex justify-content-start mt-2">
-                      <small>
-                        <i>
-                          <GroupMemberCount group={groups[group]} />
-                        </i>
-                      </small>
-                    </Col>
-                    <Col className="accordion-item-ownership d-flex justify-content-center">
-                      <GroupRoleBadge group={groups[group]} user={userInfo} />
-                    </Col>
-                  </Container>
+                  <Col className="accordion-item-name mt-2">
+                    <div className="text">{group}</div>
+                  </Col>
+                  <Col className="accordion-item-relation mt-2">
+                    <small>
+                      <i>
+                        <GroupMemberCount group={groups[group]} />
+                      </i>
+                    </small>
+                  </Col>
+                  <Col className="accordion-item-ownership d-flex justify-content-center">
+                    <GroupRoleBadge group={groups[group]} user={userInfo} />
+                  </Col>
                 </Accordion.Header>
                 <Accordion.Body>
                   <GroupInfo group={groups[group]} allUsers={allUsers} />

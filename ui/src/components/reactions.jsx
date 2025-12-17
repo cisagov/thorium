@@ -6,7 +6,7 @@ import { default as MarkdownHtml } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 // project imports
-import { LoadingSpinner, OverlayTipTop, OverlayTipLeft, Subtitle, Title } from '@components';
+import { LoadingSpinner, OverlayTipTop, OverlayTipLeft, Subtitle, Title, LinkFields } from '@components';
 import { useAuth } from '@utilities';
 import { createReaction, deleteReaction, listPipelines, listReactions } from '@thorpi';
 
@@ -598,8 +598,8 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
               </Row>
               <Row className="mt-1">
                 {reactionsList.map((reaction, idx) => (
-                  <Card key={`${reaction.id}_${idx}`} className="highlight-card">
-                    <Row>
+                  <Card key={`${reaction.id}_${idx}`} className="no-border">
+                    <LinkFields className="no-decoration">
                       <Link to={`/reaction/${reaction.group}/${reaction.id}`} className="no-decoration reactions-pipeline" md={2}>
                         <Col>{reaction.pipeline}</Col>
                       </Link>
@@ -623,7 +623,7 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
                           checked={reactionsListSelections[reaction.id] ? reactionsListSelections[reaction.id] : false}
                         ></FormCheck>
                       </Col>
-                    </Row>
+                    </LinkFields>
                   </Card>
                 ))}
               </Row>

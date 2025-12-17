@@ -11,6 +11,11 @@ import Tc2 from './custom/tc2';
 import VBA from './custom/vba';
 import AvMulti from './custom/avmulti';
 import { RenderErrorAlert } from '@components';
+import styled from 'styled-components';
+
+const BtnCol = styled(Col)`
+  text-align: right;
+`;
 
 const Tool = ({ result, type, header, sha256, tool, updateInView, updateURLSection }) => {
   const [isOpen, setOpened] = useState(false);
@@ -103,7 +108,7 @@ const Tool = ({ result, type, header, sha256, tool, updateInView, updateURLSecti
                   </Title>
                 </a>
               </Col>
-              <Col xs={2} className="btn-align">
+              <BtnCol xs={2}>
                 {height >= 85 ? (
                   <Button variant="sm" className="primary-btn mt-1" onClick={() => setOpened(!isOpen)}>
                     {isOpen && <FaAngleUp size={18} />}
@@ -112,7 +117,7 @@ const Tool = ({ result, type, header, sha256, tool, updateInView, updateURLSecti
                 ) : (
                   <></>
                 )}
-              </Col>
+              </BtnCol>
             </Row>
           </Card.Header>
           <Card.Body>

@@ -5,6 +5,8 @@ export enum scaling {
   lg = '992px',
   xl = '1200px',
   xxl = '1400px',
-  md_xxl = '1500px',
   xxxl = '1700px',
+  fourxl = '2000px',
+  fivexl = '2300px',
+  sixxl = '2600px',
 }

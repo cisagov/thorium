@@ -82,7 +82,7 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
       <LoadingSpinner loading={loading}></LoadingSpinner>
       {results && typeof results === 'object' && !loading && (
         <>
-          <div className="results-col">
+          <div>
             {numResults == 0 && !loading && (
               <>
                 <br />

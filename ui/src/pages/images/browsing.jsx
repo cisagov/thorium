@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Accordion, Alert, Badge, Button, ButtonToolbar, Col, Container, Form, Modal, Row } from 'react-bootstrap';
+import { Accordion, Alert, Badge, Button, ButtonToolbar, Col, Form, Modal, Row } from 'react-bootstrap';
 
 // project imports
 import {
@@ -98,20 +98,18 @@ const Images = () => {
       <Accordion alwaysOpen>
         {images.map((image) => (
           <Accordion.Item key={`${image.name}_${image.group}`} eventKey={`${image.name}_${image.group}`}>
-            <Accordion.Header>
-              <Container className="accordion-list">
-                <Col className="accordion-item-name">
-                  <div className="text">{image.name}</div>
-                </Col>
-                <Col className="accordion-item-relation" />
-                <Col className="accordion-item-ownership">
-                  <OverlayTipLeft tip={`This image is owned by the ${image.group} group.`}>
-                    <small>
-                      <i>{image.group}</i>
-                    </small>
-                  </OverlayTipLeft>
-                </Col>
-              </Container>
+            <Accordion.Header className="d-flex">
+              <Col className="accordion-item-name">
+                <div className="text">{image.name}</div>
+              </Col>
+              <Col className="accordion-item-relation" />
+              <Col className="accordion-item-ownership">
+                <OverlayTipLeft tip={`This image is owned by the ${image.group} group.`}>
+                  <small>
+                    <i>{image.group}</i>
+                  </small>
+                </OverlayTipLeft>
+              </Col>
             </Accordion.Header>
             <Accordion.Body>
               <ImageInfo images={images} image={image} groups={groups} setImages={setImages} />

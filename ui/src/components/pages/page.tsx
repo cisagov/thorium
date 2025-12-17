@@ -56,13 +56,19 @@ interface ThoriumPageProps {
 
 // @ts-ignore
 const PageContainer = styled(Container)`
-  padding: 4rem 0rem 0.5rem 6rem;
-  width: 100%;
-  @media (max-width: ${scaling.xxxl}) {
-    max-width: 90%;
+  max-width: 85%;
+  padding: 4rem 0rem 0.5rem 0rem;
+  @media (min-width: ${scaling.sm}) {
+    padding: 4rem 0rem 0.5rem 3.5rem;
+  }
+  @media (min-width: ${scaling.lg}) {
+    padding: 4rem 0rem 0.5rem 6rem;
   }
   @media (min-width: ${scaling.xxxl}) {
-    max-width: 2000px;
+    max-width: 80%;
+  }
+  @media (min-width: ${scaling.fivexl}) {
+    max-width: ${scaling.fourxl};
   }
 `;
 

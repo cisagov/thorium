@@ -43,22 +43,3 @@ $grid-breakpoints: (
   width: 75px !important;
   padding-top: 0.75em !important;
 }
-
-// 1400px
-//@media (max-width: scaling.$xxl) { ... }
-
-// 1200x
-//@media (max-width: scaling.$xl)) { ... }
-
-// 992px
-//@media (max-width: scaling.$lg) { ... }
-
-// 768px
-//@media (max-width: scaling.$md) { ... }
-
-//576px
-@media (max-width: scaling.$sm) {
-  .sm-members {
-    display: none;
-  }
-}

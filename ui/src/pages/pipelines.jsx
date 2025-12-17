@@ -1,5 +1,5 @@
-import React, { Fragment, useEffect, useState } from 'react';
-import { Accordion, Alert, Badge, Button, ButtonToolbar, ButtonGroup, Container, Col, Form, Modal, Row } from 'react-bootstrap';
+import { Fragment, useEffect, useState } from 'react';
+import { Accordion, Alert, Badge, Button, ButtonToolbar, ButtonGroup, Col, Form, Modal, Row } from 'react-bootstrap';
 import { FaQuestionCircle } from 'react-icons/fa';
 import { default as MarkdownHtml } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -149,7 +149,7 @@ const Pipelines = () => {
   // Display pipeline accordion page headers
   const PipelineHeader = () => {
     return (
-      <div className="accordion-list">
+      <div className="d-flex justify-content-between ">
         <div>
           <h2>
             <OverlayTipRight tip={PipelineCountTipMessage}>
@@ -238,7 +238,7 @@ const Pipelines = () => {
               formatted as a JSON array of strings and/or string arrays.`}
             >
               <SimpleSubtitle>
-                <b>Order</b> <FaQuestionCircle className="fa-icon" />
+                <b>Order</b> <FaQuestionCircle />
               </SimpleSubtitle>
             </OverlayTipRight>
           </Col>
@@ -259,7 +259,7 @@ const Pipelines = () => {
           <Col className="pipeline-header-col">
             <OverlayTipRight tip={`The length of the SLA in seconds.`}>
               <SimpleSubtitle>
-                <b>SLA</b> <FaQuestionCircle className="fa-icon" />
+                <b>SLA</b> <FaQuestionCircle />
               </SimpleSubtitle>
             </OverlayTipRight>
           </Col>
@@ -577,7 +577,7 @@ const Pipelines = () => {
 
   return (
     <Page title="Pipelines · Thorium">
-      <PipelineHeader className="accordion-list" />
+      <PipelineHeader />
       <LoadingSpinner loading={loading}></LoadingSpinner>
       <Accordion alwaysOpen>
         {pipelines
@@ -585,19 +585,17 @@ const Pipelines = () => {
           .map((pipeline) => (
             <Accordion.Item key={`${pipeline.name}_${pipeline.group}`} eventKey={`${pipeline.name}_${pipeline.group}`}>
               <Accordion.Header>
-                <Container className="accordion-list">
-                  <Col className="accordion-item-name">
-                    <div className="text">{pipeline.name}</div>
-                  </Col>
-                  <Col className="accordion-item-relation" />
-                  <Col className="accordion-item-ownership">
-                    <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
-                      <small>
-                        <i>{pipeline.group}</i>
-                      </small>
-                    </OverlayTipLeft>
-                  </Col>
-                </Container>
+                <Col className="accordion-item-name">
+                  <div className="text">{pipeline.name}</div>
+                </Col>
+                <Col className="accordion-item-relation" />
+                <Col className="accordion-item-ownership">
+                  <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
+                    <small>
+                      <i>{pipeline.group}</i>
+                    </small>
+                  </OverlayTipLeft>
+                </Col>
               </Accordion.Header>
               <Accordion.Body>
                 <PipelineInfo pipeline={pipeline} />

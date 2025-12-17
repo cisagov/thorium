@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Alert, Card, Table } from 'react-bootstrap';
 
 // project imports
-import { getAlerts, ResultsFiles, ChildrenFiles, String } from '@components';
+import { getAlerts, ResultsFiles, ChildrenFiles } from '@components';
 
 const JsonTable = ({ results }) => {
   if (results && Array.isArray(results)) {
     return (
-      <Table striped="row" hover={true} className="none-border mb-4">
+      <Table striped="row" hover={true} className="mb-4">
         <tbody>
           {results.map((array, idx) => (
             <tr key={'outer_' + idx}>

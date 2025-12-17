@@ -2,6 +2,8 @@ export enum GraphLayout {
   'Fcose' = 'fcose',
   'CoseBilent' = 'cose-bilkent',
   'Elk' = 'elk',
+  'Circle' = 'circle',
+  'Concentric' = 'concentric',
   //'Cise' = 'cise',
 }
 
@@ -100,7 +102,7 @@ export const getLayout = (layout: GraphLayout): cytoscape.LayoutOptions => {
     };
   } else if (layout == GraphLayout.CoseBilent) {
     return {
-      name: GraphLayout.Fcose,
+      name: GraphLayout.CoseBilent,
       // 'draft', 'default' or 'proof"
       // - 'draft' fast cooling rate
       // - 'default' moderate cooling rate
@@ -156,12 +158,29 @@ export const getLayout = (layout: GraphLayout): cytoscape.LayoutOptions => {
       // Initial cooling factor for incremental layout
       initialEnergyOnIncremental: 0.5,
     };
+  } else if (layout == GraphLayout.Circle) {
+    return {
+      name: GraphLayout.Circle, // we need to add clusters to structure before this one will work
+      //@ts-ignore
+      animate: false,
+      fit: true,
+      nodeDimensionsIncludeLabels: false,
+    };
+  } else if (layout == GraphLayout.Concentric) {
+    return {
+      name: GraphLayout.Concentric, // we need to add clusters to structure before this one will work
+      //@ts-ignore
+      animate: false,
+      fit: true,
+      nodeDimensionsIncludeLabels: false,
+    };
   } else if (layout == GraphLayout.Elk) {
     return {
       name: GraphLayout.Elk, // we need to add clusters to structure before this one will work
       //@ts-ignore
       animate: true,
-      nodeDimensionsIncludeLabels: true,
+      fit: true,
+      nodeDimensionsIncludeLabels: false,
       animationDuration: 500,
     };
   }

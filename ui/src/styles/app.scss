@@ -73,14 +73,14 @@ $grid-breakpoints: (
   width: auto;
 }
 
+.count-badge {
+  background-color: var(--thorium-nav-panel-bg);
+  color: var(--thorium-nav-text);
+}
+
 // login container
 .login {
   max-width: 25rem;
-}
-
-// system stats container
-.stats {
-  max-width: 900px;
 }
 
 // system settings container

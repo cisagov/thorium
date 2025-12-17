@@ -13,11 +13,15 @@ const NotFoundWrapper = styled.div`
   justify-content: center;
 `;
 
+const Image = styled.img`
+  border-right: 2px solid;
+`;
+
 const NotFoundContainer = () => {
   return (
     <Page className="d-flex justify-content-center" title="Not Found · Thorium">
       <NotFoundWrapper>
-        <img src="/ferris-scientist.png" className="pe-4 icon-separator-end" alt="FerrisScientist" height="200px" />
+        <Image src="/ferris-scientist.png" className="pe-4" alt="FerrisScientist" height="200px" />
         <div className="d-flex flex-column justify-content-center ms-4">
           <Banner>Uh Oh!</Banner>
           <Banner>{window.location.pathname}</Banner>

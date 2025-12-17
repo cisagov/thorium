@@ -10,6 +10,22 @@ $grid-breakpoints: (
 );
 */
 
+.circle {
+  box-shadow: 2px 2px 5px gray;
+  border-radius: 50%;
+  border-color: #2b2d42;
+  border-style: solid;
+  border-width: 3px;
+  width: 60px;
+  height: 60px;
+  padding: 10px;
+  background: lightgray;
+  color: black;
+  text-align: center;
+  font-size: 25px;
+  margin: auto;
+}
+
 .info-icon {
   color: var(--thorium-text);
 }
