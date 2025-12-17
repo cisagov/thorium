@@ -3,6 +3,7 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use dashmap::{DashMap, DashSet};
+use futures::{StreamExt, stream};
 use gxhash::GxHasher;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -497,12 +498,13 @@ impl Tree {
     /// * `ring` - The current growth ring for this tree
     /// * `params` - The params for growing this tree
     /// * `shared` - Shared Thorium objects
-    async fn grow_from_node(
-        &self,
+    async fn grow_from_node<'a>(
+        &'a self,
         user: &User,
         hash: u64,
         ring: &TreeRing,
         params: &TreeParams,
+        //guard: &impl Guard,
         shared: &Shared,
     ) -> Result<(), ApiError> {
         // if we already have this nodes info then get it
@@ -644,6 +646,31 @@ impl Tree {
         Ok(())
     }
 
+    /// Grow this tree in parallel
+    async fn parallel_grow(
+        &self,
+        user: &User,
+        params: &TreeParams,
+        ring: &TreeRing,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
+        // instance a set of futures to allow us to grow from multiple nodes at once
+        let mut futs = Vec::with_capacity(self.growable.len());
+        // build futures to crawl
+        for hash in &self.growable {
+            // try to grow the tree from this node
+            futs.push(self.grow_from_node(user, *hash, &ring, params, shared));
+        }
+        // convert this list of futures into a stream
+        let mut grow_stream = stream::iter(futs).buffer_unordered(10);
+        // start processing these futures concurrently 10 at a time
+        while let Some(result) = grow_stream.next().await {
+            // if we ran into an error while growing this tree then raise it
+            result?;
+        }
+        Ok(())
+    }
+
     /// Build a tree based on data in Thorium's database
     pub async fn grow(
         &mut self,
@@ -661,12 +688,8 @@ impl Tree {
             if self.growable.is_empty() {
                 break;
             }
-            // start crawling this tree's initial nodes
-            for hash in &self.growable {
-                // try to grow the tree from this node
-                self.grow_from_node(user, *hash, &ring, params, shared)
-                    .await?;
-            }
+            // grow our growable nodes in parallel
+            self.parallel_grow(user, params, &ring, shared).await?;
             // get any data missing from any associations
             self.get_association_nodes(user, &mut ring, shared).await?;
             // merge our current ring but not its relationships into our tree
