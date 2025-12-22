@@ -106,7 +106,7 @@ export const FilterDatePicker: React.FC<FilterDateProps> = ({ max = null, min = 
       minDate={safeMin}
       selected={safeSelected}
       disabled={disabled}
-      onChange={(date) => onChange(date instanceof Date ? date : null)}
+      onChange={(date: any) => onChange(date instanceof Date ? date : null)}
     />
   );
 };
