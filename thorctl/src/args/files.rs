@@ -145,9 +145,15 @@ pub struct UploadFiles {
     #[clap(short, long, value_delimiter = ',')]
     pub pipelines: Option<Vec<String>>,
     /// Any regular expressions to use to determine which files to upload
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
     #[clap(short, long)]
     pub filter: Vec<String>,
     /// Any regular expressions to use to determine which files to skip
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
     #[clap(short, long)]
     pub skip: Vec<String>,
     /// Include hidden directories/files

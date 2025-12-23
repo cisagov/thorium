@@ -77,7 +77,7 @@ pub enum ResultsPostProcessing {
     Full,
 }
 
-/// A command to get info on some reactions
+/// A command to get results
 #[derive(Parser, Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GetResults {
@@ -97,6 +97,27 @@ pub struct GetResults {
     /// Save results in a condensed format (no formatting/whitespace)
     #[clap(long)]
     pub condensed: bool,
+    /// Only retrieve the main results without supplementary result files
+    #[clap(long)]
+    pub results_only: bool,
+    /// Regular expressions to determine which result files to download
+    ///
+    /// If provided, only result files matching any of the regular expressions will
+    /// be downloaded.
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
+    #[clap(long, conflicts_with = "results_only")]
+    pub filter: Vec<String>,
+    /// Regular expressions to determine which result files to skip downloading
+    ///
+    /// If provided, only result files not matching any of the regular expressions will
+    /// be downloaded.
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
+    #[clap(long, conflicts_with = "results_only")]
+    pub skip: Vec<String>,
     /// Any specific files to get results for
     #[clap(short, long)]
     pub files: Vec<String>,

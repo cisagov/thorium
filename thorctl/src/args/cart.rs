@@ -55,9 +55,15 @@ pub struct Cart {
     #[clap(long)]
     pub no_extension: bool,
     /// Any regular expressions to use to determine which files to cart
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
     #[clap(short, long)]
     pub filter: Vec<String>,
     /// Any regular expressions to use to determine which files to skip
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
     #[clap(short, long)]
     pub skip: Vec<String>,
     /// Include hidden directories/files

@@ -1,6 +1,7 @@
 use futures::stream::{self, StreamExt};
 use http::StatusCode;
 use owo_colors::OwoColorize;
+use regex::RegexSet;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -143,11 +144,15 @@ async fn get_results_file(
 /// * `cmd` - The command to use for downloading results
 /// * `key` - The key to use to retrieve the entity that the results are attached to
 /// * `params` - The params to use when getting results
+/// * `filter` - The set of regexes used to determine which result files to download
+/// * `skip` - The set of regexes used to determine which result files to skip downloading
 async fn get_results(
     client: &impl ResultsClient,
     cmd: &GetResults,
     key: &str,
     params: &ResultGetParams,
+    filter: &RegexSet,
+    skip: &RegexSet,
 ) -> Result<(), Error> {
     // get this samples results
     let results = client.get_results(&key, params).await?;
@@ -166,20 +171,29 @@ async fn get_results(
                 root.push(&tool);
                 // create a folder to store this tools results
                 create_dir_all(&root).await?;
-                // add a directory for result files
-                root.push("result-files");
-                // download and write each of this tool's result files off to disk
-                for sub_path in &recent_output.files {
-                    if let Err(err) =
-                        get_results_file(client, key, &recent_output.id, sub_path, &tool, &root)
-                            .await
+                // only get result files if we're not set to get results only
+                if !cmd.results_only {
+                    // add a directory for the result files
+                    root.push("result-files");
+                    // download and write each of this tool's result files off to disk
+                    for sub_path in recent_output
+                        .files
+                        .iter()
+                        // filter result files based on user settings;
+                        // if no filters are provided, all result files will pass
+                        .filter(|result_file| utils::filter_str(result_file, filter, skip))
                     {
-                        // log an error if we're unable to download a result file, but keep going
-                        GetLine::error(key, &err);
+                        if let Err(err) =
+                            get_results_file(client, key, &recent_output.id, sub_path, &tool, &root)
+                                .await
+                        {
+                            // log an error if we're unable to download a result file, but keep going
+                            GetLine::error(key, &err);
+                        }
                     }
+                    // pop our result files dir
+                    root.pop();
                 }
-                // pop our result files dir
-                root.pop();
                 // process and save this result
                 write_result(recent_output, &root, &cmd.post_processing, cmd.condensed).await?;
                 // if we had tool results to download then pop our tool name now that we are done
@@ -272,10 +286,14 @@ async fn write_result(
 /// * `thorium` - A Thorium client
 /// * `cmd` - The full reaction creation command/args
 /// * `params` - The params to use when getting results
+/// * `filter` - The set of regexes used to determine which result files to download
+/// * `skip` - The set of regexes used to determine which result files to skip downloading
 async fn get_search_files(
     thorium: &Thorium,
     cmd: &GetResults,
     params: &ResultGetParams,
+    filter: &RegexSet,
+    skip: &RegexSet,
 ) -> Result<(), Error> {
     // download results if any search parameters were given
     let opts = cmd.build_file_opts()?;
@@ -292,7 +310,7 @@ async fn get_search_files(
         // download the target samples results
         stream::iter(sha256s.iter())
             .for_each_concurrent(None, |sha256| async move {
-                match get_results(&thorium.files, cmd, sha256, params).await {
+                match get_results(&thorium.files, cmd, sha256, params, filter, skip).await {
                     Ok(()) => GetLine::downloaded(sha256),
                     Err(err) => GetLine::error(sha256, &err),
                 }
@@ -314,10 +332,14 @@ async fn get_search_files(
 /// * `thorium` - A Thorium client
 /// * `cmd` - The full reaction creation command/args
 /// * `params` - The params to use when getting results
+/// * `filter` - The set of regexes used to determine which result files to download
+/// * `skip` - The set of regexes used to determine which result files to skip downloading
 async fn get_search_repos(
     thorium: &Thorium,
     cmd: &GetResults,
     params: &ResultGetParams,
+    filter: &RegexSet,
+    skip: &RegexSet,
 ) -> Result<(), Error> {
     // download results if any search parameters were given
     let opts = cmd.build_repo_opts()?;
@@ -334,7 +356,7 @@ async fn get_search_repos(
         // download the target samples results
         stream::iter(repos.iter())
             .for_each_concurrent(None, |repo| async move {
-                match get_results(&thorium.repos, cmd, repo, params).await {
+                match get_results(&thorium.repos, cmd, repo, params, filter, skip).await {
                     Ok(()) => GetLine::downloaded(repo),
                     Err(err) => GetLine::error(repo, &err),
                 }
@@ -360,6 +382,11 @@ async fn get_search_repos(
 async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), Error> {
     // ensure the search configuration is valid
     cmd.validate_search()?;
+    // build the set of regexs to determine which result files to download or skip
+    let filter = RegexSet::new(&cmd.filter)
+        .map_err(|err| Error::new(format!("Invalid filter regex: {err}")))?;
+    let skip =
+        RegexSet::new(&cmd.skip).map_err(|err| Error::new(format!("Invalid skip regex: {err}")))?;
     // print the download results header
     GetLine::header();
     // build the params for downloading results
@@ -375,9 +402,11 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
     // download the target samples results if any were given
     stream::iter(&cmd.files)
         .for_each_concurrent(Some(workers), |sha256| {
-            let params_ref = &params;
+            let params = &params;
+            let filter = &filter;
+            let skip = &skip;
             async move {
-                match get_results(&thorium.files, cmd, sha256, params_ref).await {
+                match get_results(&thorium.files, cmd, sha256, params, filter, skip).await {
                     Ok(()) => GetLine::downloaded(sha256),
                     Err(err) => GetLine::error(sha256, &err),
                 }
@@ -387,9 +416,11 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
     // download the target repos results if any were given
     stream::iter(&cmd.repos)
         .for_each_concurrent(Some(workers), |repo| {
-            let params_ref = &params;
+            let params = &params;
+            let filter = &filter;
+            let skip = &skip;
             async move {
-                match get_results(&thorium.repos, cmd, repo, params_ref).await {
+                match get_results(&thorium.repos, cmd, repo, params, filter, skip).await {
                     Ok(()) => GetLine::downloaded(repo),
                     Err(err) => GetLine::error(repo, &err),
                 }
@@ -401,9 +432,11 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
         let sha256s: HashSet<String> = utils::fs::lines_set_from_file(file_list).await?;
         stream::iter(sha256s.into_iter())
             .for_each_concurrent(Some(workers), |sha256| {
-                let params_ref = &params;
+                let params = &params;
+                let filter = &filter;
+                let skip = &skip;
                 async move {
-                    match get_results(&thorium.files, cmd, &sha256, params_ref).await {
+                    match get_results(&thorium.files, cmd, &sha256, params, filter, skip).await {
                         Ok(()) => GetLine::downloaded(&sha256),
                         Err(err) => GetLine::error(&sha256, &err),
                     }
@@ -416,9 +449,11 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
         let repos: HashSet<String> = utils::fs::lines_set_from_file(repo_list).await?;
         stream::iter(repos.into_iter())
             .for_each_concurrent(Some(workers), |repo| {
-                let params_ref = &params;
+                let params = &params;
+                let filter = &filter;
+                let skip = &skip;
                 async move {
-                    match get_results(&thorium.repos, cmd, &repo, params_ref).await {
+                    match get_results(&thorium.repos, cmd, &repo, params, filter, skip).await {
                         Ok(()) => GetLine::downloaded(&repo),
                         Err(err) => GetLine::error(&repo, &err),
                     }
@@ -431,11 +466,11 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
         // or if we want to download from all
         if !cmd.repos_only {
             // get results for files if repos_only hasn't been set
-            get_search_files(thorium, cmd, &params).await?;
+            get_search_files(thorium, cmd, &params, &filter, &skip).await?;
         }
         if cmd.include_repos || cmd.repos_only {
             // get results for repos if they should be included in the search
-            get_search_repos(thorium, cmd, &params).await?;
+            get_search_repos(thorium, cmd, &params, &filter, &skip).await?;
         }
     }
     Ok(())

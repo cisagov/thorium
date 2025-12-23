@@ -43,9 +43,15 @@ pub struct Uncart {
     #[clap(long, default_value = default_temp_uncart_path().into_os_string())]
     pub temp_dir: PathBuf,
     /// Any regular expressions to use to determine which files to uncart
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
     #[clap(short, long)]
     pub filter: Vec<String>,
     /// Any regular expressions to use to determine which files to skip
+    ///
+    /// Regular expressions follow the syntax for the Rust regex crate:
+    /// <https://docs.rs/regex/latest/regex/#syntax>
     #[clap(short, long, default_value = ".*_uncarted")]
     pub skip: Vec<String>,
     /// Apply include/skip filters to directories as well as files

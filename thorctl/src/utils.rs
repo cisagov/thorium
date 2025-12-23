@@ -2,7 +2,7 @@
 
 use colored::Colorize;
 use data_encoding::HEXLOWER;
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use thorium::Keys;
@@ -64,6 +64,32 @@ pub async fn sha256<P: AsRef<Path>>(path: P) -> Result<String, Error> {
     // build a digest for this
     let sha256 = HEXLOWER.encode(&sha256.finalize());
     Ok(sha256)
+}
+
+/// Returns true if the haystack matches user filters
+///
+/// If filters are provided, returns true if the haystack matches at least one of the
+/// regexes in the set. If skip filters are provided, returns true if the haystack
+/// doesn't match any of the regexes in the set. If both are provided, returns true
+/// if the haystack both matches at least one filter in the filter set and doesn't
+/// match any filters in the skip set.
+///
+/// Otherwise, returns false.
+///
+/// # Arguments
+///
+/// * `haystack` - The haystack we're checking
+/// * `filter` - A set of regular expressions to use to determine which files to include
+/// * `skip` - A set of regular expressions to use to determine which files to skip
+pub fn filter_str(haystack: &str, filter: &RegexSet, skip: &RegexSet) -> bool {
+    // get the path's filename
+    match (filter.is_empty(), skip.is_empty()) {
+        // needs to match the filter and not the skip if both are given
+        (false, false) => filter.is_match(haystack) && !skip.is_match(haystack),
+        (true, false) => !skip.is_match(haystack),
+        (false, true) => filter.is_match(haystack),
+        (true, true) => true,
+    }
 }
 
 /// Log any errors and return
@@ -288,4 +314,33 @@ macro_rules! err_not_admin {
             return Err(err);
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+
+    use regex::RegexSet;
+
+    use super::filter_str;
+
+    #[test]
+    fn test_filter_str_no_filters() {
+        let filter = RegexSet::empty();
+        let skip = RegexSet::empty();
+        // any str should be accepted
+        assert!(filter_str("file.txt", &filter, &skip,));
+        assert!(filter_str("any/file.txt", &filter, &skip,));
+    }
+
+    #[test]
+    fn test_filter_str_with_filter_and_skip() {
+        let filter = RegexSet::new([r".*\.txt$", r".*include.*"]).unwrap();
+        let skip = RegexSet::new([r".*ignore.*"]).unwrap();
+        // matches filter, not skip -> should succeed
+        assert!(filter_str("notes.txt", &filter, &skip,));
+        // matches filter but also skip -> should fail
+        assert!(!filter_str("include_ignore.txt", &filter, &skip,));
+        // does not match filter -> should fail
+        assert!(!filter_str("image.png", &filter, &skip,));
+    }
 }

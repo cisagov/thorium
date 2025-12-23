@@ -5,7 +5,6 @@ use futures::stream::StreamExt;
 use regex::{Regex, RegexSet};
 use std::{
     collections::HashSet,
-    ffi::OsStr,
     io,
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -51,7 +50,9 @@ pub async fn process_async_walk<I, F, Fut, E>(
         if target.is_file() {
             // the target is a file, so no directory walk is necessary;
             // just process the target if it passes our filter
-            if filter_file_name(&target, filter, skip) {
+            if let Some(target_str) = target.to_str()
+                && super::filter_str(target_str, filter, skip)
+            {
                 procces_fn(target).await;
             }
         } else {
@@ -65,7 +66,9 @@ pub async fn process_async_walk<I, F, Fut, E>(
                         Ok(entry) => {
                             let path = entry.path();
                             // if this path passes the filter, process it
-                            if filter_file_name(&path, filter, skip) {
+                            if let Some(path_str) = path.to_str()
+                                && super::filter_str(path_str, filter, skip)
+                            {
                                 procces_fn(path).await;
                             }
                         }
@@ -161,29 +164,6 @@ async fn filter_entry(entry: &DirEntry, include_hidden: bool) -> Filtering {
     }
 }
 
-/// Returns true if the file name of [`Path`] matches user filters
-///
-/// # Arguments
-///
-/// * `path` - The path whose file name we're checking
-/// * `filter` - A set of regular expressions to use to determine which files to include
-/// * `skip` - A set of regular expressions to use to determine which files to skip
-fn filter_file_name(path: &Path, filter: &RegexSet, skip: &RegexSet) -> bool {
-    // get the path's filename
-    if let Some(file_name) = path.file_name().map(OsStr::to_string_lossy) {
-        match (filter.is_empty(), skip.is_empty()) {
-            // needs to match the filter and not the skip if both are given
-            (false, false) => filter.is_match(&file_name) && !skip.is_match(&file_name),
-            (true, false) => !skip.is_match(&file_name),
-            (false, true) => filter.is_match(&file_name),
-            (true, true) => true,
-        }
-    } else {
-        // this path has no file name and is empty by definition; don't include it
-        false
-    }
-}
-
 /// Retrieve a set of lines from a file as Strings
 ///
 /// # Arguments
@@ -240,11 +220,7 @@ pub fn prepend_current_dir(output: &Path) -> String {
 #[cfg(test)]
 mod tests {
 
-    use regex::RegexSet;
-    use std::path::Path;
-
     use super::is_hidden;
-    use crate::utils::fs::filter_file_name;
 
     #[test]
     fn test_is_hidden() {
@@ -275,38 +251,5 @@ mod tests {
         for s in non_matching {
             assert!(!is_hidden(s), "expected hidden regex NOT to match '{s}'",);
         }
-    }
-
-    #[test]
-    fn test_filter_file_name_no_filters() {
-        let filter = RegexSet::empty();
-        let skip = RegexSet::empty();
-        // any path should be accepted
-        assert!(filter_file_name(Path::new("file.txt"), &filter, &skip,));
-        assert!(filter_file_name(Path::new("any/file.txt"), &filter, &skip,));
-    }
-
-    #[test]
-    fn test_filter_file_name_empty() {
-        let filter = RegexSet::empty();
-        let skip = RegexSet::empty();
-        // empty paths should not be accepted
-        assert!(!filter_file_name(Path::new(""), &filter, &skip,));
-    }
-
-    #[test]
-    fn test_filter_file_name_with_filter_and_skip() {
-        let filter = RegexSet::new([r".*\.txt$", r".*include.*"]).unwrap();
-        let skip = RegexSet::new([r".*ignore.*"]).unwrap();
-        // matches filter, not skip -> should succeed
-        assert!(filter_file_name(Path::new("notes.txt"), &filter, &skip,));
-        // matches filter but also skip -> should fail
-        assert!(!filter_file_name(
-            Path::new("include_ignore.txt"),
-            &filter,
-            &skip,
-        ));
-        // does not match filter -> should fail
-        assert!(!filter_file_name(Path::new("image.png"), &filter, &skip,));
     }
 }
