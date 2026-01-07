@@ -354,20 +354,19 @@ pub async fn admin_client() -> Result<Thorium, Error> {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "sync")] {
+    if #[cfg(all(feature = "sync"), not(feature = "python"))] {
         use crate::ThoriumBlocking;
         use crate::RUNTIME;
-    }
-}
 
-#[cfg(all(feature = "sync", not(feature = "python")))]
-/// Get a blocking admin client, bootstrapping the API if needed
-pub fn admin_client_blocking() -> Result<ThoriumBlocking, Error> {
-    // start the API if it hasn't been started already and get a token
-    let token =
-        RUNTIME.block_on(async { ADMIN_TOKEN.get_or_try_init(bootstrap_test_api).await })?;
-    // build our admin client
-    ThoriumBlocking::build(ADDR.clone())
-        .token(token.clone())
-        .build_blocking()
+        /// Get a blocking admin client, bootstrapping the API if needed
+        pub fn admin_client_blocking() -> Result<ThoriumBlocking, Error> {
+            // start the API if it hasn't been started already and get a token
+            let token =
+                RUNTIME.block_on(async { ADMIN_TOKEN.get_or_try_init(bootstrap_test_api).await })?;
+            // build our admin client
+            ThoriumBlocking::build(ADDR.clone())
+                .token(token.clone())
+                .build_blocking()
+        }
+    }
 }

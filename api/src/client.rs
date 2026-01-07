@@ -365,6 +365,61 @@ cfg_if::cfg_if! {
             // keep a copy of our client for faster masquerades and refreshes
             _client: reqwest::Client,
         }
+
+        impl ThoriumClientBuilder {
+            /// Builds a client with the configured auth settings
+            ///
+            /// # Panics
+            ///
+            /// Panics if username/password or token are not set
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use thorium::ThoriumBlocking;
+            /// # use thorium::Error;
+            ///
+            /// # fn exec() -> Result<(), Error> {
+            /// let thorium = ThoriumBlocking::build("http://127.0.0.1")
+            ///     .basic_auth("user", "password")
+            ///     .build_blocking()?;
+            /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+            /// # Ok(())
+            /// # }
+            /// # exec();
+            /// ```
+            pub fn build_blocking(self) -> Result<ThoriumBlocking, Error> {
+                // build a client
+                let client = helpers::build_blocking_reqwest_client(&self.settings)?;
+                // get token if we have a username/password and no token
+                let (token, expires) = match self.token {
+                    Some(token) => (token, None),
+                    None => {
+                        assert!(self.username.is_some() && self.password.is_some(), "Username and password must be set if token is not");
+                        ThoriumBlocking::basic_auth(&self.host, &self.username.unwrap(), &self.password.unwrap(), &client)?
+                    },
+                };
+                // convert our buffer into a Vec<u8> and base64 it
+                let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
+                // build token auth string
+                let auth_str = format!("token {encoded}");
+                // build handlers
+                let basic = BasicBlocking::new(&self.host, &client);
+                let jobs = JobsBlocking::new(&self.host, &auth_str, &client);
+                let reactions = ReactionsBlocking::new(&self.host, &auth_str, &client);
+                // build Thorium client
+                let client = ThoriumBlocking {
+                    basic,
+                    jobs,
+                    reactions,
+                    host: self.host,
+                    _auth_str: auth_str,
+                    expires,
+                    _client: client,
+                };
+                Ok(client)
+            }
+        }
     } else if #[cfg(feature = "sync")] {
         // otherwise provide the whole blocking client
 
@@ -421,11 +476,11 @@ cfg_if::cfg_if! {
             /// # Examples
             ///
             /// ```
-            /// use thorium::Thorium;
+            /// use thorium::ThoriumBlocking;
             /// # use thorium::Error;
             ///
             /// # fn exec() -> Result<(), Error> {
-            /// let thorium = Thorium::build_blocking("http://127.0.0.1")
+            /// let thorium = ThoriumBlocking::build("http://127.0.0.1")
             ///     .basic_auth("user", "password")
             ///     .build_blocking()?;
             /// # // allow test code to be compiled but don't unwrap as no API instance would be up
@@ -439,7 +494,10 @@ cfg_if::cfg_if! {
                 // get token if we have a username/password and no token
                 let (token, expires) = match self.token {
                     Some(token) => (token, None),
-                    None => ThoriumBlocking::auth(&self.host, self.username, self.password, &client)?,
+                    None => {
+                        assert!(self.username.is_some() && self.password.is_some(), "Username and password must be set if token is not");
+                        ThoriumBlocking::basic_auth(&self.host, &self.username.unwrap(), &self.password.unwrap(), &client)?
+                    }
                 };
                 // convert our buffer into a Vec<u8> and base64 it
                 let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
@@ -807,17 +865,14 @@ impl ThoriumBlocking {
     /// use thorium::ThoriumBlocking;
     /// # use thorium::Error;
     ///
-    /// # async fn exec() -> Result<(), Error> {
+    /// # fn exec() -> Result<(), Error> {
     /// let thorium = ThoriumBlocking::build("http://127.0.0.1")
     ///     .basic_auth("user", "password")
-    ///     .build()
-    ///     .await?;
+    ///     .build_blocking()?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
     /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
+    /// # exec();
     /// ```
     pub fn build<T: Into<String>>(host: T) -> ThoriumClientBuilder {
         ThoriumClientBuilder {
@@ -837,40 +892,72 @@ impl ThoriumBlocking {
     /// * `username` - The username of the user to login as
     /// * `password` - The password to authenticate with
     /// * `client` - The client to authenticate with
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use thorium::ThoriumBlocking;
-    /// # use thorium::Error;
-    ///
-    /// # async fn exec() -> Result<(), Error> {
-    /// let client = reqwest::Client::new();
-    /// let (token, expriation) = ThoriumBlocking::auth("http://127.0.0.1",
-    ///     Some("user".into()),
-    ///     Some("pass".into()),
-    ///     &client)
-    ///     .await?;
-    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
-    /// # Ok(())
-    /// # }
-    /// # tokio_test::block_on(async {
-    /// #    exec().await
-    /// # });
-    /// ```
-    pub fn auth(
+    fn basic_auth(
         host: &str,
-        username: Option<String>,
-        password: Option<String>,
+        username: &str,
+        password: &str,
         client: &reqwest::Client,
     ) -> Result<(String, Option<DateTime<Utc>>), Error> {
-        // make sure both username and password are specified
-        if username.is_none() || password.is_none() {
-            panic!("Both username and password must be specfied if token is not");
-        }
-
         // create auth handler and get token
-        let resp = UsersBlocking::auth_basic(host, &username.unwrap(), &password.unwrap(), client)?;
+        let resp = UsersBlocking::auth_basic(host, username, password, client)?;
         Ok((resp.token, Some(resp.expires)))
+    }
+
+    /// Create a blocking Thorium client from a path on disk
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to read keys from
+    pub fn from_key_file(path: &str) -> Result<Self, Error> {
+        // load auth keys
+        let keys = Keys::new(path)?;
+        // build a Thorium client from keys
+        Self::from_keys(keys)
+    }
+
+    /// Create a blocking Thorium client from a [`Keys`] struct
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - The keys to create a client with
+    pub fn from_keys(keys: Keys) -> Result<Self, Error> {
+        // create a Thorium client builder
+        let builder = Self::build(keys.api);
+        // use the correct auth method based on what is defined in the config
+        let builder = match (keys.username, keys.password, keys.token) {
+            (Some(user), Some(pass), None) => builder.basic_auth(user, pass),
+            (_, _, Some(token)) => builder.token(token),
+            (_, _, _) => {
+                return Err(Error::new(
+                    "Either username/password or token must be set in the keys",
+                ));
+            }
+        };
+        // build a new Thorium client
+        builder.build_blocking()
+    }
+
+    /// Create a Thorium client from a [`CtlConf`] serialized to a file at the given path
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to load our `CtlConf` from
+    pub fn from_ctl_conf_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        // load ctl conf
+        let ctl_conf = CtlConf::from_path(&path)?;
+        // build a client from the ctl conf
+        Self::from_ctl_conf(ctl_conf)
+    }
+
+    /// Attempt to create a `Thorium` client from the given [`CtlConf`]
+    ///
+    /// # Arguments
+    ///
+    /// * `conf` - The `CtlConf` to create a `Thorium` client from
+    pub fn from_ctl_conf(ctl_conf: CtlConf) -> Result<Self, Error> {
+        // create a builder from the ctl conf and build
+        Self::build(ctl_conf.keys.api.clone())
+            .from_ctl_conf(ctl_conf)?
+            .build_blocking()
     }
 }

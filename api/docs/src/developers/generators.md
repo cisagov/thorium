@@ -49,6 +49,29 @@ kwarg `--checkpoint 50`. This way, the generator can keep a running count for
 how many sub-reactions it has spawned. Checkpoints can also be used to simply
 signal to the generator that it's been respawned at all.
 
+#### Authentication
+
+In order to send requests to Thorium from inside the generator (e.g. sleeping the
+generator job, creating reactions, etc.) the generator will need to
+authenticate with Thorium. The auth token for the currently running user is saved
+in a keys file located at `/opt/thorium-keys/keys.yml`, which will look something
+like the following:
+
+```YAML
+api: https://<THORIUM-API-URL>
+token: <TOKEN VALUE>
+```
+
+The Rust and Python Thorium clients both natively support this key file
+and provide convenient functions to build clients just with a path
+to the file. All requests with the client will then be properly authenticated
+as the user who originally created the generator reaction.
+
+Though not recommended, you can also manually send HTTP requests using tools
+like `curl`. To authenticate properly, the auth token must be added to the
+request header at the key `Authorization` with the value `token <TOKEN-BASE64>`,
+where `<TOKEN-BASE64>` is the token encoded in base64.
+
 ### Example
 
 If we extend previous example with the following requirements:

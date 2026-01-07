@@ -4,7 +4,7 @@
 //! this crate as a dependency.
 
 use base64::Engine;
-use pyo3::pymethods;
+use pyo3::{Bound, pymethods, types::PyType};
 use std::path::PathBuf;
 
 use crate::{
@@ -43,7 +43,7 @@ impl ThoriumBlocking {
         // authenticate if needed
         let (token, expires) = match (token, username, password) {
             (None, Some(username), Some(password)) => {
-                ThoriumBlocking::auth(host, Some(username), Some(password), &client)?
+                ThoriumBlocking::basic_auth(host, &username, &password, &client)?
             }
             (Some(token), _, _) => (token, None),
             _ => return Err(Error::new("Either username/password or token must be set")),
@@ -64,6 +64,34 @@ impl ThoriumBlocking {
             expires,
             _client: client,
         })
+    }
+
+    /// Create a Thorium client from a path to a key file on disk
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to read [`Keys`] from
+    #[classmethod]
+    #[pyo3(
+        name = "from_key_file",
+        signature = (path: "str") -> "ThoriumBlocking"
+    )]
+    pub fn from_key_file_py(_cls: &Bound<'_, PyType>, path: &str) -> Result<Self, Error> {
+        Self::from_key_file(path)
+    }
+
+    /// Create a Thorium client from a path to a Thorctl config on disk
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to read [`CtlConf`] from
+    #[classmethod]
+    #[pyo3(
+        name = "from_ctl_conf_file",
+        signature = (path: "str") -> "ThoriumBlocking"
+    )]
+    pub fn from_ctl_conf_file_py(_cls: &Bound<'_, PyType>, path: &str) -> Result<Self, Error> {
+        Self::from_ctl_conf_file(path)
     }
 }
 
