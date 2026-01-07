@@ -4,13 +4,13 @@ use std::collections::{HashMap, HashSet};
 use thorium::models::{
     AutoTag, AutoTagUpdate, CacheDependencySettings, CacheDependencySettingsUpdate, ChildFilters,
     ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup,
-    CleanupUpdate, Dependencies, DependenciesUpdate, DependencySettingsUpdate,
-    EphemeralDependencySettings, EphemeralDependencySettingsUpdate, FilesHandler,
-    FilesHandlerUpdate, GenericCacheDependencySettingsUpdate, ImageArgs, ImageArgsUpdate,
-    ImageNetworkPolicyUpdate, Kvm, KvmUpdate, OutputCollection, OutputCollectionUpdate,
-    RepoDependencySettings, ResultDependencySettings, ResultDependencySettingsUpdate,
-    SampleDependencySettings, SecurityContext, SecurityContextUpdate, TagDependencySettings,
-    TagDependencySettingsUpdate,
+    CleanupUpdate, Dependencies, DependenciesUpdate, EphemeralDependencySettings,
+    EphemeralDependencySettingsUpdate, FilesHandler, FilesHandlerUpdate,
+    GenericCacheDependencySettingsUpdate, ImageArgs, ImageArgsUpdate, ImageNetworkPolicyUpdate,
+    Kvm, KvmUpdate, OutputCollection, OutputCollectionUpdate, RepoDependencySettings,
+    RepoDependencySettingsUpdate, ResultDependencySettings, ResultDependencySettingsUpdate,
+    SampleDependencySettings, SampleDependencySettingsUpdate, SecurityContext,
+    SecurityContextUpdate, TagDependencySettings, TagDependencySettingsUpdate,
 };
 
 use crate::{calc_remove_add_vec, set_clear, set_clear_vec, set_modified, set_modified_opt};
@@ -86,12 +86,13 @@ pub fn calculate_security_context_update(
 fn calculate_sample_dependencies_update(
     old: SampleDependencySettings,
     new: SampleDependencySettings,
-) -> DependencySettingsUpdate {
-    DependencySettingsUpdate {
+) -> SampleDependencySettingsUpdate {
+    SampleDependencySettingsUpdate {
         location: set_modified!(old.location, new.location),
         clear_kwarg: set_clear!(old.kwarg, new.kwarg),
         kwarg: set_modified_opt!(old.kwarg, new.kwarg),
         strategy: set_modified!(old.strategy, new.strategy),
+        naming: set_modified!(old.naming, new.naming),
     }
 }
 
@@ -160,8 +161,8 @@ fn calculate_results_dependencies_update(
 fn calculate_repo_dependencies_update(
     old: RepoDependencySettings,
     new: RepoDependencySettings,
-) -> DependencySettingsUpdate {
-    DependencySettingsUpdate {
+) -> RepoDependencySettingsUpdate {
+    RepoDependencySettingsUpdate {
         location: set_modified!(old.location, new.location),
         clear_kwarg: set_clear!(old.kwarg, new.kwarg),
         kwarg: set_modified_opt!(old.kwarg, new.kwarg),

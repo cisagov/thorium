@@ -14,17 +14,18 @@ use crate::models::images::{GenericBan, InvalidHostPathBan, InvalidUrlBan};
 use crate::models::{
     ArgStrategy, AutoTag, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate,
     ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate,
-    ConfigMap, Dependencies, DependenciesUpdate, DependencyPassStrategy, DependencySettingsUpdate,
+    ConfigMap, Dependencies, DependenciesUpdate, DependencyPassStrategy,
     EphemeralDependencySettings, EphemeralDependencySettingsUpdate, FilesHandler,
     FilesHandlerUpdate, Group, HostPath, HostPathTypes, Image, ImageArgs, ImageArgsUpdate,
     ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageKey, ImageLifetime, ImageList,
     ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate,
     ImageVersion, Kvm, KvmUpdate, KwargDependency, NFS, Notification, NotificationLevel,
     NotificationParams, NotificationRequest, OutputCollection, OutputCollectionUpdate,
-    OutputDisplayType, OutputHandler, RepoDependencySettings, Resources, ResourcesRequest,
-    ResourcesUpdate, ResultDependencySettings, ResultDependencySettingsUpdate,
-    SampleDependencySettings, Secret, SecurityContext, SecurityContextUpdate, SpawnLimits,
-    TagDependencySettings, TagDependencySettingsUpdate, User, Volume, VolumeTypes,
+    OutputDisplayType, OutputHandler, RepoDependencySettings, RepoDependencySettingsUpdate,
+    Resources, ResourcesRequest, ResourcesUpdate, ResultDependencySettings,
+    ResultDependencySettingsUpdate, SampleDependencySettings, SampleDependencySettingsUpdate,
+    Secret, SecurityContext, SecurityContextUpdate, SpawnLimits, TagDependencySettings,
+    TagDependencySettingsUpdate, User, Volume, VolumeTypes,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -404,7 +405,7 @@ async fn delete_notification(
 #[derive(OpenApi)]
 #[openapi(
     paths(create, get_image, list, list_details, update, delete_image, runtimes_update, get_notifications, create_notification, delete_notification),
-    components(schemas(ArgStrategy, AutoTag, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate, ConfigMap, Dependencies, DependenciesUpdate, DependencyPassStrategy, DependencySettingsUpdate, EphemeralDependencySettings, EphemeralDependencySettingsUpdate, FilesHandler, FilesHandlerUpdate, GenericBan, HostPath, HostPathTypes, Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageLifetime, ImageList, ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, ImageVersion, InvalidHostPathBan, InvalidUrlBan, Kvm, KvmUpdate, KwargDependency, NFS, Notification<Image>, NotificationLevel, NotificationParams, NotificationRequest<Image>, OutputCollection, OutputCollectionUpdate, OutputDisplayType, OutputHandler, RepoDependencySettings, Resources, ResourcesRequest, ResourcesUpdate, ResultDependencySettings, ResultDependencySettingsUpdate, SampleDependencySettings, Secret, SecurityContext, SecurityContextUpdate, SpawnLimits, TagDependencySettings, TagDependencySettingsUpdate, Volume, VolumeTypes)),
+    components(schemas(ArgStrategy, AutoTag, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate, ConfigMap, Dependencies, DependenciesUpdate, DependencyPassStrategy, SampleDependencySettingsUpdate, RepoDependencySettingsUpdate, EphemeralDependencySettings, EphemeralDependencySettingsUpdate, FilesHandler, FilesHandlerUpdate, GenericBan, HostPath, HostPathTypes, Image, ImageArgs, ImageArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageLifetime, ImageList, ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate, ImageVersion, InvalidHostPathBan, InvalidUrlBan, Kvm, KvmUpdate, KwargDependency, NFS, Notification<Image>, NotificationLevel, NotificationParams, NotificationRequest<Image>, OutputCollection, OutputCollectionUpdate, OutputDisplayType, OutputHandler, RepoDependencySettings, Resources, ResourcesRequest, ResourcesUpdate, ResultDependencySettings, ResultDependencySettingsUpdate, SampleDependencySettings, Secret, SecurityContext, SecurityContextUpdate, SpawnLimits, TagDependencySettings, TagDependencySettingsUpdate, Volume, VolumeTypes)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct ImageApiDocs;

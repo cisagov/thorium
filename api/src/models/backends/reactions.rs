@@ -37,6 +37,7 @@ impl InternalReactionCacheFileUpdates {
     /// # Arguments
     ///
     /// * `capacity` - The capacity to preallocate for added cache files
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         InternalReactionCacheFileUpdates {
             added: Vec::with_capacity(capacity),
@@ -753,10 +754,7 @@ impl Reaction {
         // apply all updates to the args in this reaction
         for (stage, mut args) in update.args.drain() {
             // get args entry or insert a default one
-            let entry = self
-                .args
-                .entry(stage)
-                .or_insert_with(GenericJobArgs::default);
+            let entry = self.args.entry(stage).or_default();
             // apply our updates
             // if any positionals were set overwrite the original ones
             if !args.positionals.is_empty() {
@@ -767,7 +765,7 @@ impl Reaction {
                 .kwargs
                 .retain(|key, _| !args.remove_kwargs.contains(key));
             // overlay any new kwargs ontop of the originals
-            for (key, value) in args.kwargs.drain() {
+            for (key, value) in args.kwargs {
                 entry.kwargs.insert(key, value);
             }
             // remove any requested switches

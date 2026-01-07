@@ -1480,6 +1480,17 @@ pub enum DependencyPassStrategy {
     Disabled,
 }
 
+/// The File name strategy to use when downloading files
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub enum FileNamingStrategy {
+    /// Use the sha256 of this file
+    #[default]
+    Sha256,
+    /// Use the most recent file name
+    MostRecent,
+}
+
 /// The default location the agent should download samples too
 fn default_samples_location() -> String {
     "/tmp/thorium/samples".to_owned()
@@ -1496,6 +1507,9 @@ pub struct SampleDependencySettings {
     pub kwarg: Option<String>,
     /// The strategy the agent should use when passing samples downloaded to jobs
     pub strategy: DependencyPassStrategy,
+    /// The strategy to when naming any downloaded files
+    #[serde(default)]
+    pub naming: FileNamingStrategy,
 }
 
 impl Default for SampleDependencySettings {
@@ -1505,6 +1519,7 @@ impl Default for SampleDependencySettings {
             location: default_samples_location(),
             kwarg: None,
             strategy: DependencyPassStrategy::default(),
+            naming: FileNamingStrategy::default(),
         }
     }
 }
@@ -1529,6 +1544,7 @@ impl SampleDependencySettings {
             location: location.into(),
             kwarg: None,
             strategy,
+            naming: FileNamingStrategy::default(),
         }
     }
 
@@ -1591,6 +1607,26 @@ impl SampleDependencySettings {
     pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
         // update our dependency passing strategy
         self.strategy = strategy;
+        self
+    }
+
+    /// Change the file naming strategy used when naming samples to pass into jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `naming_strategy` - The file name strategy to use when naming samples to pass to jobs
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{SampleDependencySettings, FileNamingStrategy};
+    ///
+    ///SampleDependencySettings::default().naming(FileNamingStrategy::MostRecent);
+    /// ```
+    #[must_use]
+    pub fn naming(mut self, naming_strategy: FileNamingStrategy) -> Self {
+        // update our dependency naming strategy
+        self.naming = naming_strategy;
         self
     }
 }
@@ -1943,9 +1979,9 @@ impl TagDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::TagDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().location("/data/dependencies");
+    ///TagDependencySettingsUpdate::default().location("/data/dependencies");
     /// ```
     #[must_use]
     pub fn location<T: Into<String>>(mut self, location: T) -> Self {
@@ -1965,9 +2001,9 @@ impl TagDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::TagDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().kwarg("--inputs");
+    ///TagDependencySettingsUpdate::default().kwarg("--inputs");
     /// ```
     #[must_use]
     pub fn kwarg<T: Into<String>>(mut self, kwarg: T) -> Self {
@@ -1987,9 +2023,9 @@ impl TagDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::TagDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().clear_kwarg();
+    ///TagDependencySettingsUpdate::default().clear_kwarg();
     /// ```
     #[must_use]
     pub fn clear_kwarg(mut self) -> Self {
@@ -2007,9 +2043,9 @@ impl TagDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::{DependencySettingsUpdate, DependencyPassStrategy};
+    /// use thorium::models::{TagDependencySettingsUpdate, DependencyPassStrategy};
     ///
-    ///DependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
+    ///TagDependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
     /// ```
     #[must_use]
     pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
@@ -2392,9 +2428,9 @@ impl ChildrenDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::ChildrenDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().location("/data/dependencies");
+    ///ChildrenDependencySettingsUpdate::default().location("/data/dependencies");
     /// ```
     #[must_use]
     pub fn location<T: Into<String>>(mut self, location: T) -> Self {
@@ -2414,9 +2450,9 @@ impl ChildrenDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::ChildrenDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().kwarg("--inputs");
+    ///ChildrenDependencySettingsUpdate::default().kwarg("--inputs");
     /// ```
     #[must_use]
     pub fn kwarg<T: Into<String>>(mut self, kwarg: T) -> Self {
@@ -2436,9 +2472,9 @@ impl ChildrenDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::ChildrenDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().clear_kwarg();
+    ///ChildrenDependencySettingsUpdate::default().clear_kwarg();
     /// ```
     #[must_use]
     pub fn clear_kwarg(mut self) -> Self {
@@ -2456,9 +2492,9 @@ impl ChildrenDependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::{DependencySettingsUpdate, DependencyPassStrategy};
+    /// use thorium::models::{ChildrenDependencySettingsUpdate, DependencyPassStrategy};
     ///
-    ///DependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
+    ///ChildrenDependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
     /// ```
     #[must_use]
     pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
@@ -2471,7 +2507,7 @@ impl ChildrenDependencySettingsUpdate {
 /// The settings for the agent downloading samples for jobs
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct DependencySettingsUpdate {
+pub struct SampleDependencySettingsUpdate {
     /// Where the agent should store downloaded dependencies
     pub location: Option<String>,
     /// The kwarg to pass these samples in with if one is set (otherwise use positional args)
@@ -2481,41 +2517,11 @@ pub struct DependencySettingsUpdate {
     pub clear_kwarg: bool,
     /// The strategy the agent should use when passing downloaded dependencies to jobs
     pub strategy: Option<DependencyPassStrategy>,
+    /// The strategy to when naming any downloaded files
+    pub naming: Option<FileNamingStrategy>,
 }
 
-impl PartialEq<DependencySettingsUpdate> for SampleDependencySettings {
-    /// Check if a [`SampleDependencySettings`] contains all the updates from a [`DependencySettingsUpdate`]
-    ///
-    /// # Arguments
-    ///
-    /// * `update` - The `DependencySettingsUpdate` to compare against
-    fn eq(&self, update: &DependencySettingsUpdate) -> bool {
-        // make sure any updates were propagated
-        matches_update!(self.location, update.location);
-        matches_update_opt!(self.kwarg, update.kwarg);
-        matches_clear!(self.kwarg, update.clear_kwarg);
-        matches_update!(self.strategy, update.strategy);
-        true
-    }
-}
-
-impl PartialEq<DependencySettingsUpdate> for RepoDependencySettings {
-    /// Check if a [`RepoDependencySettings`] contains all the updates from a [`DependencySettingsUpdate`]
-    ///
-    /// # Arguments
-    ///
-    /// * `update` - The `DependencySettingsUpdate` to compare against
-    fn eq(&self, update: &DependencySettingsUpdate) -> bool {
-        // make sure any updates were propagated
-        matches_update!(self.location, update.location);
-        matches_update_opt!(self.kwarg, update.kwarg);
-        matches_clear!(self.kwarg, update.clear_kwarg);
-        matches_update!(self.strategy, update.strategy);
-        true
-    }
-}
-
-impl DependencySettingsUpdate {
+impl SampleDependencySettingsUpdate {
     /// Change the location to save dependencies to
     ///
     /// # Arguments
@@ -2525,9 +2531,9 @@ impl DependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::SampleDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().location("/data/dependencies");
+    /// SampleDependencySettingsUpdate::default().location("/data/dependencies");
     /// ```
     #[must_use]
     pub fn location<T: Into<String>>(mut self, location: T) -> Self {
@@ -2547,9 +2553,9 @@ impl DependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::SampleDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().kwarg("--inputs");
+    /// SampleDependencySettingsUpdate::default().kwarg("--inputs");
     /// ```
     #[must_use]
     pub fn kwarg<T: Into<String>>(mut self, kwarg: T) -> Self {
@@ -2569,9 +2575,9 @@ impl DependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::DependencySettingsUpdate;
+    /// use thorium::models::SampleDependencySettingsUpdate;
     ///
-    ///DependencySettingsUpdate::default().clear_kwarg();
+    /// SampleDependencySettingsUpdate::default().clear_kwarg();
     /// ```
     #[must_use]
     pub fn clear_kwarg(mut self) -> Self {
@@ -2589,9 +2595,162 @@ impl DependencySettingsUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::{DependencySettingsUpdate, DependencyPassStrategy};
+    /// use thorium::models::{SampleDependencySettingsUpdate, DependencyPassStrategy};
     ///
-    ///DependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
+    /// SampleDependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
+    /// ```
+    #[must_use]
+    pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
+        // update our dependency passing strategy
+        self.strategy = Some(strategy);
+        self
+    }
+
+    /// Change the file naming strategy used when naming samples to pass into jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `naming_strategy` - The file name strategy to use when naming samples to pass to jobs
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{SampleDependencySettings, FileNamingStrategy};
+    ///
+    ///SampleDependencySettings::default().naming(FileNamingStrategy::MostRecent);
+    /// ```
+    #[must_use]
+    pub fn naming(mut self, naming_strategy: FileNamingStrategy) -> Self {
+        // update our dependency naming strategy
+        self.naming = Some(naming_strategy);
+        self
+    }
+}
+
+impl PartialEq<SampleDependencySettingsUpdate> for SampleDependencySettings {
+    /// Check if a [`SampleDependencySettings`] contains all the updates from a [`SampleDependencySettingsUpdate`]
+    ///
+    /// # Arguments
+    ///
+    /// * `update` - The `SampleDependencySettingsUpdate` to compare against
+    fn eq(&self, update: &SampleDependencySettingsUpdate) -> bool {
+        // make sure any updates were propagated
+        matches_update!(self.location, update.location);
+        matches_update_opt!(self.kwarg, update.kwarg);
+        matches_clear!(self.kwarg, update.clear_kwarg);
+        matches_update!(self.strategy, update.strategy);
+        true
+    }
+}
+
+/// The settings for the agent downloading samples for jobs
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct RepoDependencySettingsUpdate {
+    /// Where the agent should store downloaded dependencies
+    pub location: Option<String>,
+    /// The kwarg to pass these samples in with if one is set (otherwise use positional args)
+    pub kwarg: Option<String>,
+    /// Whether to clear the kwarg setting or not
+    #[serde(default)]
+    pub clear_kwarg: bool,
+    /// The strategy the agent should use when passing downloaded dependencies to jobs
+    pub strategy: Option<DependencyPassStrategy>,
+}
+
+impl PartialEq<RepoDependencySettingsUpdate> for RepoDependencySettings {
+    /// Check if a [`RepoDependencySettings`] contains all the updates from a [`RepoDependencySettingsUpdate`]
+    ///
+    /// # Arguments
+    ///
+    /// * `update` - The `RepoDependencySettingsUpdate` to compare against
+    fn eq(&self, update: &RepoDependencySettingsUpdate) -> bool {
+        // make sure any updates were propagated
+        matches_update!(self.location, update.location);
+        matches_update_opt!(self.kwarg, update.kwarg);
+        matches_clear!(self.kwarg, update.clear_kwarg);
+        matches_update!(self.strategy, update.strategy);
+        true
+    }
+}
+
+impl RepoDependencySettingsUpdate {
+    /// Change the location to save dependencies to
+    ///
+    /// # Arguments
+    ///
+    /// * `location` - The location to save downloaded dependencies to
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::RepoDependencySettingsUpdate;
+    ///
+    /// RepoDependencySettingsUpdate::default().location("/data/dependencies");
+    /// ```
+    #[must_use]
+    pub fn location<T: Into<String>>(mut self, location: T) -> Self {
+        // convert our location to a string and set it
+        self.location = Some(location.into());
+        self
+    }
+
+    /// Updates the kwarg to pass these dependencies in with if one exists
+    ///
+    /// This should include the '--' characters.
+    ///
+    /// # Arguments
+    ///
+    /// * `kwarg` - The kwarg arg to pass dependencies in with
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::RepoDependencySettingsUpdate;
+    ///
+    /// RepoDependencySettingsUpdate::default().kwarg("--inputs");
+    /// ```
+    #[must_use]
+    pub fn kwarg<T: Into<String>>(mut self, kwarg: T) -> Self {
+        // convert our kwarg to a string and set it
+        self.kwarg = Some(kwarg.into());
+        self
+    }
+
+    /// Clears the kwarg arg value
+    ///
+    /// This should include the '--' characters.
+    ///
+    /// # Arguments
+    ///
+    /// * `kwarg` - The kwarg arg to pass dependencies in with
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::RepoDependencySettingsUpdate;
+    ///
+    /// RepoDependencySettingsUpdate::default().clear_kwarg();
+    /// ```
+    #[must_use]
+    pub fn clear_kwarg(mut self) -> Self {
+        // set the clear kwarg flag to true
+        self.clear_kwarg = true;
+        self
+    }
+
+    /// Change the strategy used to pass dependencies into jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The strategy to use when passing dependencies to jobs
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{RepoDependencySettingsUpdate, DependencyPassStrategy};
+    ///
+    /// RepoDependencySettingsUpdate::default().strategy(DependencyPassStrategy::Names);
     /// ```
     #[must_use]
     pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
@@ -3652,7 +3811,7 @@ impl PartialEq<DependenciesUpdate> for Dependencies {
 pub struct DependenciesUpdate {
     /// The strategy the agent should use when passing donwloaded samples to tools
     #[serde(default)]
-    pub samples: DependencySettingsUpdate,
+    pub samples: SampleDependencySettingsUpdate,
     /// The strategy the agent should use when passing downloaded ephemeral files to tools
     #[serde(default)]
     pub ephemeral: EphemeralDependencySettingsUpdate,
@@ -3661,7 +3820,7 @@ pub struct DependenciesUpdate {
     pub results: ResultDependencySettingsUpdate,
     /// The strategy the agent should use when passing donwloaded repos to tools
     #[serde(default)]
-    pub repos: DependencySettingsUpdate,
+    pub repos: RepoDependencySettingsUpdate,
     /// The strategy the agent should use when passing donwloaded tags to tools
     #[serde(default)]
     pub tags: TagDependencySettingsUpdate,
@@ -3683,15 +3842,15 @@ impl DependenciesUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::{DependenciesUpdate, DependencySettingsUpdate, DependencyPassStrategy};
+    /// use thorium::models::{DependenciesUpdate, SampleDependencySettingsUpdate, DependencyPassStrategy};
     ///
     /// DependenciesUpdate::default()
-    ///     .samples(DependencySettingsUpdate::default()
+    ///     .samples(SampleDependencySettingsUpdate::default()
     ///         .location("/data/samples")
     ///         .strategy(DependencyPassStrategy::Names));
     /// ```
     #[must_use]
-    pub fn samples(mut self, samples: DependencySettingsUpdate) -> Self {
+    pub fn samples(mut self, samples: SampleDependencySettingsUpdate) -> Self {
         self.samples = samples;
         self
     }
@@ -3753,15 +3912,15 @@ impl DependenciesUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::{DependenciesUpdate, DependencySettingsUpdate, DependencyPassStrategy};
+    /// use thorium::models::{DependenciesUpdate, RepoDependencySettingsUpdate, DependencyPassStrategy};
     ///
     /// DependenciesUpdate::default()
-    ///     .repos(DependencySettingsUpdate::default()
+    ///     .repos(RepoDependencySettingsUpdate::default()
     ///         .location("/data/repos")
     ///         .strategy(DependencyPassStrategy::Names));
     /// ```
     #[must_use]
-    pub fn repos(mut self, repos: DependencySettingsUpdate) -> Self {
+    pub fn repos(mut self, repos: RepoDependencySettingsUpdate) -> Self {
         self.repos = repos;
         self
     }

@@ -2,7 +2,7 @@ use cidr::{Ipv4Cidr, Ipv6Cidr};
 use futures::{StreamExt, TryStreamExt, stream};
 use rand::seq::IndexedRandom;
 use rand::{Rng, SeedableRng, seq::IteratorRandom};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::LazyLock;
 use uuid::Uuid;
@@ -498,7 +498,7 @@ pub fn gen_args() -> GenericJobArgs {
         .map(|_| gen_string(gen_int!(5, 64)))
         .collect();
     // generate a random number of positional args
-    let kwargs: HashMap<String, Vec<String>> = (0..gen_int!(3, 10))
+    let kwargs: BTreeMap<String, Vec<String>> = (0..gen_int!(3, 10))
         .map(|_| {
             (
                 gen_string(gen_int!(5, 64)),

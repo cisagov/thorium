@@ -295,7 +295,7 @@ impl AgentExecutor for BareMetal {
         // build the command this worker should execute
         let cmd = cmd
             .add_ephemeral(&job.ephemeral, &self.ephemerals, &dep_conf.ephemeral)
-            .add_samples(&job.samples, &self.samples, &dep_conf.samples)
+            .add_samples(&self.samples, &dep_conf.samples)
             .add_repos(image, &job.repos, &self.repos)
             .add_results(
                 &image.dependencies.results.images,

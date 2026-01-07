@@ -3,7 +3,7 @@
 
 use base64::Engine as _;
 use chrono::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
 // only support tokio for file reads in tokio mode
@@ -55,7 +55,7 @@ cfg_if::cfg_if! {
             /// * `raw` - The raw generic job args to convert
             fn try_from(raw: RawGenericJobArgs) -> Result<Self, ApiError> {
                 // build a hashmap of the right size
-                let mut kwargs = HashMap::with_capacity(raw.kwargs.len());
+                let mut kwargs = BTreeMap::default();
                 // crawl over the raw kwarg values and convert them to vectors
                 for (key, values) in raw.kwargs {
                     // if this value is a string then wrap it in a vector and insert it

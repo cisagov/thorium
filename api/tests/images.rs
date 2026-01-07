@@ -6,13 +6,13 @@ use std::path::PathBuf;
 use futures::{StreamExt, TryStreamExt, stream};
 use thorium::models::{
     ArgStrategy, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, CleanupUpdate,
-    DependenciesUpdate, DependencyPassStrategy, DependencySettingsUpdate,
-    EphemeralDependencySettingsUpdate, FilesHandlerUpdate, GroupUpdate, GroupUsersUpdate,
-    HostPathWhitelistUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageLifetime,
-    ImageNetworkPolicyUpdate, ImageScaler, ImageUpdate, ImageVersion, NetworkPolicyRequest,
-    NotificationLevel, NotificationParams, NotificationRequest, OutputCollectionUpdate,
-    OutputDisplayType, OutputHandler, PipelineRequest, ResourcesUpdate,
-    ResultDependencySettingsUpdate, SystemSettingsResetParams, SystemSettingsUpdate,
+    DependenciesUpdate, DependencyPassStrategy, EphemeralDependencySettingsUpdate,
+    FilesHandlerUpdate, GroupUpdate, GroupUsersUpdate, HostPathWhitelistUpdate, ImageBan,
+    ImageBanKind, ImageBanUpdate, ImageLifetime, ImageNetworkPolicyUpdate, ImageScaler,
+    ImageUpdate, ImageVersion, NetworkPolicyRequest, NotificationLevel, NotificationParams,
+    NotificationRequest, OutputCollectionUpdate, OutputDisplayType, OutputHandler, PipelineRequest,
+    RepoDependencySettingsUpdate, ResourcesUpdate, ResultDependencySettingsUpdate,
+    SampleDependencySettingsUpdate, SystemSettingsResetParams, SystemSettingsUpdate,
     SystemSettingsUpdateParams, Volume, VolumeTypes,
 };
 use thorium::test_utilities::{self, generators};
@@ -395,7 +395,7 @@ async fn update() -> Result<(), Error> {
         .dependencies(
             DependenciesUpdate::default()
                 .samples(
-                    DependencySettingsUpdate::default()
+                    SampleDependencySettingsUpdate::default()
                         .location("/updated/path")
                         .kwarg("--update")
                         .strategy(DependencyPassStrategy::Names),
@@ -418,7 +418,7 @@ async fn update() -> Result<(), Error> {
                         .remove_name("field.txt"),
                 )
                 .repos(
-                    DependencySettingsUpdate::default()
+                    RepoDependencySettingsUpdate::default()
                         .location("/new/location")
                         .kwarg("--new-repos")
                         .strategy(DependencyPassStrategy::Disabled),

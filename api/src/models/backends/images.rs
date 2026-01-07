@@ -288,6 +288,7 @@ impl DependenciesUpdate {
         update_opt!(image.dependencies.samples.kwarg, self.samples.kwarg);
         update_clear!(image.dependencies.samples.kwarg, self.samples.clear_kwarg);
         update!(image.dependencies.samples.strategy, self.samples.strategy);
+        update!(image.dependencies.samples.naming, self.samples.naming);
         // ephemeral settings
         update!(
             image.dependencies.ephemeral.location,

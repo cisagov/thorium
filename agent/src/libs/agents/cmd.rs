@@ -167,15 +167,9 @@ impl CmdBuilder {
     ///
     /// # Arguments
     ///
-    /// * `sha256s` - The sha256s for the samples we have as dependencies
     /// * `paths` - The paths to any downloaded sha256s
     /// * `settings` - The settings to use for adding sample dependencies to our command
-    pub fn add_samples(
-        mut self,
-        sha256s: &[String],
-        paths: &[PathBuf],
-        settings: &SampleDependencySettings,
-    ) -> Self {
+    pub fn add_samples(mut self, paths: &[PathBuf], settings: &SampleDependencySettings) -> Self {
         // get the samples args formatted correctly
         let args = match settings.strategy {
             // convert the paths to our samples to strings
@@ -184,7 +178,11 @@ impl CmdBuilder {
                 .map(|path| path.to_string_lossy().to_string())
                 .collect(),
             // just return the names we already have
-            DependencyPassStrategy::Names => sha256s.to_vec(),
+            DependencyPassStrategy::Names => paths
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|fname| fname.to_string_lossy().into_owned())
+                .collect(),
             // just return a list containing our directory name
             DependencyPassStrategy::Directory => {
                 vec![settings.location.clone()]
@@ -565,8 +563,10 @@ impl CmdBuilder {
                 wipe = false;
             }
         }
+        // swap our kwargs btree map with an empty one
+        let kwarg_map = std::mem::take(&mut self.kwargs);
         // append all left over custom kwargs args if any were set
-        for (key, values) in self.kwargs.drain() {
+        for (key, values) in kwarg_map {
             // add our kwargs
             for value in values {
                 // add our key
@@ -906,14 +906,14 @@ mod tests {
             vec_string!(
                 "/usr/bin/python3",
                 "corn.py",
+                "--commit",
+                "main",
+                "--commit",
+                "main",
                 "--repo",
                 "github.com/curl/curl",
                 "--repo",
                 "github.com/notcurl/notcurl",
-                "--commit",
-                "main",
-                "--commit",
-                "main",
                 "pos1",
                 "pos2",
                 "/tmp/repo1",
@@ -1124,7 +1124,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1157,7 +1157,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1192,7 +1192,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1227,7 +1227,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1264,7 +1264,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1303,7 +1303,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1687,7 +1687,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1733,7 +1733,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -1884,8 +1884,13 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        //<<<<<<< HEAD
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .add_repos(&image, &job.repos, &repo_paths)
+        //=======
+        //        .add_samples(&sample_paths, &image.dependencies.samples)
+        //        .add_repos(&job.repos, &repo_paths, &image.dependencies.repos)
+        //>>>>>>> bd24ea94 (feat(agent): Added support for passing samples to jobs by file name)
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
         .build(&image, None)
         .unwrap();
@@ -1957,7 +1962,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .add_results(
             &image.dependencies.results.images,
             &result_paths,
@@ -2012,7 +2017,7 @@ mod tests {
                 "start"
             ],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our overlayed command
@@ -2053,7 +2058,7 @@ mod tests {
                 "nested"
             ],
         )
-        .add_samples(&job.samples, &sample_paths, &image.dependencies.samples)
+        .add_samples(&sample_paths, &image.dependencies.samples)
         .build(&image, None)
         .unwrap();
         // validate our args

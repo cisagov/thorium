@@ -2,7 +2,7 @@
 //! Currently only Redis is supported
 
 use chrono::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use uuid::Uuid;
 
@@ -254,7 +254,7 @@ pub struct RawJob {
 }
 
 /// Keyword args for generic jobs
-pub type GenericJobKwargs = HashMap<String, Vec<String>>;
+pub type GenericJobKwargs = BTreeMap<String, Vec<String>>;
 
 /// Helps serde default a value to false
 fn default_false() -> bool {

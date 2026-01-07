@@ -9,8 +9,8 @@ use thorium::Error;
 use thorium::Thorium;
 use thorium::client::ResultsClient;
 use thorium::models::{
-    DependencyPassStrategy, FileDownloadOpts, GenericJob, Image, ReactionCache, RepoDownloadOpts,
-    ResultGetParams,
+    DependencyPassStrategy, FileDownloadOpts, FileNamingStrategy, GenericJob, Image, ReactionCache,
+    RepoDownloadOpts, ResultGetParams,
 };
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -229,6 +229,88 @@ pub async fn download_cache<P: AsRef<Path>>(
     Ok(downloaded)
 }
 
+/// Build the path to write a downloaded sample too
+///
+/// # Arguments
+///
+/// * `thorium` - A client for Thorium
+/// * `image` - The image our job is based on
+/// * `base` - The base path to write any downloaded samples too
+/// * `sha256` - The sha256 of the sample to download
+/// * `logs` - The channel to use when sending logs to Thorium
+#[instrument(name = "setup::build_sample_path", skip_all, err(Debug))]
+pub async fn build_sample_path(
+    thorium: &Thorium,
+    image: &Image,
+    base: &Path,
+    sha256: &str,
+    logs: &mut Sender<String>,
+) -> Result<PathBuf, Error> {
+    // get the to use for this file
+    match image.dependencies.samples.naming {
+        // just use the sha256 for our name
+        FileNamingStrategy::Sha256 => {
+            // log the sha256 we are downloading
+            event!(Level::INFO, sha256 = sha256);
+            // add a log to disk that are downloading this file
+            log!(logs, "Downloading sample {sha256}");
+            Ok(base.join(sha256))
+        }
+        FileNamingStrategy::MostRecent => {
+            // get this samples submission info
+            let info = thorium.files.get(sha256).await?;
+            // get the most recent submission with a file name
+            let target = match info.submissions.iter().find_map(|sub| sub.name.as_ref()) {
+                Some(name_str) => {
+                    // cast this file name to a PathBuf
+                    let name_path = PathBuf::from(name_str);
+                    // if this is a absolute path then just use the file name otherwise append the full relative path
+                    if name_path.has_root() {
+                        // if this file name is just this root then add our sha256
+                        match name_path.file_name() {
+                            Some(name) => {
+                                // add a log to disk that are downloading this file
+                                log!(logs, "Downloading sample {}", name.display());
+                                base.join(name)
+                            }
+                            None => {
+                                // log that we only discovered a root
+                                log!(
+                                    logs,
+                                    "{sha256} is just a root! Using the sha256 instead of the {name_str}"
+                                );
+                                // add our sha256 instead
+                                base.join(sha256)
+                            }
+                        }
+                    } else {
+                        // add the relative path
+                        base.join(name_path)
+                    }
+                }
+                None => {
+                    // log that we didn't find any submissions with file names
+                    log!(
+                        logs,
+                        "{sha256} has no submissions with a file name! Using the sha256."
+                    );
+                    // add a log to disk that are downloading this file
+                    log!(logs, "Downloading sample {sha256}");
+                    // add our sha256 instead
+                    base.join(sha256)
+                }
+            };
+            // log that we are writting this sample to a different name then its sha256
+            event!(
+                Level::INFO,
+                sha256 = sha256,
+                target = target.to_string_lossy().to_string()
+            );
+            Ok(target)
+        }
+    }
+}
+
 /// Downloads any requested samples or ephemeral files from Thorium
 ///
 /// # Arguments
@@ -238,7 +320,6 @@ pub async fn download_cache<P: AsRef<Path>>(
 /// * `job` - The job we are downloading samples for
 /// * `target` - The target folder to write these samples too
 /// * `logs` - The channel to use when sending logs to Thorium
-/// * `span` - The span to log traces under
 #[instrument(name = "setup::download_samples", skip_all, err(Debug))]
 pub async fn download_samples<P: AsRef<Path>>(
     thorium: &Thorium,
@@ -248,27 +329,25 @@ pub async fn download_samples<P: AsRef<Path>>(
     logs: &mut Sender<String>,
 ) -> Result<Vec<PathBuf>, Error> {
     // build the path to save these samples too
-    let mut target = target.as_ref().to_path_buf();
+    let target = target.as_ref().to_path_buf();
     // create a list to the paths to our downloaded samples
     let mut samples = Vec::with_capacity(job.samples.len());
     // build the options for downloading this file
     let mut opts = FileDownloadOpts::default().uncart();
     // crawl over any samples and try to download them
     for sha256 in &job.samples {
-        // log the sha256 we are downloading
-        event!(Level::INFO, sha256 = sha256);
-        // build the target path for this upload
-        target.push(sha256);
+        // build the path to download our files too
+        let dl_target = build_sample_path(thorium, image, &target, sha256, logs).await?;
         // download and uncart this file to disk
-        log!(logs, "Downloading sample {}", sha256);
-        thorium.files.download(sha256, &target, &mut opts).await?;
+        thorium
+            .files
+            .download(sha256, &dl_target, &mut opts)
+            .await?;
         // only pass in downloaded samples if its enabled
         if image.dependencies.samples.strategy != DependencyPassStrategy::Disabled {
             // add this downloaded sample to our list
-            samples.push(target.clone());
+            samples.push(dl_target);
         }
-        // pop this samples hash
-        target.pop();
     }
     Ok(samples)
 }
