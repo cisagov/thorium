@@ -1884,13 +1884,8 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        //<<<<<<< HEAD
         .add_samples(&sample_paths, &image.dependencies.samples)
         .add_repos(&image, &job.repos, &repo_paths)
-        //=======
-        //        .add_samples(&sample_paths, &image.dependencies.samples)
-        //        .add_repos(&job.repos, &repo_paths, &image.dependencies.repos)
-        //>>>>>>> bd24ea94 (feat(agent): Added support for passing samples to jobs by file name)
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
         .build(&image, None)
         .unwrap();

@@ -14,6 +14,7 @@ use std::str::FromStr;
 mod files;
 mod images;
 mod pipelines;
+mod trees;
 
 use crate::Conf;
 use crate::client::Thorium;
@@ -116,7 +117,10 @@ impl ThoriumMCP {
     pub fn new(mcp_conf: McpConfig) -> Self {
         Self {
             conf: mcp_conf,
-            tool_router: Self::sample_router() + Self::images_router() + Self::pipelines_router(),
+            tool_router: Self::sample_router()
+                + Self::images_router()
+                + Self::pipelines_router()
+                + Self::tree_router(),
         }
     }
 }

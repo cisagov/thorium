@@ -51,3 +51,4 @@ cfg-if = "1"
 reqwest = { workspace = true , default-features = false, features = ["rustls-tls"] }
 rmcp = { version = "0.8", features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"]}
 openai-api-rs = "8"
+tui-banner = "0.2"

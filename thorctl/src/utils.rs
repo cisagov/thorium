@@ -11,6 +11,7 @@ use tokio::io::{AsyncReadExt, BufReader};
 
 use crate::{Args, CtlConf};
 
+pub mod banner;
 pub mod diff;
 pub mod fs;
 pub mod groups;

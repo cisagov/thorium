@@ -32,7 +32,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "1.4.0"
+version = "1.5.0"
 authors = ["mcarson <mcarson@sandia.gov>", "gmbaker <gmbaker@sandia.gov>", "jehamza <jehamza@sandia.gov>"]
 edition = "2024"
 
@@ -41,8 +41,8 @@ inherits = "release"
 debug = true
 
 [workspace.dependencies]
-thorium-api = { version= "1.4.0", path="api", default-features = false }
-thorium-derive = { version = "1.4.0", path = "thorium-derive" }
+thorium-api = { version= "1.5.0", path="api", default-features = false }
+thorium-derive = { version = "1.5.0", path = "thorium-derive" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart", "stream", "blocking"] }
 tokio = { version = "1.45", features = ["full"] }
 kube = { git = "https://github.com/stackabletech/kube-rs.git", rev="cfdfcd1", features = ["rustls-tls", "derive", "config", "client", "runtime", "http-proxy"] }

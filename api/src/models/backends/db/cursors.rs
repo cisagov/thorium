@@ -2877,11 +2877,9 @@ impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
         let timer = std::time::Instant::now();
         // get the next page of data for this cursor
         self.backing.next(shared).await?;
-        println!("backing.next -> {:?}", timer.elapsed());
         let timer = std::time::Instant::now();
         // get the details for the current page of data
         let details = D::get_details(user, &mut self.backing, shared).await?;
-        println!("D::get_details -> {:?}", timer.elapsed());
         let timer = std::time::Instant::now();
         // count the tags for each item
         for item in details {
@@ -2890,7 +2888,6 @@ impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
             // add the tags to our count
             self.retain.add_tags(tags);
         }
-        println!("for item in details -> {:?}", timer.elapsed());
         Ok(())
     }
 

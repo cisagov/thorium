@@ -1,6 +1,7 @@
 //! A Tree of data in Thorium
 
 use gxhash::GxHasher;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Deserializer;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -66,7 +67,7 @@ impl Default for TreeParams {
 }
 
 /// The parameters for building a tree in Thorium
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TreeOpts {
     /// The depth to build this tree out too
@@ -307,7 +308,7 @@ impl TreeSupport for TreeTags {
 }
 
 /// The settings to use when finding related data in our tree
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TreeRelatedQuery {
     /// The tags to use when finding related data
@@ -329,7 +330,7 @@ impl TreeRelatedQuery {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TreeQuery {
     /// The groups to limit our tree too

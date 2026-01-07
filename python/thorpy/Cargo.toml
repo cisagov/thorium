@@ -3,7 +3,7 @@ name = "thorpy"
 # version derived from main workspace version, but replacing pre-release
 # '-' suffix with '+' for compatibility with
 # [PEP440](<https://peps.python.org/pep-0440/#adding-local-version-identifiers)
-version = "1.106.0+0.27.0"
+version = "1.5.0"
 authors.workspace = true
 edition.workspace = true
 

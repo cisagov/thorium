@@ -6909,7 +6909,7 @@ dependencies = [
 
 [[package]]
 name = "thoradm"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
@@ -6949,7 +6949,7 @@ dependencies = [
 
 [[package]]
 name = "thorctl"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "async-walkdir",
@@ -6987,6 +6987,7 @@ dependencies = [
  "thorium-api",
  "tokio",
  "tokio-stream",
+ "tui-banner",
  "url",
  "uuid",
  "walkdir",
@@ -6994,7 +6995,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-agent"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "async-walkdir",
@@ -7029,7 +7030,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-api"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "argon2",
@@ -7134,7 +7135,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-derive"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "darling 0.21.3",
  "proc-macro2",
@@ -7144,7 +7145,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-event-handler"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "chrono",
  "clap",
@@ -7159,7 +7160,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-operator"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "aws-credential-types",
  "aws-sdk-s3",
@@ -7188,7 +7189,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-reactor"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -7213,7 +7214,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-scaler"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -7246,7 +7247,7 @@ dependencies = [
 
 [[package]]
 name = "thorium-search-streamer"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "async-trait",
  "bytesize",
@@ -7274,7 +7275,7 @@ dependencies = [
 
 [[package]]
 name = "thorpy"
-version = "1.106.0+0.27.0"
+version = "1.5.0"
 dependencies = [
  "openssl",
  "pyo3",
@@ -7283,7 +7284,7 @@ dependencies = [
 
 [[package]]
 name = "thorpy-stubs"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -7726,6 +7727,12 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tui-banner"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d1b7ab5b95cec8f101330c65e98ae299d1a406bce12b9b5bf5208e35e1a40b8"
 
 [[package]]
 name = "tungstenite"

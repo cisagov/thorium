@@ -13,6 +13,7 @@ use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig
 use rmcp::{RoleClient, ServiceExt};
 use thorium::{CtlConf, Error};
 
+mod chat;
 mod services;
 mod summary;
 
@@ -113,23 +114,23 @@ async fn call_tool_helper(
     mcp: &RunningService<RoleClient, InitializeRequestParam>,
     progress: &MultiBar,
     params: CallToolRequestParam,
-) -> (String, CallToolResult) {
+) -> Result<(String, CallToolResult), Error> {
     // get this tools name
     let name = params.name.to_string();
     // add a progress bar and log what tools we are calling
     let bar = progress.add("", BarKind::Unbound);
     // set our bars style
-    bar.set_style(mcp_bar_style().unwrap());
+    bar.set_style(mcp_bar_style()?);
     // set this bars steady tick rate
     bar.enable_steady_tick(std::time::Duration::from_millis(120));
     // set this bars message
     bar.set_message(format!("Calling Tool: {name}"));
     // call this mcp tool
-    let call_resp = mcp.call_tool(params).await.unwrap();
+    let call_resp = mcp.call_tool(params).await?;
     // Log that we got results from this tool
     bar.info(format!("Retrieved Results from {name}"));
     bar.finish_and_clear();
-    (name, call_resp)
+    Ok((name, call_resp))
 }
 
 /// A Thorium AI chat bot
@@ -201,13 +202,15 @@ impl<A: AiSupport> ThorChat<A> {
     async fn call_tools(
         &self,
         tool_calls: Vec<CallToolRequestParam>,
-    ) -> Vec<(String, CallToolResult)> {
+    ) -> Result<Vec<(String, CallToolResult)>, Error> {
         // call our tools in parallel
         stream::iter(tool_calls)
             .map(|params| async move { call_tool_helper(&self.mcp, &self.progress, params).await })
             .buffered(10)
-            .collect::<Vec<(String, CallToolResult)>>()
+            .collect::<Vec<Result<(String, CallToolResult), Error>>>()
             .await
+            .into_iter()
+            .collect::<Result<Vec<(String, CallToolResult)>, Error>>()
     }
 
     /// Wrap calls to an to handle progress bars
@@ -260,7 +263,7 @@ impl<A: AiSupport> ThorChat<A> {
                 // loop and execute tools until we get a response
                 loop {
                     // call our tools in parallel
-                    let tool_results = self.call_tools(tool_calls).await;
+                    let tool_results = self.call_tools(tool_calls).await?;
                     // tell our ai about these results
                     //match self.ai.add_tool_results(tool_results).await {
                     match self.wrap_add_tool_results(tool_results).await? {
@@ -282,6 +285,7 @@ pub async fn handle(args: &Args, cmd: &Ai) -> Result<(), Error> {
     let mut thorchat = ThorChat::<OpenAI>::new(args).await?;
     // handle the correct command
     match cmd {
+        Ai::Chat(chat) => chat::handle(&mut thorchat, chat).await,
         Ai::Summary(summary) => summary::handle(&mut thorchat, summary).await,
     }
 }
