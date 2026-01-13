@@ -20,7 +20,6 @@ use uuid::Uuid;
 
 use super::{MonitorUpdate, PartitionArchive, Utils};
 use crate::Error;
-use crate::args::BackupComponents;
 
 /// An archived partition that is ready to be written to disk
 #[derive(Debug)]
@@ -447,9 +446,6 @@ pub trait Backup:
     + Serialize<AllocSerializer<1024>>
     + for<'frame, 'metadata> DeserializeRow<'frame, 'metadata>
 {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents;
-
     /// The prepared statement to use when retrieving data from Scylla
     async fn prepared_statement(
         scylla: &Session,

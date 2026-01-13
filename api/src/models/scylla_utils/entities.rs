@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use scylla::DeserializeRow;
 use uuid::Uuid;
 
-use crate::models::{EntityKinds, entities::EntityMetadata};
+use crate::models::EntityKinds;
 
 /// A single row of an entity from Scylla
 #[derive(Debug, Deserialize, DeserializeRow)]

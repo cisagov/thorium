@@ -6,10 +6,10 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
+use scylla::DeserializeRow;
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, PrepareError};
 use scylla::statement::prepared::PreparedStatement;
-use scylla::DeserializeRow;
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::path::PathBuf;
@@ -17,9 +17,8 @@ use std::sync::Arc;
 use thorium::Conf;
 use uuid::Uuid;
 
-use crate::args::BackupComponents;
-use crate::backup::{utils, Backup, Restore, S3Backup, S3Restore, Scrub, Utils};
 use crate::Error;
+use crate::backup::{Backup, Restore, S3Backup, S3Restore, Scrub, Utils, utils};
 
 /// A single line of stage logs
 #[derive(Debug, Archive, Serialize, Deserialize, DeserializeRow)]
@@ -51,11 +50,6 @@ impl Utils for Comment {
 
 #[async_trait::async_trait]
 impl Backup for Comment {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::Comments
-    }
-
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -210,11 +204,6 @@ impl Restore for Comment {
 
 #[async_trait::async_trait]
 impl S3Backup for Comment {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::CommentAttachments
-    }
-
     /// Get the comment attachments and where to write them off to disk at
     ///
     /// # Arguments

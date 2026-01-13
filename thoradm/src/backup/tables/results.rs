@@ -7,23 +7,22 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
+use scylla::DeserializeRow;
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, PrepareError};
 use scylla::statement::prepared::PreparedStatement;
-use scylla::DeserializeRow;
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::path::PathBuf;
 use std::sync::Arc;
-use thorium::models::OutputDisplayType;
 use thorium::Conf;
+use thorium::models::OutputDisplayType;
 use uuid::Uuid;
 
-use crate::args::BackupComponents;
+use crate::Error;
 use crate::backup::S3Backup;
 use crate::backup::S3Restore;
-use crate::backup::{utils, Backup, Restore, Scrub, Utils};
-use crate::Error;
+use crate::backup::{Backup, Restore, Scrub, Utils, utils};
 
 /// The samples list table
 #[derive(Debug, Archive, Serialize, Deserialize, DeserializeRow)]
@@ -58,11 +57,6 @@ impl Utils for Output {
 /// Implement backup support for the results table
 #[async_trait::async_trait]
 impl Backup for Output {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::Results
-    }
-
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -222,11 +216,6 @@ impl Restore for Output {
 
 #[async_trait::async_trait]
 impl S3Backup for Output {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::ResultFiles
-    }
-
     /// Get the result files and where to write them off to disk at
     ///
     /// # Arguments
@@ -338,11 +327,6 @@ impl Utils for OutputStream {
 /// Implement backup support for the results table
 #[async_trait::async_trait]
 impl Backup for OutputStream {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::ResultsStream
-    }
-
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments

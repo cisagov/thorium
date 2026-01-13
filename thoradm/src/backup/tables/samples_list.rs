@@ -6,18 +6,17 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
+use scylla::DeserializeRow;
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, PrepareError};
 use scylla::statement::prepared::PreparedStatement;
-use scylla::DeserializeRow;
 use std::hash::Hasher;
 use std::sync::Arc;
 use thorium::Conf;
 use uuid::Uuid;
 
-use crate::args::BackupComponents;
-use crate::backup::{utils, Backup, Restore, Scrub, Utils};
 use crate::Error;
+use crate::backup::{Backup, Restore, Scrub, Utils, utils};
 
 /// The samples list table
 #[derive(Debug, Archive, Serialize, Deserialize, DeserializeRow)]
@@ -60,11 +59,6 @@ impl Utils for SamplesList {
 /// Implement backup support for the samples list table
 #[async_trait::async_trait]
 impl Backup for SamplesList {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::SamplesList
-    }
-
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments

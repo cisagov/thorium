@@ -1,11 +1,15 @@
-//! The arguments for the backups and data restorations in Thorium
+//! The arguments for Thoradm functions
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::path::PathBuf;
 use thorium::models::{
     HostPathWhitelistUpdate, SystemSettingsResetParams, SystemSettingsUpdate,
     SystemSettingsUpdateParams,
 };
+
+mod backup;
+
+pub use backup::{BackupComponents, BackupSubCommands, NewBackup, RestoreBackup, ScrubBackup};
 
 /// Provide a default admin config path
 fn default_cluster_conf_path() -> PathBuf {
@@ -55,78 +59,6 @@ pub enum SubCommands {
     /// Censuse commands in Thorium
     #[clap(subcommand)]
     Census(CensusSubCommands),
-}
-
-/// The backup specific subcommands
-#[derive(Parser, Debug, Clone)]
-pub enum BackupSubCommands {
-    /// Take a new backup
-    #[clap(version, author)]
-    New(NewBackup),
-    /// Scrub a backup for bitrot
-    Scrub(ScrubBackup),
-    /// Restore a backup to a Thorium cluster
-    #[clap(version, author)]
-    Restore(RestoreBackup),
-}
-
-/// Define the default backup components
-fn default_backup_components() -> Vec<BackupComponents> {
-    // return all by default
-    vec![BackupComponents::All]
-}
-
-/// The tables that can be backed up
-#[derive(Debug, Clone, Copy, strum::Display, ValueEnum, PartialEq, Eq, Hash)]
-#[strum(serialize_all = "kebab-case")]
-pub enum BackupComponents {
-    All,
-    CommentAttachments,
-    Comments,
-    Commitish,
-    CommitishList,
-    Nodes,
-    Redis,
-    RepoData,
-    RepoList,
-    ResultFiles,
-    Results,
-    NetworkPolicies,
-    ResultsStream,
-    S3Ids,
-    S3IdsObjects,
-    SamplesList,
-    Tags,
-}
-
-/// Backup a Thorium cluster
-#[derive(Parser, Debug, Clone)]
-pub struct NewBackup {
-    /// The components to backup
-    #[clap(value_enum, default_values_t = default_backup_components(), value_delimiter = ',')]
-    pub components: Vec<BackupComponents>,
-    /// Where to store our backups
-    #[clap(short, long, default_value = "ThoriumBackups")]
-    pub output: PathBuf,
-    /// The chunk multiplier to use with our worker count
-    #[clap(short, long, default_value = "100")]
-    pub multiplier: u64,
-}
-
-/// Scrub a backup for bitrot
-#[derive(Parser, Debug, Clone)]
-pub struct ScrubBackup {
-    /// The path to the backup to scrub
-    #[clap(short, long)]
-    pub backup: PathBuf,
-}
-
-/// Restore a backup to a specific Thorium cluster
-#[derive(Parser, Debug, Clone)]
-pub struct RestoreBackup {
-    /// The path to the backup to restore
-    #[clap(short, long)]
-    pub backup: PathBuf,
 }
 
 /// The settings specific subcommands

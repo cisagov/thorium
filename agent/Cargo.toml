@@ -44,6 +44,12 @@ cgroups-rs = "0.3"
 controlgroup = "0.3"
 
 
-# disable cgroups support when on windows
-[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
+# disable cgroups support when on macos
 thorium-api = { workspace = true, default-features = false, features = ["client", "crossbeam-err", "trace"]}
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# disable cgroups support when on windows
+thorium-api = { workspace = true, default-features = false, features = ["client", "crossbeam-err", "trace"]}
+# force a version of openssl that works when cross compiling
+openssl-src = "=300.5.4+3.5.4"

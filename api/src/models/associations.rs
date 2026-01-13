@@ -21,6 +21,14 @@ pub enum AssociationTarget {
 
 /// The different possible associations
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "rkyv-support",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "rkyv-support",
+    archive_attr(derive(Debug, bytecheck::CheckBytes))
+)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 pub enum AssociationKind {

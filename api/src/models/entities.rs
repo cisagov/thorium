@@ -406,6 +406,14 @@ impl TagSupport for Entity {
     feature = "scylla-utils",
     strum_discriminants(derive(thorium_derive::ScyllaStoreJson))
 )]
+#[cfg_attr(
+    feature = "rkyv-support",
+    strum_discriminants(derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))
+)]
+#[cfg_attr(
+    feature = "rkyv-support",
+    strum_discriminants(archive_attr(derive(Debug, bytecheck::CheckBytes)))
+)]
 #[cfg_attr(feature = "api", strum_discriminants(derive(utoipa::ToSchema)))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum EntityMetadata {

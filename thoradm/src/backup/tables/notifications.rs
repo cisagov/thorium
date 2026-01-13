@@ -1,56 +1,56 @@
-//! Backup and restore support for tags
+//! Backup and restore support for notifications
 
 use ahash::AHasher;
-use bytecheck::CheckBytes;
-use chrono::prelude::*;
-use futures::stream::{FuturesUnordered, StreamExt};
+use chrono::{DateTime, Utc};
+use futures::{StreamExt, stream::FuturesUnordered};
 use indicatif::ProgressBar;
-use rkyv::{Archive, Deserialize, Serialize};
-use scylla::DeserializeRow;
-use scylla::client::session::Session;
-use scylla::errors::{ExecutionError, PrepareError};
-use scylla::statement::prepared::PreparedStatement;
-use std::hash::Hasher;
-use std::sync::Arc;
-use thorium::Conf;
-use thorium::models::backends::TagSupport;
-use thorium::models::{TagRequest, TagType};
+use rkyv::{Archive, CheckBytes, Deserialize, Serialize};
+use scylla::{
+    DeserializeRow,
+    client::session::Session,
+    errors::{ExecutionError, PrepareError},
+    statement::prepared::PreparedStatement,
+};
+use std::{hash::Hasher, sync::Arc};
+use thorium::{
+    Conf,
+    models::{NotificationLevel, NotificationType},
+};
+use uuid::Uuid;
 
 use crate::Error;
-use crate::backup::{Backup, Restore, Scrub, Utils, utils};
+use crate::backup::{Backup, Restore, Scrub, Utils};
 
-/// A single line of stage logs
+/// A single row from the notifications table
 #[derive(Debug, Archive, Serialize, Deserialize, DeserializeRow)]
 #[archive_attr(derive(Debug, CheckBytes))]
 #[scylla(flavor = "enforce_order", skip_name_checks)]
-pub struct Tag {
-    /// The type of object this tag is for
-    pub tag_type: TagType,
-    /// The group this tag is a part of
-    pub group: String,
-    /// The year this tag was submitted
-    pub year: i32,
-    /// The bucket this tag was submitted in
-    pub bucket: i32,
-    /// The key for this tag
+pub struct Notification {
+    /// The kind of notification this is
+    pub kind: NotificationType,
+    /// The key to the item this notification relates to
     pub key: String,
-    /// The value for this tag
-    pub value: String,
-    /// The timestamp this tag was submitted
-    pub uploaded: DateTime<Utc>,
-    /// The item we are getting tags for
-    pub item: String,
+    /// The time this notification was created
+    pub created: DateTime<Utc>,
+    /// The notification's unique ID
+    pub id: Uuid,
+    /// The notification's message
+    pub msg: String,
+    /// The notification's level
+    pub level: NotificationLevel,
+    /// The id of a ban this notification is referencing if there is one
+    pub ban_id: Option<Uuid>,
 }
 
-impl Utils for Tag {
+impl Utils for Notification {
     /// The name of the table we are backing up
     fn name() -> &'static str {
-        "tags"
+        "notifications"
     }
 }
 
 #[async_trait::async_trait]
-impl Backup for Tag {
+impl Backup for Notification {
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments
@@ -61,12 +61,12 @@ impl Backup for Tag {
         scylla: &Session,
         ns: &str,
     ) -> Result<PreparedStatement, PrepareError> {
-        // build tags get prepared statement
+        // build logs get prepared statement
         scylla
             .prepare(format!(
-                "SELECT type, group, year, bucket, key, value, uploaded, item \
+                "SELECT kind, key, created, id, msg, level, ban_id \
                 FROM {}.{} \
-                Where token(type, group, year, bucket, key, value) >= ? AND token(type, group, year, bucket, key, value) <= ?",
+                WHERE token(kind, key) >= ? AND token(kind, key) <= ?",
                 ns,
                 Self::name(),
             ))
@@ -78,31 +78,25 @@ impl Backup for Tag {
         // build a new hasher
         let mut hasher = AHasher::default();
         // ingest our partition key
-        hasher.write(self.tag_type.as_str().as_bytes());
-        hasher.write(self.group.as_bytes());
-        hasher.write_i32(self.year);
-        hasher.write_i32(self.bucket);
+        hasher.write(self.kind.as_str().as_bytes());
         hasher.write(self.key.as_bytes());
-        hasher.write(self.value.as_bytes());
         // finish this hash and get its value
         hasher.finish()
     }
 }
 
-/// Implement scrub support for the tags table
-impl Scrub for Tag {}
+/// Implement scrub support for the samples list table
+impl Scrub for Notification {}
 
-/// Implement restore support for the tags table
+/// Implement restore support for the samples list table
 #[async_trait::async_trait]
-impl Restore for Tag {
-    // The partition config is within the tags config in the Thorium config
-    type PartitionConf = thorium::conf::Tags;
+impl Restore for Notification {
+    // notifications are not partitioned
+    type PartitionConf = ();
 
     /// The steps to once run before restoring data
-    async fn prep(scylla: &Session, ns: &str) -> Result<(), ExecutionError> {
-        // drop the materialized views for this table
-        utils::drop_materialized_view(ns, "tags_by_item", scylla).await?;
-        utils::drop_materialized_view(ns, "tags_case_insensitive", scylla).await?;
+    async fn prep(_scylla: &Session, _ns: &str) -> Result<(), ExecutionError> {
+        // no prep steps needed
         Ok(())
     }
 
@@ -119,8 +113,8 @@ impl Restore for Tag {
         scylla
             .prepare(format!(
                 "INSERT INTO {}.{} \
-                (type, group, item, year, bucket, key, value, uploaded, key_lower, value_lower) \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (kind, key, created, id, msg, level, ban_id) \
+                VALUES (?, ?, ?, ?, ?, ?, ?)",
                 ns,
                 Self::name(),
             ))
@@ -132,8 +126,8 @@ impl Restore for Tag {
     /// # Arguments
     ///
     /// * `conf` - The Thorium config
-    fn partition_conf(config: &Conf) -> Self::PartitionConf {
-        config.thorium.tags.clone()
+    fn partition_conf(_config: &Conf) {
+        // notifications are not partitioned
     }
 
     /// Restore a single partition
@@ -143,48 +137,37 @@ impl Restore for Tag {
     /// * `buffer` - The buffer we should restore data from
     /// * `scylla` - The client to use when talking to scylla
     /// * `rows_restored` - The number of rows that have been restored
-    /// * `partition_conf` - The config defining the partition size to use when restoring data
+    /// * `partition_size` - The partition size to use when restoring data
     /// * `progress` - The bar to report progress with
     /// * `prepared` - The prepared statement to inject data with
     async fn restore<'a>(
         buffer: &'a [u8],
         scylla: &Arc<Session>,
-        partition_conf: &Self::PartitionConf,
+        _partition_size: &(),
         rows_restored: &mut usize,
         progress: &mut ProgressBar,
         prepared: &PreparedStatement,
     ) -> Result<(), Error> {
         // cast our buffer to its archived type
-        let rows = rkyv::check_archived_root::<Vec<Tag>>(buffer)?;
+        let rows = rkyv::check_archived_root::<Vec<Notification>>(buffer)?;
         // build a set of futures
         let mut futures = FuturesUnordered::new();
         // build our queries to insert this partitions rows
         for row in rows.iter() {
-            // deserialize our tag type
-            let tag_type: TagType = row.tag_type.deserialize(&mut rkyv::Infallible)?;
-            // get the correct partition size based on tags
-            let partition_size = partition_conf.map_type(&tag_type).partition_size;
+            let kind: NotificationType = row.kind.deserialize(&mut rkyv::Infallible)?;
+            let level: NotificationLevel = row.level.deserialize(&mut rkyv::Infallible)?;
             // deserialize this rows uploaded timestamp
-            let uploaded = row.uploaded.deserialize(&mut rkyv::Infallible)?;
-            // calculate the new bucket
-            let bucket = thorium::utils::helpers::partition(uploaded, row.year, partition_size);
-            // get the lowercase versions of key/value
-            let key_lower = row.key.to_lowercase();
-            let value_lower = row.value.to_lowercase();
-            // restore this row back to scylla
+            let created: DateTime<Utc> = row.created.deserialize(&mut rkyv::Infallible)?;
             let query = scylla.execute_unpaged(
                 prepared,
                 (
-                    tag_type,
-                    row.group.as_str(),
-                    row.item.as_str(),
-                    row.year,
-                    bucket,
+                    kind,
                     row.key.as_str(),
-                    row.value.as_str(),
-                    uploaded,
-                    key_lower,
-                    value_lower,
+                    created,
+                    row.id,
+                    row.msg.as_str(),
+                    level,
+                    row.ban_id.as_ref(),
                 ),
             );
             // add this to our futures
@@ -216,12 +199,5 @@ impl Restore for Tag {
             progress.set_message(rows_restored.to_string());
         }
         Ok(())
-    }
-}
-
-impl<T: TagSupport> Utils for TagRequest<T> {
-    /// The name of the table we are operating on
-    fn name() -> &'static str {
-        "tags"
     }
 }

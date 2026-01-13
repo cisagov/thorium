@@ -22,7 +22,6 @@ use tokio::task::JoinHandle;
 use tokio_util::io::ReaderStream;
 
 use crate::Error;
-use crate::args::BackupComponents;
 
 use super::{ArchiveReader, MonitorUpdate, Utils};
 
@@ -354,9 +353,6 @@ impl<S: S3Backup> S3BackupWorker<S> {
 
 #[async_trait::async_trait]
 pub trait S3Backup: Utils + std::fmt::Debug + 'static + Send + Archive {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents;
-
     /// Get the s3 urls and where to write them off to disk at
     ///
     /// # Arguments

@@ -17,7 +17,6 @@ use uuid::Uuid;
 
 use crate::{
     Error,
-    args::BackupComponents,
     backup::{Backup, Restore, Scrub, Utils, utils},
 };
 
@@ -54,11 +53,6 @@ impl Utils for NetworkPolicy {
 
 #[async_trait::async_trait]
 impl Backup for NetworkPolicy {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::NetworkPolicies
-    }
-
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments

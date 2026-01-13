@@ -608,6 +608,14 @@ pub enum TreeRelationships {
 
 /// The direction this branch is going
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Copy)]
+#[cfg_attr(
+    feature = "rkyv-support",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "rkyv-support",
+    archive_attr(derive(Debug, bytecheck::CheckBytes))
+)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 pub enum Directionality {

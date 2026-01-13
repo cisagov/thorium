@@ -6,18 +6,17 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use indicatif::ProgressBar;
 use rkyv::{Archive, Deserialize, Serialize};
+use scylla::DeserializeRow;
 use scylla::client::session::Session;
 use scylla::errors::{ExecutionError, PrepareError};
 use scylla::statement::prepared::PreparedStatement;
-use scylla::DeserializeRow;
 use std::hash::Hasher;
 use std::sync::Arc;
-use thorium::models::{NodeHealth, Resources};
 use thorium::Conf;
+use thorium::models::{NodeHealth, Resources};
 
-use crate::args::BackupComponents;
-use crate::backup::{Backup, Restore, Scrub, Utils};
 use crate::Error;
+use crate::backup::{Backup, Restore, Scrub, Utils};
 
 /// A single node in a Thorium cluster
 #[derive(Debug, Archive, Serialize, Deserialize, DeserializeRow)]
@@ -45,11 +44,6 @@ impl Utils for Node {
 
 #[async_trait::async_trait]
 impl Backup for Node {
-    /// Return the corresponding backup component for the implementor
-    fn backup_component() -> BackupComponents {
-        BackupComponents::Nodes
-    }
-
     /// The prepared statement to use when retrieving data from Scylla
     ///
     /// # Arguments

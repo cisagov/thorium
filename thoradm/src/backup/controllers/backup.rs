@@ -13,10 +13,10 @@ use rkyv::Archive;
 use rkyv::validation::validators::DefaultValidator;
 use scylla::client::session::Session;
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use strum::IntoEnumIterator;
 use thorium::Conf;
 use thorium::CtlConf;
 use thorium::Thorium;
@@ -29,7 +29,10 @@ use crate::Error;
 use crate::args::Args;
 use crate::args::BackupComponents;
 use crate::args::NewBackup;
+use crate::backup::tables::Association;
+use crate::backup::tables::Entity;
 use crate::backup::tables::NetworkPolicy;
+use crate::backup::tables::Notification;
 use crate::backup::tables::{
     Comment, Commitish, CommitishList, Node, Output, OutputStream, RepoData, RepoList, S3Id,
     SamplesList, Tag,
@@ -267,38 +270,24 @@ impl<B: Backup> TableBackup<B> {
     /// * `components` - The components set to backup
     /// * `path` - The path to store all of this Thorium clusters backups in
     /// * `chunk_count` - The number of chunks to break our token range into
-    pub async fn backup(
-        &mut self,
-        components: &HashSet<BackupComponents>,
-        mut path: PathBuf,
-        chunk_count: u64,
-    ) -> Result<(), Error> {
-        // check if we're supposed to backup this component
-        if components.contains(&BackupComponents::All)
-            || components.contains(&B::backup_component())
-        {
-            // log the table we are backing up
-            self.progress
-                .println(format!("Backing up {}", B::pretty_name()))?;
-            // nest our path by our table name
-            path.push(B::name());
-            // start our archive map updater
-            let handle = self.start_monitor();
-            // build our workers
-            self.spawn_workers(&path).await?;
-            // start backing up data
-            self.start(chunk_count).await?;
-            // wait for all of our workers to finish
-            self.wait_for_workers().await?;
-            // tell our monitor to finish and exit
-            self.updates_tx.send(MonitorUpdate::Finished).await?;
-            // wait for our map updater to finish
-            handle.await?;
-        } else {
-            // we're not supposed to backup this component so skip it
-            self.progress
-                .println(format!("Skipping {} backup...", B::pretty_name()))?;
-        }
+    pub async fn backup(&mut self, mut path: PathBuf, chunk_count: u64) -> Result<(), Error> {
+        // log the table we are backing up
+        self.progress
+            .println(format!("Backing up {}", B::pretty_name()))?;
+        // nest our path by our table name
+        path.push(B::name());
+        // start our archive map updater
+        let handle = self.start_monitor();
+        // build our workers
+        self.spawn_workers(&path).await?;
+        // start backing up data
+        self.start(chunk_count).await?;
+        // wait for all of our workers to finish
+        self.wait_for_workers().await?;
+        // tell our monitor to finish and exit
+        self.updates_tx.send(MonitorUpdate::Finished).await?;
+        // wait for our map updater to finish
+        handle.await?;
         Ok(())
     }
 }
@@ -509,42 +498,29 @@ impl<S: S3Backup> S3BackupController<S> {
     /// # Arguments
     ///
     /// * `path` - The path to store all of this Thorium clusters backups in
-    pub async fn backup(
-        &mut self,
-        components: &HashSet<BackupComponents>,
-        mut path: PathBuf,
-    ) -> Result<(), Error>
+    pub async fn backup(&mut self, mut path: PathBuf) -> Result<(), Error>
     where
         <S as Archive>::Archived:
             for<'a> bytecheck::CheckBytes<DefaultValidator<'a>> + std::fmt::Debug,
     {
         // get our name without '_'
         let pretty_name = S::name().replace('_', " ");
-        // check if we're supposed to backup this component
-        if components.contains(&BackupComponents::All)
-            || components.contains(&S::backup_component())
-        {
-            // log the table we are backing up
-            self.progress.println(format!("Backing up {pretty_name}"))?;
-            // nest our path by our table name
-            path.push(S::name());
-            // start our archive map updater
-            let handle = self.start_global_tracker();
-            // build our workers
-            self.spawn_workers(&mut path).await?;
-            // start backing up data
-            self.start(&mut path).await?;
-            // wait for all of our workers to finish
-            self.wait_for_workers().await?;
-            // tell our map updater to finish
-            self.updates_tx.send(MonitorUpdate::Finished).await?;
-            // wait for our map updater to finish
-            handle.await?;
-        } else {
-            // we're not supposed to backup this component so skip it
-            self.progress
-                .println(format!("Skipping {pretty_name} backup"))?;
-        }
+        // log the table we are backing up
+        self.progress.println(format!("Backing up {pretty_name}"))?;
+        // nest our path by our table name
+        path.push(S::name());
+        // start our archive map updater
+        let handle = self.start_global_tracker();
+        // build our workers
+        self.spawn_workers(&mut path).await?;
+        // start backing up data
+        self.start(&mut path).await?;
+        // wait for all of our workers to finish
+        self.wait_for_workers().await?;
+        // tell our map updater to finish
+        self.updates_tx.send(MonitorUpdate::Finished).await?;
+        // wait for our map updater to finish
+        handle.await?;
         Ok(())
     }
 }
@@ -566,8 +542,6 @@ pub struct BackupController {
     ctl_conf: CtlConf,
     /// The number of chunks to split our token range into
     chunks: u64,
-    /// The components to backup
-    components: HashSet<BackupComponents>,
     /// The samples list table
     samples_list: TableBackup<SamplesList>,
     /// The s3 ids table
@@ -592,6 +566,12 @@ pub struct BackupController {
     nodes: TableBackup<Node>,
     /// The network policies table
     network_policies: TableBackup<NetworkPolicy>,
+    /// The entities table
+    entities: TableBackup<Entity>,
+    /// The associations table
+    associations: TableBackup<Association>,
+    /// The notifications table
+    notifications: TableBackup<Notification>,
     /// The s3 ids S3 backup
     s3_ids_objects: S3BackupController<S3Id>,
     /// The comments S3 backup
@@ -610,14 +590,12 @@ impl BackupController {
     /// * `scylla` - The client to use with scylla
     /// * `workers` - The number of workers to spawn
     /// * `multiplier` - The multiplier to use with our worker count
-    /// * `components` - The components of Thorium to backup
     pub fn new(
         config: &Conf,
         ctl_conf: CtlConf,
         scylla: &Arc<Session>,
         workers: usize,
         multiplier: u64,
-        components: HashSet<BackupComponents>,
     ) -> Self {
         // get this clusters namespace
         let namespace = &config.thorium.namespace;
@@ -634,6 +612,9 @@ impl BackupController {
         let commits_list = TableBackup::new(namespace, scylla, workers);
         let nodes = TableBackup::new(namespace, scylla, workers);
         let network_policies = TableBackup::new(namespace, scylla, workers);
+        let entities = TableBackup::new(namespace, scylla, workers);
+        let associations = TableBackup::new(namespace, scylla, workers);
+        let notifications = TableBackup::new(namespace, scylla, workers);
         // build our s3 backups
         let s3_ids_objects = S3BackupController::new(namespace, config, workers);
         let comment_attachments = S3BackupController::new(namespace, config, workers);
@@ -642,7 +623,6 @@ impl BackupController {
         BackupController {
             ctl_conf,
             chunks: workers as u64 * multiplier,
-            components,
             samples_list,
             s3_ids,
             comments,
@@ -655,6 +635,9 @@ impl BackupController {
             commitish_list: commits_list,
             nodes,
             network_policies,
+            entities,
+            associations,
+            notifications,
             s3_ids_objects,
             comment_attachments,
             result_files,
@@ -668,28 +651,22 @@ impl BackupController {
     /// * `path` - The path to write this backup too
     async fn backup_redis(&self, mut path: PathBuf) -> Result<(), Error> {
         // check if we're supposed to backup Redis
-        if self.components.contains(&BackupComponents::All)
-            || self.components.contains(&BackupComponents::Redis)
-        {
-            // create our data dir
-            tokio::fs::create_dir_all(&path).await?;
-            // build a Thorium client
-            let client = Thorium::from_ctl_conf(self.ctl_conf.clone()).await?;
-            // get a backup of our redis data
-            let backup = client.system.backup().await?;
-            // serialize our backup to json
-            // we use json instead of rkyv because datetimes seem to be causing problems
-            let backup_str = serde_json::to_string(&backup)?;
-            // build the path to write our backup off to disk
-            path.push("redis.json");
-            // get a handle to the file to write our redis backup too
-            let mut file = File::create(&path).await?;
-            // write our serialized backup to disk
-            file.write_all(backup_str.as_bytes()).await?;
-        } else {
-            // skip redis backup
-            println!("Skipping redis backup...");
-        }
+
+        // create our data dir
+        tokio::fs::create_dir_all(&path).await?;
+        // build a Thorium client
+        let client = Thorium::from_ctl_conf(self.ctl_conf.clone()).await?;
+        // get a backup of our redis data
+        let backup = client.system.backup().await?;
+        // serialize our backup to json
+        // we use json instead of rkyv because datetimes seem to be causing problems
+        let backup_str = serde_json::to_string(&backup)?;
+        // build the path to write our backup off to disk
+        path.push("redis.json");
+        // get a handle to the file to write our redis backup too
+        let mut file = File::create(&path).await?;
+        // write our serialized backup to disk
+        file.write_all(backup_str.as_bytes()).await?;
         Ok(())
     }
 
@@ -698,28 +675,40 @@ impl BackupController {
     /// # Arguments
     ///
     /// * `path` - The path to write this backup too
+    /// * `components` - The components to backup
     #[rustfmt::skip]
-    pub async fn backup(&mut self, path: &Path) -> Result<(), Error> {
+    pub async fn backup(&mut self, path: &Path, components: &[BackupComponents]) -> Result<(), Error> {
         let path = path.to_path_buf();
-        // backup our redis data to disk
-        self.backup_redis(path.clone()).await?;
-        // backup our tables
-        self.samples_list.backup(&self.components, path.clone(), self.chunks).await?;
-        self.s3_ids.backup(&self.components, path.clone(), self.chunks).await?;
-        self.comments.backup(&self.components, path.clone(), self.chunks).await?;
-        self.results.backup(&self.components, path.clone(), self.chunks).await?;
-        self.results_stream.backup(&self.components, path.clone(), self.chunks).await?;
-        self.tags.backup(&self.components, path.clone(), self.chunks).await?;
-        self.repo_data.backup(&self.components, path.clone(), self.chunks).await?;
-        self.repos_list.backup(&self.components, path.clone(), self.chunks).await?;
-        self.commitish.backup(&self.components, path.clone(), self.chunks).await?;
-        self.commitish_list.backup(&self.components, path.clone(), self.chunks).await?;
-        self.nodes.backup(&self.components, path.clone(), self.chunks).await?;
-        self.network_policies.backup(&self.components, path.clone(), self.chunks).await?;
-        // backup our s3 data
-        self.s3_ids_objects.backup(&self.components, path.clone()).await?;
-        self.comment_attachments.backup(&self.components, path.clone()).await?;
-        self.result_files.backup(&self.components, path).await?;
+        // iterate over all components to backup, only backing them up if we're set to
+        for component in BackupComponents::iter() {
+            if component.should_backup(components) {
+                match component {
+                    BackupComponents::All | BackupComponents::NoS3 => (),
+                    BackupComponents::Redis => self.backup_redis(path.clone()).await?,
+                    BackupComponents::Associations => self.associations.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Comments => self.comments.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Commitish => self.commitish.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::CommitishList => self.commitish_list.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Entities => self.entities.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::NetworkPolicies => self.network_policies.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Nodes => self.nodes.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Notifications => self.notifications.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::RepoData => self.repo_data.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::RepoList => self.repos_list.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Results => self.results.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::ResultsStream => self.results_stream.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::S3Ids => self.s3_ids.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::SamplesList => self.samples_list.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::Tags => self.tags.backup(path.clone(), self.chunks).await?,
+                    BackupComponents::CommentAttachments => self.comment_attachments.backup(path.clone()).await?,
+                    BackupComponents::ResultFiles => self.result_files.backup(path.clone()).await?,
+                    BackupComponents::S3IdsObjects => self.s3_ids_objects.backup(path.clone()).await?,
+                }
+            } else if !component.is_filter() {
+                // we're not supposed to backup this component so skip it
+                println!("Skipping {component} backup...");
+            }
+        }
         Ok(())
     }
 }
@@ -736,8 +725,6 @@ pub async fn handle(backup_args: &NewBackup, args: &Args) -> Result<(), Error> {
     let ctl_conf = CtlConf::from_path(&args.ctl_conf)?;
     // build a new scylla client
     let scylla = Arc::new(utils::get_scylla_client(&config).await?);
-    // get a deduped set of components to backup
-    let components = backup_args.components.iter().copied().collect();
     // build the controller for this cluster
     let mut controller = BackupController::new(
         &config,
@@ -745,9 +732,10 @@ pub async fn handle(backup_args: &NewBackup, args: &Args) -> Result<(), Error> {
         &scylla,
         args.workers,
         backup_args.multiplier,
-        components,
     );
-    // backup this cluster to disk
-    controller.backup(&backup_args.output).await?;
+    // backup the selected components to disk
+    controller
+        .backup(&backup_args.output, &backup_args.components)
+        .await?;
     Ok(())
 }

@@ -45,6 +45,14 @@ impl NotificationType {
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, Default, EnumString, AsRefStr, clap::ValueEnum,
 )]
+#[cfg_attr(
+    feature = "rkyv-support",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "rkyv-support",
+    archive_attr(derive(Debug, bytecheck::CheckBytes))
+)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum NotificationLevel {
