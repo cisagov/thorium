@@ -7274,7 +7274,7 @@ dependencies = [
 
 [[package]]
 name = "thorpy"
-version = "1.106.0+0.26.0"
+version = "1.106.0+0.27.0"
 dependencies = [
  "openssl",
  "pyo3",

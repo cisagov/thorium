@@ -1,6 +1,7 @@
 //! Saves files into the backend
 
 use chrono::prelude::*;
+use futures::{StreamExt, stream};
 use itertools::Itertools;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -792,21 +793,28 @@ pub async fn list_details(
     let mut sorted: BTreeMap<DateTime<Utc>, Vec<String>> = BTreeMap::default();
     // build a hashmap to store our sha256s in
     let mut map = HashMap::with_capacity(sha256s.len());
+    // preallocate space for the futures we are going to create
+    let mut futures = Vec::with_capacity(100);
     // split our groups and samples into chunks of 50
     for (sha256s_chunk, groups_chunk) in sha256s.chunks(50).cartesian_product(groups.chunks(50)) {
         // turn our chunks into vecs
         let groups_vec = groups_chunk.to_vec();
         let sha256s_vec = sha256s_chunk.to_vec();
-        // send a query to get this chunks data
-        let query = shared
-            .scylla
-            .session
-            .execute_unpaged(
-                &shared.scylla.prep.samples.get_many,
-                (sha256s_vec, groups_vec),
-            )
-            .await?;
-        // enable casting to types for this query
+        // build a query to get this chunks data
+        let query = shared.scylla.session.execute_unpaged(
+            &shared.scylla.prep.samples.get_many,
+            (sha256s_vec, groups_vec),
+        );
+        // add this future to our future set
+        futures.push(query);
+    }
+    // build our stream of futures
+    let mut stream = stream::iter(futures.drain(..)).buffer_unordered(50);
+    // start getting our details from our queries
+    while let Some(query) = stream.next().await {
+        // unwrap our query
+        let query = query?;
+        // convert our query into a rows query
         let query_rows = query.into_rows_result()?;
         // crawl the rows returned by this query
         for cast in query_rows.rows::<SubmissionRow>()? {
