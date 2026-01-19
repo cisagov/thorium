@@ -199,7 +199,7 @@ pub type ReactionArgs = HashMap<String, GenericJobArgs>;
 /// A request to create a new reaction
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub struct ReactionRequest {
     /// The group the reaction is in
     pub group: String,
@@ -824,7 +824,7 @@ pub struct StageLogs {
     strum::Display,
 )]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub enum ReactionStatus {
     /// This reaction is created, but is not yet running
     #[strum(serialize = "Created")]
@@ -937,7 +937,7 @@ impl PartialEq<ReactionRequest> for Reaction {
 }
 
 /// The response given when creating a reaction
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct ReactionCreation {
     /// The uuidv4 of the created reaction
@@ -1080,7 +1080,7 @@ impl PartialEq<ReactionUpdate> for Reaction {
 
 /// An ephemeral cache of information across this entire reaction
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ReactionCache {
     /// A generic key/value cache of info across this reaction

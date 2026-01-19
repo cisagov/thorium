@@ -152,6 +152,13 @@ cfg_if::cfg_if! {
     }
 }
 
+// sync client feature reexports
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "client", feature = "sync"))] {
+        pub use cursors::{CursorBlocking, CountCursorBlocking};
+    }
+}
+
 // api feature exports
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
@@ -213,5 +220,10 @@ cfg_if::cfg_if! {
 }
 
 // python mappings
-#[cfg(feature = "python")]
-mod python;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "python")] {
+        pub mod python;
+
+        pub use files::{SamplePy, SubmissionChunkPy, OriginPy, CarvedOriginPy };
+    }
+}

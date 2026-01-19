@@ -217,8 +217,6 @@ impl ThoriumClientBuilder {
 
     /// Builds a client with the configured auth settings
     ///
-    /// This will panic if username/password or auth are not set
-    ///
     /// # Examples
     ///
     /// ```
@@ -241,9 +239,19 @@ impl ThoriumClientBuilder {
         // build a client
         let client = helpers::build_reqwest_client(&self.settings).await?;
         // get token if we have a username/password and no token
-        let (token, expires) = match self.token {
-            Some(token) => (token, None),
-            None => Thorium::auth(&self.host, self.username, self.password, &client).await?,
+        let (token, expires) = match (self.token, self.username, self.password) {
+            // we already have a token, so use the existing one
+            (Some(token), _, _) => (token, None),
+            // we need to get a new token with basic auth
+            (None, Some(username), Some(password)) => {
+                Thorium::auth(&self.host, &username, &password, &client).await?
+            }
+            // username and password were not given and we don't have a token, so error
+            _ => {
+                return Err(Error::new(
+                    "Username and password must be provided if no auth token is set!",
+                ));
+            }
         };
         // convert our buffer into a Vec<u8> and base64 it
         let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
@@ -344,7 +352,7 @@ cfg_if::cfg_if! {
     // if the python feature is active
     if #[cfg(feature = "python")] {
         /// A synchronous client for Thorium
-        #[pyclass]
+        #[pyclass(from_py_object)]
         #[derive(Clone)]
         pub struct ThoriumBlocking {
             /// Handles basic routes in Thorium
@@ -356,6 +364,9 @@ cfg_if::cfg_if! {
             /// Handles reactions routes in Thorium
             #[pyo3(get)]
             pub reactions: ReactionsBlocking,
+            /// Handles reactions routes in Thorium
+            #[pyo3(get)]
+            pub files: FilesBlocking,
             /// The host/url to reach Thorium at
             pub host: String,
             /// The auth str to use when reverting from a masquerade
@@ -368,10 +379,6 @@ cfg_if::cfg_if! {
 
         impl ThoriumClientBuilder {
             /// Builds a client with the configured auth settings
-            ///
-            /// # Panics
-            ///
-            /// Panics if username/password or token are not set
             ///
             /// # Examples
             ///
@@ -392,12 +399,17 @@ cfg_if::cfg_if! {
                 // build a client
                 let client = helpers::build_blocking_reqwest_client(&self.settings)?;
                 // get token if we have a username/password and no token
-                let (token, expires) = match self.token {
-                    Some(token) => (token, None),
-                    None => {
-                        assert!(self.username.is_some() && self.password.is_some(), "Username and password must be set if token is not");
-                        ThoriumBlocking::basic_auth(&self.host, &self.username.unwrap(), &self.password.unwrap(), &client)?
+                let (token, expires) = match (self.token, self.username, self.password) {
+                    // we already have a token, so use the existing one
+                    (Some(token), _, _) => (token, None),
+                    (None, Some(username), Some(password)) => {
+                        ThoriumBlocking::basic_auth(&self.host, &username, &password, &client)?
                     },
+                    _ => {
+                        return Err(Error::new(
+                            "Username and password must be provided if no auth token is set!",
+                        ));
+                    }
                 };
                 // convert our buffer into a Vec<u8> and base64 it
                 let encoded = base64::engine::general_purpose::STANDARD.encode(token.as_bytes());
@@ -407,11 +419,13 @@ cfg_if::cfg_if! {
                 let basic = BasicBlocking::new(&self.host, &client);
                 let jobs = JobsBlocking::new(&self.host, &auth_str, &client);
                 let reactions = ReactionsBlocking::new(&self.host, &auth_str, &client);
+                let files = FilesBlocking::new(&self.host, &auth_str, &client);
                 // build Thorium client
                 let client = ThoriumBlocking {
                     basic,
                     jobs,
                     reactions,
+                    files,
                     host: self.host,
                     _auth_str: auth_str,
                     expires,
@@ -471,8 +485,6 @@ cfg_if::cfg_if! {
         impl ThoriumClientBuilder {
             /// Builds a client with the configured auth settings
             ///
-            /// This will panic if username/password or auth are not set
-            ///
             /// # Examples
             ///
             /// ```
@@ -492,11 +504,16 @@ cfg_if::cfg_if! {
                 // build a client
                 let client = helpers::build_blocking_reqwest_client(&self.settings)?;
                 // get token if we have a username/password and no token
-                let (token, expires) = match self.token {
-                    Some(token) => (token, None),
-                    None => {
-                        assert!(self.username.is_some() && self.password.is_some(), "Username and password must be set if token is not");
-                        ThoriumBlocking::basic_auth(&self.host, &self.username.unwrap(), &self.password.unwrap(), &client)?
+                let (token, expires) = match (self.token, self.username, self.password) {
+                    // we already have a token, so use the existing one
+                    (Some(token), _, _) => (token, None),
+                    (None, Some(username), Some(password)) => {
+                        ThoriumBlocking::basic_auth(&self.host, &username, &password, &client)?
+                    },
+                    _ => {
+                        return Err(Error::new(
+                            "Username and password must be provided if no auth token is set!",
+                        ));
                     }
                 };
                 // convert our buffer into a Vec<u8> and base64 it
@@ -604,11 +621,13 @@ impl Thorium {
     ///
     /// # async fn exec() -> Result<(), Error> {
     /// let client = reqwest::Client::new();
-    /// let (token, expriation) = Thorium::auth("http://127.0.0.1",
-    ///     Some("user".into()),
-    ///     Some("pass".into()),
-    ///     &client)
-    ///     .await?;
+    /// let (token, expriation) =
+    ///     Thorium::auth(
+    ///         "http://127.0.0.1",
+    ///         "user",
+    ///         "pass",
+    ///         &client
+    ///     ).await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
     /// # }
@@ -618,17 +637,12 @@ impl Thorium {
     /// ```
     pub async fn auth(
         host: &str,
-        username: Option<String>,
-        password: Option<String>,
+        username: &str,
+        password: &str,
         client: &reqwest::Client,
     ) -> Result<(String, Option<DateTime<Utc>>), Error> {
-        // make sure both username and password are specified
-        if username.is_none() || password.is_none() {
-            panic!("Both username and password must be specfied if token is not");
-        }
-
         // create auth handler and get token
-        let resp = Users::auth_basic(host, &username.unwrap(), &password.unwrap(), client).await?;
+        let resp = Users::auth_basic(host, username, password, client).await?;
         Ok((resp.token, Some(resp.expires)))
     }
 
@@ -762,18 +776,14 @@ impl Thorium {
     /// #    exec().await
     /// # });
     /// ```
-    pub async fn refresh<T: Into<String>>(
-        &mut self,
-        username: T,
-        password: T,
-    ) -> Result<(), Error> {
+    pub async fn refresh<T: AsRef<str>>(&mut self, username: T, password: T) -> Result<(), Error> {
         // logout and invalidate our token
         self.users.logout().await?;
         // authenticate and get new token
         let (token, expiration) = Self::auth(
             &self.host,
-            Some(username.into()),
-            Some(password.into()),
+            username.as_ref(),
+            password.as_ref(),
             &self.client,
         )
         .await?;

@@ -15,7 +15,6 @@ const MAIN_MODULE_NAME: &str = "thorium";
 /// Imports we need for the stubs
 const IMPORTS: &str = r"
 
-from pathlib import Path
 from uuid import UUID
 ";
 

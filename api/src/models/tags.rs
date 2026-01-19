@@ -11,6 +11,9 @@ use crate::models::TagMap;
 use super::InvalidEnum;
 use super::backends::TagSupport;
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 /// The different types of tags
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Hash, Eq)]
 #[cfg_attr(
@@ -594,8 +597,9 @@ impl<T: TagSupport + 'static + Send> super::CensusSupport for TagCensusCaseInsen
 }
 
 /// The counts for a specific tag key and its value
-#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct TagKeyCounts {
     /// The total number of items with this tag key
     pub total: u64,
@@ -604,8 +608,9 @@ pub struct TagKeyCounts {
 }
 
 /// A count of tags across some chunk of time
-#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct TagCounts {
     /// The id for this cursor if it can be continued
     #[serde(skip_serializing_if = "Option::is_none")]

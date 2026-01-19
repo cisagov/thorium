@@ -1,3 +1,5 @@
+//! Python-specific things for jobs
+
 use pyo3::pymethods;
 
 use crate::models::{GenericJobArgs, GenericJobKwargs, GenericJobOpts};
@@ -7,11 +9,11 @@ impl GenericJobArgs {
     #[new]
     #[pyo3(signature =
         (
-            positionals: "list[str]" = Vec::new(),
-            kwargs: "dict[str, list[str]]" = GenericJobKwargs::default(),
-            switches: "list[str]" = Vec::new(),
-            opts: "GenericJobOpts" = GenericJobOpts::default()
-        ) -> "GenericJobArgs",
+            positionals = Vec::new(),
+            kwargs = GenericJobKwargs::default(),
+            switches = Vec::new(),
+            opts = GenericJobOpts::default()
+        ),
     )]
     fn new(
         positionals: Vec<String>,
@@ -33,10 +35,10 @@ impl GenericJobOpts {
     #[new]
     #[pyo3(signature =
         (
-            override_positionals=false,
-            override_kwargs=false,
-            override_cmd: "list[str] | None" = None
-        ) -> "GenericJobOpts"
+            override_positionals = false,
+            override_kwargs = false,
+            override_cmd = None
+        )
     )]
     fn new_py(
         override_positionals: bool,

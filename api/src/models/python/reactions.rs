@@ -1,3 +1,5 @@
+//! Python-specific things for reactions
+
 use pyo3::pymethods;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -17,16 +19,16 @@ impl ReactionRequest {
         (
             group,
             pipeline,
-            args: "dict[str, GenericJobArgs]" = ReactionArgs::default(),
+            args = ReactionArgs::default(),
             sla = None,
-            tags: "list[str]" = Vec::new(),
+            tags = Vec::new(),
             parent: "UUID | None" = None,
-            samples: "list[str]" = Vec::new(),
-            buffers: "dict[str, str]" = HashMap::new(),
-            repos: "list[RepoDependencyRequest]" = Vec::new(),
+            samples = Vec::new(),
+            buffers = HashMap::new(),
+            repos = Vec::new(),
             trigger_depth = None,
-            cache: "ReactionCache" = ReactionCache::default(),
-        ) -> "ReactionRequest"
+            cache = ReactionCache::default(),
+        )
     )]
     #[allow(clippy::too_many_arguments)]
     fn new_py(
@@ -69,9 +71,9 @@ impl ReactionCache {
     #[new]
     #[pyo3(signature =
         (
-            generic: "dict[str, str]" = HashMap::new(),
-            files: "list[str]" = Vec::new(),
-        ) -> "ReactionCache"
+            generic = HashMap::new(),
+            files = Vec::new(),
+        )
     )]
     fn new_py(generic: HashMap<String, String>, files: Vec<String>) -> Self {
         Self { generic, files }

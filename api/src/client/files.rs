@@ -26,15 +26,21 @@ use crate::{
     send_bytes,
 };
 
-// import our static runtime if we need a blocking client
-#[cfg(feature = "sync")]
-use super::RUNTIME;
+// sync client imports
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sync")] {
+        use super::RUNTIME;
+        use super::traits::ResultsClientBlocking;
+        use crate::models::{CursorBlocking, CountCursorBlocking};
+    }
+}
 
-#[cfg(feature = "sync")]
-use super::traits::ResultsClientBlocking;
+// python client imports
+#[cfg(feature = "python")]
+use pyo3::pyclass;
 
 /// A handler for the files routes in Thorium
-#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
+#[cfg_attr(feature = "sync", thorium_derive::blocking_struct(python))]
 #[derive(Clone)]
 pub struct Files {
     /// The host/url that Thorium can be reached at
@@ -45,7 +51,13 @@ pub struct Files {
     client: reqwest::Client,
 }
 
-#[cfg_attr(feature = "sync", thorium_derive::blocking_struct)]
+#[cfg_attr(
+    feature = "sync",
+    thorium_derive::blocking_struct(wrap_return(
+        Cursor = "CursorBlocking",
+        CountCursor = "CountCursorBlocking"
+    ))
+)]
 impl Files {
     /// Creates a new files handler
     ///

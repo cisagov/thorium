@@ -6,6 +6,6 @@ edition.workspace = true
 
 [dependencies]
 anyhow = "1.0"
-pyo3-introspection = "0.27"
+pyo3-introspection = "0.28"
 cargo_metadata = "0.23"
 walkdir = "2.5.0"

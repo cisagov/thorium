@@ -145,7 +145,7 @@ impl JobResets {
 
 /// The different possible statuses for a reaction
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum JobStatus {
@@ -175,7 +175,7 @@ impl fmt::Display for JobStatus {
 
 /// The different possible statuses for a Job handle command
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum JobHandleStatus {
     /// The current job completed but the reaction is still waiting for other jobs to complete
@@ -194,7 +194,7 @@ pub enum JobHandleStatus {
 
 /// response for handling Job command
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct HandleJobResponse {
     /// status of executed command
@@ -618,8 +618,8 @@ impl GenericJobArgsUpdate {
 /// Currently this is the only job we support but in the future I would like to
 /// have a way to allow users to tell Thorium how to bounds check jobs. That
 /// will likely be its own type.
-#[derive(Serialize, Deserialize, Debug)]
-#[cfg_attr(feature = "python", pyclass)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct GenericJob {
     /// The reaction this job is apart of

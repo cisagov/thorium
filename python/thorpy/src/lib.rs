@@ -19,11 +19,17 @@ pub mod thorium {
     #[pymodule_export]
     pub use thorium::client::conf::ClientSettings;
     #[pymodule_export]
-    pub use thorium::client::{BasicBlocking, JobsBlocking, ReactionsBlocking, ThoriumBlocking};
+    pub use thorium::client::{
+        BasicBlocking, FilesBlocking, JobsBlocking, ReactionsBlocking, ThoriumBlocking,
+    };
+    #[pymodule_export]
+    pub use thorium::models::python::{SampleCursor, SampleListLineCursor, TagCountsCursor};
     #[pymodule_export]
     pub use thorium::models::{
-        BulkReactionResponse, CommitishKinds, GenericJob, GenericJobArgs, GenericJobOpts,
-        HandleJobResponse, JobHandleStatus, Reaction, ReactionCache, ReactionCreation,
-        ReactionRequest, ReactionStatus, RepoDependency, RepoDependencyRequest,
+        BulkReactionResponse, CarvedOriginPy, Comment, CommitishKinds, FileListOpts, GenericJob,
+        GenericJobArgs, GenericJobOpts, HandleJobResponse, JobHandleStatus, OriginPy, Reaction,
+        ReactionCache, ReactionCreation, ReactionRequest, ReactionStatus, RepoDependency,
+        RepoDependencyRequest, SampleListLine, SamplePy, SubmissionChunkPy, TagCounts,
+        TagKeyCounts,
     };
 }

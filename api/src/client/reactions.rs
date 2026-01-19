@@ -1269,10 +1269,7 @@ impl ReactionsBlocking {
     ///
     /// * `reqs` - The reaction requests to create reactions in bulk
     #[allow(clippy::needless_pass_by_value)]
-    #[pyo3(
-        name = "create_bulk",
-        signature = (reqs: "list[ReactionRequest]") -> "BulkReactionResponse"
-    )]
+    #[pyo3(name = "create_bulk")]
     pub fn create_bulk_py(
         &self,
         reqs: Vec<ReactionRequest>,

@@ -3,16 +3,18 @@
 //! The actual Python module is exported/built in the `thorpy` crate which has
 //! this crate as a dependency.
 
+mod files;
+
 use base64::Engine;
-use pyo3::{Bound, pymethods, types::PyType};
+use pyo3::{pymethods, types::PyType, Bound};
 use std::path::PathBuf;
 
 use crate::{
-    Error, ThoriumBlocking,
     client::{
-        BasicBlocking, ClientSettings, JobsBlocking, ReactionsBlocking,
-        conf::default_client_timeout, helpers,
+        conf::default_client_timeout, helpers, BasicBlocking, ClientSettings, FilesBlocking,
+        JobsBlocking, ReactionsBlocking,
     },
+    Error, ThoriumBlocking,
 };
 
 #[pymethods]
@@ -27,8 +29,8 @@ impl ThoriumBlocking {
             token=None,
             username=None,
             password=None,
-            settings: "ClientSettings" = ClientSettings::default()
-        ) -> "ThoriumBlocking"
+            settings = ClientSettings::default()
+        )
     )]
     #[allow(clippy::needless_pass_by_value)]
     pub fn new(
@@ -55,10 +57,12 @@ impl ThoriumBlocking {
         let basic = BasicBlocking::new(host, &client);
         let jobs = JobsBlocking::new(host, &auth_str, &client);
         let reactions = ReactionsBlocking::new(host, &auth_str, &client);
+        let files = FilesBlocking::new(host, &auth_str, &client);
         Ok(Self {
             basic,
             jobs,
             reactions,
+            files,
             host: host.to_string(),
             _auth_str: auth_str,
             expires,
@@ -72,10 +76,7 @@ impl ThoriumBlocking {
     ///
     /// * `path` - The path to read [`Keys`] from
     #[classmethod]
-    #[pyo3(
-        name = "from_key_file",
-        signature = (path: "str") -> "ThoriumBlocking"
-    )]
+    #[pyo3(name = "from_key_file")]
     pub fn from_key_file_py(_cls: &Bound<'_, PyType>, path: &str) -> Result<Self, Error> {
         Self::from_key_file(path)
     }
@@ -86,10 +87,7 @@ impl ThoriumBlocking {
     ///
     /// * `path` - The path to read [`CtlConf`] from
     #[classmethod]
-    #[pyo3(
-        name = "from_ctl_conf_file",
-        signature = (path: "str") -> "ThoriumBlocking"
-    )]
+    #[pyo3(name = "from_ctl_conf_file")]
     pub fn from_ctl_conf_file_py(_cls: &Bound<'_, PyType>, path: &str) -> Result<Self, Error> {
         Self::from_ctl_conf_file(path)
     }
@@ -103,7 +101,7 @@ impl ClientSettings {
         (
             invalid_certs=false,
             invalid_hostnames=false,
-            certificate_authorities: "list[Path]" = Vec::new(),
+            certificate_authorities=Vec::new(),
             timeout=default_client_timeout()
         )
     )]

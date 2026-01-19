@@ -837,7 +837,7 @@ impl CommitishListParams {
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", pyclass)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub enum CommitishKinds {
     /// A commit
     Commit,

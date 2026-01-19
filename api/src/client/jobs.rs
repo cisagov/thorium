@@ -593,10 +593,7 @@ impl JobsBlocking {
     ///
     /// * `job` - The generator job to set as sleeping
     /// * `checkpoint` - The new checkpoint to set
-    #[pyo3(
-        name = "checkpoint",
-        signature = (job: "GenericJob", checkpoint: "str") -> "HandleJobResponse"
-    )]
+    #[pyo3(name = "checkpoint")]
     pub fn checkpoint_py(
         &self,
         job: &GenericJob,

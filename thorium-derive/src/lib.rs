@@ -10,6 +10,8 @@ mod sync;
 #[cfg(feature = "python")]
 mod python;
 
+mod utils;
+
 /// Add the json based serialzie impl
 fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
@@ -29,7 +31,7 @@ fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
                 scylla::serialize::value::SerializeValue::serialize(&value, typ, writer)
             }
         }
-    })
+    });
 }
 
 /// Add the json based serialzie impl
@@ -66,7 +68,7 @@ fn add_json_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
             }
         }
 
-    })
+    });
 }
 
 #[proc_macro_derive(ScyllaStoreJson)]
@@ -99,7 +101,7 @@ fn add_as_str_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
                 scylla::serialize::value::SerializeValue::serialize(&value, typ, writer)
             }
         }
-    })
+    });
 }
 
 /// Add the as str based serialzie impl
@@ -144,7 +146,7 @@ fn add_as_str_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
                 }
             }
         }
-    })
+    });
 }
 
 #[proc_macro_derive(ScyllaStoreAsStr)]
@@ -191,7 +193,7 @@ pub fn blocking_trait(meta: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Create a blocking version of the async function
 ///
-/// The body of the async function is just blocked on the static runtim
+/// The body of the async function is just blocked on the static runtime
 #[cfg(feature = "sync")]
 #[proc_macro_attribute]
 pub fn blocking_fn(meta: TokenStream, input: TokenStream) -> TokenStream {
@@ -204,4 +206,19 @@ pub fn blocking_fn(meta: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn pyclass(meta: TokenStream, input: TokenStream) -> TokenStream {
     python::pyclass(meta, input)
+}
+
+/// Defines an identical enum with the suffix `Py` appended that's PyO3-compatible,
+/// replacing unit-type variants (e.g. `MyVariant`) with empty tuple variants
+/// (e.g. `MyVariant()`).
+///
+/// From is implemented either side to easily convert types between each other. No
+/// attributes are carried over.
+///
+/// This is required until `PyO3` supports unit-type enum variants in complex enums
+/// (see <https://pyo3.rs/v0.27.2/class.html#complex-enums>)
+#[cfg(feature = "python")]
+#[proc_macro_attribute]
+pub fn pyenum(meta: TokenStream, input: TokenStream) -> TokenStream {
+    python::pyenum(meta, input)
 }

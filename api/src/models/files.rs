@@ -53,6 +53,9 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 // only support scylla and other api side only structs if the api features is enabled
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
@@ -1303,6 +1306,7 @@ impl OriginRequest {
 /// The types of network protocols used in a packet capture
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub enum PcapNetworkProtocol {
     /// The TCP protocol
     #[serde(rename = "TCP", alias = "Tcp", alias = "tcp")]
@@ -1355,6 +1359,10 @@ impl FromStr for PcapNetworkProtocol {
 /// The types of files a samples can be carved from
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(
+    feature = "python",
+    thorium_derive::pyenum(clone(derive("Serialize", "Deserialize")))
+)]
 pub enum CarvedOrigin {
     /// The sample was carved from a packet capture
     Pcap {
@@ -1389,6 +1397,14 @@ pub enum CarvedOrigin {
         }
     }
 )))]
+#[cfg_attr(
+    feature = "python",
+    thorium_derive::pyenum(
+        clone(derive("Serialize", "Deserialize")),
+        pytypes("CarvedOrigin"),
+        rename(None = "None_")
+    )
+)]
 pub enum Origin {
     /// This sample was downloaded from an external website
     Downloaded { url: String, name: Option<String> },
@@ -1986,6 +2002,10 @@ impl PartialEq<SubmissionUpdate> for Sample {
 		"origin": "None"
 	}
 )))]
+#[cfg_attr(
+    feature = "python",
+    thorium_derive::pyclass(clone(derive("Serialize", "Deserialize")), get, pytypes("Origin"))
+)]
 pub struct SubmissionChunk {
     /// A UUID for this submission
     pub id: Uuid,
@@ -2027,6 +2047,7 @@ pub type TagMap = HashMap<String, HashMap<String, HashSet<String>>>;
 		"attachments": {}
 	}
 )))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct Comment {
     /// The groups to share this comment with
     pub groups: Vec<String>,
@@ -2137,6 +2158,14 @@ pub struct CommentResponse {
 		}
     ]
 })))]
+#[cfg_attr(
+    feature = "python",
+    thorium_derive::pyclass(
+        clone(derive("Serialize", "Deserialize")),
+        get,
+        pytypes("SubmissionChunk")
+    )
+)]
 pub struct Sample {
     /// The sha256 of this sample
     pub sha256: String,
@@ -2858,6 +2887,7 @@ impl FileListParams {
 // A single sample submission line
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
 pub struct SampleListLine {
     /// The group this submission was apart of (used only for cursor generation)
     #[serde(skip_serializing, skip_deserializing)]
@@ -3127,6 +3157,7 @@ impl DeleteCommentParams {
 /// Currently this only supports single tag queries but when ES support is added multi tag queries
 /// will be supported.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub struct FileListOpts {
     /// The cursor to use to continue this search
     pub cursor: Option<Uuid>,
