@@ -64,9 +64,9 @@ jobs:
           # make a glibc dir
           mkdir glibc
           # copy artifacts to the a glibc dir
-          mv target/release/thorium glibc/.
           mv target/release/thoradm glibc/.
           mv target/release/thorctl glibc/.
+          mv target/release/thorium-api glibc/.
           mv target/release/thorium-agent glibc/.
           mv target/release/thorium-scaler glibc/.
           mv target/release/thorium-reactor glibc/.
