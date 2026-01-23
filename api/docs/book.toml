@@ -1,9 +1,10 @@
 [book]
 authors = ["Michael Carson", "Gavin Baker", "Jake Hamzawi"]
 language = "en"
-multilingual = false
 src = "src"
 title = "Thorium"
+
+[build]
 create-missing = true
 
 [output.html]
