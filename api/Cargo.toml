@@ -161,7 +161,7 @@ reqwest = { workspace = true, optional = true }
 tokio-util = { version = "0.7", default-features = false, features = ["codec", "io", "compat"], optional = true }
 git2 = { version = "0.20", optional = true }
 gix = { version = "0.72", optional = true }
-gix-date = { version = "0.10", optional = true }
+gix-date = { version = "0.12", optional = true }
 shellexpand = { version = "3", optional = true }
 tokio-tar = { version = "0.3", optional = true }
 
