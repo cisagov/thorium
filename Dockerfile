@@ -6,7 +6,7 @@ RUN apt update -y && \
 
 # copy the api in
 WORKDIR /app
-ADD ./target/release/thorium thorium
+ADD ./target/release/thorium-api thorium-api
 ADD ./target/release/thorium-operator thorium-operator
 ADD ./target/release/thoradm thoradm
 ADD ./target/release/thorium-scaler thorium-scaler
@@ -36,7 +36,7 @@ ADD ./target/aarch64-apple-darwin/release/thorctl binaries/darwin/arm64/thorctl
 ADD ./api/docs/src/scripts/install-thorctl.sh binaries/install-thorctl.sh
 
 # make glibc compiled binaries executable
-RUN chmod +x thorium \
+RUN chmod +x thorium-api \
   thoradm \
   thorium-operator \
   thorium-scaler \
