@@ -92,6 +92,11 @@ fn default_envs() -> Vec<EnvVar> {
     ]
 }
 
+/// Serde helper for default number of api replicas
+fn default_api_replicas() -> u16 {
+    3
+}
+
 /// Serde helper for default api container args (cmd in a Dockerfile)
 fn default_api_cmd() -> Vec<String> {
     vec!["/app/thorium-api".to_owned()]
@@ -114,6 +119,7 @@ fn default_api_resources() -> Resources {
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Hash, Eq, PartialEq)]
 pub struct ThoriumApi {
     /// Number of API pods to scale the deployment
+    #[serde(default = "default_api_replicas")]
     pub replicas: u16,
     /// Environment variables to apply to API container
     #[serde(default = "default_envs")]
@@ -127,6 +133,19 @@ pub struct ThoriumApi {
     /// The CPU and Memory needed by the API
     #[serde(default = "default_api_resources")]
     pub resources: Resources,
+}
+
+impl Default for ThoriumApi {
+    /// Build a default api config
+    fn default() -> Self {
+        ThoriumApi {
+            replicas: default_api_replicas(),
+            env: default_envs(),
+            cmd: default_api_cmd(),
+            args: default_api_args(),
+            resources: default_api_resources(),
+        }
+    }
 }
 
 /// Serde helper for default kube config path
@@ -271,15 +290,15 @@ pub struct ThoriumEventHandler {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, JsonSchema, Hash, Eq, PartialEq)]
 pub struct ThoriumComponents {
     /// Thorium API
-    api: Option<ThoriumApi>,
+    pub api: ThoriumApi,
     /// The kubernetes scaler
-    scaler: Option<ThoriumScaler>,
+    pub scaler: Option<ThoriumScaler>,
     /// The baremetal/kaboom scaler
-    baremetal_scaler: Option<ThoriumBaremetalScaler>,
+    pub baremetal_scaler: Option<ThoriumBaremetalScaler>,
     /// Elastic search streamer
-    search_streamer: Option<ThoriumSearchStreamer>,
+    pub search_streamer: Option<ThoriumSearchStreamer>,
     /// Event trigger/handler component of Thorium
-    event_handler: Option<ThoriumEventHandler>,
+    pub event_handler: Option<ThoriumEventHandler>,
 }
 
 /// Serde helper for default image pull policy for containers
@@ -333,15 +352,6 @@ impl ThoriumCluster {
         self.spec.version.clone()
     }
 
-    /// Get the API component spec
-    pub fn get_api_spec(&self) -> Option<&ThoriumApi> {
-        if let Some(spec) = &self.spec.components.api {
-            Some(&spec)
-        } else {
-            None
-        }
-    }
-
     /// Get the scaler component spec
     pub fn get_scaler_spec(&self) -> Option<&ThoriumScaler> {
         if let Some(spec) = &self.spec.components.scaler {
@@ -382,9 +392,8 @@ impl ThoriumCluster {
     pub fn list_component_names(&self) -> Vec<String> {
         // a list of component names
         let mut names: Vec<String> = Vec::new();
-        if let Some(_) = self.spec.components.api {
-            names.push("api".to_owned());
-        }
+        // always add the api name
+        names.push("api".to_owned());
         if let Some(_) = self.spec.components.scaler {
             names.push("scaler".to_owned());
         }

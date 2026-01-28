@@ -77,7 +77,7 @@ async fn reconcile_nodes(node: Arc<Node>, ctx: Arc<NodeWatchContext>) -> Result<
                 // this node has an unknown thorium enabled label
                 unknown => {
                     return Err(Error::new(format!(
-                        "Node {:?} has unknown thorium enabled label: {unknown}",
+                        "Node {:?} has unknown 'thorium' label '{unknown}'. Expected values are 'enabled' or 'disabled'",
                         node.metadata.name
                     )));
                 }

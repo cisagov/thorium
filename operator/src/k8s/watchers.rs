@@ -7,6 +7,7 @@ use tokio::task::JoinSet;
 use crate::args::OperateCluster;
 use crate::k8s::controller::SharedInfo;
 
+mod mcp;
 mod nodes;
 mod thorium_cr;
 
@@ -37,4 +38,6 @@ pub fn start(
     ));
     // create a node watcher
     watchers.spawn(nodes::start(name, client.clone(), shared.clone()));
+    // create an mcp pod watcher
+    watchers.spawn(mcp::start(client.clone(), shared.clone()));
 }

@@ -50,7 +50,7 @@ pub async fn apply(
     // create required s3 buckets if not exists
     app::helpers::create_all_buckets(meta).await?;
     // create or update API service
-    k8s::services::create_or_update(meta).await?;
+    k8s::services::create_or_update_all(meta).await?;
     // create or update api deployment from CR
     k8s::deployments::deploy_api(meta, &host_aliases).await?;
     // build API url host string

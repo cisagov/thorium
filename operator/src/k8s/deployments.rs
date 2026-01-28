@@ -15,8 +15,12 @@ use super::crds;
 ///  Arguments
 ///
 /// * `meta` - Thorium cluster client and metadata
-fn api_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>) -> Option<Value> {
-    let api_spec = meta.cluster.get_api_spec();
+fn api(
+    meta: &ClusterMeta,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Result<Deployment, serde_json::Error> {
+    // get the api component spec
+    let api_spec = &meta.cluster.spec.components.api;
     // only include imagePullSecret if required
     let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
         serde_json::json!([
@@ -27,106 +31,106 @@ fn api_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>) -> Optio
     } else {
         serde_json::json!([])
     };
-    match api_spec {
-        Some(api_spec) => Some(serde_json::json!({
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": {
-                "namespace": meta.cluster.metadata.namespace.clone(),
-                "name": "api",
-                "labels": {
+    // build the api deployment template
+    let template = serde_json::json!({
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "namespace": meta.cluster.metadata.namespace.clone(),
+            "name": "api",
+            "labels": {
+                "app": "api",
+                "version": meta.cluster.get_version(),
+            }
+        },
+        "spec": {
+            "replicas": api_spec.replicas.clone(),
+            "selector": {
+                "matchLabels": {
                     "app": "api",
-                    "version": meta.cluster.get_version(),
                 }
             },
-            "spec": {
-                "replicas": api_spec.replicas.clone(),
-                "selector": {
-                    "matchLabels": {
+            "template": {
+                "metadata": {
+                    "labels": {
                         "app": "api",
+                        "version": meta.cluster.get_version(),
                     }
                 },
-                "template": {
-                    "metadata": {
-                        "labels": {
-                            "app": "api",
-                            "version": meta.cluster.get_version(),
-                        }
-                    },
-                    "spec": {
-                        "containers": [
-                            {
-                                "name": "api",
-                                "image": meta.cluster.get_image(),
-                                "command": api_spec.cmd.clone(),
-                                "args": api_spec.args.clone(),
-                                "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
-                                "resources": {
-                                    "limits": crds::Resources::request_conv(&api_spec.resources).expect("failed to convert resources to valid request format"),
-                                    "requests": crds::Resources::request_conv(&api_spec.resources).expect("failed to convert resources to valid request format"),
-                                },
-                                "env": api_spec.env.clone(),
-                                "livenessProbe": {
-                                    "httpGet": {
-                                        "path": "/health",
-                                        "port": 80,
-                                        "scheme": "HTTP"
-                                    },
-                                    "initialDelaySeconds": 10,
-                                    "periodSeconds": 10,
-                                    "successThreshold": 1,
-                                    "timeoutSeconds": 1,
-                                    "failureThreshold": 1,
-                                },
-                                "readinessProbe": {
-                                    "httpGet": {
-                                        "path": "/health",
-                                        "port": 80,
-                                        "scheme": "HTTP"
-                                    },
-                                    "initialDelaySeconds": 5,
-                                    "periodSeconds": 3,
-                                    "successThreshold": 1,
-                                    "timeoutSeconds": 1,
-                                    "failureThreshold": 10,
-                                },
-                                "volumeMounts": [
-                                    {
-                                        "name": "config",
-                                        "mountPath": "/conf/thorium.yml",
-                                        "subPath": "thorium.yml"
-                                    },
-                                    {
-                                        "name": "banner",
-                                        "mountPath": "/app/banner.txt",
-                                        "subPath": "banner.txt"
-                                    }
-                                ]
-                            }
-                        ],
-                        "hostAliases": host_aliases,
-                        "volumes": [
-                            {
-                                "name": "config",
-                                "secret": {
-                                    "secretName": "thorium"
-                                }
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "api",
+                            "image": meta.cluster.get_image(),
+                            "command": api_spec.cmd.clone(),
+                            "args": api_spec.args.clone(),
+                            "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
+                            "resources": {
+                                "limits": crds::Resources::request_conv(&api_spec.resources).expect("failed to convert resources to valid request format"),
+                                "requests": crds::Resources::request_conv(&api_spec.resources).expect("failed to convert resources to valid request format"),
                             },
-                            {
-                                "name": "banner",
-                                "configMap": {
+                            "env": api_spec.env.clone(),
+                            "livenessProbe": {
+                                "httpGet": {
+                                    "path": "/health",
+                                    "port": 80,
+                                    "scheme": "HTTP"
+                                },
+                                "initialDelaySeconds": 10,
+                                "periodSeconds": 10,
+                                "successThreshold": 1,
+                                "timeoutSeconds": 1,
+                                "failureThreshold": 1,
+                            },
+                            "readinessProbe": {
+                                "httpGet": {
+                                    "path": "/health",
+                                    "port": 80,
+                                    "scheme": "HTTP"
+                                },
+                                "initialDelaySeconds": 5,
+                                "periodSeconds": 3,
+                                "successThreshold": 1,
+                                "timeoutSeconds": 1,
+                                "failureThreshold": 10,
+                            },
+                            "volumeMounts": [
+                                {
+                                    "name": "config",
+                                    "mountPath": "/conf/thorium.yml",
+                                    "subPath": "thorium.yml"
+                                },
+                                {
                                     "name": "banner",
-                                    "optional": true,
+                                    "mountPath": "/app/banner.txt",
+                                    "subPath": "banner.txt"
                                 }
+                            ]
+                        }
+                    ],
+                    "hostAliases": host_aliases,
+                    "volumes": [
+                        {
+                            "name": "config",
+                            "secret": {
+                                "secretName": "thorium"
                             }
-                        ],
-                        "imagePullSecrets": image_pull_secrets
-                    }
+                        },
+                        {
+                            "name": "banner",
+                            "configMap": {
+                                "name": "banner",
+                                "optional": true,
+                            }
+                        }
+                    ],
+                    "imagePullSecrets": image_pull_secrets
                 }
             }
-        })),
-        None => None,
-    }
+        }
+    });
+    // parse this template into a deployment
+    serde_json::from_value(template)
 }
 
 /// Build JSON template for baremetal-scaler deployment
@@ -578,11 +582,10 @@ pub async fn get_templates(meta: &ClusterMeta) -> Result<Vec<Deployment>, Error>
         .unwrap_or_default();
     // preallocate a list of our core component deployments
     let mut deployments: Vec<Deployment> = Vec::with_capacity(5);
-    // add any api deployment templates
-    if let Some(deployment) = api_template(meta, &host_aliases) {
-        let deployment: Deployment = serde_json::from_value(deployment)?;
-        deployments.push(deployment);
-    }
+    // build the api deployment for Thorium
+    let api_deployment = api(meta, &host_aliases)?;
+    // add this to our deployment list
+    deployments.push(api_deployment);
     // add any scaler deployment templates
     if let Some(deployment) = scaler_template(meta, &host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
@@ -710,14 +713,10 @@ pub async fn deploy_api(
     meta: &ClusterMeta,
     host_aliases: &Vec<K8sHostAliases>,
 ) -> Result<(), Error> {
-    // add any api deployment templates
-    if let Some(deployment) = api_template(meta, host_aliases) {
-        let deployment: Deployment = serde_json::from_value(deployment)?;
-        create_or_update(deployment, meta).await?;
-    // component not present in cluster spec during upgrades, cleanup
-    } else {
-        delete_one("api", meta).await?;
-    }
+    // build the api deployment ot deploy
+    let deployment = api(meta, host_aliases)?;
+    // create or update this deployment
+    create_or_update(deployment, meta).await?;
     Ok(())
 }
 

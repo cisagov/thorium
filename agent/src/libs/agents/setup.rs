@@ -250,7 +250,7 @@ pub async fn build_sample_path(
             // log the sha256 we are downloading
             event!(Level::INFO, sha256 = sha256);
             // add a log to disk that are downloading this file
-            log!(logs, "Downloading sample {sha256}");
+            log!(logs, "Downloading sample {}", sha256);
             Ok(base.join(sha256))
         }
         FileNamingStrategy::MostRecent => {

@@ -5,7 +5,7 @@ ARG TOKEN
 RUN apt update && apt install -y curl
 # install rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > installer && \
-      sh installer --default-toolchain nightly-2025-08-01 -y
+      sh installer --default-toolchain nightly -y
 # install build dependencies
 RUN apt update && \
       apt install -y \
