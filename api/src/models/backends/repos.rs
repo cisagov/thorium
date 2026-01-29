@@ -425,9 +425,9 @@ impl Repo {
             Ok(resp) => Ok(resp),
             Err(err) => {
                 // determine if this file already exists in s3
-                if db::s3::s3_id_exists(S3Objects::File, &s3_id, shared).await? {
+                if db::s3::s3_id_exists(S3Objects::Repo, &s3_id, shared).await? {
                     // delete our multipart upload since this failed
-                    shared.s3.files.delete(&s3_id.to_string()).await?;
+                    shared.s3.repos.delete(&s3_id.to_string()).await?;
                 }
                 Err(err)
             }

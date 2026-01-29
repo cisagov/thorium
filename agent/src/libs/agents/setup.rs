@@ -62,10 +62,7 @@ pub async fn write_generic_cache(
         // serialize our generic cache
         let serialized = serde_json::to_string(&cache.generic)?;
         // download and uncart this file to disk
-        log!(
-            logs,
-            format!("Writing generic cache to {}", cache_path.display())
-        );
+        log!(logs, "Writing generic cache to {}", cache_path.display());
         // write our generic cache to disk
         tokio::fs::write(&cache_path, &serialized).await?;
         // set the path that we downloaded our cache too
@@ -101,7 +98,7 @@ async fn download_cache_file_helper(
     // make sure to always uncart these files
     let mut opts = FileDownloadOpts::default().uncart();
     // log that we are downloading this cache file
-    log!(&mut logs, format!("Downloading cache file {sub}"));
+    log!(&mut logs, "Downloading cache file {sub}");
     // make any required sub folders if needed
     if let Some(parent) = write_path.parent() {
         // create our parent folders

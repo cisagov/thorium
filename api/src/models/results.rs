@@ -26,6 +26,7 @@ use crate::client::Error;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 pub enum OutputKind {
     /// We are saving file results
     Files,

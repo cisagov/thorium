@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum::http::request::Parts;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::{Span, instrument};
+use tracing::instrument;
 use uuid::Uuid;
 
 use super::db::{self};
@@ -34,12 +34,13 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
                 "groups" => self.groups.push(field.text().await?),
                 "tool" => self.tool = Some(field.text().await?),
                 "tool_version" => {
-                    self.tool_version = Some(ImageVersion::from(&field.text().await?))
+                    self.tool_version = Some(ImageVersion::from(&field.text().await?));
                 }
                 "cmd" => self.cmd = Some(field.text().await?),
                 "result" => self.result = Some(field.text().await?),
                 "display_type" => {
-                    self.display_type = Some(OutputDisplayType::from_str(&field.text().await?[..])?)
+                    self.display_type =
+                        Some(OutputDisplayType::from_str(&field.text().await?[..])?);
                 }
                 "extra" => self.extra = Some(deserialize!(&field.text().await?)),
                 // this is the data so return it so we can stream it to s3
@@ -130,10 +131,8 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
             .await?;
         // build the key to save results and tags too
         let key = O::build_key(key.clone(), &form.extra);
-        // get our current span
-        let span = Span::current();
         // save these results to the backend
-        db::results::create(&key, &form, shared, &span).await?;
+        db::results::create(&key, &form, shared).await?;
         // build the tag request for this results tags
         let tag_req = O::tag_req()
             .groups(form.groups.clone())
@@ -259,7 +258,8 @@ impl OutputMap {
     ///
     /// * `limit` - The max number of results to keep for each tool
     pub fn limit(&mut self, limit: usize) {
-        for (_, results) in self.results.iter_mut() {
+        // limit all of our results to at most N
+        for results in self.results.values_mut() {
             results.truncate(limit);
         }
     }

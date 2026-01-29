@@ -107,10 +107,19 @@ macro_rules! best_effort_panic {
 #[macro_export]
 macro_rules! log {
     ($logs:expr, $msg:expr) => {
-        crate::check!($logs.send($msg.to_string()))
+        $crate::check!($logs.send(format!($msg)))
     };
     ($logs:expr, $format:expr, $($args:expr),+) => {
-        crate::check!($logs.send(format!($format, $($args),+)))
+        $crate::check!($logs.send(format!($format, $($args),+)))
+    };
+}
+
+// Log a string that has no data/{} in it
+#[doc(hidden)]
+#[macro_export]
+macro_rules! log_string {
+    ($logs:expr, $msg:expr) => {
+        $crate::check!($logs.send($msg))
     };
 }
 
@@ -119,7 +128,7 @@ macro_rules! log {
 #[macro_export]
 macro_rules! fail {
     ($logs:expr, $msg:expr) => {{
-        crate::check!($logs.send($msg.to_string()));
+        $crate::check!($logs.send($msg.to_string()));
         return Err(thorium::Error::new($msg));
     }};
 }

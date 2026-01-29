@@ -12,7 +12,7 @@ use super::cmd::CmdBuilder;
 use super::{AgentExecutor, InFlight, setup};
 use crate::libs::children::{self, Children};
 use crate::libs::{DownloadedCache, RawResults, TagBundle, Target, results, tags};
-use crate::{log, purge, purge_parent};
+use crate::{log, log_string, purge, purge_parent};
 
 /// Isolate a path to target folder or file
 ///
@@ -311,7 +311,7 @@ impl AgentExecutor for BareMetal {
         // cast our command to a str
         let built_str = cmd.join(" ");
         // log the command we are executing
-        log!(self.logs, built_str);
+        log_string!(self.logs, built_str.clone());
         event!(Level::INFO, cmd = built_str);
         // open a file handle to this file
         let log_file = std::fs::File::create(log_path)?;

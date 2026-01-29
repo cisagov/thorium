@@ -10,9 +10,9 @@ use tracing::{Level, event, instrument};
 
 use super::cmd::CmdBuilder;
 use super::{AgentExecutor, InFlight, setup};
-use crate::args;
 use crate::libs::children::{self, Children};
 use crate::libs::{DownloadedCache, RawResults, TagBundle, Target, results, tags};
+use crate::{args, log_string};
 use crate::{deserialize, log, purge};
 
 /// An execution of a single job in k8s
@@ -318,9 +318,11 @@ impl AgentExecutor for K8s {
             // if this is a windows job then change our command to run in windows
             .windows(self.windows)
             .build(image, None)?;
+        // cast our command to a str
+        let built_str = cmd.join(" ");
         // log our built command
-        log!(self.logs, cmd.join(" "));
-        event!(Level::INFO, cmd = cmd.join(" "));
+        log_string!(self.logs, built_str.clone());
+        event!(Level::INFO, cmd = built_str);
         // create a file to buffer our logs in
         let log_file = std::fs::File::create(log_path)?;
         // build the comamnd to execute

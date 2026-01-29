@@ -5,6 +5,7 @@ use futures::{StreamExt, stream};
 use itertools::Itertools;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Duration;
 use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
@@ -12,10 +13,10 @@ use super::ScyllaCursor;
 use crate::models::backends::TagSupport;
 use crate::models::backends::db::ScyllaTagCountCursor;
 use crate::models::{
-    Comment, CommentForm, CommentRow, Event, FileListParams, ResultSearchEvent, Sample,
-    SampleCheck, SampleCheckResponse, SampleForm, SampleListLine, SampleSubmissionResponse,
-    Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate, TagDeleteRequest, TagRequest,
-    TagSearchEvent, User,
+    Comment, CommentForm, CommentRow, Event, FileListParams, OutputKind, ResultSearchEvent,
+    S3Objects, Sample, SampleCheck, SampleCheckResponse, SampleForm, SampleListLine,
+    SampleSubmissionResponse, Submission, SubmissionChunk, SubmissionRow, SubmissionUpdate,
+    TagDeleteRequest, TagRequest, TagSearchEvent, User,
 };
 use crate::utils::s3::StandardHashes;
 use crate::utils::{ApiError, Shared, helpers};
@@ -553,6 +554,17 @@ pub async fn get(
     Ok(None)
 }
 
+async fn still_visible(sample: &Sample, shared: &Shared) -> Result<bool, ApiError> {
+    // we need to see all groups so use the thorium user
+    let user = User::force_get("thorium", shared).await?;
+    // build a sampel check query for this sample
+    let check = SampleCheck::new(sample.sha256.clone());
+    // see if this sample is visible in any group
+    let resp = exists(&user, &check, shared).await?;
+    // return if this sample exists or not
+    Ok(resp.exists)
+}
+
 /// Deletes a submission from a sample
 ///
 /// # Arguments
@@ -577,6 +589,10 @@ pub async fn delete_submission(
     let bucket = helpers::partition(sub.uploaded, year, chunk_size);
     // delete the submissions from the db
     delete_from_groups!(shared, groups, year, bucket, sub.uploaded, sub.id);
+    // sleep for a second to ensure scylla has time to become consistent
+    // this isn't very performant but deletes should be relatively rare and you can
+    // perform then in parallel to work around performance issues
+    tokio::time::sleep(Duration::from_secs(1)).await;
     // get the groups and submitters of other submissions for this sample
     let group_submitter_map = other_submissions(&sample.sha256, sub, groups, shared).await?;
     // prune submitter tags
@@ -593,18 +609,14 @@ pub async fn delete_submission(
     // leaking other groups also can see this sample
     let prunes: Vec<String> = if group_submitter_map.is_empty() {
         // no other groups have access to this sample so delete all of its data
-        sample
-            .groups()
-            .into_iter()
-            .map(|name| name.to_owned())
-            .collect()
+        sample.groups().into_iter().map(ToOwned::to_owned).collect()
     } else {
         // other groups have access to this data so determine if there are any
         // groups that no longer have access and should have there access pruned
         groups
             .iter()
             .filter(|group| !group_submitter_map.contains_key(*group))
-            .map(|name| name.to_owned())
+            .map(ToOwned::to_owned)
             .collect()
     };
     // if any groups need their access pruned then do it
@@ -612,7 +624,20 @@ pub async fn delete_submission(
         // prune access for our target groups
         prune_access(sample, &prunes, shared).await?;
     }
-    // build the ache keys for these submissions
+    // if no other groups still have access to this data then determine if anyone in Thorium
+    // including those we can't see still have access to this sample
+    if group_submitter_map.is_empty() {
+        // check to see if this sample is still visible to others
+        if !still_visible(sample, shared).await? {
+            // get the s3 id for this object
+            let s3_id = super::s3::get_s3_id(S3Objects::File, &sample.sha256, shared).await?;
+            // no one else has access so prune this samples data
+            shared.s3.files.delete(&s3_id.to_string()).await?;
+            // also delete this from the s3 object id table
+            super::s3::delete(S3Objects::File, s3_id, shared).await?;
+        }
+    }
+    // build the census count cache keys for these submissions
     // There is no extra info for samples to pass so we just pass in an &()
     let keys = super::keys::samples::census_keys(groups, year, bucket, shared);
     // update this samples census cache info
@@ -741,6 +766,8 @@ async fn prune_access(
     }
     // prune comment attachments now that the comments are deleted
     prune_comment_attachments(&sample.comments, &sample.sha256, shared).await?;
+    // prune access to results for this sample
+    super::results::delete(OutputKind::Files, groups, &sample.sha256, shared).await?;
     // create events to delete search info for this sample in the pruned groups
     let tag_event = TagSearchEvent::deleted::<Sample>(sample.sha256.clone(), groups.clone());
     let result_event = ResultSearchEvent::deleted::<Sample>(sample.sha256.clone(), groups.clone());

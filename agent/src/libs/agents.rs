@@ -25,7 +25,7 @@ use crate::args::Envs;
 use crate::libs::cache;
 use crate::libs::children::Children;
 use crate::libs::{Target, results, tags};
-use crate::{Worker, from_now, log};
+use crate::{Worker, from_now, log_string};
 
 use super::results::RawResults;
 use super::tags::TagBundle;
@@ -654,7 +654,7 @@ pub async fn execute(mut agent: Agent, log_path: String) {
             // log this error event
             event!(Level::INFO, msg = &msg);
             // send our error message
-            log!(agent.sender, msg);
+            log_string!(agent.sender, msg);
             // error our this job
             check!(agent.error_channel_only(&error).await);
             // return early

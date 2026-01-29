@@ -147,10 +147,7 @@ async fn sync_cache_files(
                 // get this entries path
                 let entry_path = entry.path();
                 // log that we are updating this cache file
-                log!(
-                    logs,
-                    format!("Updating {} cache file", entry_path.display())
-                );
+                log!(logs, "Updating {} cache file", entry_path.display());
                 // build the update to sync this cache file update with
                 let update = ReactionCacheFileUpdate::default()
                     .file(OnDiskFile::new(entry_path).trim_prefix(&cache_file_path));

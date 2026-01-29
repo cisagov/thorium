@@ -184,7 +184,7 @@ async fn delete(session: &Session, config: &Conf) -> PreparedStatement {
     // build s3 id delete prepared statement
     session
         .prepare(format!(
-            "DELETE FROM {}.s3_ids WHERE type = ? and id in ?",
+            "DELETE FROM {}.s3_ids WHERE type = ? and id = ?",
             &config.thorium.namespace
         ))
         .await

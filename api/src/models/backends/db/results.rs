@@ -1,9 +1,11 @@
 //! Saves results into the backend
 
 use chrono::prelude::*;
+use futures::StreamExt;
+use futures::stream::{self};
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
-use tracing::{event, instrument, span, Level, Span};
+use tracing::{Level, event, instrument, span};
 use uuid::Uuid;
 
 use crate::models::backends::OutputSupport;
@@ -11,7 +13,7 @@ use crate::models::{
     Output, OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKind, OutputMap, OutputRow,
     ResultSearchEvent,
 };
-use crate::utils::{helpers, ApiError, Shared};
+use crate::utils::{ApiError, Shared, helpers};
 use crate::{internal_err, log_scylla_err, unauthorized};
 
 /// Saves a files result into the backend
@@ -21,16 +23,14 @@ use crate::{internal_err, log_scylla_err, unauthorized};
 /// * `key` - The key to use when saving our results.
 /// * `form` - The results to save to scylla
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::results::create", skip(form, shared), err(Debug))]
 pub async fn create<O: OutputSupport>(
     key: &str,
     form: &OutputForm<O>,
     shared: &Shared,
-    span: &Span,
 ) -> Result<(), ApiError> {
     // get the type of tag we are creating
     let kind = O::output_kind();
-    // start our create results span
-    let span = span!(parent: span, Level::INFO, "Save Results To Scylla");
     // wrap our tool in a vec
     let tools = vec![form.tool.clone()];
     // get our previous results
@@ -90,7 +90,7 @@ pub async fn create<O: OutputSupport>(
     // if we have more then our max results stored then delete any past that
     if past.len() >= shared.config.thorium.retention.results {
         // prune any results in groups with more then 3 values
-        prune(kind, &form.groups, key, &past, shared, &span).await?;
+        prune(kind, &form.groups, key, &past, shared).await?;
     }
     // create an event since we've modified results
     let event = ResultSearchEvent::modified::<O>(key.to_string(), form.groups.clone());
@@ -417,6 +417,11 @@ pub async fn get(
 /// * `result_id` - The id of the result to possibly prune
 /// * `files` - The files in s3 to prune if neccesary
 /// * `shared` - Shared Thorium objects
+#[instrument(
+    name = "db::results::prune_helper",
+    skip(result_id, files, shared),
+    err(Debug)
+)]
 async fn prune_helper(
     kind: OutputKind,
     key: &str,
@@ -462,16 +467,14 @@ async fn prune_helper(
 /// * `results` - The results we are deciding whether to prune or not
 /// * `shared` - Shared Thorium objects
 /// * `span` - The span to log traces under
+#[instrument(name = "db::results::prune", skip(groups, results, shared), err(Debug))]
 pub async fn prune(
     kind: OutputKind,
     groups: &[String],
     key: &str,
     results: &[Output],
     shared: &Shared,
-    span: &Span,
 ) -> Result<(), ApiError> {
-    // create our span
-    span!(parent: span, Level::INFO, "Pruning Results");
     // track how many results for each group we have
     let mut stock: HashMap<&str, usize> = HashMap::default();
     // track the results we prune
@@ -495,7 +498,7 @@ pub async fn prune(
             let entry = stock.entry(group).or_insert(0);
             // if we are already at our retention limit then prune this result
             if *entry >= shared.config.thorium.retention.results {
-                // get the year and hour for this result
+                // delete this result from the result stream
                 shared
                     .scylla
                     .session
@@ -517,9 +520,82 @@ pub async fn prune(
         }
     }
     // crawl ove the result files that might need to be pruned
-    for (result_id, files) in pruned.iter() {
+    for (result_id, files) in &pruned {
         // prune this result if its no longer needed
         prune_helper(kind, key, result_id, files, shared).await?;
+    }
+    Ok(())
+}
+
+/// Delete all results for something in specific groups
+#[instrument(name = "db::results::delete", skip_all, err(Debug))]
+pub async fn delete(
+    kind: OutputKind,
+    groups: &Vec<String>,
+    key: &str,
+    shared: &Shared,
+) -> Result<(), ApiError> {
+    // get all of the results for this item
+    let results = get(kind, groups, key, &Vec::default(), true, shared).await?;
+    // track the results we want to delete
+    let mut pruned = Vec::default();
+    // step over and remove results from the results stream and build the list of results to delete
+    for tool_results in results.results.values() {
+        // delete each of our results
+        for tool_result in tool_results {
+            // get the year this result was added
+            let year = tool_result.uploaded.year();
+            // get the chunk size for results
+            let chunk_size = shared.config.thorium.results.partition_size;
+            // determine what bucket this result is in
+            let bucket = helpers::partition(tool_result.uploaded, year, chunk_size);
+            // remove this from result from each groups result stream
+            let deletes = helpers::assert_send_stream(
+                stream::iter(&tool_result.groups)
+                    .map(|group| {
+                        // delete this result from the result stream
+                        shared.scylla.session.execute_unpaged(
+                            &shared.scylla.prep.results.delete_stream,
+                            (
+                                kind,
+                                group,
+                                year,
+                                bucket,
+                                tool_result.uploaded,
+                                tool_result.id,
+                            ),
+                        )
+                    })
+                    .buffer_unordered(10),
+            )
+            .collect::<Vec<Result<_, _>>>()
+            .await;
+            // check for any errors in our deletes
+            for delete in deletes {
+                // log all failed deletes but don't fail out the request
+                if let Err(error) = delete {
+                    event!(Level::ERROR, error = error.to_string());
+                }
+            }
+            // add this result id and its files to the list of results to prune
+            pruned.push((&tool_result.id, &tool_result.files));
+        }
+    }
+    // crawl over the result files that might need to be pruned
+    for (result_id, files) in &pruned {
+        // prune this result if its no longer needed
+        if prune_helper(kind, key, result_id, files, shared)
+            .await
+            .is_err()
+        {
+            // log this error instead of returning an error to prevent further dangling data
+            // the error will be logged in the prune_helper debug
+            event!(
+                Level::ERROR,
+                msg = "Failed to prune result",
+                result_id = result_id.to_string()
+            );
+        }
     }
     Ok(())
 }

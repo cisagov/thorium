@@ -102,7 +102,7 @@ pub async fn generate_id(objects: S3Objects, shared: &Shared) -> Result<Uuid, Ap
 ///
 /// # Arguments
 ///
-/// * `s3_id` - The s3 id to check for
+/// * `Objects` - The type of object to get
 /// * `key` - The key of the s3 id to get
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::s3::get_s3_id", skip(shared), err(Debug))]
@@ -125,4 +125,21 @@ pub async fn get_s3_id(objects: S3Objects, key: &str, shared: &Shared) -> Result
             objects, key
         ))
     }
+}
+
+/// Delete an object from the s3 id table
+///
+/// # Arguments
+///
+/// * `Objects` - The type of object to delete
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::s3::delete", skip(id, shared), err(Debug))]
+pub async fn delete(objects: S3Objects, id: Uuid, shared: &Shared) -> Result<(), ApiError> {
+    // execute our query
+    shared
+        .scylla
+        .session
+        .execute_unpaged(&shared.scylla.prep.s3.delete, (objects, id))
+        .await?;
+    Ok(())
 }

@@ -15,7 +15,7 @@ use thorium::models::{
     RepoDependency, SampleRequest,
 };
 use thorium::{Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -156,11 +156,9 @@ fn child_matches_any(
                     if matches_any_filter(mime.mime_type(), &filters.mime, filters_cache)? {
                         log!(
                             logs,
-                            format!(
-                                "Child '{}' has MIME type '{}' that matches a filter!",
-                                child.to_string_lossy(),
-                                mime.mime_type()
-                            )
+                            "Child '{}' has MIME type '{}' that matches a filter!",
+                            child.to_string_lossy(),
+                            mime.mime_type()
                         );
                         return Ok(true);
                     }
@@ -173,11 +171,9 @@ fn child_matches_any(
                 // we got some MIME error, so log, but try matching on the other filters
                 log!(
                     logs,
-                    format!(
-                        "Unable to get MIME type for child '{}': {}",
-                        child.to_string_lossy(),
-                        err
-                    )
+                    "Unable to get MIME type for child '{}': {}",
+                    child.to_string_lossy(),
+                    err
                 );
                 None
             }
@@ -188,10 +184,8 @@ fn child_matches_any(
         if matches_any_filter(file_name, &filters.file_name, filters_cache)? {
             log!(
                 logs,
-                format!(
-                    "Child '{}' has file name that matches a filter!",
-                    child.to_string_lossy(),
-                )
+                "Child '{}' has file name that matches a filter!",
+                child.to_string_lossy()
             );
             return Ok(true);
         }
@@ -201,10 +195,8 @@ fn child_matches_any(
         if matches_any_filter(file_extension, &filters.file_extension, filters_cache)? {
             log!(
                 logs,
-                format!(
-                    "Child '{}' has file extension that matches a filter!",
-                    child.to_string_lossy(),
-                )
+                "Child '{}' has file extension that matches a filter!",
+                child.to_string_lossy()
             );
             return Ok(true);
         }
@@ -213,19 +205,15 @@ fn child_matches_any(
     if let Some(mime) = mime {
         log!(
             logs,
-            format!(
-                "Child '{}' with MIME type '{}' did not match any filters!",
-                mime.mime_type(),
-                child.to_string_lossy(),
-            )
+            "Child '{}' with MIME type '{}' did not match any filters!",
+            mime.mime_type(),
+            child.to_string_lossy()
         );
     } else {
         log!(
             logs,
-            format!(
-                "Child '{}' did not match any filters!",
-                child.to_string_lossy(),
-            )
+            "Child '{}' did not match any filters!",
+            child.to_string_lossy()
         );
     }
     Ok(false)
@@ -665,26 +653,38 @@ impl Children {
     async fn get_pcap_metadata(&self, logs: &mut Sender<String>) -> HashMap<String, PcapMetadata> {
         let pcap_metadata_path = self.root.join("carved/pcap/thorium_pcap_metadata.json");
         match PcapMetadata::map_from_file(&pcap_metadata_path).await {
-            Ok(maybe_metadata) => {
-                match maybe_metadata {
-                    Some(metadata) => {
-                        let num_pcap = self.carved.pcap.len();
-                        if num_pcap != 0 && metadata.is_empty() {
-                            log!(logs, "{} Carved-PCAP children were found, but metadata file '{}' is empty!", num_pcap, pcap_metadata_path.to_string_lossy());
-                        } else if num_pcap == 0 && !metadata.is_empty() {
-                            log!(logs, "No Carved-PCAP children were found, but metadata file '{}' has data!", pcap_metadata_path.to_string_lossy());
-                        }
-                        metadata
+            Ok(maybe_metadata) => match maybe_metadata {
+                Some(metadata) => {
+                    let num_pcap = self.carved.pcap.len();
+                    if num_pcap != 0 && metadata.is_empty() {
+                        log!(
+                            logs,
+                            "{} Carved-PCAP children were found, but metadata file '{}' is empty!",
+                            num_pcap,
+                            pcap_metadata_path.to_string_lossy()
+                        );
+                    } else if num_pcap == 0 && !metadata.is_empty() {
+                        log!(
+                            logs,
+                            "No Carved-PCAP children were found, but metadata file '{}' has data!",
+                            pcap_metadata_path.to_string_lossy()
+                        );
                     }
-                    None => {
-                        let num_pcap = self.carved.pcap.len();
-                        if num_pcap != 0 {
-                            log!(logs, "{} Carved-PCAP children were found, but metadata file '{}' is missing!", num_pcap, pcap_metadata_path.to_string_lossy());
-                        }
-                        HashMap::default()
-                    }
+                    metadata
                 }
-            }
+                None => {
+                    let num_pcap = self.carved.pcap.len();
+                    if num_pcap != 0 {
+                        log!(
+                            logs,
+                            "{} Carved-PCAP children were found, but metadata file '{}' is missing!",
+                            num_pcap,
+                            pcap_metadata_path.to_string_lossy()
+                        );
+                    }
+                    HashMap::default()
+                }
+            },
             Err(Error::IO(err)) => {
                 log!(
                     logs,
@@ -704,7 +704,12 @@ impl Children {
                 HashMap::default()
             }
             Err(err) => {
-                log!(logs, "An unknown error occurred reading metadata for Carved-PCAP children in '{}': {}", pcap_metadata_path.to_string_lossy(), err);
+                log!(
+                    logs,
+                    "An unknown error occurred reading metadata for Carved-PCAP children in '{}': {}",
+                    pcap_metadata_path.to_string_lossy(),
+                    err
+                );
                 HashMap::default()
             }
         }
