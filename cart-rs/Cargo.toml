@@ -17,7 +17,7 @@ flate2 = "1"
 miniz_oxide = "0.8"
 rc4 = "0.1"
 generic-array = "0.14"
-bytes = "1.10"
+bytes = "1.11"
 futures-core = "0.3"
 pin-project = "1.1"
 

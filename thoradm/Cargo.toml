@@ -24,7 +24,7 @@ chrono = { workspace = true, features = ["serde", "rkyv", "rkyv-validation"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 ahash = "0.8"
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"]}
-bytes = "1.10"
+bytes = "1.11"
 kanal = "0.1.1"
 indicatif = { version = "0.17", features = ["tokio"] }
 num-format = "0.4"
