@@ -123,6 +123,7 @@ const CreateImageContainer = () => {
     if (Object.keys(securityContext).length && userInfo && userInfo.role == 'Admin' && data.scaler != 'External') {
       data['security_context'] = securityContext;
     }
+
     // --------------------------- tags ----------------------------
     const environmentVarsJson = {};
     // tags are key/value pairs where the values are strings

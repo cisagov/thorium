@@ -6,19 +6,21 @@ import { FaQuestionCircle } from 'react-icons/fa';
 import { FieldBadge, OverlayTipRight } from '@components';
 
 const ResourcesToolTips = {
-  self: `The resources required to run this image. Running images that exceed their requested 
+  self: `The resources required to run this image. Running images that exceed their requested
     resources may be terminated.`,
-  cpu: `The number of CPUs that an image will be allowed to consume. Requesting a large amount 
+  cpu: `The number of CPUs that an image will be allowed to consume. Requesting a large amount
     of CPU may result in an image that can never be scheduled.  Units are either whole CPU or
     integer thousandths of a CPU (mCPU).`,
-  memory: `The max amount of memory an image may be allowed to consume. Requesting a large 
+  memory: `The max amount of memory an image may be allowed to consume. Requesting a large
     amount of memory may result in an image that can never be scheduled.`,
-  ephemeral_storage: `The amount of ephemeral storage that this image requires to run. Requesting 
+  ephemeral_storage: `The amount of ephemeral storage that this image requires to run. Requesting
     a large amount of storage may result in an image that can never be scheduled.`,
-  amd_gpu: `The number of AMD GPUs required to run this image. Requesting a large number of GPUs 
+  amd_gpu: `The number of AMD GPUs required to run this image. Requesting a large number of GPUs
     may result in an image that can never be scheduled.`,
-  nvidia_gpu: `The number of NVIDIA GPUs required to run this image. Requesting a large number of 
+  nvidia_gpu: `The number of NVIDIA GPUs required to run this image. Requesting a large number of
     GPUs may result in an image that can never be scheduled.`,
+  burstable_cpu: `The maximum CPU that this image can burst to above its base cpu limits.`,
+  burstable_memory: `The maximum memory that this image can burst above its base memory limits.`,
 };
 
 const ResourcesTemplate = {
@@ -30,6 +32,10 @@ const ResourcesTemplate = {
   ephemeral_storage_units: 'Gi',
   amd_gpu: '',
   nvidia_gpu: '',
+  burstable_cpu: '',
+  burstable_cpu_units: 'CPU',
+  burstable_memory: '',
+  burstable_memory_units: 'Gi',
 };
 
 const DisplayImageResources = ({ resources }) => {
@@ -112,6 +118,34 @@ const DisplayImageResources = ({ resources }) => {
           </div>
         </Col>
       </Row>
+      {/* ************************** Burstable CPU ************************** */}
+      <Row>
+        <Col className="key-col-1" />
+        <Col className="key-col-2-ext">
+          <em>{`burst cpu: `}</em>
+        </Col>
+        <Col className="key-col-3">
+          <div className="image-fields">
+            <OverlayTipRight tip={ResourcesToolTips.burstable_cpu}>
+              <FieldBadge field={`${String(parseInt(resources.burstable ? resources.burstable['cpu'] : 0))} mCPU`} color={'#7e7c7c'} />
+            </OverlayTipRight>
+          </div>
+        </Col>
+      </Row>
+      {/* ************************** Burstable Memory ************************** */}
+      <Row>
+        <Col className="key-col-1" />
+        <Col className="key-col-2-ext">
+          <em>{`burst memory: `}</em>
+        </Col>
+        <Col className="key-col-3">
+          <div className="image-fields">
+            <OverlayTipRight tip={ResourcesToolTips.burstable_memory}>
+              <FieldBadge field={`${String(parseInt(resources.burstable ? resources.burstable['memory'] : 0))} MiB`} color={'#7e7c7c'} />
+            </OverlayTipRight>
+          </div>
+        </Col>
+      </Row>
     </Fragment>
   );
 };
@@ -170,6 +204,29 @@ const updateCreateRequest = (resources, setRequestResources, setErrors, setHasEr
   } else {
     requestResources.nvidia_gpu = Number(requestResources.nvidia_gpu);
   }
+
+  // Handle burstable resources - format and nest under burstable object
+  const burstable = {};
+  if (requestResources.burstable_cpu && requestResources.burstable_cpu != '') {
+    if (requestResources.burstable_cpu_units == 'mCPU') {
+      burstable.cpu = String(`${requestResources.burstable_cpu}m`);
+    } else {
+      burstable.cpu = String(requestResources.burstable_cpu);
+    }
+  }
+  if (requestResources.burstable_memory && requestResources.burstable_memory != '') {
+    burstable.memory = String(`${requestResources.burstable_memory}${requestResources.burstable_memory_units}`);
+  }
+  // Only include burstable in request if at least one field is set
+  if (Object.keys(burstable).length > 0) {
+    requestResources.burstable = burstable;
+  }
+  // Clean up the flat burstable fields from request
+  delete requestResources.burstable_cpu;
+  delete requestResources.burstable_cpu_units;
+  delete requestResources.burstable_memory;
+  delete requestResources.burstable_memory_units;
+
   setErrors(errors);
   Object.keys(errors).length ? setHasErrors(true) : setHasErrors(false);
   setRequestResources(requestResources);
@@ -235,6 +292,29 @@ const updateEditRequest = (initialResources, resources, setRequestResources, set
   if (Object.keys(requestResources).includes('worker_slots')) {
     delete requestResources['worker_slots'];
   }
+
+  // Handle burstable resources - format and nest under burstable object
+  const burstable = {};
+  if (requestResources.burstable_cpu && requestResources.burstable_cpu != '') {
+    if (requestResources.burstable_cpu_units == 'mCPU') {
+      burstable.cpu = String(`${requestResources.burstable_cpu}m`);
+    } else {
+      burstable.cpu = String(requestResources.burstable_cpu);
+    }
+  }
+  if (requestResources.burstable_memory && requestResources.burstable_memory != '') {
+    burstable.memory = String(`${requestResources.burstable_memory}${requestResources.burstable_memory_units}`);
+  }
+  // Only include burstable in request if at least one field is set
+  if (Object.keys(burstable).length > 0) {
+    requestResources.burstable = burstable;
+  }
+  // Clean up the flat burstable fields from request
+  delete requestResources.burstable_cpu;
+  delete requestResources.burstable_cpu_units;
+  delete requestResources.burstable_memory;
+  delete requestResources.burstable_memory_units;
+
   setErrors(errors);
   Object.keys(errors).length ? setHasErrors(true) : setHasErrors(false);
   setRequestResources(requestResources);
@@ -314,7 +394,7 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
                     <Form.Control
                       type="text"
                       value={resources.memory}
-                      placeholder={resources.memory_units == 'Mi' ? '4000' : '1'}
+                      placeholder={resources.memory_units == 'Mi' ? '2048' : '2'}
                       onChange={(e) => {
                         const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
                         updateResources('memory', String(validValue));
@@ -420,6 +500,78 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
           </div>
         </Col>
       </Row>
+      {/* ************************** Burstable CPU ************************** */}
+      <Row>
+        <Col className="key-col-2-ext">
+          <em>{`burst cpu: `}</em>
+        </Col>
+        <Col className="key-col-3">
+          <div className="image-fields">
+            <OverlayTipRight tip={ResourcesToolTips.burstable_cpu}>
+              <Form.Group className="mb-2 image-fields">
+                <Row>
+                  <Col className="resource-type-col">
+                    <Form.Control
+                      type="text"
+                      value={resources.burstable_cpu ? resources.burstable_cpu : ''}
+                      placeholder={resources.burstable_cpu_units == 'mCPU' ? '2000' : '2'}
+                      onChange={(e) => {
+                        const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
+                        updateResources('burstable_cpu', String(validValue));
+                      }}
+                    />
+                  </Col>
+                  <Col className="resource-unit-col">
+                    <Form.Select
+                      value={resources.burstable_cpu_units}
+                      onChange={(e) => updateResources('burstable_cpu_units', String(e.target.value))}
+                    >
+                      <option value="CPU">CPU</option>
+                      <option value="mCPU">mCPU</option>
+                    </Form.Select>
+                  </Col>
+                </Row>
+              </Form.Group>
+            </OverlayTipRight>
+          </div>
+        </Col>
+      </Row>
+      {/* ************************** Burstable Memory ************************** */}
+      <Row>
+        <Col className="key-col-2-ext">
+          <em>{`burst mem: `}</em>
+        </Col>
+        <Col className="key-col-3">
+          <div className="image-fields">
+            <OverlayTipRight tip={ResourcesToolTips.burstable_memory}>
+              <Form.Group className="mb-2 image-fields">
+                <Row>
+                  <Col className="resource-type-col">
+                    <Form.Control
+                      type="text"
+                      value={resources.burstable_memory ? resources.burstable_memory : ''}
+                      placeholder={resources.burstable_memory_units == 'Mi' ? '4096' : '4'}
+                      onChange={(e) => {
+                        const validValue = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
+                        updateResources('burstable_memory', String(validValue));
+                      }}
+                    />
+                  </Col>
+                  <Col className="resource-unit-col">
+                    <Form.Select
+                      value={resources.burstable_memory_units}
+                      onChange={(e) => updateResources('burstable_memory_units', String(e.target.value))}
+                    >
+                      <option value="Gi">GiB</option>
+                      <option value="Mi">MiB</option>
+                    </Form.Select>
+                  </Col>
+                </Row>
+              </Form.Group>
+            </OverlayTipRight>
+          </div>
+        </Col>
+      </Row>
     </Fragment>
   );
 };
@@ -484,6 +636,24 @@ const ImageResources = ({ resources, setRequestResources, setHasErrors, mode }) 
     }
     if (resources && !resources.ephemeral_storage_units) {
       resources['ephemeral_storage_units'] = 'Mi';
+    }
+    // Extract burstable values from nested object for form state
+    if (resources && resources.burstable) {
+      if (resources.burstable.cpu) {
+        resources['burstable_cpu'] = resources.burstable.cpu;
+        resources['burstable_cpu_units'] = 'mCPU';
+      }
+      if (resources.burstable.memory) {
+        resources['burstable_memory'] = resources.burstable.memory;
+        resources['burstable_memory_units'] = 'Mi';
+      }
+    }
+    // Set default units for burstable fields if not present
+    if (resources && !resources.burstable_cpu_units) {
+      resources['burstable_cpu_units'] = 'CPU';
+    }
+    if (resources && !resources.burstable_memory_units) {
+      resources['burstable_memory_units'] = 'Gi';
     }
   }
 
