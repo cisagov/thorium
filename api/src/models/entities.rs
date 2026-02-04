@@ -17,10 +17,12 @@ use crate::models::{
 pub mod collections;
 pub mod countries;
 pub mod devices;
+pub mod filesystem;
 pub mod shared;
 pub mod vendors;
 
 use devices::DeviceEntity;
+use filesystem::{FileSystemEntity, FileSystemFolderEntity};
 use shared::CriticalSector;
 
 cfg_if::cfg_if! {
@@ -63,6 +65,11 @@ cfg_if::cfg_if! {
             pub collection_ignore_groups: Option<bool>,
             pub collection_start: Option<DateTime<Utc>>,
             pub collection_end: Option<DateTime<Utc>>,
+            pub sha256: Option<String>,
+            pub names_sha256: Option<String>,
+            pub data_sha256: Option<String>,
+            pub all_sha256: Option<String>,
+            pub tools: Vec<String>,
         }
 
         impl EntityMetadataForm {
@@ -148,6 +155,8 @@ cfg_if::cfg_if! {
             pub collection_end: Option<DateTime<Utc>>,
             pub clear_collection_start: Option<bool>,
             pub clear_collection_end: Option<bool>,
+            pub add_tools: Vec<String>,
+            pub remove_tools: Vec<String>,
         }
     }
 }
@@ -201,7 +210,7 @@ impl TreeSupport for Entity {
     /// Gather any initial nodes for a tree
     #[cfg(feature = "api")]
     async fn gather_initial(
-        user: &User,
+        _user: &User,
         query: &crate::models::TreeQuery,
         shared: &crate::utils::Shared,
     ) -> Result<Vec<super::TreeNode>, crate::utils::ApiError> {
@@ -466,6 +475,10 @@ pub enum EntityMetadata {
     /// Collections are dynamic lists of items in Thorium (e.g. samples, repos, etc.)
     /// based on search parameters like tags
     Collection(CollectionEntity),
+    /// A filesystem entity
+    FileSystem(FileSystemEntity),
+    /// A folder within a filesystem entity
+    Folder(FileSystemFolderEntity),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
@@ -481,6 +494,10 @@ pub enum EntityMetadataRequest {
     Vendor(VendorEntityRequest),
     /// A request to create a collection entity
     Collection(CollectionEntityRequest),
+    /// A filesystem entity
+    FileSystem(FileSystemEntity),
+    /// A filesystem folder entity
+    Folder(FileSystemFolderEntity),
     /// An entity that can't be described by any of the other variants
     Other,
 }
@@ -497,6 +514,8 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::Device(device) => device.add_to_form(form),
             EntityMetadataRequest::Vendor(vendor) => vendor.add_to_form(form),
             EntityMetadataRequest::Collection(collection) => collection.add_to_form(form),
+            EntityMetadataRequest::FileSystem(fs) => fs.add_to_form(form),
+            EntityMetadataRequest::Folder(folder) => folder.add_to_form(form),
             // just set our kind to other
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }
@@ -512,6 +531,7 @@ impl EntityKinds {
 }
 
 /// A request to create an entity
+#[derive(Debug, Clone)]
 pub struct EntityRequest {
     /// The entity's name
     pub name: String,
@@ -526,6 +546,37 @@ pub struct EntityRequest {
 }
 
 impl EntityRequest {
+    /// Create a new entity request
+    pub fn new<I>(name: impl Into<String>, metadata: EntityMetadataRequest, groups: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<String>,
+    {
+        // convert our groups to a list of strings
+        let groups = groups.into_iter().map(Into::into).collect();
+        EntityRequest {
+            name: name.into(),
+            metadata,
+            groups,
+            tags: HashMap::default(),
+            description: None,
+        }
+    }
+
+    /// Add a tag to this entity request
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key of the tag to add
+    /// * `value` - The value for the tag to add
+    pub fn tag(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        // get an entry into this tags key list
+        let entry = self.tags.entry(key.into()).or_default();
+        // add our value
+        entry.insert(value.into());
+        self
+    }
+
     /// Cast this entity request into a form
     #[cfg(feature = "client")]
     pub fn to_form(mut self) -> Result<reqwest::multipart::Form, crate::Error> {
@@ -541,7 +592,7 @@ impl EntityRequest {
         // add any tags to this form
         for (key, mut values) in self.tags {
             // build the tag key to for this tag
-            let tag_key = format!("tags[{key}]");
+            let tag_key = format!("tags[{key}][]");
             // add this tags list of values to our form
             form = multipart_set!(form, &tag_key, values);
         }
@@ -580,6 +631,153 @@ fn default_list_limit() -> usize {
 fn default_entity_kinds() -> Vec<EntityKinds> {
     // list all entities by default
     EntityKinds::iter().collect()
+}
+
+/// The options that you can set when listing entities in Thorium
+#[derive(Debug, Clone)]
+pub struct EntityListOpts {
+    /// The cursor to use to continue this search
+    pub cursor: Option<Uuid>,
+    /// The latest date to start listing entities from
+    pub start: Option<DateTime<Utc>>,
+    /// The oldest date to stop listing entities from
+    pub end: Option<DateTime<Utc>>,
+    /// The max number of objects to retrieve on a single page
+    pub page_size: usize,
+    /// The total number of objects to return with this cursor
+    pub limit: Option<usize>,
+    /// The groups limit our search to
+    pub groups: Vec<String>,
+    /// The tags to filter on
+    pub tags: HashMap<String, Vec<String>>,
+    /// Whether matching on tags should be case-insensitive
+    pub tags_case_insensitive: bool,
+}
+
+impl Default for EntityListOpts {
+    /// Build a default search
+    fn default() -> Self {
+        EntityListOpts {
+            start: None,
+            cursor: None,
+            end: None,
+            page_size: 50,
+            limit: None,
+            groups: Vec::default(),
+            tags: HashMap::default(),
+            tags_case_insensitive: false,
+        }
+    }
+}
+
+impl EntityListOpts {
+    /// Restrict the entity search to start at a specific date
+    ///
+    /// # Arguments
+    ///
+    /// * `start` - The date to start listing entities from
+    #[must_use]
+    pub fn start(mut self, start: DateTime<Utc>) -> Self {
+        // set the date to start listing entities at
+        self.start = Some(start);
+        self
+    }
+
+    /// Set the cursor to use when continuing this search
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - The cursor id to use for this search
+    #[must_use]
+    pub fn cursor(mut self, cursor: Uuid) -> Self {
+        // set cursor for this search
+        self.cursor = Some(cursor);
+        self
+    }
+
+    /// Restrict the entity search to stop at a specific date
+    ///
+    /// # Arguments
+    ///
+    /// * `end` - The date to stop listing entites at
+    #[must_use]
+    pub fn end(mut self, end: DateTime<Utc>) -> Self {
+        // set the date to end listing entities at
+        self.end = Some(end);
+        self
+    }
+
+    /// The max number of entities to retrieve in a single page
+    ///
+    /// # Arguments
+    ///
+    /// * `page_size` - The max number of documents to return in a single request
+    #[must_use]
+    pub fn page_size(mut self, page_size: usize) -> Self {
+        // set the date to end listing entities at
+        self.page_size = page_size;
+        self
+    }
+
+    /// Limit how many entities this search can return at once
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - The max number of objects to return over the lifetime of this cursor
+    #[must_use]
+    pub fn limit(mut self, limit: usize) -> Self {
+        // set the date to end listing entities at
+        self.limit = Some(limit);
+        self
+    }
+
+    /// Limit what groups we search in
+    ///
+    /// # Arguments
+    ///
+    /// * `groups` - The groups to restrict our search to
+    #[must_use]
+    pub fn groups<T: Into<String>>(mut self, groups: Vec<T>) -> Self {
+        // set the date to end listing entities at
+        self.groups
+            .extend(groups.into_iter().map(|group| group.into()));
+        self
+    }
+
+    /// List entities that match a specific tag
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The tag key to match against
+    /// * `value` - The tag value to match against
+    #[must_use]
+    pub fn tag<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
+        // get an entry into this tags value list
+        let entry = self.tags.entry(key.into()).or_default();
+        // add this tags value
+        entry.push(value.into());
+        self
+    }
+
+    /// List entities that match a specific tag by ref
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The tag key to match against
+    /// * `value` - The tag value to match against
+    pub fn tag_ref<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) {
+        // get an entry into this tags value list
+        let entry = self.tags.entry(key.into()).or_default();
+        // add this tags value
+        entry.push(value.into());
+    }
+
+    /// Set for matching on tags to be case-insensitive
+    #[must_use]
+    pub fn tags_case_insensitive(mut self) -> Self {
+        self.tags_case_insensitive = true;
+        self
+    }
 }
 
 /// The params for listing entities
@@ -659,14 +857,95 @@ pub struct EntityListLine {
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct EntityUpdate {
+    /// The new name to set
     pub name: Option<String>,
+    /// The groups to add to this entity
     pub add_groups: Vec<String>,
+    /// The groups to remove form this entity
     pub remove_groups: Vec<String>,
+    /// The decsription to set for this entity
     pub description: Option<String>,
+    /// Clear this entities description
     pub clear_description: bool,
+    /// Add a tool to this entity
+    pub add_tools: Vec<String>,
+    /// Remoev a tool from this entity
+    pub remove_tools: Vec<String>,
 }
 
 impl EntityUpdate {
+    /// Change the name for this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to change too
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        // update our name
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Add a group to this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group to add
+    pub fn group(mut self, group: impl Into<String>) -> Self {
+        // add this group
+        self.add_groups.push(group.into());
+        self
+    }
+
+    /// Remove a group from this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group to remove
+    pub fn remove_group(mut self, group: impl Into<String>) -> Self {
+        // add this group to our remove list
+        self.remove_groups.push(group.into());
+        self
+    }
+
+    /// Change the description for this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `description` - The description to change too
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        // update our description
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Clear this entities description
+    pub fn clear_description(mut self) -> Self {
+        self.clear_description = true;
+        self
+    }
+
+    /// Add a tool to this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `tool` - The tool to add
+    pub fn tool(mut self, tool: impl Into<String>) -> Self {
+        // add this tool
+        self.add_tools.push(tool.into());
+        self
+    }
+
+    /// Remove a tool from this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `tool` - The tool to remove
+    pub fn remove_tool(mut self, tool: impl Into<String>) -> Self {
+        // add this tool to our remove list
+        self.remove_tools.push(tool.into());
+        self
+    }
+
     /// Convert this update to a multipart form
     #[cfg(feature = "client")]
     pub fn to_form(mut self) -> Result<reqwest::multipart::Form, crate::Error> {

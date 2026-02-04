@@ -401,6 +401,11 @@ impl TreeRing {
             let details = db::files::list_details(&tree.groups, sha256s, shared).await?;
             // wrap these samples in a tree node
             for sample in details {
+                // ignore any files that are not direct children
+                if !sample.is_direct_to(parent) {
+                    // this sample will be represented through an abstraction
+                    continue;
+                }
                 // wrap this sample in a node data object
                 let node = TreeNode::Sample(sample);
                 // add this node to our tree ring

@@ -1,5 +1,6 @@
 //! collects children files from jobs and submits them to Thorium
 
+use async_walkdir::WalkDir as AsyncWalkDir;
 use crossbeam::channel::Sender;
 use futures::stream::{self, StreamExt};
 use itertools::Itertools;
@@ -11,8 +12,8 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use thorium::models::{
-    CarvedOrigin, ChildFilters, GenericJob, Image, OriginRequest, PcapNetworkProtocol,
-    RepoDependency, SampleRequest,
+    CarvedOrigin, ChildFilters, FileSystemEntityBuilder, GenericJob, Image, OriginRequest,
+    PcapNetworkProtocol, RepoDependency, SampleRequest, SampleSubmissionResponse,
 };
 use thorium::{Error, Thorium};
 use tracing::{Level, event, instrument};
@@ -24,7 +25,7 @@ use crate::log;
 
 /// A cache of compiled child filter regular expressions mapped to their raw
 /// String representation
-// TODO: only one agent is running at a time, so we don't really need a Mutex here;
+// only one agent is running at a time, so we don't really need a Mutex here;
 // unfortunately, we can't make this thread-local because the Agent is run on a tokio
 // task an can be on any thread
 static CHILD_FILTERS_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
@@ -49,7 +50,7 @@ pub async fn setup<P: AsRef<Path>>(root: P) -> Result<(), Error> {
     Ok(())
 }
 
-/// Recursively walk a directory and get all non hidden files
+/// Recursively walk a directory and get all files
 ///
 /// # Arguments
 ///
@@ -58,11 +59,10 @@ pub fn get_children(path: &PathBuf) -> Vec<PathBuf> {
     // only crawl this dir if it exists
     if path.exists() {
         // walk this dir and get all children
-        WalkDir::new(&path)
+        WalkDir::new(path)
             .follow_links(true)
             .into_iter()
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| !helpers::is_hidden(entry))
+            .filter_map(Result::ok)
             .filter(helpers::is_file)
             .map(|entry| entry.path().to_path_buf())
             .collect::<Vec<PathBuf>>()
@@ -70,6 +70,44 @@ pub fn get_children(path: &PathBuf) -> Vec<PathBuf> {
         // this path doesn't exist so just return an empty vec
         Vec::default()
     }
+}
+
+/// Recursively walk a directory and get all files in a filesystem
+///
+/// # Arguments
+///
+/// * `path` - The path to the directory to start looking for child files at
+pub async fn get_filesystem_children(path: &PathBuf) -> Result<FileSystemEntityBuilder, Error> {
+    // create a filesystem builder
+    let mut builder = FileSystemEntityBuilder::new("CarvedFilesystem", path)?;
+    // only crawl this dir if it exists
+    if path.exists() {
+        // walk over entries in this path
+        let mut walker = AsyncWalkDir::new(path);
+        // start walking over entries in this dir
+        while let Some(entry_result) = walker.next().await {
+            // check if we failed to get an entry
+            let entry = entry_result
+                .map_err(|error| Error::new(format!("Failed to walk filesystem dir: {error:?}")))?;
+            // handle if this is a file or folder
+            let entry_kind = entry.file_type().await.unwrap();
+            // if this is a folder add its folder to our filesystem builder
+            if entry_kind.is_dir() {
+                // skip the root directory
+                if entry.path() != Path::new("/") {
+                    // add our non root path
+                    builder.directory(entry.path()).unwrap();
+                }
+                // skip to the next entry
+                continue;
+            }
+            // if this is a file then add this file to our files system builder
+            if entry_kind.is_file() {
+                builder.file(entry.path()).unwrap();
+            }
+        }
+    }
+    Ok(builder)
 }
 
 /// Determine if a file is a supporting build file or not
@@ -226,7 +264,7 @@ async fn get_parent_groups(thorium: &Thorium, job: &GenericJob) -> Result<Vec<St
     // get the info on all the samples we depend on
     for sha256 in &job.samples {
         // get info on this sample
-        let sample = thorium.files.get(&sha256).await?;
+        let sample = thorium.files.get(sha256).await?;
         // add this samples goups to our hashset
         groups.extend(sample.groups().into_iter().map(|name| name.to_owned()));
     }
@@ -242,81 +280,53 @@ async fn get_parent_groups(thorium: &Thorium, job: &GenericJob) -> Result<Vec<St
     Ok(group_vec)
 }
 
-/// Children filtered by a set of filters configured in the tool
-struct FilteredChildren {
-    /// The list of children that matched at least one of the filters
-    matches: Vec<PathBuf>,
-    /// The list of children that didn't match any of the filters
-    non_matches: Vec<PathBuf>,
-}
-
-impl FilteredChildren {
-    /// Filter a list of children into two lists – ones that match, and ones that
-    /// don't match – and save the lists to a new `FilteredChildren`
-    ///
-    /// # Arguments
-    ///
-    /// * `children` - The children to filter
-    /// * `filters` - The filters to use
-    /// * `filters_cache` - A cache of compiled regexes from our filters
-    /// * `logs` - The logs to send to the API
-    #[instrument(name = "FilteredChildren::filter", skip_all, err(Debug))]
-    fn filter(
-        children: &mut Vec<PathBuf>,
-        filters: &ChildFilters,
-        filters_cache: &mut HashMap<String, Regex>,
-        logs: &mut Sender<String>,
-    ) -> Result<Self, Error> {
-        // save a list of children that matched/didn't match
-        let mut matches = Vec::new();
-        let mut non_matches = Vec::new();
-        // clear out the children from the given Vec into a temporary vec to match on
-        let mut temp = std::mem::take(children);
-        for child in temp.drain(..) {
-            // check if the child matched any of our filters
-            if child_matches_any(&child, filters, filters_cache, logs)? {
-                // at least one filter matched, so add it to the matched list
-                matches.push(child);
-            } else {
-                // no filters matched, so add it to the non_matched list
-                non_matches.push(child);
-            }
-        }
-        Ok(Self {
-            matches,
-            non_matches,
-        })
-    }
-}
-
 /// Children carved from a sample
 #[derive(Default)]
 struct CarvedChildren {
     /// Child files carved from a packet capture
-    pub pcap: Vec<PathBuf>,
+    pub pcap: Option<ChildrenFiles>,
     /// Child files carved from an unknown or unspecified file type
-    pub unknown: Vec<PathBuf>,
+    pub unknown: Option<ChildrenFiles>,
 }
 
 impl CarvedChildren {
     /// Returns true if there are no carved children
     fn is_empty(&self) -> bool {
-        self.unknown.is_empty() && self.pcap.is_empty()
+        self.unknown.is_none() && self.pcap.is_none()
+    }
+
+    /// Get how many pcap files that are
+    fn pcap_len(&self) -> usize {
+        // if we don't have any pcap files just return 0
+        match &self.pcap {
+            Some(pcap) => {
+                // count how many pcap files for both loose and filesystem
+                match pcap {
+                    ChildrenFiles::Loose(loose) => loose.len(),
+                    ChildrenFiles::Fs(builder) => builder.files.len(),
+                }
+            }
+            None => 0,
+        }
     }
 }
 
-/// The different types of children files to submit to Thorium
-pub struct Children {
-    /// The root path where children are located, configured in the image
-    root: PathBuf,
-    /// The tags to set for any submitted files
-    pub tags: HashMap<String, HashSet<String>>,
-    /// Child files from building from source
-    source: Vec<PathBuf>,
-    /// Child files from unpacked samples
-    unpacked: Vec<PathBuf>,
-    /// Children carved from a sample
-    carved: CarvedChildren,
+async fn children_submitter_helper(
+    thorium: &Thorium,
+    path: PathBuf,
+    req: SampleRequest,
+) -> Result<(PathBuf, SampleSubmissionResponse), Error> {
+    // submit this sample to Thorium
+    let resp = thorium.files.create(req).await?;
+    // return our path and response
+    Ok((path, resp))
+}
+
+/// The conflict error for ssample upload
+#[derive(Deserialize, Debug)]
+pub struct SampleUploadConflict {
+    /// The error message containing the sha256
+    pub error: String,
 }
 
 /// Submit children files 10 at a time for a given sample/repo
@@ -329,7 +339,7 @@ macro_rules! submit {
                     // if any children were found then generate our origin requests
                     let origin = $origin($sample, &child).result_ids($results.to_vec());
                     // build this origins sample request
-                    let req = SampleRequest::new(child, $groups.to_vec()).origin(origin);
+                    let req = SampleRequest::new(child.clone(), $groups.to_vec()).origin(origin);
                     // set our trigger depth if we have one
                     let mut req = match $depth {
                         Some(trigger_depth) => req.trigger_depth(trigger_depth),
@@ -338,17 +348,24 @@ macro_rules! submit {
                     // inject the tags for this child
                     req.tags.clone_from(&$tags);
                     // submit this sample to Thorium
-                    $thorium.files.create(req)
+                    children_submitter_helper($thorium, child, req)
                 })
-                .buffer_unordered(10)
+                .buffered(10)
                 .collect::<Vec<Result<_, _>>>()
                 .await
                 .into_iter()
                 .map(|res| match res {
                     // this child was submitted succesfully so log its sha256 and id
-                    Ok(sub) => {
-                        log!($logs, "{} Submitted {} - {}", $msg, sub.sha256, sub.id);
-                        Ok(())
+                    Ok((path, resp)) => {
+                        log!(
+                            $logs,
+                            "{}: {} Submitted {} - {}",
+                            $msg,
+                            path.display(),
+                            resp.sha256,
+                            resp.id
+                        );
+                        Ok(resp.sha256)
                     }
                     // this child failed to submit so log an error
                     Err(err) => {
@@ -356,7 +373,18 @@ macro_rules! submit {
                         match err.status() {
                             Some(StatusCode::CONFLICT) => {
                                 log!($logs, "{} Already Exists", $msg);
-                                Ok(())
+                                // get this requests error message
+                                match err.msg() {
+                                    Some(msg) => {
+                                        // get the sha256 from our error message
+                                        match serde_json::from_str(&msg) {
+                                            // return this already uploaded samples sha256
+                                            Ok(SampleUploadConflict { error }) => Ok(error),
+                                            Err(error) => Err(Error::Serde(error)),
+                                        }
+                                    }
+                                    None => Err(err),
+                                }
                             }
                             _ => {
                                 log!($logs, "{} Error: {:#?}", $msg, err);
@@ -370,13 +398,99 @@ macro_rules! submit {
     };
 }
 
+/// Children that are either loose files or a structured filesystem
+enum ChildrenFiles {
+    /// Loose unstructured files
+    Loose(Vec<PathBuf>),
+    /// File structured in a filesystem
+    Fs(FileSystemEntityBuilder),
+}
+
+impl ChildrenFiles {
+    /// Filter any children files that we don't want to submit
+    ///
+    /// Filtering on filesystems will remove any empty folders
+    pub fn filter(
+        &mut self,
+        filters: &ChildFilters,
+        filters_cache: &mut HashMap<String, Regex>,
+        logs: &mut Sender<String>,
+    ) -> Result<(), Error> {
+        // save a list of children that matched/didn't match
+        let mut matches = Vec::new();
+        let mut non_matches = Vec::new();
+        // get all paths to check
+        let mut to_check = match self {
+            Self::Loose(paths) => std::mem::take(paths),
+            Self::Fs(builder) => std::mem::take(&mut builder.files),
+        };
+        // check if any of these paths should be removed
+        for child in to_check.drain(..) {
+            // check if the child matched any of our filters
+            if child_matches_any(&child, filters, filters_cache, logs)? {
+                // at least one filter matched, so add it to the matched list
+                matches.push(child);
+            } else {
+                // no filters matched, so add it to the non_matched list
+                non_matches.push(child);
+            }
+        }
+        // add either the matches or non matches to be submitted
+        // based on if this is a positive or negative check
+        if filters.submit_non_matches {
+            // filter down to only submitting files that do **not** match our filters
+            match self {
+                Self::Loose(paths) => *paths = non_matches,
+                Self::Fs(builder) => {
+                    // filter out any files we don't want to submit from this filesystem
+                    for path in &matches {
+                        // remove this path from our matches
+                        builder.remove(path)?;
+                    }
+                    // clear any empty folders
+                    builder.clear_empty();
+                }
+            }
+        } else {
+            // filter down to only submitting files that do match our filters
+            match self {
+                Self::Loose(paths) => *paths = matches,
+                Self::Fs(builder) => {
+                    // filter out any files we don't want to submit from this filesystem
+                    for path in &non_matches {
+                        // remove this path from our matches
+                        builder.remove(path)?;
+                    }
+                    // clear any empty folders
+                    builder.clear_empty();
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The different types of children files to submit to Thorium
+pub struct Children {
+    /// The root path where children are located, configured in the image
+    root: PathBuf,
+    /// The tags to set for any submitted files
+    pub tags: HashMap<String, HashSet<String>>,
+    /// Child files from building from source
+    source: Option<ChildrenFiles>,
+    /// Child files from unpacked samples
+    unpacked: Option<ChildrenFiles>,
+    /// Children carved from a sample
+    carved: CarvedChildren,
+}
+
 impl Children {
     fn new<P: AsRef<Path>>(path: P) -> Self {
         Self {
             root: path.as_ref().to_path_buf(),
             tags: HashMap::default(),
-            source: Vec::default(),
-            unpacked: Vec::default(),
+            source: None,
+            unpacked: None,
             carved: CarvedChildren::default(),
         }
     }
@@ -389,20 +503,21 @@ impl Children {
     /// * `logs` - The logs to send to the API
     pub async fn collect<P: AsRef<Path>>(
         path: P,
+        image: &Image,
         logs: &mut Sender<String>,
     ) -> Result<Self, Error> {
         // build a Children object and collect any tags
         let mut children = Children::new(path).collect_tags(logs)?;
         // collect any children
-        children.source();
-        children.unpacked();
-        children.carved();
+        children.source(image).await?;
+        children.unpacked(image).await?;
+        children.carved(image).await?;
         Ok(children)
     }
 
     /// Returns true if there are no children
     fn is_empty(&self) -> bool {
-        self.unpacked.is_empty() && self.source.is_empty() && self.carved.is_empty()
+        self.unpacked.is_none() && self.source.is_none() && self.carved.is_empty()
     }
 
     /// Gather all tags to apply to any children
@@ -435,11 +550,19 @@ impl Children {
     /// # Arguments
     ///
     /// * `path` - The root path to look for the source folder and its children files in
-    fn source(&mut self) {
+    async fn source(&mut self, image: &Image) -> Result<(), Error> {
         // build the path to our source children
         let root = self.root.join("source");
-        // recrusively walk through this directory skipping any hidden files
-        self.source = get_children(&root);
+        // collect children as either a filesystem or as loose files based on image settings
+        let children = if image.output_collection.as_filesystem {
+            ChildrenFiles::Fs(get_filesystem_children(&root).await?)
+        } else {
+            // recursively walk through this directory and get all files
+            ChildrenFiles::Loose(get_children(&root))
+        };
+        // update our source files
+        self.source = Some(children);
+        Ok(())
     }
 
     /// Collect unpacked children files and submit them to Thorium
@@ -447,11 +570,19 @@ impl Children {
     /// # Arguments
     ///
     /// * `path` - The root path to look for the unpacked folder and its children files in
-    fn unpacked(&mut self) {
+    async fn unpacked(&mut self, image: &Image) -> Result<(), Error> {
         // build the path to our source children
         let root = self.root.join("unpacked");
-        // recrusively walk through this directory skipping any hidden files
-        self.unpacked = get_children(&root);
+        // collect children as either a filesystem or as loose files based on image settings
+        let children = if image.output_collection.as_filesystem {
+            ChildrenFiles::Fs(get_filesystem_children(&root).await?)
+        } else {
+            // recursively walk through this directory and get all files
+            ChildrenFiles::Loose(get_children(&root))
+        };
+        // update our unpacked files
+        self.unpacked = Some(children);
+        Ok(())
     }
 
     /// Collect carved children files
@@ -459,16 +590,25 @@ impl Children {
     /// # Arguments
     ///
     /// * `path` - The root path to look for the carved folder and its children files in
-    fn carved(&mut self) {
+    async fn carved(&mut self, image: &Image) -> Result<(), Error> {
         // build the path to our source children
         let root = self.root.join("carved");
         let unknown_root = root.join("unknown");
         let pcap_root = root.join("pcap");
-        // recrusively walk through this directory skipping any hidden files
-        self.carved = CarvedChildren {
-            unknown: get_children(&unknown_root),
-            pcap: get_children(&pcap_root),
+        // collect children as either a filesystem or as loose files based on image settings
+        let unknown = if image.output_collection.as_filesystem {
+            Some(ChildrenFiles::Fs(
+                get_filesystem_children(&unknown_root).await?,
+            ))
+        } else {
+            // recursively walk through this directory and get all files
+            Some(ChildrenFiles::Loose(get_children(&root)))
         };
+        // collect any files carved from pcaps
+        let pcap = Some(ChildrenFiles::Loose(get_children(&pcap_root)));
+        // recursively walk through this directory skipping any hidden files
+        self.carved = CarvedChildren { unknown, pcap };
+        Ok(())
     }
 
     /// Filter children based on the image's configured child filters
@@ -481,39 +621,27 @@ impl Children {
     #[instrument(name = "Children::filter", skip_all, err(Debug))]
     fn filter(&mut self, filters: &ChildFilters, logs: &mut Sender<String>) -> Result<(), Error> {
         // get a lock on our child filters cache;
-        // TODO: only one agent is running at a time, so we don't expect others to need
+        // only one agent is running at a time, so we don't expect others to need
         // the cache at the same time; the Agent *is* run on a tokio task though, so we
         // can't make the cache thread-local
         let mut filters_cache = CHILD_FILTERS_CACHE
             .lock()
             .map_err(|err| Error::new(format!("Error locking filter mutex: {err}")))?;
-        // filter children from each of our lists
-        let mut unpacked_filtered =
-            FilteredChildren::filter(&mut self.unpacked, filters, &mut filters_cache, logs)?;
-        let mut source_filtered =
-            FilteredChildren::filter(&mut self.source, filters, &mut filters_cache, logs)?;
-        let mut carved_pcap_filtered =
-            FilteredChildren::filter(&mut self.carved.pcap, filters, &mut filters_cache, logs)?;
-        let mut carved_unknown_filtered =
-            FilteredChildren::filter(&mut self.carved.unknown, filters, &mut filters_cache, logs)?;
-        if filters.submit_non_matches {
-            // we're submitting ones that don't match, so re-add the non-matches to self to be submitted
-            self.unpacked.append(&mut unpacked_filtered.non_matches);
-            self.source.append(&mut source_filtered.non_matches);
-            self.carved
-                .pcap
-                .append(&mut carved_pcap_filtered.non_matches);
-            self.carved
-                .unknown
-                .append(&mut carved_unknown_filtered.non_matches);
-        } else {
-            // we're submitting ones that match, so re-add matches to self to be submitted
-            self.unpacked.append(&mut unpacked_filtered.matches);
-            self.source.append(&mut source_filtered.matches);
-            self.carved.pcap.append(&mut carved_pcap_filtered.matches);
-            self.carved
-                .unknown
-                .append(&mut carved_unknown_filtered.matches);
+        // filter unpacked children from each of our lists
+        if let Some(unpacked) = &mut self.unpacked {
+            unpacked.filter(filters, &mut filters_cache, logs)?;
+        }
+        // filter source children from each of our lists
+        if let Some(source) = &mut self.source {
+            source.filter(filters, &mut filters_cache, logs)?;
+        }
+        // filter carved pcap children from each of our lists
+        if let Some(pcap) = &mut self.carved.pcap {
+            pcap.filter(filters, &mut filters_cache, logs)?;
+        }
+        // filter carved unknown children from each of our lists
+        if let Some(unknown) = &mut self.carved.unknown {
+            unknown.filter(filters, &mut filters_cache, logs)?;
         }
         Ok(())
     }
@@ -530,7 +658,7 @@ impl Children {
     /// * `logs` - The logs to send to the API
     #[instrument(name = "Children::submit_source", skip_all, err(Debug))]
     pub async fn submit_source(
-        &self,
+        &mut self,
         thorium: &Thorium,
         job: &GenericJob,
         results: &[Uuid],
@@ -539,61 +667,92 @@ impl Children {
         groups: &Vec<String>,
         logs: &mut Sender<String>,
     ) -> Result<(), Error> {
-        // only attemp to ingest children if some exist
-        if !self.source.is_empty() {
-            // get the flags for this build job if any were set
-            let flags = match job.args.kwargs.get("--flags") {
-                Some(flags) => flags.clone(),
-                None => job.args.to_vec(),
-            };
-            // get the build system or error
-            let system = match job.args.kwargs.get("--builder") {
-                Some(system_vec) => match system_vec.get(0) {
-                    Some(system) => system,
-                    // default to the stage name if --builder isn't set
-                    None => &job.stage,
-                },
+        // get the name of the tool that source this sample
+        let tool = &job.stage;
+        // submit either our loose files or our filesystem
+        let (paths, is_direct) = match &mut self.source {
+            // theres no source children and nothing to do
+            None => return Ok(()),
+            // ingest all loose source children files
+            Some(ChildrenFiles::Loose(loose)) => (std::mem::take(loose), true),
+            // ingest all children files in this filesystem
+            Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
+        };
+        // if there are no files to upload then return early
+        if paths.is_empty() {
+            return Ok(());
+        }
+        // get the flags for this build job if any were set
+        let flags = match job.args.kwargs.get("--flags") {
+            Some(flags) => flags.clone(),
+            None => job.args.to_vec(),
+        };
+        // get the build system or error
+        let system = match job.args.kwargs.get("--builder") {
+            Some(system_vec) => match system_vec.get(0) {
+                Some(system) => system,
+                // default to the stage name if --builder isn't set
                 None => &job.stage,
+            },
+            None => &job.stage,
+        };
+        // submit for each repo that was bound in
+        for repo in &job.repos {
+            // get the current commit for this repo
+            let commit = match commits.get(&repo.url) {
+                Some(commit) => commit,
+                None => {
+                    event!(Level::ERROR, repo = repo.url, msg = "Missing commit");
+                    log!(
+                        logs,
+                        "Repo {} missing commit info - skipping children upload",
+                        repo.url
+                    );
+                    continue;
+                }
             };
-            // submit for each repo that was bound in
-            for repo in &job.repos {
-                // get the current commit for this repo
-                let commit = match commits.get(&repo.url) {
-                    Some(commit) => commit,
-                    None => {
-                        event!(Level::ERROR, repo = repo.url, msg = "Missing commit");
-                        log!(
-                            logs,
-                            "Repo {} missing commit info - skipping children upload",
-                            repo.url
-                        );
-                        continue;
+            let resps = submit!(
+                repo,
+                paths,
+                |repo: &RepoDependency, child: &Path| {
+                    // if this file has an extension that is not .so it is a supporting file
+                    let supporting = is_supporting(child);
+                    OriginRequest::source(
+                        &repo.url,
+                        repo.commitish.as_ref(),
+                        commit,
+                        flags.iter(),
+                        system,
+                        supporting,
+                    )
+                    .direct(is_direct)
+                },
+                results,
+                groups,
+                depth,
+                self.tags,
+                thorium,
+                logs,
+                "Source Child"
+            )
+            .await?;
+            // associate all files with our filesystem if this image drops one
+            if let Some(ChildrenFiles::Fs(builder)) = &mut self.source {
+                // only create a filesystem if some data was found
+                if !builder.is_empty() {
+                    // add tags so that we know this filesystem came from the source origin
+                    builder.tag_mut("FileSystemOriginKind", "Source");
+                    // add all sha256s for all files
+                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                        // add this paths sha256
+                        builder.add_sha256(path, sha256);
                     }
-                };
-                submit!(
-                    repo,
-                    self.source,
-                    |repo: &RepoDependency, child: &Path| {
-                        // if this file has an extension that is not .so it is a supporting file
-                        let supporting = is_supporting(child);
-                        OriginRequest::source(
-                            &repo.url,
-                            repo.commitish.as_ref(),
-                            commit,
-                            flags.iter(),
-                            system,
-                            supporting,
-                        )
-                    },
-                    results,
-                    groups,
-                    depth,
-                    self.tags,
-                    thorium,
-                    logs,
-                    "Source Child"
-                )
-                .await?;
+                    // create this filesystem for each sample
+                    for sample in &job.samples {
+                        // create this filesystem in thorium
+                        builder.create(tool, sample, groups, thorium).await?;
+                    }
+                }
             }
         }
         Ok(())
@@ -609,7 +768,7 @@ impl Children {
     /// * `logs` - The logs to send to the API
     #[instrument(name = "Children::submit_unpacked", skip_all, err(Debug))]
     pub async fn submit_unpacked(
-        &self,
+        &mut self,
         thorium: &Thorium,
         job: &GenericJob,
         results: &[Uuid],
@@ -619,13 +778,27 @@ impl Children {
     ) -> Result<(), Error> {
         // get the name of the tool that unpacked this sample
         let tool = &job.stage;
+        // submit either our loose files or our filesystem
+        let (paths, is_direct) = match &mut self.unpacked {
+            // theres no unpacked children and nothing to do
+            None => return Ok(()),
+            // ingest all loose unpacked children files
+            Some(ChildrenFiles::Loose(loose)) => (std::mem::take(loose), true),
+            // ingest all children files in this filesystem
+            Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
+        };
+        // if there are no files to upload then return early
+        if paths.is_empty() {
+            return Ok(());
+        }
         // submit for each parent sample that was bound in
         for sample in &job.samples {
-            submit!(
+            // upload all of these samples
+            let resps = submit!(
                 sample,
-                self.unpacked,
+                paths,
                 |sample: &String, _child: &Path| {
-                    OriginRequest::unpacked(sample.clone(), Some(tool.to_owned()))
+                    OriginRequest::unpacked(sample.clone(), Some(tool.to_owned())).direct(is_direct)
                 },
                 results,
                 groups,
@@ -636,6 +809,24 @@ impl Children {
                 "Unpacked Child"
             )
             .await?;
+            // associate all files with our filesystem if this image drops one
+            if let Some(ChildrenFiles::Fs(builder)) = &mut self.unpacked {
+                // only create a filesystem if some data was found
+                if !builder.is_empty() {
+                    // add tags so that we know this filesystem came from the source origin
+                    builder.tag_mut("FileSystemOriginKind", "Unpacked");
+                    // add all sha256s for all files
+                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                        // add this paths sha256
+                        builder.add_sha256(path, sha256);
+                    }
+                    // create this filesystem for each sample
+                    for sample in &job.samples {
+                        // create this filesystem in thorium
+                        builder.create(tool, sample, groups, thorium).await?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -655,7 +846,7 @@ impl Children {
         match PcapMetadata::map_from_file(&pcap_metadata_path).await {
             Ok(maybe_metadata) => match maybe_metadata {
                 Some(metadata) => {
-                    let num_pcap = self.carved.pcap.len();
+                    let num_pcap = self.carved.pcap_len();
                     if num_pcap != 0 && metadata.is_empty() {
                         log!(
                             logs,
@@ -673,7 +864,7 @@ impl Children {
                     metadata
                 }
                 None => {
-                    let num_pcap = self.carved.pcap.len();
+                    let num_pcap = self.carved.pcap_len();
                     if num_pcap != 0 {
                         log!(
                             logs,
@@ -726,7 +917,7 @@ impl Children {
     /// * `logs` - The logs to send to the API
     #[instrument(name = "Children::submit_carved", skip_all, err(Debug))]
     pub async fn submit_carved(
-        &self,
+        &mut self,
         thorium: &Thorium,
         job: &GenericJob,
         results: &[Uuid],
@@ -738,12 +929,21 @@ impl Children {
         let tool = &job.stage;
         // try to get metadata on the pcap files
         let pcap_metadata = self.get_pcap_metadata(logs).await;
+        // submit either our loose files or our filesystem
+        let (paths, is_direct) = match &mut self.carved.pcap {
+            // theres no unpacked children and nothing to do
+            None => return Ok(()),
+            // ingest all loose unpacked children files
+            Some(ChildrenFiles::Loose(loose)) => (std::mem::take(loose), true),
+            // ingest all children files in this filesystem
+            Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
+        };
         // submit for each parent sample that was bound in
         for sample in &job.samples {
             // submit samples carved from a PCAP
-            submit!(
+            let resps = submit!(
                 sample,
-                self.carved.pcap,
+                paths,
                 |sample: &String, child: &Path| {
                     // see if this child has metadata
                     if let Some(metadata) = child
@@ -763,6 +963,7 @@ impl Children {
                             metadata.proto.clone(),
                             metadata.url.clone(),
                         )
+                        .direct(is_direct)
                     } else {
                         // this child has no metadata so just submit without it
                         OriginRequest::carved_pcap(
@@ -775,6 +976,7 @@ impl Children {
                             None,
                             None,
                         )
+                        .direct(is_direct)
                     }
                 },
                 results,
@@ -786,12 +988,40 @@ impl Children {
                 "Carved-PCAP Child"
             )
             .await?;
+            // associate all files with our filesystem if this image drops one
+            if let Some(ChildrenFiles::Fs(builder)) = &mut self.carved.pcap {
+                // only create a filesystem if some data was found
+                if !builder.is_empty() {
+                    // add tags so that we know this filesystem came from the source origin
+                    builder.tag_mut("FileSystemOriginKind", "CarvedPcap");
+                    // add all sha256s for all files
+                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                        // add this paths sha256
+                        builder.add_sha256(path, sha256);
+                    }
+                    // create this filesystem for each sample
+                    for sample in &job.samples {
+                        // create this filesystem in thorium
+                        builder.create(tool, sample, groups, thorium).await?;
+                    }
+                }
+            }
+            // submit either our loose files or our filesystem
+            let (paths, is_direct) = match &mut self.carved.unknown {
+                // theres no unpacked children and nothing to do
+                None => return Ok(()),
+                // ingest all loose unpacked children files
+                Some(ChildrenFiles::Loose(loose)) => (std::mem::take(loose), true),
+                // ingest all children files in this filesystem
+                Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
+            };
             // submit samples carved from an unknown source
-            submit!(
+            let resps = submit!(
                 sample,
-                self.carved.unknown,
+                paths,
                 |sample: &String, _child: &Path| {
                     OriginRequest::carved_unknown(sample.clone(), Some(tool.to_owned()))
+                        .direct(is_direct)
                 },
                 results,
                 groups,
@@ -802,6 +1032,24 @@ impl Children {
                 "Carved-Unknown Child"
             )
             .await?;
+            // associate all files with our filesystem if this image drops one
+            if let Some(ChildrenFiles::Fs(builder)) = &mut self.carved.unknown {
+                // only create a filesystem if some data was found
+                if !builder.is_empty() {
+                    // add tags so that we know this filesystem came from the source origin
+                    builder.tag_mut("FileSystemOriginKind", "CarvedUnknown");
+                    // add all sha256s for all files
+                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                        // add this paths sha256
+                        builder.add_sha256(path, sha256);
+                    }
+                    // create this filesystem for each sample
+                    for sample in &job.samples {
+                        // create this filesystem in thorium
+                        builder.create(tool, sample, groups, thorium).await?;
+                    }
+                }
+            }
         }
         Ok(())
     }

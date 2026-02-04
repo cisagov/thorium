@@ -30,7 +30,7 @@ rkyv-support = ["rkyv", "bytecheck"]
 # include async client dependencies
 client = [
   "reqwest", "tokio", "tokio-util", "futures", "git2", "shellexpand", "elasticsearch",
-  "tokio-tar", "http", "gix", "gix-date", "async-trait"
+  "tokio-tar", "http", "gix", "gix-date", "async-trait", "data-encoding", "sha2"
   ]
 
 # include sync client dependencies

@@ -421,6 +421,10 @@ pub fn calculate_output_collection_update(
             files: calculate_files_handler_update(old_collection.files, new_collection.files),
             auto_tag: calculate_auto_tag_updates(old_collection.auto_tag, new_collection.auto_tag),
             children: set_modified!(old_collection.children, new_collection.children),
+            as_filesystem: set_modified!(
+                old_collection.as_filesystem,
+                new_collection.as_filesystem
+            ),
             clear_groups: set_clear_vec!(old_collection.groups, new_collection.groups),
             groups: new_collection.groups,
         })

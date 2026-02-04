@@ -104,7 +104,7 @@ impl Files {
     /// # async fn exec() -> Result<(), Error> {
     /// // create Thorium client
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
-    /// // buld the file request
+    /// // build the file request
     /// let file_req = SampleRequest::new("corn.txt", vec!("plants".to_owned()));
     /// // try to create file in Thorium
     /// thorium.files.create(file_req).await?;

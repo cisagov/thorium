@@ -356,9 +356,9 @@ pub trait ScyllaCursorSupport: CursorCore {
             // enable casting to types for this query
             let query_rows = query.into_rows_result()?;
             // set the type to cast this stream too
-            let mut typed_stream = query_rows.rows::<Self::IntermediateRow>()?;
+            let typed_stream = query_rows.rows::<Self::IntermediateRow>()?;
             // cast our rows to typed values
-            while let Some(row) = typed_stream.next() {
+            for row in typed_stream {
                 // raise any errors from casting
                 let cast = row?;
                 // get the timestamp and unique key for our intermediate row
@@ -2874,13 +2874,10 @@ impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "ScyllaTagCountCursor::next", skip_all, err(Debug))]
     pub async fn next(&mut self, user: &User, shared: &Shared) -> Result<(), ApiError> {
-        let timer = std::time::Instant::now();
         // get the next page of data for this cursor
         self.backing.next(shared).await?;
-        let timer = std::time::Instant::now();
         // get the details for the current page of data
         let details = D::get_details(user, &mut self.backing, shared).await?;
-        let timer = std::time::Instant::now();
         // count the tags for each item
         for item in details {
             // get the tags for this item

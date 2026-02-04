@@ -5,7 +5,7 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum::routing::post;
 
-use crate::models::{ApiCursor, Association, AssociationListParams, AssociationRequest, User};
+use crate::models::{AssociationRequest, User};
 use crate::utils::{ApiError, AppState};
 
 /// Associate an entity or object with another entity/object

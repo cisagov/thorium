@@ -5,7 +5,7 @@ use futures::future::try_join_all;
 use futures::stream::{self, StreamExt};
 use scylla::DeserializeRow;
 use std::collections::HashMap;
-use tracing::{Level, Span, event, instrument, span};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::keys::{
@@ -65,8 +65,8 @@ macro_rules! pipe_key {
     skip_all,
     err(Debug)
 )]
-pub async fn build<'a>(
-    pipe: &'a mut redis::Pipeline,
+pub async fn build(
+    pipe: &mut redis::Pipeline,
     cast: Reaction,
     cache: ReactionCache,
     pipeline: &Pipeline,
@@ -78,6 +78,8 @@ pub async fn build<'a>(
     let update = status_create!(&cast);
     // get the timestamp for this reaction
     let timestamp = cast.sla.timestamp();
+    // get our reaction id as a string
+    let reaction_id = cast.id.to_string();
     // create reaction
     let pipe = pipe
         // set reaction data
@@ -100,12 +102,12 @@ pub async fn build<'a>(
         .cmd("hsetnx").arg(&keys.data).arg("parent_ephemeral").arg(serialize!(&cast.parent_ephemeral))
         .cmd("hsetnx").arg(&keys.data).arg("repos").arg(serialize!(&cast.repos))
         // add to specific status set
-        .cmd("sadd").arg(&ReactionKeys::status(&cast.group, &cast.pipeline, &cast.status, shared))
-            .arg(&cast.id.to_string())
+        .cmd("sadd").arg(ReactionKeys::status(&cast.group, &cast.pipeline, &cast.status, shared))
+            .arg(&reaction_id)
         // add this reaction to the specific group/pipeline/stage set
-        .cmd("sadd").arg(&keys.set).arg(&cast.id.to_string())
+        .cmd("sadd").arg(&keys.set).arg(&reaction_id)
         // add this reaction to the group wide sorted set
-        .cmd("zadd").arg(&keys.group_set).arg(timestamp).arg(&cast.id.to_string())
+        .cmd("zadd").arg(&keys.group_set).arg(timestamp).arg(&reaction_id)
         // push the reaction create status log update
         .cmd("rpush").arg(&keys.logs).arg(serialize!(&update));
     // if a parent was set then set that too
@@ -119,9 +121,9 @@ pub async fn build<'a>(
             // increment our parent sub reaction counter
             .cmd("hincrby").arg(&parent_data).arg("sub_reactions").arg(1)
             // add sub reaction to sub reaction set
-            .cmd("sadd").arg(&sub_key).arg(cast.id.to_string())
+            .cmd("sadd").arg(&sub_key).arg(&reaction_id)
             // add sub reaction to sub reaction status set
-            .cmd("sadd").arg(&status_key).arg(cast.id.to_string());
+            .cmd("sadd").arg(&status_key).arg(&reaction_id);
     }
     // set our cache info if we have any initial cache data
     if !cache.is_empty() {
@@ -144,7 +146,7 @@ pub async fn build<'a>(
     let pipe = cast.tags.iter()
         .fold(pipe, |pipe, tag|
             pipe.cmd("sadd").arg(ReactionKeys::tag(&cast.group, tag, shared))
-                .arg(&cast.id.to_string()));
+                .arg(&reaction_id));
     // create initial jobs
     react(pipe, pipeline, cast, shared).await
 }
@@ -543,9 +545,9 @@ pub async fn list_details(
     let raw: Vec<ReactionData> = ids.iter()
         .fold(redis::pipe().atomic(), |pipe, id|
             pipe
-                .cmd("hgetall").arg(&ReactionKeys::data_str(group, id, shared))
-                .cmd("smembers").arg(&ReactionKeys::jobs_str(group, id, shared))
-                .cmd("smembers").arg(&ReactionKeys::generators_str(group, id, shared)))
+                .cmd("hgetall").arg(ReactionKeys::data_str(group, id, shared))
+                .cmd("smembers").arg(ReactionKeys::jobs_str(group, id, shared))
+                .cmd("smembers").arg(ReactionKeys::generators_str(group, id, shared)))
         .query_async(conn!(shared)).await?;
     // cast to reaction structs
     let reactions = cast!(raw, Reaction::try_from);
@@ -572,7 +574,7 @@ async fn cost(
     let mut costs: Vec<f64> = stages.iter()
         .flatten()
         .fold(redis::pipe().atomic(), |pipe, stage|
-            pipe.cmd("hget").arg(&ImageKeys::data(group, stage, shared)).arg("runtime"))
+            pipe.cmd("hget").arg(ImageKeys::data(group, stage, shared)).arg("runtime"))
         .query_async(conn!(shared)).await?;
 
     // short circuit if there are no stages after this
@@ -595,7 +597,8 @@ async fn cost(
 /// * `reaction` - The reaction to check for a parent reaction
 /// * `pipe` - The Redis [`redis::Pipeline`] to build ontop of
 /// * `shared` - Shared Thorium objects
-fn incr_parent<'a>(reaction: &Reaction, pipe: &'a mut redis::Pipeline, shared: &Shared) {
+#[rustfmt::skip]
+fn incr_parent(reaction: &Reaction, pipe: &mut redis::Pipeline, shared: &Shared) {
     // check if we have a parent reaction
     if let Some(parent) = reaction.parent.as_ref() {
         // build key to our parent reactions data
@@ -606,21 +609,14 @@ fn incr_parent<'a>(reaction: &Reaction, pipe: &'a mut redis::Pipeline, shared: &
             ReactionKeys::sub_status_set(&reaction.group, parent, &ReactionStatus::Started, shared);
         let new_status =
             ReactionKeys::sub_status_set(&reaction.group, parent, &reaction.status, shared);
+        // get our reaction id as a string
+        let reaction_id = reaction.id.to_string();
         // move from old status list to new status list
-        pipe.cmd("srem")
-            .arg(old_status)
-            .arg(&reaction.id.to_string())
-            .cmd("sadd")
-            .arg(new_status)
-            .arg(&reaction.id.to_string())
+        pipe.cmd("srem").arg(old_status).arg(&reaction_id)
+            .cmd("sadd").arg(new_status).arg(&reaction_id)
             // increment our parents completed reactions by one
-            .cmd("hincrby")
-            .arg(&parent_data)
-            .arg("completed_sub_reactions")
-            .arg(1)
-            .cmd("hget")
-            .arg(&parent_data)
-            .arg("sub_reactions");
+            .cmd("hincrby").arg(&parent_data).arg("completed_sub_reactions").arg(1)
+            .cmd("hget").arg(&parent_data).arg("sub_reactions");
     }
 }
 
@@ -711,8 +707,8 @@ fn build_expire<'a>(
 /// * `reaction` - The [`Reaction`] to create jobs for
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
-pub async fn complete<'a>(
-    pipe: &'a mut redis::Pipeline,
+pub async fn complete(
+    pipe: &mut redis::Pipeline,
     mut reaction: Reaction,
     shared: &Shared
 ) -> Result<Reaction, ApiError> {  
@@ -730,17 +726,19 @@ pub async fn complete<'a>(
     let pipe = build_expire(pipe, &reaction, &keys, &dest, shared);
     // get the timestamp for this reactions sla
     let timestamp = reaction.sla.timestamp();
+    // get our reaction id as a string
+    let reaction_id = reaction.id.to_string();
     // update reaction
     pipe.cmd("hset").arg(&keys.data).arg("status").arg(&force_serialize!(&reaction.status))
         .cmd("hset").arg(&keys.data).arg("current_stage").arg(reaction.current_stage)
         .cmd("rpush").arg(logs::queue_name(&update, shared)).arg(force_serialize!(&update))
-        .cmd("srem").arg(src).arg(&reaction.id.to_string())
-        .cmd("sadd").arg(dest).arg(&reaction.id.to_string())
+        .cmd("srem").arg(src).arg(&reaction_id)
+        .cmd("sadd").arg(dest).arg(&reaction_id)
         // move from started group set to completed group set
-        .cmd("zrem").arg(&ReactionKeys::group_set(&reaction.group, &ReactionStatus::Started, shared))
-            .arg(&reaction.id.to_string())
-        .cmd("zadd").arg(&ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
-            .arg(timestamp).arg(&reaction.id.to_string()); 
+        .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &ReactionStatus::Started, shared))
+            .arg(&reaction_id)
+        .cmd("zadd").arg(ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
+            .arg(timestamp).arg(&reaction_id); 
     // crawl over the jobs for this reaction and expire all of their data
     let mut cursor = 0;
     loop {
@@ -778,8 +776,8 @@ pub async fn complete<'a>(
 /// * `span` - The span to log traces under
 #[rustfmt::skip]
 #[instrument(name = "db::reactions::react", skip_all, err(Debug))]
-pub async fn react<'a>(
-    pipe: &'a mut redis::Pipeline,
+pub async fn react(
+    pipe: &mut redis::Pipeline,
     pipeline: &Pipeline,
     mut reaction: Reaction,
     shared: &Shared,
@@ -790,14 +788,12 @@ pub async fn react<'a>(
         let reaction = complete(pipe, reaction, shared).await?;
         return Ok((reaction, JobHandleStatus::Completed));
     }
-
     // get stages to launch
     let stages = &pipeline.order[reaction.current_stage as usize];
     reaction.current_stage_length = stages.len() as u64;
     reaction.current_stage_progress = 0;
     // get cost of stages to left to execute and the next stages to execute
     let (next, rest) = cost(&pipeline.group, &pipeline.order[reaction.current_stage as usize..], shared).await?;
-
     // get the image info on all required images
     let info = images::job_info(&pipeline.group, stages, shared).await?;
     // launch all sub stages
@@ -811,7 +807,6 @@ pub async fn react<'a>(
         // add job build command onto our redis pipeline
         jobs::build(pipe, &cast, shared).await?;
     }
-
     // update reaction data
     let key = ReactionKeys::data(&reaction.group, &reaction.id, shared);
     pipe.cmd("hset").arg(&key).arg("current_stage").arg(reaction.current_stage)
@@ -882,7 +877,6 @@ pub async fn proceed(mut reaction: Reaction, shared: &Shared) -> Result<JobHandl
     if reaction.sub_reactions > reaction.completed_sub_reactions {
         return Ok(JobHandleStatus::Waiting);
     }
-
     // check if we any active generators
     if reaction.generators.is_empty() {
         // either all generatos completed or we never had any
@@ -999,17 +993,19 @@ pub async fn fail(
     let mut pipe = redis::pipe();
     // add expire commands for this failed reaction 
     let pipe = build_expire(&mut pipe, &reaction, &keys, &dest, shared);
+    // get our reaction id as a string
+    let reaction_id = reaction.id.to_string();
     // get the timestamp for this reactions sla
     let timestamp = reaction.sla.timestamp();
     pipe.cmd("hset").arg(&keys.data).arg("status").arg(serialize!(&reaction.status))
         // move from src status to failed status set
-        .cmd("srem").arg(src).arg(&reaction.id.to_string())
-        .cmd("sadd").arg(dest).arg(&reaction.id.to_string())
+        .cmd("srem").arg(src).arg(&reaction_id)
+        .cmd("sadd").arg(dest).arg(&reaction_id)
         // move from started group set to failed group set
-       .cmd("zrem").arg(&ReactionKeys::group_set(&reaction.group, &ReactionStatus::Started, shared))
-            .arg(&reaction.id.to_string())
-       .cmd("zadd").arg(&ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
-            .arg(timestamp).arg(&reaction.id.to_string());
+       .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &ReactionStatus::Started, shared))
+            .arg(&reaction_id)
+       .cmd("zadd").arg(ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
+            .arg(timestamp).arg(&reaction_id);
 
     // create status log for failing out this reaction
     let update_cast = StatusUpdate::new(
@@ -1227,18 +1223,18 @@ pub async fn delete(reaction: &Reaction, shared: &Shared) -> Result<(), ApiError
         // add the delete job data commands
         jobs.details.iter()
             .fold(&mut pipe, |pipe, job|
-                pipe.cmd("del").arg(&JobKeys::data(&job.id, shared))
-                    .cmd("zrem").arg(&JobKeys::status_queue(&reaction.group, 
+                pipe.cmd("del").arg(JobKeys::data(&job.id, shared))
+                    .cmd("zrem").arg(JobKeys::status_queue(&reaction.group, 
                             &reaction.pipeline, &job.stage, &reaction.creator, &job.status, shared))
-                         .arg(&job.id.to_string())
-                    .cmd("zrem").arg(&StreamKeys::system_scaler(job.scaler, "deadlines", shared))
+                         .arg(job.id.to_string())
+                    .cmd("zrem").arg(StreamKeys::system_scaler(job.scaler, "deadlines", shared))
                          .arg(job.stream_data())
-                    .cmd("del").arg(&ReactionKeys::stage_logs(&reaction.id, &job.stage, shared)));
+                    .cmd("del").arg(ReactionKeys::stage_logs(&reaction.id, &job.stage, shared)));
         // filter out any jobs that don't have a running worker
         jobs.details.iter().filter(|job| job.worker.is_some()).fold(&mut pipe, |pipe, job|
             // remove this job from the running queue
             pipe.cmd("zrem")
-                .arg(&StreamKeys::system_scaler(job.scaler, "running", shared))
+                .arg(StreamKeys::system_scaler(job.scaler, "running", shared))
                 .arg(force_serialize!(&serde_json::json!({"job_id": job.id, "worker": &job.worker.as_ref().unwrap()})))
         );
         // execute our redis pipeline
@@ -1251,24 +1247,26 @@ pub async fn delete(reaction: &Reaction, shared: &Shared) -> Result<(), ApiError
         cursor = jobs.cursor.unwrap();
     }
     let keys = ReactionKeys::new(reaction, shared);
+    // get our reaction id as a string
+    let reaction_id = reaction.id.to_string();
     // build pipeline to delete this reactions data
     let mut pipe = redis::pipe();
     // add commands to clear remove this reaction from the tag lists
     reaction.tags.iter()
         .fold(&mut pipe, |pipe, tag| {
             pipe.cmd("srem").arg(ReactionKeys::tag(&reaction.group, tag, shared))
-                    .arg(&reaction.id.to_string())
+                    .arg(&reaction_id)
         });
 
     // execute pipeline to delete our reaction specific data
     let _: () = pipe.atomic()
         .cmd("del").arg(&keys.data)
         .cmd("del").arg(&keys.logs)
-        .cmd("zrem").arg(&ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
-            .arg(&reaction.id.to_string())
-        .cmd("srem").arg(&keys.set).arg(reaction.id.to_string())
-        .cmd("srem").arg(&ReactionKeys::status(&reaction.group, &reaction.pipeline, &reaction.status, shared))
-            .arg(&reaction.id.to_string())
+        .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
+            .arg(&reaction_id)
+        .cmd("srem").arg(&keys.set).arg(&reaction_id)
+        .cmd("srem").arg(ReactionKeys::status(&reaction.group, &reaction.pipeline, &reaction.status, shared))
+            .arg(&reaction_id)
         .query_async(conn!(shared)).await?;
     Ok(())
 }
@@ -1374,16 +1372,18 @@ pub async fn update(
     pipe.cmd("hset").arg(&keys.data).arg("args").arg(serialize!(&reaction.args))
         .cmd("hset").arg(&keys.data).arg("sla").arg(serialize!(&reaction.sla))
         .cmd("hsetnx").arg(&keys.data).arg("ephemeral").arg(serialize!(&reaction.ephemeral));
+    // get our reaction id as a string
+    let reaction_id = reaction.id.to_string();
     // remove the old tags
     old_tags.iter()
         .fold(&mut pipe, |pipe, tag|
             pipe.cmd("srem").arg(ReactionKeys::tag(&reaction.group, tag, shared))
-                .arg(&reaction.id.to_string()));
+                .arg(&reaction_id));
     // add new tags
     new_tags.iter()
         .fold(&mut pipe, |pipe, tag|
             pipe.cmd("sadd").arg(ReactionKeys::tag(&reaction.group, tag, shared))
-                .arg(&reaction.id.to_string()));
+                .arg(&reaction_id));
     // execute pipeline updating this reactions data
     let _: () = pipe.atomic().query_async(conn!(shared)).await?;
     Ok(())

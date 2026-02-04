@@ -2,8 +2,10 @@
 
 #![feature(path_file_prefix)]
 #![feature(os_str_slice)]
+#![feature(path_is_empty)]
 
 use clap::Parser;
+use futures::StreamExt;
 use thorium::{CtlConf, Error};
 
 mod args;
@@ -12,6 +14,9 @@ mod handlers;
 mod utils;
 
 use args::{Args, SubCommands};
+
+use std::path::Path;
+use thorium::models::FileSystemEntityBuilder;
 
 #[tokio::main]
 async fn main() {

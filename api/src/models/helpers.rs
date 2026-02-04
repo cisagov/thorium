@@ -335,10 +335,26 @@ macro_rules! set {
 #[macro_export]
 macro_rules! at_least {
     ($left:expr, $right:expr) => {
-        if ($left < $right) {
-            $right
-        } else {
-            $left
+        if ($left < $right) { $right } else { $left }
+    };
+}
+
+/// add an origin value to tags
+#[doc(hidden)]
+#[macro_export]
+macro_rules! tag {
+    ($tags:expr, $key:expr, $value:expr) => {
+        $tags.entry($key.to_owned()).or_default().insert($value);
+    };
+}
+
+/// Optionally add an origin value to tags
+#[doc(hidden)]
+#[macro_export]
+macro_rules! opt_tag {
+    ($tags:expr, $key:expr, $value:expr) => {
+        if let Some(value) = $value {
+            $tags.entry($key.to_owned()).or_default().insert(value);
         }
     };
 }

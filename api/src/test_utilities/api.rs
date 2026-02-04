@@ -290,8 +290,11 @@ async fn bootstrap_test_api() -> Result<String, Error> {
     // spawn the api
     std::thread::spawn(move || {
         // create a tokio runtime
-        let rt =
-            tokio::runtime::Runtime::new().expect("Failed to spawn tokio runtime for the test API");
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_stack_size(8 << 20)
+            .build()
+            .expect("Failed to spawn tokio runtime for the test API");
         // spawn our api
         rt.block_on(async move { crate::axum(CONF.clone()).await });
     });

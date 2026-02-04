@@ -24,7 +24,7 @@ pub enum Error {
     /// An error from interacting with a git repo
     Git(git2::Error),
     /// An error from opening a repo with gix
-    GitOpen(gix::open::Error),
+    GitOpen(Box<gix::open::Error>),
     /// An error finding a git reference
     GitFindReference(gix::reference::find::existing::Error),
     /// An error from a gix reference iter
@@ -326,7 +326,7 @@ impl From<git2::Error> for Error {
 
 impl From<gix::open::Error> for Error {
     fn from(error: gix::open::Error) -> Self {
-        Error::GitOpen(error)
+        Error::GitOpen(Box::new(error))
     }
 }
 

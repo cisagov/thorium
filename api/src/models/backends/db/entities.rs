@@ -37,9 +37,11 @@ pub async fn create(
     let assoc_req = form.build_association_req(user, id, shared).await?;
     // take our form tags since we need those to setup tags and this entity object
     // gets abandoned in this function anyways
-    let tags = std::mem::take(&mut form.tags);
+    let mut tags = std::mem::take(&mut form.tags);
     // cast our form to an entity
     let entity = form.cast(user, id, shared).await?;
+    // populate our intrinsic tags
+    entity.populate_intrinsic_tags(&mut tags);
     // serialize our metadata
     let serialized_meta = serialize!(&entity.metadata);
     // get the current timestamp for when this entity was created
@@ -335,16 +337,22 @@ async fn supplement_tag_lines(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is updating this entity
 /// * `entity` - The entity that's being updated
 /// * `add_groups` - The groups that were added to the entity
 /// * `remove_groups` - The groups that were removed from the entity
 /// * `shared` - Shared Thorium objects
 pub async fn update(
+    user: &User,
     mut entity: Entity,
     add_groups: &[String],
     remove_groups: &[String],
     shared: &Shared,
 ) -> Result<(), ApiError> {
+    // instance a set of tags that we want to ensure exist
+    let mut tags = HashMap::default();
+    // populate our intrinsic tags
+    entity.populate_intrinsic_tags(&mut tags);
     // drop any association specific data
     entity.drop_associated_data();
     // serialize our metadata
@@ -434,6 +442,24 @@ pub async fn update(
             shared,
         );
         super::census::decr_cache(keys, shared).await?;
+    }
+    // add tags if we have any
+    if !tags.is_empty() {
+        // build a tag request
+        let mut req = TagRequest::<Entity>::default().groups(entity.groups.clone());
+        // move our tags to the request
+        req.tags = tags;
+        // get the earliest time each group can see this entity
+        let earliest = entity.earliest();
+        // save the tags in scylla
+        super::tags::create(
+            user,
+            Entity::build_key(entity.id.to_string(), &()),
+            req,
+            &earliest,
+            shared,
+        )
+        .await?;
     }
     // delete tag rows for the deleted groups
     let mut tag_delete_req = TagDeleteRequest::<Entity>::default().groups(remove_groups);

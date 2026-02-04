@@ -58,6 +58,12 @@ pub enum AssociationKind {
     UsedIn,
     /// This campaign was performed by
     PerformedBy,
+    /// This filesystem was extracted/carved from
+    FileSystemIn,
+    /// This is a folder within a filesystem or another fodler
+    FolderIn,
+    /// This is a file in a folder in a filesytem
+    FileIn,
 }
 
 impl std::fmt::Display for AssociationKind {
@@ -77,6 +83,9 @@ impl std::fmt::Display for AssociationKind {
             AssociationKind::UsedBy => write!(f, "UsedBy"),
             AssociationKind::UsedIn => write!(f, "UsedIn"),
             AssociationKind::PerformedBy => write!(f, "PerformedBy"),
+            AssociationKind::FileSystemIn => write!(f, "FileSystemIn"),
+            AssociationKind::FolderIn => write!(f, "FolderIn"),
+            AssociationKind::FileIn => write!(f, "FileIn"),
         }
     }
 }
@@ -98,6 +107,9 @@ impl AssociationKind {
             AssociationKind::UsedBy => "UsedBy",
             AssociationKind::UsedIn => "UsedIn",
             AssociationKind::PerformedBy => "PerformedBy",
+            AssociationKind::FileSystemIn => "FileSystemIn",
+            AssociationKind::FolderIn => "FolderIn",
+            AssociationKind::FileIn => "FileIn",
         }
     }
 }
@@ -121,6 +133,9 @@ impl FromStr for AssociationKind {
             "UsedBy" => Ok(AssociationKind::UsedBy),
             "UsedIn" => Ok(AssociationKind::UsedIn),
             "PerformedBy" => Ok(AssociationKind::PerformedBy),
+            "FileSystemIn" => Ok(AssociationKind::FileSystemIn),
+            "FolderIn" => Ok(AssociationKind::FolderIn),
+            "FileIn" => Ok(AssociationKind::FileIn),
             _ => Err(InvalidEnum(format!("Unknown AssociationKind: {raw}"))),
         }
     }
@@ -168,6 +183,7 @@ impl AssociationRequest {
     /// * `kind` - The kind of association request to create
     /// * `source` - Where this assocation comes from
     pub fn new(kind: AssociationKind, source: AssociationTarget) -> Self {
+        // build this association request
         AssociationRequest {
             kind,
             source,
@@ -189,6 +205,7 @@ impl AssociationRequest {
         source: AssociationTarget,
         capacity: usize,
     ) -> Self {
+        // build this association request
         AssociationRequest {
             kind,
             source,
@@ -196,6 +213,17 @@ impl AssociationRequest {
             groups: Vec::with_capacity(capacity),
             is_bidirectional: false,
         }
+    }
+
+    /// Add a target for this association
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The target for this association
+    pub fn target(mut self, target: AssociationTarget) -> Self {
+        // add our new target
+        self.targets.push(target);
+        self
     }
 
     /// Set the groups to use with this association

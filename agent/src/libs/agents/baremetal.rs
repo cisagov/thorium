@@ -397,9 +397,9 @@ impl AgentExecutor for BareMetal {
     ///
     /// * `image` - The Image to collect children for
     #[instrument(name = "AgentExecutor<BareMetal>::children", skip_all, err(Debug))]
-    async fn children(&mut self, _: &Image) -> Result<Children, Error> {
+    async fn children(&mut self, image: &Image) -> Result<Children, Error> {
         // collect any children from the default location
-        Children::collect(&self.children_path, &mut self.logs).await
+        Children::collect(&self.children_path, image, &mut self.logs).await
     }
 
     /// Sync any updates to our cache

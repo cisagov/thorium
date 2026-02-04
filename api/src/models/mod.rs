@@ -41,11 +41,12 @@ pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchPara
 pub use entities::collections::{CollectionEntity, CollectionEntityRequest, CollectionKind};
 pub use entities::countries::Country;
 pub use entities::devices::{DeviceEntity, DeviceEntityRequest};
+pub use entities::filesystem::{FileSystemEntity, FileSystemEntityBuilder};
 pub use entities::shared::CriticalSector;
 pub use entities::vendors::{VendorEntity, VendorEntityRequest};
 pub use entities::{
-    Entity, EntityKinds, EntityListLine, EntityListParams, EntityMetadata, EntityResponse,
-    EntityUpdate,
+    Entity, EntityKinds, EntityListLine, EntityListOpts, EntityListParams, EntityMetadata,
+    EntityMetadataRequest, EntityRequest, EntityResponse, EntityUpdate,
 };
 pub use errors::InvalidEnum;
 pub use events::{

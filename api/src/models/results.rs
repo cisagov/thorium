@@ -990,6 +990,9 @@ pub struct OutputCollection {
     /// The file Handler settings
     #[serde(default)]
     pub files: FilesHandler,
+    /// Whether any children files should be ingested as a filesystem
+    #[serde(default)]
+    pub as_filesystem: bool,
     /// Where to look for child files to ingest,
     #[serde(default = "default_children")]
     pub children: String,
@@ -1007,6 +1010,7 @@ impl Default for OutputCollection {
         OutputCollection {
             handler: OutputHandler::default(),
             files: FilesHandler::default(),
+            as_filesystem: false,
             children: "/tmp/thorium/children".to_owned(),
             auto_tag: HashMap::default(),
             groups: Vec::default(),
@@ -1311,6 +1315,9 @@ pub struct OutputCollectionUpdate {
     /// Where to look for child files to ingest,
     #[serde(default)]
     pub children: Option<String>,
+    /// Whether to collect any children as a filesystem
+    #[serde(default)]
+    pub as_filesystem: Option<bool>,
     /// The groups we should restrict our results uploads too
     #[serde(default)]
     pub groups: Vec<String>,

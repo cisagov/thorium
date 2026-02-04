@@ -17,19 +17,21 @@ use uuid::Uuid;
 use super::db;
 use crate::models::backends::GraphicSupport;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
+use crate::models::entities::filesystem::FileSystemFolderEntity;
 use crate::models::entities::{EntityMetadata, EntityMetadataForm};
 use crate::models::{
     ApiCursor, AssociationKind, AssociationListOpts, AssociationRequest, AssociationTarget,
     AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
     EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow,
-    EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, Group, GroupAllowAction,
-    ListableAssociation, TagListRow, TagMap, TagType, TreeSupport, User, VendorEntity,
+    EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, FileSystemEntity, Group,
+    GroupAllowAction, ListableAssociation, TagListRow, TagMap, TagType, TreeSupport, User,
+    VendorEntity,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
     bad, bad_internal, deserialize, ensure_empty_segment, ensure_segments_complete, for_groups,
-    internal_err, not_found, serialize, unauthorized, update, update_add_rem, update_clear_opt,
-    update_opt,
+    internal_err, not_found, serialize, tag, unauthorized, update, update_add_rem,
+    update_clear_opt, update_opt,
 };
 
 mod collections;
@@ -130,6 +132,33 @@ impl Entity {
         }
     }
 
+    pub fn populate_intrinsic_tags(&self, tags: &mut HashMap<String, HashSet<String>>) {
+        match &self.metadata {
+            EntityMetadata::Device(device) => {
+                // add all of the vendors for this device to tags
+                for sector in &device.critical_sectors {
+                    tag!(tags, "CriticalSectors", sector.to_string());
+                }
+            }
+            EntityMetadata::Vendor(vendor) => {
+                // add all of the vendors for this device to tags
+                for sector in &vendor.critical_sectors {
+                    tag!(tags, "CriticalSectors", sector.to_string());
+                }
+            }
+            EntityMetadata::Collection(collection) => (),
+            EntityMetadata::FileSystem(fs) => {
+                tag!(tags, "FsSha256", fs.sha256.clone());
+            }
+            EntityMetadata::Folder(folder) => {
+                tag!(tags, "FolderNamesSha256", folder.names_sha256.clone());
+                tag!(tags, "FolderDataSha256", folder.data_sha256.clone());
+                tag!(tags, "FolderAllSha256", folder.all_sha256.clone());
+            }
+            EntityMetadata::Other => (),
+        }
+    }
+
     /// Populate some entities associations
     ///
     /// # Arguments
@@ -180,7 +209,9 @@ impl Entity {
                 // vendor/collection/other has no data that we need to retrieve
                 EntityMetadata::Vendor(_)
                 | EntityMetadata::Collection(_)
-                | EntityMetadata::Other => (),
+                | EntityMetadata::Other
+                | EntityMetadata::FileSystem(_)
+                | EntityMetadata::Folder(_) => (),
             }
         }
         Ok(self)
@@ -304,8 +335,15 @@ impl Entity {
             EntityMetadata::Collection(collection) => {
                 collection.update(&mut form)?;
             }
-            // other has no metadata to upadte
-            EntityMetadata::Other => (),
+            // update this filesystems metadata
+            EntityMetadata::FileSystem(fs) => {
+                // add new tools that dumped this filesystem
+                fs.tools.append(&mut form.add_tools);
+                // remove any tools from old tools
+                fs.tools.retain(|tool| !form.remove_tools.contains(tool));
+            }
+            // other kinds have no metadata to update
+            EntityMetadata::Other | EntityMetadata::Folder(_) => (),
         }
         // update any associations based on this update
         form.update_associations(user, self, shared).await
@@ -372,6 +410,7 @@ impl Entity {
         }
         // update this entity
         db::entities::update(
+            user,
             self,
             &update_form.add_groups,
             &update_form.remove_groups,
@@ -593,7 +632,13 @@ impl Entity {
             // vendors in devices is built by association
             EntityMetadata::Device(device) => device.vendors.clear(),
             // vendor/collection/other has no association specific data
-            EntityMetadata::Vendor(_) | EntityMetadata::Collection(_) | EntityMetadata::Other => (),
+            EntityMetadata::Vendor(_)
+            | EntityMetadata::Collection(_)
+            | EntityMetadata::FileSystem(_)
+            | EntityMetadata::Folder(_)
+            | EntityMetadata::Other => (),
+            // vendor/other has no association specific data
+            _ => (),
         }
     }
 }
@@ -624,6 +669,8 @@ impl EntityMetadata {
             EntityMetadata::Device(device_entity) => Some(serialize!(device_entity)),
             EntityMetadata::Vendor(vendor_entity) => Some(serialize!(vendor_entity)),
             EntityMetadata::Collection(collection_entity) => Some(serialize!(collection_entity)),
+            EntityMetadata::FileSystem(fs_entity) => Some(serialize!(fs_entity)),
+            EntityMetadata::Folder(folder_entity) => Some(serialize!(folder_entity)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -877,6 +924,10 @@ impl EntityMetadataForm {
                     bad_internal!(format!("Invalid collection end datetime '{end_raw}'"))
                 })?);
             }
+            "sha256" => self.sha256 = Some(field.text().await?),
+            "names_sha256" => self.names_sha256 = Some(field.text().await?),
+            "data_sha256" => self.data_sha256 = Some(field.text().await?),
+            "all_sha256" => self.all_sha256 = Some(field.text().await?),
             maybe_list => {
                 match maybe_list {
                     "urls" => {
@@ -913,6 +964,7 @@ impl EntityMetadataForm {
                         // add our value
                         entry.insert(field.text().await?);
                     }
+                    "tools" => self.tools.push(field.text().await?),
                     bad_name => {
                         return bad!(format!("'{bad_name}' is not a valid metadata form name"));
                     }
@@ -944,6 +996,12 @@ impl EntityMetadataForm {
             )),
             EntityKinds::Vendor => Ok(EntityMetadata::Vendor(VendorEntity::from_form(self))),
             EntityKinds::Collection => Ok(EntityMetadata::Collection(CollectionEntity::from_form(
+                self,
+            )?)),
+            EntityKinds::FileSystem => Ok(EntityMetadata::FileSystem(FileSystemEntity::from_form(
+                self,
+            )?)),
+            EntityKinds::Folder => Ok(EntityMetadata::Folder(FileSystemFolderEntity::from_form(
                 self,
             )?)),
             EntityKinds::Other => Ok(EntityMetadata::Other),
@@ -1172,6 +1230,8 @@ impl EntityMetadataUpdateForm {
                             .or_default();
                         entry.insert(field.text().await?);
                     }
+                    "add_tools" => self.add_tools.push(field.text().await?),
+                    "remove_tools" => self.remove_tools.push(field.text().await?),
                     // this is an invalid key so return an error
                     bad_name => {
                         return bad!(format!(

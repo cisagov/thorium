@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::{OnDiskFile, TreeSupport};
 #[cfg(feature = "api")]
 use crate::models::Tree;
-use crate::{matches_adds, matches_removes, matches_update_opt, same};
+use crate::{matches_adds, matches_removes, matches_update_opt, opt_tag, same, tag};
 
 // api only imports
 cfg_if::cfg_if! {
@@ -62,7 +62,7 @@ cfg_if::cfg_if! {
         /// A request to to set the origin for a submission
         ///
         /// This is only used internally to deserialize multipart forms
-        #[derive(Debug, Default)]
+        #[derive(Debug)]
         pub struct OriginForm {
             /// The type of origin this should be deserialized as
             pub origin_type: OriginTypes,
@@ -124,6 +124,8 @@ cfg_if::cfg_if! {
             pub dest_port: Option<u16>,
             /// The type of protocol this sample was transported in
             pub proto: Option<PcapNetworkProtocol>,
+            /// Whether this origin is direct or indirect
+            pub direct: bool,
         }
 
         /// A request to upload a sample to Thorium
@@ -687,6 +689,11 @@ impl Default for OriginTypes {
     }
 }
 
+/// Help serde default direct to true
+fn default_direct() -> bool {
+    true
+}
+
 /// A request to to set the origin for a submission
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -781,6 +788,9 @@ pub struct OriginRequest {
     /// The type of protocol this sample was transported in
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proto: Option<PcapNetworkProtocol>,
+    /// Whether this origin is direct or not (indirect origins are linked by associations)
+    #[serde(default = "default_direct")]
+    pub direct: bool,
     /// If this is an origin update then set the origin to None
     #[serde(default)]
     pub clear_origin: bool,
@@ -819,13 +829,14 @@ impl OriginRequest {
             commitish: None,
             commit: None,
             system: None,
-            clear_origin: false,
             supporting: None,
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -861,13 +872,14 @@ impl OriginRequest {
             commitish: None,
             commit: None,
             system: None,
-            clear_origin: false,
             supporting: None,
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -914,13 +926,14 @@ impl OriginRequest {
             commitish: None,
             commit: None,
             system: None,
-            clear_origin: false,
             supporting: None,
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -961,13 +974,14 @@ impl OriginRequest {
             commitish: None,
             commit: None,
             system: None,
-            clear_origin: false,
             supporting: None,
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -1014,13 +1028,14 @@ impl OriginRequest {
             commitish: None,
             commit: None,
             system: None,
-            clear_origin: false,
             supporting: None,
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -1066,13 +1081,14 @@ impl OriginRequest {
             commitish: None,
             commit: None,
             system: None,
-            clear_origin: false,
             supporting: None,
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -1126,13 +1142,14 @@ impl OriginRequest {
             commitish: commitish.map(|val| val.into()),
             commit: Some(commit.into()),
             system: Some(system.into()),
-            clear_origin: false,
             supporting: Some(supporting),
             src_ip: None,
             dest_ip: None,
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
+            clear_origin: false,
         }
     }
 
@@ -1189,6 +1206,7 @@ impl OriginRequest {
             src_port,
             dest_port,
             proto,
+            direct: true,
             clear_origin: false,
         }
     }
@@ -1231,8 +1249,23 @@ impl OriginRequest {
             src_port: None,
             dest_port: None,
             proto: None,
+            direct: true,
             clear_origin: false,
         }
+    }
+
+    /// Set an origin as being direct
+    ///
+    ///
+    /// Indirect origins are for things that are linked to the parent through
+    /// associations. Direct is true while indirect is false;
+    ///
+    /// # Arguments
+    ///
+    /// * `direct` - Whether this origin is direct or not
+    pub fn direct(mut self, direct: bool) -> Self {
+        self.direct = direct;
+        self
     }
 
     /// A a result id to this origin
@@ -1266,6 +1299,12 @@ impl OriginRequest {
     pub fn extend_form(mut self, form: reqwest::multipart::Form) -> reqwest::multipart::Form {
         // set the type of origin this is
         let form = form.text("origin[origin_type]", self.origin_type);
+        // add direct to our form
+        let form = if self.direct {
+            form.text("origin[direct]", "true")
+        } else {
+            form.text("origin[direct]", "false")
+        };
         // add any values that were set
         let form = multipart_list_conv!(form, "origin[result_ids]", self.result_ids);
         let form = multipart_text!(form, "origin[url]", self.url);
@@ -1417,6 +1456,9 @@ pub enum Origin {
         /// Whether this parent sample exists or not
         #[serde(default)]
         dangling: bool,
+        /// Whether this sample is directly linked to the parent sample in Thorium
+        #[serde(default = "default_direct")]
+        direct: bool,
     },
     /// This sample is an output of a transformation of another sample
     Transformed {
@@ -1482,6 +1524,9 @@ pub enum Origin {
         system: String,
         /// Whether this is a supporting build file or a final build file
         supporting: bool,
+        /// Whether this sample is directly linked to the parent sample in Thorium
+        #[serde(default = "default_direct")]
+        direct: bool,
     },
     /// This sample was statically carved out from another sample
     ///
@@ -1499,25 +1544,12 @@ pub enum Origin {
         dangling: bool,
         /// The type of carved file this is
         carved_origin: CarvedOrigin,
+        /// Whether this sample is directly linked to the parent sample in Thorium
+        #[serde(default = "default_direct")]
+        direct: bool,
     },
     /// This sample has no unique origin
     None,
-}
-
-/// add an origin value to tags
-macro_rules! tag {
-    ($tags:expr, $key:expr, $value:expr) => {
-        $tags.entry($key.to_owned()).or_default().insert($value);
-    };
-}
-
-/// Optionally add an origin value to tags
-macro_rules! opt_tag {
-    ($tags:expr, $key:expr, $value:expr) => {
-        if let Some(value) = $value {
-            $tags.entry($key.to_owned()).or_default().insert(value);
-        }
-    };
 }
 
 /// Whether something is a file or repo
@@ -1614,6 +1646,7 @@ impl Origin {
                 flags,
                 system,
                 supporting,
+                ..
             } => {
                 tag!(tags, "Origin", "Source".to_owned());
                 tag!(tags, "Repo", repo);
@@ -1711,7 +1744,7 @@ impl Origin {
     }
 
     /// Get a parent sha256 for this sample if it exists
-    pub fn get_parent_sha256_or_repo<'a>(&'a self) -> Option<FileOrRepo<'a>> {
+    fn get_parent_sha256_or_repo<'a>(&'a self) -> Option<FileOrRepo<'a>> {
         match self {
             Origin::Downloaded { .. } => None,
             Origin::Unpacked { parent, .. } => Some(FileOrRepo::File(parent)),
@@ -1734,6 +1767,56 @@ impl Origin {
             _ => false,
         }
     }
+
+    /// Check if this origin is indirect
+    ///
+    /// Some origins can be indirect as they can be represented in a tree
+    /// through a filesystem or other abstractions.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - The parent to check against
+    pub fn is_indirect(&self) -> bool {
+        // check if this origin is from our parent and is direct
+        match self {
+            Origin::Unpacked { direct, .. } => !direct,
+            Origin::Source { direct, .. } => !direct,
+            Origin::Carved { direct, .. } => !direct,
+            // all other origins are always direct
+            _ => false,
+        }
+    }
+
+    /// Check if this origin is directly linked to a parent
+    ///
+    /// Some origins can be indirect as they can be represented in a tree
+    /// through a filesystem or other abstractions.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - The parent to check against
+    pub fn is_direct_to(&self, parent: &str) -> bool {
+        // check if this origin is from our parent and is direct
+        match self {
+            Origin::Unpacked {
+                parent: other,
+                direct,
+                ..
+            } => parent == other && *direct,
+            Origin::Source {
+                repo: other,
+                direct,
+                ..
+            } => parent == other && *direct,
+            Origin::Carved {
+                parent: other,
+                direct,
+                ..
+            } => parent == other && *direct,
+            // all other origins are always direct
+            _ => true,
+        }
+    }
 }
 
 impl PartialEq<Option<OriginRequest>> for Origin {
@@ -1751,9 +1834,15 @@ impl PartialEq<Option<OriginRequest>> for Origin {
                     same!(Some(url), req.url.as_ref());
                     same!(name, &req.name);
                 }
-                Origin::Unpacked { tool, parent, .. } => {
+                Origin::Unpacked {
+                    tool,
+                    parent,
+                    direct,
+                    ..
+                } => {
                     same!(tool, &req.tool);
                     same!(Some(parent), req.parent.as_ref());
+                    same!(*direct, req.direct);
                 }
                 Origin::Transformed {
                     tool,
@@ -1808,6 +1897,7 @@ impl PartialEq<Option<OriginRequest>> for Origin {
                     flags,
                     system,
                     supporting,
+                    direct,
                 } => {
                     same!(Some(repo), req.repo.as_ref());
                     same!(commitish, &req.commitish);
@@ -1815,15 +1905,18 @@ impl PartialEq<Option<OriginRequest>> for Origin {
                     same!(flags, &req.flags);
                     same!(Some(system), req.system.as_ref());
                     same!(Some(supporting), req.supporting.as_ref());
+                    same!(*direct, req.direct);
                 }
                 Origin::Carved {
                     parent,
                     tool,
                     carved_origin,
+                    direct,
                     ..
                 } => {
                     same!(Some(parent), req.parent.as_ref());
                     same!(tool, &req.tool);
+                    same!(*direct, req.direct);
                     match carved_origin {
                         CarvedOrigin::Pcap {
                             src_ip,
@@ -2242,6 +2335,21 @@ impl Sample {
         }
         simple
     }
+
+    /// Check if this Sample is directly linked to a parent
+    ///
+    /// Some origins can be indirect as they can be represented in a tree
+    /// through a filesystem or other abstractions.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - The parent to check against
+    pub fn is_direct_to(&self, parent: &str) -> bool {
+        // check all of this samples submissions for a direct relationship
+        self.submissions
+            .iter()
+            .any(|sub| sub.origin.is_direct_to(parent))
+    }
 }
 
 #[cfg(any(feature = "api", feature = "client"))]
@@ -2559,9 +2667,11 @@ impl TreeSupport for Sample {
     ) -> Result<(), crate::utils::ApiError> {
         // step over our submissions and find any parents
         for sub in &self.submissions {
+            // skip any indirect relationship
+            if sub.origin.is_indirect() {
+                continue;
+            }
             // check if this is a dangling parent
-
-            use crate::models::UnhashedTreeBranch;
             if sub.origin.is_dangling_parent() {
                 // this parent is dangling so just skip it for now
                 // TODO: in the future we should have a dangling node
@@ -2608,7 +2718,8 @@ impl TreeSupport for Sample {
             // build the relationship for this node
             let relationship = TreeRelationships::Origin(sub.origin.clone());
             // wrap our relationship in a branch
-            let branch = UnhashedTreeBranch::new(parent_hash, relationship, Directionality::From);
+            let branch =
+                super::UnhashedTreeBranch::new(parent_hash, relationship, Directionality::From);
             // get an entry to this parent nodes relationships
             let entry = ring.relationships.entry(node_hash).or_default();
             // insert our relationship
@@ -3153,9 +3264,6 @@ impl DeleteCommentParams {
 }
 
 /// The options that you can set when listing files in Thorium
-///
-/// Currently this only supports single tag queries but when ES support is added multi tag queries
-/// will be supported.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub struct FileListOpts {

@@ -17,6 +17,9 @@ pub struct Chat {
     /// Whether to log messages to/from the AI
     #[clap(long)]
     pub debug: bool,
+    /// Allow all tool calls
+    #[clap(short, long)]
+    pub allow_all_tools: bool,
 }
 
 /// Summarize some data in Thorium

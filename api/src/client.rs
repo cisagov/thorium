@@ -6,9 +6,11 @@ use std::path::{Path, PathBuf};
 
 use crate::models::{self, AuthResponse, ScrubbedUser};
 
+mod associations;
 mod basic;
 pub mod conf;
 mod cursors;
+mod entities;
 mod error;
 mod events;
 mod files;
@@ -30,9 +32,11 @@ mod updates;
 mod users;
 mod utils;
 
+pub use associations::Associations;
 pub use basic::Basic;
 pub use conf::{ClientSettings, CtlConf};
 pub use cursors::{Cursor, LogsCursor, SearchDate};
+pub use entities::Entities;
 pub use error::Error;
 pub use events::Events;
 pub use files::Files;
@@ -74,6 +78,8 @@ cfg_if::cfg_if! {
         pub use network_policies::NetworkPoliciesBlocking;
         pub use trees::TreesBlocking;
         pub use updates::UpdatesBlocking;
+        pub use entities::EntitiesBlocking;
+        pub use associations::AssociationsBlocking;
 
         // expose blocking traits
         pub use traits::ResultsClientBlocking;
@@ -270,6 +276,8 @@ impl ThoriumClientBuilder {
         let search = Search::new(&self.host, &auth_str, &client);
         let files = Files::new(&self.host, &auth_str, &client);
         let repos = Repos::new(&self.host, &auth_str, &client);
+        let entities = Entities::new(&self.host, &auth_str, &client);
+        let associations = Associations::new(&self.host, &auth_str, &client);
         let updates = Updates::new(&self.host, &auth_str, &client);
         let events = Events::new(&self.host, &auth_str, &client);
         let network_policies = NetworkPolicies::new(&self.host, &auth_str, &client);
@@ -288,6 +296,8 @@ impl ThoriumClientBuilder {
             search,
             files,
             repos,
+            entities,
+            associations,
             events,
             network_policies,
             trees,
@@ -328,6 +338,10 @@ pub struct Thorium {
     pub files: Files,
     /// Handles repos routes in Thorium
     pub repos: Repos,
+    /// Handles entities routes in Thorium
+    pub entities: Entities,
+    /// Handles associations routes in Thorium
+    pub associations: Associations,
     /// Handles binary update routes in Thorium
     pub updates: Updates,
     /// Handles event routes in Thorium
@@ -464,6 +478,10 @@ cfg_if::cfg_if! {
             pub files: FilesBlocking,
             /// Handles repos routes in Thorium
             pub repos: ReposBlocking,
+            /// Handles entities routes in Thorium
+            pub entities: EntitiesBlocking,
+            /// Handles associations routes in Thorium
+            pub associations: AssociationsBlocking,
             /// Handles binary update routes in Thorium
             pub updates: UpdatesBlocking,
             /// Handles event routes in Thorium
@@ -533,6 +551,8 @@ cfg_if::cfg_if! {
                 let search = SearchBlocking::new(&self.host, &auth_str, &client);
                 let files = FilesBlocking::new(&self.host, &auth_str, &client);
                 let repos = ReposBlocking::new(&self.host, &auth_str, &client);
+                let entities = EntitiesBlocking::new(&self.host, &auth_string, &client);
+                let associations = AssociationsBlocking::new(&self.host, &auth_str, &client);
                 let updates = UpdatesBlocking::new(&self.host, &auth_str, &client);
                 let events = EventsBlocking::new(&self.host, &auth_str, &client);
                 let network_policies = NetworkPoliciesBlocking::new(&self.host, &auth_str, &client);
@@ -551,6 +571,8 @@ cfg_if::cfg_if! {
                     search,
                     files,
                     repos,
+                    entities,
+                    associations,
                     updates,
                     events,
                     network_policies,

@@ -326,6 +326,7 @@ impl OutputCollection {
         update!(self.files.result_files, update.files.result_files);
         update!(self.files.tags, update.files.tags);
         update!(self.children, update.children);
+        update!(self.as_filesystem, update.as_filesystem);
         // update the names in the files handler
         self.files
             .names

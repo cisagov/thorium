@@ -117,6 +117,7 @@ impl SampleForm {
                 "origin[src_port]" => self.origin.src_port = Some(field.text().await?.parse()?),
                 "origin[dest_port]" => self.origin.dest_port = Some(field.text().await?.parse()?),
                 "origin[proto]" => self.origin.proto = Some(field.text().await?.parse()?),
+                "origin[direct]" => self.origin.direct = field.text().await?.parse()?,
                 "trigger_depth" => self.trigger_depth = field.text().await?.parse()?,
                 // this is the data so return it so we can stream it to s3
                 "data" => return Ok(Some(field)),
@@ -784,6 +785,11 @@ impl Sample {
         let hash = self.tree_hash();
         // check the origins this sample to see if we have any relationships that need to be added
         for sub in &self.submissions {
+            // skip any indirect relationships
+            if sub.origin.is_indirect() {
+                // ignore this indirect relationship
+                continue;
+            }
             // get parents for this submission origin if they exist
             if let Some(parent_hash) = sub.origin.is_child_of_any(parents) {
                 // build the relationship for this origin
@@ -1019,6 +1025,44 @@ macro_rules! get {
     };
 }
 
+impl Default for OriginForm {
+    fn default() -> Self {
+        OriginForm {
+            origin_type: OriginTypes::None,
+            result_ids: Vec::default(),
+            url: None,
+            name: None,
+            tool: None,
+            parent: None,
+            flags: Vec::default(),
+            cmd: None,
+            sniffer: None,
+            source: None,
+            destination: None,
+            incident: None,
+            cover_term: None,
+            mission_team: None,
+            network: None,
+            machine: None,
+            location: None,
+            memory_type: None,
+            reconstructed: Vec::default(),
+            base_addr: None,
+            repo: None,
+            commitish: None,
+            commit: None,
+            system: None,
+            supporting: None,
+            src_ip: None,
+            dest_ip: None,
+            src_port: None,
+            dest_port: None,
+            proto: None,
+            direct: true,
+        }
+    }
+}
+
 impl OriginForm {
     /// Convert an [`OriginForm`] to an [`Origin`], including its associated result ID's
     ///
@@ -1037,6 +1081,7 @@ impl OriginForm {
                 tool: self.tool,
                 parent: get!(self.parent, "parent"),
                 dangling: false,
+                direct: self.direct,
             },
             OriginTypes::Transformed => Origin::Transformed {
                 tool: self.tool,
@@ -1071,6 +1116,7 @@ impl OriginForm {
                 flags: self.flags,
                 system: get!(self.system, "system"),
                 supporting: get!(self.supporting, "supporting"),
+                direct: self.direct,
             },
             OriginTypes::Carved(carved_type) => Origin::Carved {
                 parent: get!(self.parent, "parent"),
@@ -1087,6 +1133,7 @@ impl OriginForm {
                     },
                     CarvedOriginTypes::Unknown => CarvedOrigin::Unknown,
                 },
+                direct: self.direct,
             },
         };
         Ok((origin, self.result_ids))
@@ -1111,6 +1158,7 @@ impl TryFrom<OriginRequest> for Origin {
                 tool: req.tool,
                 parent: get!(req.parent, "parent"),
                 dangling: false,
+                direct: req.direct,
             },
             "Transformed" => Origin::Transformed {
                 tool: req.tool,
@@ -1143,6 +1191,7 @@ impl TryFrom<OriginRequest> for Origin {
                 tool: req.tool,
                 dangling: false,
                 carved_origin: CarvedOrigin::Unknown,
+                direct: req.direct,
             },
             "CarvedPcap" => Origin::Carved {
                 parent: get!(req.parent, "parent"),
@@ -1156,6 +1205,7 @@ impl TryFrom<OriginRequest> for Origin {
                     proto: req.proto,
                     url: req.url,
                 },
+                direct: req.direct,
             },
             _ => {
                 return bad!(

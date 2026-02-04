@@ -124,7 +124,7 @@ async fn list_ties(session: &Session, config: &Conf) -> PreparedStatement {
     // build associations list ties prepared statement
     session
         .prepare(format!(
-            "SELECT group, kind, source, target, created, submitter, direction, extra_source, extra_target \
+            "SELECT group, kind, source, target, submitter, created, direction, extra_source, extra_target \
                 FROM {}.associations \
                 WHERE group = ? \
                 AND year = ? \

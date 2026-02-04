@@ -424,7 +424,7 @@ impl AgentExecutor for K8s {
     #[instrument(name = "AgentExecutor<K8s>::children", skip_all, err(Debug))]
     async fn children(&mut self, image: &Image) -> Result<Children, Error> {
         // collect any children from the default location
-        Children::collect(&image.output_collection.children, &mut self.logs).await
+        Children::collect(&image.output_collection.children, image, &mut self.logs).await
     }
 
     /// Sync any updates to our cache
