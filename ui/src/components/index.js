@@ -40,6 +40,7 @@ export * from './entities/create';
 export * from './entities/details';
 export * from './entities/shared';
 export * from './entities/upload';
+export { default as EditableCollectionTags } from './entities/collections/editable_collection_tags';
 // ---------------------------------------------------------
 
 // ------------------------ Images -------------------------

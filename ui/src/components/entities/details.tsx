@@ -1,7 +1,7 @@
 import React, { useEffect, useState, createContext, useContext, Fragment, JSX } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Row, Col, Form, Modal } from 'react-bootstrap';
-import { FaBackspace, FaRegEdit, FaSave, FaTrash } from 'react-icons/fa';
+import { FaBackspace, FaQuestionCircle, FaRegEdit, FaSave, FaTrash } from 'react-icons/fa';
 import { FaFileCirclePlus, FaSquarePlus } from 'react-icons/fa6';
 
 // project imports
@@ -23,6 +23,7 @@ import { Entity } from '@models';
 import { deleteEntity, updateEntity } from '@thorpi';
 import { buildUpdateEntityForm } from './utilities';
 import styled from 'styled-components';
+import { ListCollectionButton } from './collections/details';
 
 export type MetadataComponent = (
   entity: Entity,
@@ -290,7 +291,7 @@ interface DeviceButtonProps {
 
 const EntityButtons: React.FC<DeviceButtonProps> = ({ className }) => {
   const { userInfo } = useAuth();
-  const { entity } = useEntityContext();
+  const { editing, entity } = useEntityContext();
   // submitter and User++ can modify an entity
   // modify/create needs to have permissions within the group no in Thorium
   const canModify = true; // TODO: grab group membership of selected groups and check roles
@@ -301,6 +302,7 @@ const EntityButtons: React.FC<DeviceButtonProps> = ({ className }) => {
       <DeleteButton disabled={!canModify} />
       <CreateButton disabled={!canCreate} />
       <UploadFileButton disabled={!canCreate} />
+      {entity.kind === 'Collection' && entity.metadata.Collection.collection_kind === 'Files' && <ListCollectionButton entity={entity} />}
     </div>
   );
 };
@@ -329,6 +331,22 @@ const EntityHeader: React.FC<EntityHeaderProps> = ({ icon }) => {
     </Card>
   );
 };
+
+type EntityDetailsLabelProps = {
+  label: string;
+  tip: string;
+};
+
+export function EntityDetailsLabel({ label, tip }: EntityDetailsLabelProps): JSX.Element {
+  return (
+    <InfoHeader>
+      {label}
+      <OverlayTipBottom tip={tip}>
+        <FaQuestionCircle />
+      </OverlayTipBottom>
+    </InfoHeader>
+  );
+}
 
 type EntityDetailsProps<T extends Entity> = {
   getEntityDetails: (entityID: string, setError: (err: string) => void, updateEntity: (entity: T) => void) => void;

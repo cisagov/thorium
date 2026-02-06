@@ -6,13 +6,14 @@ import styled from 'styled-components';
 // project imports
 import { InfoHeader, InfoValue, OverlayTipBottom, Page, SelectInputArray, Title } from '@components';
 import { useAuth } from '@utilities';
-import { CreateEntity, Entities } from '@models';
+import { CreateEntity, Entities, CreateEntityPreprocessor } from '@models';
 import { createEntity } from '@thorpi';
 import { buildCreateEntityForm, copyEntityFields } from './utilities';
 
 export type MetadataComponent = (
   entity: CreateEntity,
   onChange: <K extends keyof CreateEntity>(field: K, value: CreateEntity[K]) => void,
+  preprocessor?: CreateEntityPreprocessor<any>,
 ) => JSX.Element;
 
 type EntityCreateContextType = {
@@ -22,6 +23,7 @@ type EntityCreateContextType = {
   updatePendingEntity: <K extends keyof CreateEntity>(field: K, value: CreateEntity[K]) => void;
   error: string; // any error message returned when trying to create a new entity
   setError: (error: string) => void; // set create error message callback
+  preprocessor?: CreateEntityPreprocessor<any>; // handles any extra preprocessing to be done on the entity before creation
 };
 
 // Page context
@@ -38,7 +40,7 @@ const useEntityContext = () => {
 
 // Entity shared fields
 const EntityInfo = () => {
-  const { entity, metadata, updatePendingEntity } = useEntityContext();
+  const { entity, metadata, updatePendingEntity, preprocessor } = useEntityContext();
   const { userInfo } = useAuth();
   return (
     <>
@@ -72,7 +74,7 @@ const EntityInfo = () => {
             </InfoValue>
           </Row>
           <hr className="my-3" />
-          {metadata(entity, updatePendingEntity)}
+          {metadata(entity, updatePendingEntity, preprocessor)}
           <hr className="my-3" />
           <Row>
             <InfoHeader>Description</InfoHeader>
@@ -88,7 +90,7 @@ const EntityInfo = () => {
           </Row>
           <Row className="mt-4">
             <InfoHeader />
-            <InfoValue>* Field is required to create a new device</InfoValue>
+            <InfoValue>* Field is required to create a new {entity.kind.toLowerCase()}</InfoValue>
           </Row>
         </Card.Body>
       </Card>
@@ -96,7 +98,11 @@ const EntityInfo = () => {
   );
 };
 
-const EntityCreateButton = () => {
+type EntityCreateButtonProps = {
+  preprocessor?: CreateEntityPreprocessor<any>;
+};
+
+function EntityCreateButton<T extends CreateEntity>({ preprocessor }: EntityCreateButtonProps) {
   const navigate = useNavigate();
   const { entity, kind, setError } = useEntityContext();
   const { userInfo } = useAuth();
@@ -107,7 +113,8 @@ const EntityCreateButton = () => {
     : `You must be a user, manager, or owner in a selected group to create this ${kind}.`;
 
   const handleCreateEntity = (): void => {
-    createEntity(buildCreateEntityForm(entity, kind), setError).then((response) => {
+    const processedEntity = preprocessor ? preprocessor.preprocess(entity) : entity;
+    createEntity(buildCreateEntityForm(processedEntity, kind), setError).then((response) => {
       if (response != null) {
         navigate(`/${kind}/${response.id}`);
       }
@@ -124,7 +131,7 @@ const EntityCreateButton = () => {
       </OverlayTipBottom>
     </div>
   );
-};
+}
 
 const CreateEntityTitle = styled.div`
   display: grid;
@@ -137,9 +144,10 @@ type EntityDetailsProps<T extends CreateEntity> = {
   blank: T;
   kind: Entities;
   metadata: MetadataComponent;
+  preprocessor?: CreateEntityPreprocessor<T>;
 };
 
-export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata }: EntityDetailsProps<T>): JSX.Element {
+export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata, preprocessor }: EntityDetailsProps<T>): JSX.Element {
   const { state } = useLocation();
   // pull device state if its there
   const [entity, setEntity] = useState<CreateEntity>(state?.entity ? copyEntityFields(state.entity, blank) : blank);
@@ -160,6 +168,7 @@ export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata }: 
         error,
         setError,
         kind,
+        preprocessor,
       }}
     >
       <Page className="full-min-width" title={`Create ${kind}`}>
@@ -168,7 +177,7 @@ export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata }: 
         </CreateEntityTitle>
         <EntityInfo />
         {error != '' && <Alert variant="danger text-center">{error}</Alert>}
-        <EntityCreateButton />
+        <EntityCreateButton preprocessor={preprocessor} />
       </Page>
     </EntityContext.Provider>
   );

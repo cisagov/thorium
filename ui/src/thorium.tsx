@@ -17,13 +17,16 @@ const NotFound = lazy(async () => import('./pages/not_found'));
 const FileDetails = lazy(async () => import('./pages/files/details'));
 const DeviceDetails = lazy(async () => await import('./pages/entities/devices/details'));
 const VendorDetails = lazy(async () => await import('./pages/entities/vendors/details'));
+const CollectionDetails = lazy(async () => await import('./pages/entities/collections/details'));
 const RepoDetails = lazy(() => import('./pages/repos/details'));
 const FilesBrowsing = lazy(() => import('./pages/files/browsing'));
 const RepoBrowsing = lazy(() => import('./pages/repos/browsing'));
 const DeviceBrowsing = lazy(async () => await import('./pages/entities/devices/browsing'));
 const VendorBrowsing = lazy(async () => await import('./pages/entities/vendors/browsing'));
+const CollectionBrowsing = lazy(async () => await import('./pages/entities/collections/browsing'));
 const CreateDevice = lazy(async () => await import('./pages/entities/devices/create'));
 const CreateVendor = lazy(async () => await import('./pages/entities/vendors/create'));
+const CreateCollection = lazy(async () => await import('./pages/entities/collections/create'));
 const CreateImage = lazy(() => import('./pages/images/create'));
 const GraphBuilder = lazy(async () => await import('./pages/graph'));
 const UploadFiles = lazy(() => import('./pages/files/upload'));
@@ -54,8 +57,12 @@ const Resources = () => (
     <Route path="/vendors" element={<PageWrapper Contents={VendorBrowsing} />} />
     <Route path="/vendor" element={<PageWrapper Contents={VendorBrowsing} />} />
     <Route path="/vendor/:entityID" element={<PageWrapper Contents={VendorDetails} />} />
+    <Route path="/collections" element={<PageWrapper Contents={CollectionBrowsing} />} />
+    <Route path="/collections/" element={<PageWrapper Contents={CollectionBrowsing} />} />
+    <Route path="/collection/:entityID" element={<PageWrapper Contents={CollectionDetails} />} />
     <Route path="/create/vendor" element={<PageWrapper Contents={CreateVendor} />} />
     <Route path="/create/device" element={<PageWrapper Contents={CreateDevice} />} />
+    <Route path="/create/collection" element={<PageWrapper Contents={CreateCollection} />} />
     <Route path="/create/image" element={<PageWrapper Contents={CreateImage} />} />
     <Route path="/graph" element={<PageWrapper Contents={GraphBuilder} />} />
     <Route path="/upload" element={<PageWrapper Contents={UploadFiles} />} />

@@ -60,16 +60,108 @@ pub fn to_k8s_name<T: AsRef<str>>(value: T, id: Uuid) -> Result<String, ApiError
     Ok(k8s_name)
 }
 
+/// Checks to make sure that the next segment in the bracket segment list
+/// is empty, otherwise returns an error.
+///
+/// This check is important for list fields that should end with `[]`
+#[macro_export]
+macro_rules! ensure_empty_segment {
+    ($segments_iter:expr, $name:expr) => {{
+        if !$segments_iter.next().is_some_and(str::is_empty) {
+            bad!(format!(
+                "Malformed multipart field name '{}': missing final '[]' on list",
+                $name
+            ))
+        } else {
+            Ok(())
+        }
+    }};
+}
+
+/// Checks to make sure that there are no more segments left in the given
+/// iterator, otherwise returns an error
+#[macro_export]
+macro_rules! ensure_segments_complete {
+    ($segments_iter:expr, $name:expr) => {{
+        if $segments_iter.next().is_some() {
+            bad!(format!(
+                "Multipart field name '{}' has invalid extra components",
+                $name
+            ))
+        } else {
+            Ok(())
+        }
+    }};
+}
+
+/// Parses a string like "metadata[key][value]" into a `Vec` of `&str` segments.
+///
+/// Particularly useful when parsing multipart form field names
+///
+/// The first segment is everything before the first `[`.
+/// Subsequent segments are the contents of each `[...]` bracket pair.
+/// An empty input returns an empty `Vec`.
+///
+/// # Errors
+///
+/// - No matching closing bracket `]` after open bracket `[`
+/// - Extra input after closing bracket `]`
+pub fn parse_bracket_segments(input: &str) -> Result<Vec<&str>, ApiError> {
+    if input.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut segments = Vec::new();
+    // split off the first segment (before the first `[`)
+    let (first, rest) = match input.find('[') {
+        Some(pos) => (&input[..pos], &input[pos..]),
+        // no brackets at all, return the whole string
+        None => return Ok(vec![input]),
+    };
+    segments.push(first);
+    // parse each [...] bracket group from the remainder
+    let mut remaining = rest;
+    while !remaining.is_empty() {
+        match remaining.find('[') {
+            // no more opening brackets
+            None => {
+                return bad!(format!(
+                    "malformed input '{input}': extra characters after brackets"
+                ));
+            }
+            Some(open) => {
+                match remaining[open..].find(']') {
+                    // malformed: no closing bracket
+                    None => {
+                        return bad!(format!(
+                            "malformed input '{input}': missing closing bracket"
+                        ));
+                    }
+                    Some(close_offset) => {
+                        // close_offset is relative to remaining[open..]
+                        let close = open + close_offset;
+                        let content = &remaining[open + 1..close];
+                        segments.push(content);
+                        remaining = &remaining[close + 1..];
+                    }
+                }
+            }
+        }
+    }
+    Ok(segments)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // k8s name tests
+
     fn is_valid_k8s_name(name: &str) -> bool {
-        return !name.is_empty()
+        !name.is_empty()
             && name.is_ascii()
             && name.len() <= K8_NAME_MAX_CHARS
             && name.to_ascii_lowercase() == name
-            && name.chars().next().unwrap().is_alphanumeric();
+            && name.chars().next().unwrap().is_alphanumeric()
     }
 
     #[test]
@@ -126,5 +218,97 @@ mod tests {
         let k8s_name = to_k8s_name(name, Uuid::new_v4()).unwrap();
         assert!(k8s_name.starts_with("name-with-caps"));
         assert!(is_valid_k8s_name(&k8s_name));
+    }
+
+    // bracket segments tests
+
+    #[test]
+    fn test_parse_brackets_empty() {
+        assert_eq!(parse_bracket_segments("").unwrap(), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn test_parse_brackets_no_brackets() {
+        assert_eq!(
+            parse_bracket_segments("metadata").unwrap(),
+            vec!["metadata"]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_single_pair() {
+        assert_eq!(
+            parse_bracket_segments("metadata[key]").unwrap(),
+            vec!["metadata", "key"]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_two_pairs() {
+        assert_eq!(
+            parse_bracket_segments("metadata[key][value]").unwrap(),
+            vec!["metadata", "key", "value"]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_empty_pairs() {
+        assert_eq!(
+            parse_bracket_segments("metadata[][key][][value]").unwrap(),
+            vec!["metadata", "", "key", "", "value"]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_all_empty() {
+        assert_eq!(
+            parse_bracket_segments("field[][]").unwrap(),
+            vec!["field", "", ""]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_empty_first() {
+        // Edge case: input starts with `[`
+        assert_eq!(
+            parse_bracket_segments("[key][value]").unwrap(),
+            vec!["", "key", "value"]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_single_empty() {
+        assert_eq!(
+            parse_bracket_segments("field[]").unwrap(),
+            vec!["field", ""]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_many() {
+        assert_eq!(
+            parse_bracket_segments("a[b][c][d][e]").unwrap(),
+            vec!["a", "b", "c", "d", "e"]
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_characters_after_brackets() {
+        let res = parse_bracket_segments("metadata[key]extra_bad_stuff");
+        let err = res.expect_err("Should be an error");
+        assert!(
+            err.msg
+                .is_some_and(|msg| msg.contains("extra characters after brackets"))
+        );
+    }
+
+    #[test]
+    fn test_parse_brackets_missing_closing_bracket() {
+        let res = parse_bracket_segments("metadata[key][value");
+        let err = res.expect_err("Should be an error");
+        assert!(
+            err.msg
+                .is_some_and(|msg| msg.contains("missing closing bracket"))
+        );
     }
 }

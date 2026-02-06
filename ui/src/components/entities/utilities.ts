@@ -1,11 +1,53 @@
 import { getCode as getCountryCode, Country } from 'country-list';
 
 // project imports
-import { CreateEntity, CreateTags, CriticalSector, Entities, Entity, Vendor } from '@models';
+import { CollectionTags, CreateEntity, CreateTags, CriticalSector, Entities, Entity, Vendor } from '@models';
 
 const reformatCriticalSectors = (sector: string): string => {
   return sector.replaceAll(' and ', '').replaceAll(',', '').replaceAll(' ', '');
 };
+
+/**
+ * Computes which collection tag values were added and removed between two tag maps.
+ *
+ * A tag map is shaped as: `{ [key: string]: string[] }`, where each key can have multiple values.
+ *
+ * @param currentTags - The existing collection tags in the Thorium backend.
+ * @param pendingTags - The edited (pending) collection tags.
+ * @returns An object containing:
+ *  - `toAdd`: keys/values present in `pending` but not in `current`
+ *  - `toDelete`: keys/values present in `current` but not in `pending`
+ */
+function diffCollectionTags(
+  currentTags: CollectionTags | undefined,
+  pendingTags: CollectionTags | undefined,
+): { toAdd: CollectionTags; toDelete: CollectionTags } {
+  // set current/pending tags to empty map if undefined
+  const current = currentTags ?? {};
+  const pending = pendingTags ?? {};
+  // get a set of all keys both in current and pending
+  const keys = new Set<string>([...Object.keys(current), ...Object.keys(pending)]);
+  // declare maps of keys/values to add and delete
+  const toAdd: CollectionTags = {};
+  const toDelete: CollectionTags = {};
+  for (const k of keys) {
+    // get the set of values from current/pending, or default to empty set
+    const currentValues = new Set(current[k] ?? []);
+    const pendingValues = new Set(pending[k] ?? []);
+    // values to add are everything in pending that's not in current
+    const valuesToAdd = [...pendingValues].filter((v) => !currentValues.has(v));
+    // values to delete are everything in current that's not in pending
+    const valuesToDelete = [...currentValues].filter((v) => !pendingValues.has(v));
+    // add the values to add and delete to our main maps
+    if (valuesToAdd.length) {
+      toAdd[k] = valuesToAdd;
+    }
+    if (valuesToDelete.length) {
+      toDelete[k] = valuesToDelete;
+    }
+  }
+  return { toAdd, toDelete };
+}
 
 export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): FormData {
   const updateForm = new FormData();
@@ -17,10 +59,10 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
   const addGroups = pendingEntity.groups.filter((pendingGroup) => !entity.groups.includes(pendingGroup));
   const removeGroups = entity.groups.filter((entityGroup) => !pendingEntity.groups.includes(entityGroup));
   addGroups.map((group) => {
-    updateForm.append('add_groups', group);
+    updateForm.append('add_groups[]', group);
   });
   removeGroups.map((group) => {
-    updateForm.append('remove_groups', group);
+    updateForm.append('remove_groups[]', group);
   });
   // description
   if (entity.description != pendingEntity.description) {
@@ -37,10 +79,10 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
   const addUrls: string[] | undefined = pendingMeta?.urls?.filter((url: string) => !metadata.urls.includes(url));
   const removeUrls: string[] | undefined = metadata?.urls?.filter((url: string) => !pendingMeta.urls.includes(url));
   addUrls?.map((url: string) => {
-    updateForm.append('metadata[add_urls]', url);
+    updateForm.append('metadata[add_urls][]', url);
   });
   removeUrls?.map((url: string) => {
-    updateForm.append('metadata[remove_urls]', url);
+    updateForm.append('metadata[remove_urls][]', url);
   });
   // metadata: vendors
   console.log(metadata.vendors);
@@ -51,10 +93,10 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
     (vendor: Vendor) => !pendingMeta.vendors.map((pendingVendor: string) => pendingVendor).includes(vendor.id),
   );
   addVendors?.map((vendor: string) => {
-    updateForm.append('metadata[add_vendors]', vendor);
+    updateForm.append('metadata[add_vendors][]', vendor);
   });
   removeVendors?.map((vendor: string) => {
-    updateForm.append('metadata[remove_vendors]', vendor);
+    updateForm.append('metadata[remove_vendors][]', vendor);
   });
   // metadata: critical_system/critical_sectors
   if (metadata?.critical_system != pendingMeta?.critical_system) {
@@ -63,7 +105,7 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
   // critical system is false, clear any critical_sectors listed
   if (entity.kind != 'Vendor' && pendingMeta.critical_system === false) {
     metadata.critical_sectors.map((sector: CriticalSector) => {
-      updateForm.append('metadata[remove_critical_sectors]', reformatCriticalSectors(sector));
+      updateForm.append('metadata[remove_critical_sectors][]', reformatCriticalSectors(sector));
     });
   }
   if (entity.kind == 'Vendor' || pendingMeta.critical_system === true) {
@@ -71,18 +113,18 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
       (sector: string) => !metadata.critical_sectors.includes(sector),
     );
     addSectors?.map((sector: string) => {
-      updateForm.append('metadata[add_critical_sectors]', reformatCriticalSectors(sector));
+      updateForm.append('metadata[add_critical_sectors][]', reformatCriticalSectors(sector));
     });
     const removeSectors: string[] | undefined = metadata?.critical_sectors?.filter(
       (sector: string) => !pendingMeta.critical_sectors.includes(sector),
     );
     removeSectors?.map((sector: string) => {
-      updateForm.append('metadata[remove_critical_sectors]', reformatCriticalSectors(sector));
+      updateForm.append('metadata[remove_critical_sectors][]', reformatCriticalSectors(sector));
     });
   }
   // metadata: sensitive_location
   if (metadata?.sensitive_location != pendingMeta.sensitive_location && typeof pendingMeta?.sensitive_location == 'boolean') {
-    updateForm.set('metadata[sensitive_location]', `${pendingMeta.sensitive_location}`);
+    updateForm.set('metadata[sensitive_location][]', `${pendingMeta.sensitive_location}`);
   }
   // metadata: countries
   const addCountries: Country[] | undefined = pendingMeta?.countries?.filter(
@@ -93,14 +135,49 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
   );
   addCountries?.map((country: Country) => {
     if (country.code !== undefined) {
-      updateForm.append('metadata[add_countries]', country.code);
+      updateForm.append('metadata[add_countries][]', country.code);
     }
   });
   removeCountries?.map((country: any) => {
     if (country.code !== undefined) {
-      updateForm.append('metadata[remove_countries]', country.code);
+      updateForm.append('metadata[remove_countries][]', country.code);
     }
   });
+  // Collection-specific metadata
+  if (entity.kind == 'Collection') {
+    if (metadata?.tags_case_insensitive != pendingMeta.tags_case_insensitive && typeof pendingMeta?.tags_case_insensitive == 'boolean') {
+      updateForm.set('metadata[collection_tags_case_insensitive]', `${pendingMeta.tags_case_insensitive}`);
+    }
+    if (metadata?.ignore_groups != pendingMeta.ignore_groups && typeof pendingMeta?.ignore_groups == 'boolean') {
+      updateForm.set('metadata[collection_ignore_groups]', `${pendingMeta.ignore_groups}`);
+    }
+    if (metadata?.start !== pendingMeta?.start) {
+      if (pendingMeta.start === null || pendingMeta.start === '') {
+        updateForm.set('metadata[clear_collection_start]', 'true');
+      } else {
+        updateForm.set('metadata[collection_start]', pendingMeta?.start);
+      }
+    }
+    if (metadata?.end !== pendingMeta?.end) {
+      if (pendingMeta.end === null || pendingMeta.end === '') {
+        updateForm.set('metadata[clear_collection_end]', 'true');
+      } else {
+        updateForm.set('metadata[collection_end]', pendingMeta?.end);
+      }
+    }
+    // collection_tags add/delete
+    const { toAdd, toDelete } = diffCollectionTags(metadata?.collection_tags, pendingMeta?.collection_tags);
+    Object.entries(toAdd).forEach(([k, vals]) => {
+      vals.forEach((v) => {
+        updateForm.append(`metadata[add_collection_tags][${k}][]`, v);
+      });
+    });
+    Object.entries(toDelete).forEach(([k, vals]) => {
+      vals.forEach((v) => {
+        updateForm.append(`metadata[delete_collection_tags][${k}][]`, v);
+      });
+    });
+  }
   return updateForm;
 }
 
@@ -110,7 +187,7 @@ export function buildCreateEntityForm(entity: CreateEntity, kind: Entities): For
   createForm.set('kind', kind);
   // add groups to form
   entity.groups.map((group: string) => {
-    createForm.append('groups', group);
+    createForm.append('groups[]', group);
   });
   if (entity.description && entity.description !== '') {
     createForm.set('description', entity.description);
@@ -118,7 +195,7 @@ export function buildCreateEntityForm(entity: CreateEntity, kind: Entities): For
   // add create tags to form
   Object.keys(entity.tags).map((key: string) => {
     entity.tags[key].map((value: string) => {
-      createForm.append(`tags[${key}]`, value);
+      createForm.append(`tags[${key}][]`, value);
     });
   });
   // metadata
@@ -126,7 +203,7 @@ export function buildCreateEntityForm(entity: CreateEntity, kind: Entities): For
   // metadata: urls
   if (metadata && 'urls' in metadata && metadata.urls?.length > 0) {
     metadata.urls.map((url: string) => {
-      createForm.append('metadata[urls]', url);
+      createForm.append('metadata[urls][]', url);
     });
   }
   // metadata: sensitive_location
@@ -146,13 +223,13 @@ export function buildCreateEntityForm(entity: CreateEntity, kind: Entities): For
       ('critical_system' in metadata && typeof metadata.critical_system == 'boolean' && metadata.critical_system === true))
   ) {
     metadata.critical_sectors.map((sector: string) => {
-      createForm.append('metadata[critical_sectors]', reformatCriticalSectors(sector));
+      createForm.append('metadata[critical_sectors][]', reformatCriticalSectors(sector));
     });
   }
   // metadata: vendor
   if (metadata && 'vendor' in metadata && metadata.vendor.length > 0) {
     metadata.vendor.map((vendor: string) => {
-      createForm.append('metadata[vendor]', vendor);
+      createForm.append('metadata[vendor][]', vendor);
     });
   }
   // metadata: countries
@@ -160,9 +237,37 @@ export function buildCreateEntityForm(entity: CreateEntity, kind: Entities): For
     metadata.countries.map((name: string) => {
       const code = getCountryCode(name);
       if (code !== undefined) {
-        createForm.append('metadata[countries]', code);
+        createForm.append('metadata[countries][]', code);
       }
     });
+  }
+  // Collection-specific metadata
+  if (entity.kind == 'Collection') {
+    if (metadata?.collection_kind && metadata?.collection_kind !== '') {
+      createForm.append('metadata[collection_kind]', metadata?.collection_kind);
+    }
+    if (metadata?.tags_case_insensitive) {
+      createForm.append('metadata[collection_tags_case_insensitive]', 'true');
+    }
+    if (metadata?.ignore_groups) {
+      createForm.append('metadata[collection_ignore_groups]', 'true');
+    }
+    if (metadata?.start && metadata?.start !== '') {
+      createForm.append('metadata[collection_start]', metadata?.start);
+    }
+    if (metadata?.end && metadata?.end !== '') {
+      createForm.append('metadata[collection_end]', metadata?.end);
+    }
+    if (metadata?.collection_tags && typeof metadata?.collection_tags === 'object') {
+      Object.entries(metadata.collection_tags).forEach(([tagKey, tagVals]) => {
+        if (Array.isArray(tagVals)) {
+          tagVals.forEach((val) => {
+            // e.g. metadata[collection_tags][key][]=value
+            createForm.append(`metadata[collection_tags][${tagKey}][]`, val);
+          });
+        }
+      });
+    }
   }
   return createForm;
 }

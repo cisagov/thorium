@@ -1,7 +1,7 @@
 import React, { Fragment } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Col, Nav, Navbar, NavDropdown, Row } from 'react-bootstrap';
-import { FaCube, FaFolderOpen, FaQuestion, FaSitemap, FaUsers, FaUser, FaUpload, FaCog, FaChartLine } from 'react-icons/fa';
+import { FaCube, FaFolderOpen, FaFolder, FaQuestion, FaSitemap, FaUsers, FaUser, FaUpload, FaCog, FaChartLine } from 'react-icons/fa';
 import { FaHardDrive } from 'react-icons/fa6';
 import { MdBusinessCenter } from 'react-icons/md';
 
@@ -117,6 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userInfo }) => {
         <Fragment>
           <SidebarItem to="/upload" short={<FaUpload size={25} />} full={'Upload'} />
           <SidebarItem to="/files" short={<FaFolderOpen size={25} />} full={'Files'} />
+          <SidebarItem to="/collections" short={<FaFolder size={25} />} full={'Collections'} />
           <SidebarItem to="/devices" short={<FaHardDrive size={25} />} full={'Devices'} />
           <SidebarItem to="/vendors" short={<MdBusinessCenter size={25} />} full={'Vendors'} />
           <SidebarItem to="/pipelines" short={<FaSitemap size={25} />} full={'Pipelines'} />

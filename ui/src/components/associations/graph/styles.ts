@@ -9,6 +9,7 @@ import RepoSVG from '@assets/icons/git.svg';
 import VendorSVG from '@assets/icons/vendor.svg';
 import VendorSearchSVG from '@assets/icons/vendor-add.svg';
 import DeviceSVG from '@assets/icons/device.svg';
+import CollectionSVG from '@assets/icons/collection.svg';
 import OtherSVG from '@assets/icons/other.svg';
 
 // replace hardcoded key in SVG with actual colors
@@ -18,18 +19,21 @@ export const OtherGrowableIcon = OtherSVG.replace('REPLACEME', '64cc66');
 export const RepoGrowableIcon = RepoSVG.replace('REPLACEME', '64cc66');
 export const TagGrowableIcon = TagSearchSVG.replace('REPLACEME', '64cc66');
 export const VendorGrowableIcon = VendorSearchSVG.replace('REPLACEME', '64cc66');
+export const CollectionGrowableIcon = CollectionSVG.replace('REPLACEME', '64cc66');
 export const DeviceIcon = DeviceSVG.replace('REPLACEME', 'ed9624');
 export const FileIcon = FileSVG.replace('REPLACEME', 'f1d592');
 export const OtherIcon = OtherSVG.replace('REPLACEME', 'cacfca');
 export const RepoIcon = RepoSVG.replace('REPLACEME', 'f03c2e');
 export const TagIcon = TagSVG.replace('REPLACEME', '427d8c');
 export const VendorIcon = VendorSVG.replace('REPLACEME', '8f30b8');
+export const CollectionIcon = CollectionSVG.replace('REPLACEME', '8f30b8');
 export const InitialDeviceIcon = DeviceSVG.replace('REPLACEME', '00998C');
 export const InitialFileIcon = FileSVG.replace('REPLACEME', '00998C');
 export const InitialOtherIcon = OtherSVG.replace('REPLACEME', '00998C');
 export const InitialRepoIcon = RepoSVG.replace('REPLACEME', '00998C');
 export const InitialTagIcon = TagSVG.replace('REPLACEME', '00998C');
 export const InitialVendorIcon = VendorSVG.replace('REPLACEME', '00998C');
+export const InitialCollectionIcon = CollectionSVG.replace('REPLACEME', '00998C');
 
 // get edge color based on theme
 const getEdgeColor = (style: CSSStyleDeclaration) => {
@@ -170,6 +174,18 @@ export const buildStyleSheet = (rootNodes: string[]): StylesheetJson => {
       },
     },
     {
+      selector: '.basic-collection',
+      style: {
+        'background-image': `url(${CollectionIcon})`,
+      },
+    },
+    {
+      selector: '.growable-collection',
+      style: {
+        'background-image': `url(${CollectionGrowableIcon})`,
+      },
+    },
+    {
       selector: '.has-node-label',
       style: {
         label: 'data(label)',
@@ -217,6 +233,12 @@ export const buildStyleSheet = (rootNodes: string[]): StylesheetJson => {
       selector: `.initial-device`,
       style: {
         'background-image': `url(${InitialDeviceIcon})`,
+      },
+    },
+    {
+      selector: `.initial-collection`,
+      style: {
+        'background-image': `url(${InitialCollectionIcon})`,
       },
     },
   ];

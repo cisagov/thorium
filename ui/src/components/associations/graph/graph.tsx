@@ -128,6 +128,7 @@ const addNode = (
         classes: classes,
       });
     } else if ('Entity' in nodeData && nodeData.Entity?.kind == 'Vendor') {
+      console.log('Vendor');
       if (growable.includes(node)) {
         classes.push('growable-vendor');
       } else if (isInitialNode) {
@@ -143,13 +144,29 @@ const addNode = (
         },
         classes: classes,
       });
+    } else if ('Entity' in nodeData && nodeData.Entity?.kind == 'Collection') {
+      if (growable.includes(node)) {
+        classes.push('growable-collection');
+      } else if (isInitialNode) {
+        classes.push('initial-collection');
+      } else {
+        classes.push('basic-collection');
+      }
+      elements.push({
+        data: {
+          id: node,
+          label: nodeData.Entity.name,
+          diameter: getNodeSize(scoreNode(graph.data_map[node]), nodeCount),
+        },
+        classes: classes,
+      });
     } else {
       if (growable.includes(node)) {
-        classes.push('growable-default');
+        classes.push('growable-other');
       } else if (isInitialNode) {
-        classes.push('initial-default');
+        classes.push('initial-other');
       } else {
-        classes.push('basic-default');
+        classes.push('basic-other');
       }
       elements.push({
         data: {
@@ -267,6 +284,14 @@ const grow = async (
       if (node.hasClass('growable-device')) {
         node.removeClass('growable-device');
         node.addClass('basic-device');
+      }
+      if (node.hasClass('growable-collection')) {
+        node.removeClass('growable-collection');
+        node.addClass('basic-collection');
+      }
+      if (node.hasClass('growable-other')) {
+        node.removeClass('growable-other');
+        node.addClass('basic-other');
       }
     }
     // update nodes that are no longer growable

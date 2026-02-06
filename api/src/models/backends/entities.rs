@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::{event, instrument};
+use tracing::instrument;
 use uuid::Uuid;
 
 use super::db;
@@ -20,17 +20,19 @@ use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport}
 use crate::models::entities::{EntityMetadata, EntityMetadataForm};
 use crate::models::{
     ApiCursor, AssociationKind, AssociationListOpts, AssociationRequest, AssociationTarget,
-    AssociationTargetColumn, Country, CriticalSector, DeviceEntity, Entity, EntityForm,
-    EntityKinds, EntityListLine, EntityListParams, EntityListRow, EntityMetadataUpdateForm,
-    EntityResponse, EntityRow, EntityUpdateForm, Group, GroupAllowAction, ListableAssociation,
-    TagListRow, TagMap, TagType, TreeSupport, User, VendorEntity,
+    AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
+    EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow,
+    EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, Group, GroupAllowAction,
+    ListableAssociation, TagListRow, TagMap, TagType, TreeSupport, User, VendorEntity,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
-    bad, deserialize, for_groups, internal_err, not_found, serialize, unauthorized, update,
-    update_add_rem, update_clear_opt, update_opt,
+    bad, bad_internal, deserialize, ensure_empty_segment, ensure_segments_complete, for_groups,
+    internal_err, not_found, serialize, unauthorized, update, update_add_rem, update_clear_opt,
+    update_opt,
 };
 
+mod collections;
 mod devices;
 
 impl Entity {
@@ -80,6 +82,8 @@ impl Entity {
             shared,
         )
         .await?;
+        // make sure the data in the finished form is valid
+        entity_form.validate()?;
         // create the entity
         db::entities::create(user, entity_form, entity_id, shared).await?;
         // the entity was created successfully
@@ -173,8 +177,10 @@ impl Entity {
                     // get all of the entities we found
                     metadata.vendors = db::entities::get_many(&user.groups, &ids, shared).await?;
                 }
-                // vendor/other has no data that we need to retrieve
-                EntityMetadata::Vendor(_) | EntityMetadata::Other => (),
+                // vendor/collection/other has no data that we need to retrieve
+                EntityMetadata::Vendor(_)
+                | EntityMetadata::Collection(_)
+                | EntityMetadata::Other => (),
             }
         }
         Ok(self)
@@ -293,6 +299,10 @@ impl Entity {
                 vendor
                     .critical_sectors
                     .retain(|sector| !form.remove_critical_sectors.contains(sector));
+            }
+            // update collection info
+            EntityMetadata::Collection(collection) => {
+                collection.update(&mut form)?;
             }
             // other has no metadata to upadte
             EntityMetadata::Other => (),
@@ -582,8 +592,8 @@ impl Entity {
         match &mut self.metadata {
             // vendors in devices is built by association
             EntityMetadata::Device(device) => device.vendors.clear(),
-            // vendor/other has no association specific data
-            EntityMetadata::Vendor(_) | EntityMetadata::Other => (),
+            // vendor/collection/other has no association specific data
+            EntityMetadata::Vendor(_) | EntityMetadata::Collection(_) | EntityMetadata::Other => (),
         }
     }
 }
@@ -613,6 +623,7 @@ impl EntityMetadata {
         let data = match self {
             EntityMetadata::Device(device_entity) => Some(serialize!(device_entity)),
             EntityMetadata::Vendor(vendor_entity) => Some(serialize!(vendor_entity)),
+            EntityMetadata::Collection(collection_entity) => Some(serialize!(collection_entity)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -636,62 +647,57 @@ impl EntityForm {
     /// * `field` - The field to try to add
     pub async fn add<'a>(&'a mut self, field: Field<'a>) -> Result<Option<Field<'a>>, ApiError> {
         // get the name of this field
-        if let Some(name) = field.name() {
+        if let Some(name) = field.name().map(ToOwned::to_owned) {
+            // iterate over the segments ('<NAME>[<KEY1>][<KEY2>]') in the field name
+            let name_segments = super::helpers::parse_bracket_segments(&name)?;
+            let mut name_segments_iter = name_segments.into_iter();
             // add this fields value to our form
-            match name {
+            match name_segments_iter
+                .next()
+                .ok_or(bad_internal!("Multipart field name is empty".to_string()))?
+            {
                 "name" => self.name = Some(field.text().await?),
-                "groups" => self.groups.push(field.text().await?),
                 "description" => self.description = Some(field.text().await?),
                 // this is image data so return it so we can stream it to s3
                 "image" => return Ok(Some(field)),
                 // kind fields
                 "kind" => {
                     // try to cast our kind to the correct kind
-                    let cast = EntityKinds::from_str(&field.text().await?)?;
+                    let kind_raw = field.text().await.map_err(|_| {
+                        bad_internal!(
+                            "Invalid entity kind: entity kind must be a string".to_string(),
+                        )
+                    })?;
+                    let cast = EntityKinds::from_str(&kind_raw)
+                        .map_err(|_| bad_internal!(format!("Invalid entity kind '{kind_raw}'")))?;
                     // set our kind
                     self.kind = Some(cast);
                 }
-                "metadata[urls]" => {
-                    self.metadata.urls.push(field.text().await?);
+                "metadata" => {
+                    name_segments_iter =
+                        self.metadata.add(field, &name, name_segments_iter).await?;
                 }
-                "metadata[vendor]" => {
-                    // try to parse this vendor id
-                    let vendor_id = field.text().await?.parse::<Uuid>()?;
-                    // add this id to our vendor list
-                    self.metadata.vendors.push(vendor_id);
-                }
-                "metadata[critical_system]" => {
-                    self.metadata.critical_system = Some(field.text().await?.parse()?);
-                }
-                "metadata[critical_sectors]" => {
-                    // try to convert this field to a critical sector
-                    let sector = CriticalSector::from_str(&field.text().await?)?;
-                    // add this critical sector
-                    self.metadata.critical_sectors.insert(sector);
-                }
-                "metadata[sensitive_location]" => {
-                    self.metadata.sensitive_location = Some(field.text().await?.parse()?);
-                }
-                "metadata[countries]" => {
-                    // validate and parse this country
-                    let country = Country::new(&field.text().await?)?;
-                    // add this country to our metadata form
-                    self.metadata.countries.insert(country);
-                }
-                _ => {
-                    // check if this is a tags key
-                    if name.starts_with("tags[") {
-                        // this is a tag so get the key substring
-                        let key = &name[5..name.len() - 1];
-                        // get an entry to this tags value vec
-                        let entry = self.tags.entry(key.to_owned()).or_default();
-                        // add our value
-                        entry.insert(field.text().await?);
-                        return Ok(None);
+                // this could be a list field
+                maybe_list => {
+                    match maybe_list {
+                        "groups" => self.groups.push(field.text().await?),
+                        "tags" => {
+                            let key = name_segments_iter.next().filter(|s| !s.is_empty()).ok_or(
+                                bad_internal!("Entity tag key is empty or missing".to_string()),
+                            )?;
+                            // get an entry to this tags value vec
+                            let entry = self.tags.entry(key.to_owned()).or_default();
+                            // add our value
+                            entry.insert(field.text().await?);
+                        }
+                        _ => return bad!(format!("'{name}' is not a valid form name")),
                     }
-                    return bad!(format!("'{}' is not a valid form name", name));
+                    // this is a list field, so make sure the next segment is an empty `[]`
+                    ensure_empty_segment!(name_segments_iter, name)?;
                 }
             }
+            // make sure there aren't extra segments left over
+            ensure_segments_complete!(name_segments_iter, name)?;
             // we found and consumed a valid form entry
             return Ok(None);
         }
@@ -805,6 +811,119 @@ impl EntityForm {
 }
 
 impl EntityMetadataForm {
+    /// Adds a multipart field to our entity metadata form
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the field is invalid
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The field to try to add
+    /// * `name` - The name of the field to add
+    /// * `name_segments` - An iterator over the segments of the field name
+    pub async fn add<'a, I: Iterator<Item = &'a str>>(
+        &'a mut self,
+        field: Field<'a>,
+        name: &str,
+        mut name_segments: I,
+    ) -> Result<I, ApiError> {
+        match name_segments.next().ok_or(bad_internal!(
+            "Invalid entity metadata field: metadata field name is missing".to_string()
+        ))? {
+            "critical_system" => {
+                self.critical_system = Some(field.text().await?.parse()?);
+            }
+            "sensitive_location" => {
+                self.sensitive_location = Some(field.text().await?.parse()?);
+            }
+            "collection_kind" => {
+                // try to cast the collection kind
+                let kind_raw = field.text().await.map_err(|_| {
+                    bad_internal!(
+                        "Invalid collection kind: entity kind must be a string".to_string(),
+                    )
+                })?;
+                self.collection_kind =
+                    Some(kind_raw.parse().map_err(|_| {
+                        bad_internal!(format!("Invalid collection kind '{kind_raw}'"))
+                    })?);
+            }
+            "collection_tags_case_insensitive" => {
+                let raw = field.text().await?;
+                self.collection_tags_case_insensitive = Some(raw.parse().map_err(|err| {
+                    bad_internal!(format!(
+                        "Invalid collection tags case insensitive value '{raw}': {err}"
+                    ))
+                })?);
+            }
+            "collection_ignore_groups" => {
+                let raw = field.text().await?;
+                self.collection_ignore_groups = Some(raw.parse().map_err(|err| {
+                    bad_internal!(format!(
+                        "Invalid collection ignore groups value '{raw}': {err}"
+                    ))
+                })?);
+            }
+            "collection_start" => {
+                let start_raw = field.text().await?;
+                self.collection_start = Some(start_raw.parse().map_err(|_| {
+                    bad_internal!(format!("Invalid collection start datetime '{start_raw}'"))
+                })?);
+            }
+            "collection_end" => {
+                let end_raw = field.text().await?;
+                self.collection_end = Some(end_raw.parse().map_err(|_| {
+                    bad_internal!(format!("Invalid collection end datetime '{end_raw}'"))
+                })?);
+            }
+            maybe_list => {
+                match maybe_list {
+                    "urls" => {
+                        self.urls.push(field.text().await?);
+                    }
+                    "vendor" => {
+                        // try to parse this vendor id
+                        let vendor_id = field.text().await?.parse::<Uuid>()?;
+                        // add this id to our vendor list
+                        self.vendors.push(vendor_id);
+                    }
+                    "critical_sectors" => {
+                        // try to convert this field to a critical sector
+                        let sector = CriticalSector::from_str(&field.text().await?)?;
+                        // add this critical sector
+                        self.critical_sectors.insert(sector);
+                    }
+                    "countries" => {
+                        // validate and parse this country
+                        let country = Country::new(&field.text().await?)?;
+                        // add this country to our metadata form
+                        self.countries.insert(country);
+                    }
+                    "collection_tags" => {
+                        let key =
+                            name_segments
+                                .next()
+                                .filter(|s| !s.is_empty())
+                                .ok_or(bad_internal!(
+                                    "Collection tag key is empty or missing".to_string()
+                                ))?;
+                        // get an entry to collection tags set
+                        let entry = self.collection_tags.entry(key.to_owned()).or_default();
+                        // add our value
+                        entry.insert(field.text().await?);
+                    }
+                    bad_name => {
+                        return bad!(format!("'{bad_name}' is not a valid metadata form name"));
+                    }
+                }
+                // this is a list field, so make sure the next segment is an empty `[]`
+                ensure_empty_segment!(name_segments, name)?;
+            }
+        }
+        Ok(name_segments)
+    }
+
     /// Attempt to cast the entity kind form to an [`EntityKind`], verifying the
     /// form is valid
     ///
@@ -824,6 +943,9 @@ impl EntityMetadataForm {
                 DeviceEntity::from_form(self, groups, shared).await?,
             )),
             EntityKinds::Vendor => Ok(EntityMetadata::Vendor(VendorEntity::from_form(self))),
+            EntityKinds::Collection => Ok(EntityMetadata::Collection(CollectionEntity::from_form(
+                self,
+            )?)),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }
     }
@@ -846,32 +968,43 @@ impl EntityUpdateForm {
     /// * `field` - The field to try to add
     pub async fn add<'a>(&'a mut self, field: Field<'a>) -> Result<Option<Field<'a>>, ApiError> {
         // get the name of this field
-        if let Some(name) = field.name() {
+        if let Some(name) = field.name().map(ToOwned::to_owned) {
+            // iterate over the segments ('<NAME>[<KEY1>][<KEY2>]') in the field name
+            let name_segments = super::helpers::parse_bracket_segments(&name)?;
+            let mut name_segments_iter = name_segments.into_iter();
             // add this fields value to our form
-            match name {
+            match name_segments_iter
+                .next()
+                .ok_or(bad_internal!("Multipart field name is empty".to_string()))?
+            {
                 "name" => self.name = Some(field.text().await?),
-                "add_groups" => self.add_groups.push(field.text().await?),
-                "remove_groups" => self.remove_groups.push(field.text().await?),
                 "clear_image" => self.clear_image = Some(field.text().await?.parse()?),
                 "description" => self.description = Some(field.text().await?),
                 "clear_description" => self.clear_description = Some(field.text().await?.parse()?),
                 // this is image data so return it so we can stream it to s3
                 "image" => return Ok(Some(field)),
-                _ => {
-                    // check if this is a kind field
-                    if let Some(kind_name) =
-                        EntityMetadataUpdateForm::parse_metadata_field_name(name)
-                    {
-                        // get an owned value before we move the field
-                        let kind_name = kind_name.to_owned();
-                        // try to add the kind field
-                        self.metadata.add(field, &kind_name).await?;
-                    } else {
+                "metadata" => {
+                    name_segments_iter =
+                        self.metadata.add(field, &name, name_segments_iter).await?;
+                }
+                // this could be a list field
+                maybe_list => {
+                    match maybe_list {
+                        "add_groups" => self.add_groups.push(field.text().await?),
+                        "remove_groups" => self.remove_groups.push(field.text().await?),
                         // this is an invalid form field
-                        return bad!(format!("'{name}' is not a valid entity update form name"));
+                        bad_name => {
+                            return bad!(format!(
+                                "'{bad_name}' is not a valid entity update form name"
+                            ));
+                        }
                     }
+                    // this is a list field, so make sure the next segment is an empty `[]`
+                    ensure_empty_segment!(name_segments_iter, name)?;
                 }
             }
+            // make sure there aren't extra segments left over
+            ensure_segments_complete!(name_segments_iter, name)?;
             // we found and consumed a valid form entry
             return Ok(None);
         }
@@ -928,21 +1061,7 @@ impl EntityUpdateForm {
 }
 
 impl EntityMetadataUpdateForm {
-    /// Try to parse the kind field name from the field if it's a kind field
-    /// (i.e. `kind[<NAME>]` → `<NAME>`)
-    ///
-    /// # Arguments
-    ///
-    /// * `field_name` - The name of the field
-    fn parse_metadata_field_name(field_name: &str) -> Option<&str> {
-        if field_name.starts_with("metadata[") && field_name.ends_with(']') {
-            Some(&field_name[9..field_name.len() - 1])
-        } else {
-            None
-        }
-    }
-
-    /// Adds a multipart field to our entity kind update form
+    /// Adds a multipart field to our entity metadata update form
     ///
     /// # Errors
     ///
@@ -951,12 +1070,17 @@ impl EntityMetadataUpdateForm {
     /// # Arguments
     ///
     /// * `field` - The field to try to add
-    async fn add<'a>(&'a mut self, field: Field<'a>, kind_name: &str) -> Result<(), ApiError> {
-        match kind_name {
-            "add_urls" => self.add_urls.push(field.text().await?),
-            "remove_urls" => self.remove_urls.push(field.text().await?),
-            "add_vendors" => self.add_vendors.push(field.text().await?.parse()?),
-            "remove_vendors" => self.remove_vendors.push(field.text().await?.parse()?),
+    /// * `name` - The full name of the field
+    /// * `name_segments` - An iterator over the parsed segments from the field name
+    pub async fn add<'a, I: Iterator<Item = &'a str>>(
+        &'a mut self,
+        field: Field<'a>,
+        name: &str,
+        mut name_segments: I,
+    ) -> Result<I, ApiError> {
+        match name_segments.next().ok_or(bad_internal!(
+            "Invalid entity metadata update field: metadata field name is missing".to_string()
+        ))? {
             "critical_system" => self.critical_system = Some(field.text().await?.parse()?),
             "clear_critical_system" => {
                 self.clear_critical_system = Some(field.text().await?.parse()?);
@@ -965,32 +1089,101 @@ impl EntityMetadataUpdateForm {
             "clear_sensitive_location" => {
                 self.clear_sensitive_location = Some(field.text().await?.parse()?);
             }
-            "add_critical_sectors" => {
-                self.add_critical_sectors.push(field.text().await?.parse()?);
+            "collection_start" => {
+                let start_raw = field.text().await?;
+                self.collection_start = Some(start_raw.parse().map_err(|_| {
+                    bad_internal!(format!("Invalid collection start datetime '{start_raw}'"))
+                })?);
             }
-            "remove_critical_sectors" => {
-                self.remove_critical_sectors
-                    .push(field.text().await?.parse()?);
+            "collection_end" => {
+                let end_raw = field.text().await?;
+                self.collection_end = Some(end_raw.parse().map_err(|_| {
+                    bad_internal!(format!("Invalid collection end datetime '{end_raw}'"))
+                })?);
             }
-            "add_countries" => {
-                // validate and parse this country
-                let country = Country::new(&field.text().await?)?;
-                // add this country to our metadata form
-                self.add_countries.push(country);
+            "clear_collection_start" => self.clear_collection_start = Some(true),
+            "clear_collection_end" => self.clear_collection_end = Some(true),
+            "collection_tags_case_insensitive" => {
+                let raw = field.text().await?;
+                self.collection_tags_case_insensitive = Some(raw.parse().map_err(|err| {
+                    bad_internal!(format!(
+                        "Invalid collection tags case insensitive value '{raw}': {err}"
+                    ))
+                })?);
             }
-            "remove_countries" => {
-                // validate and parse this country
-                let country = Country::new(&field.text().await?)?;
-                // add this country to our metadata form
-                self.remove_countries.push(country);
+            "collection_ignore_groups" => {
+                let raw = field.text().await?;
+                self.collection_ignore_groups = Some(raw.parse().map_err(|err| {
+                    bad_internal!(format!(
+                        "Invalid collection ignore groups value '{raw}': {err}"
+                    ))
+                })?);
             }
-            _ => {
-                return bad!(format!(
-                    "'{kind_name}' is not a valid entity kind update form name"
-                ));
+            // this could be a list field
+            maybe_list => {
+                match maybe_list {
+                    "add_urls" => self.add_urls.push(field.text().await?),
+                    "remove_urls" => self.remove_urls.push(field.text().await?),
+                    "add_vendors" => self.add_vendors.push(field.text().await?.parse()?),
+                    "remove_vendors" => self.remove_vendors.push(field.text().await?.parse()?),
+                    "add_critical_sectors" => {
+                        self.add_critical_sectors.push(field.text().await?.parse()?);
+                    }
+                    "remove_critical_sectors" => {
+                        self.remove_critical_sectors
+                            .push(field.text().await?.parse()?);
+                    }
+                    "add_countries" => {
+                        // validate and parse this country
+                        let country = Country::new(&field.text().await?)?;
+                        // add this country to our metadata form
+                        self.add_countries.push(country);
+                    }
+                    "remove_countries" => {
+                        // validate and parse this country
+                        let country = Country::new(&field.text().await?)?;
+                        // add this country to our metadata form
+                        self.remove_countries.push(country);
+                    }
+                    "add_collection_tags" => {
+                        let key =
+                            name_segments
+                                .next()
+                                .filter(|s| !s.is_empty())
+                                .ok_or(bad_internal!(
+                                    "Collection tag to add has a key that is empty or missing"
+                                        .to_string()
+                                ))?;
+                        let entry = self.add_collection_tags.entry(key.to_owned()).or_default();
+                        entry.insert(field.text().await?);
+                    }
+                    "delete_collection_tags" => {
+                        let key =
+                            name_segments
+                                .next()
+                                .filter(|s| !s.is_empty())
+                                .ok_or(bad_internal!(
+                                    "Collection tag to delete has a key that is empty or missing"
+                                        .to_string()
+                                ))?;
+                        let entry = self
+                            .delete_collection_tags
+                            .entry(key.to_owned())
+                            .or_default();
+                        entry.insert(field.text().await?);
+                    }
+                    // this is an invalid key so return an error
+                    bad_name => {
+                        return bad!(format!(
+                            "'{bad_name}' is not a valid entity kind update form name"
+                        ));
+                    }
+                }
+                // this is a list field, so make sure the next segment is an empty `[]`
+                ensure_empty_segment!(name_segments, name)?;
             }
         }
-        Ok(())
+        Ok(name_segments)
     }
 
     /// Build an association request for anything in this entity form

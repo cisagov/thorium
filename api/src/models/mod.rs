@@ -38,6 +38,7 @@ pub use associations::{
 };
 pub use deadlines::Deadline;
 pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchParams};
+pub use entities::collections::{CollectionEntity, CollectionEntityRequest, CollectionKind};
 pub use entities::countries::Country;
 pub use entities::devices::{DeviceEntity, DeviceEntityRequest};
 pub use entities::shared::CriticalSector;

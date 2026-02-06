@@ -10,10 +10,11 @@ use uuid::Uuid;
 
 use super::Association;
 use crate::models::{
-    Country, DeviceEntityRequest, TagMap, TreeBranch, TreeSupport, VendorEntity,
-    VendorEntityRequest,
+    CollectionEntity, CollectionEntityRequest, CollectionKind, Country, DeviceEntityRequest,
+    TagMap, TreeBranch, TreeSupport, VendorEntity, VendorEntityRequest,
 };
 
+pub mod collections;
 pub mod countries;
 pub mod devices;
 pub mod shared;
@@ -58,6 +59,32 @@ cfg_if::cfg_if! {
             pub sensitive_location: Option<bool>,
             pub critical_sectors: BTreeSet<CriticalSector>,
             pub countries: BTreeSet<Country>,
+            pub collection_kind: Option<CollectionKind>,
+            pub collection_tags: HashMap<String, HashSet<String>>,
+            pub collection_tags_case_insensitive: Option<bool>,
+            pub collection_ignore_groups: Option<bool>,
+            pub collection_start: Option<DateTime<Utc>>,
+            pub collection_end: Option<DateTime<Utc>>,
+        }
+
+        impl EntityMetadataForm {
+            /// Ensure the data in the entity metadata form is valid
+            ///
+            /// # Errors
+            ///
+            /// - `collection_start` is older than `collection_end`
+            pub fn validate(&self) -> Result<(), ApiError> {
+                // ensure start is newer than end
+                if let (Some(start), Some(end)) = (
+                    self.collection_start.as_ref(),
+                    self.collection_end.as_ref(),
+                ) && start < end {
+                    return crate::bad!(format!(
+                        "Start must be more recent than end: Start '{start}' < End '{end}'"
+                    ));
+                }
+                Ok(())
+            }
         }
 
         /// A request to create a new entity
@@ -77,6 +104,14 @@ cfg_if::cfg_if! {
             pub description: Option<String>,
             /// This entities image
             pub image: Option<String>,
+        }
+
+        impl EntityForm {
+            /// Ensure the data in the entity metadata form is valid
+            pub fn validate(&self) -> Result<(), ApiError> {
+                self.metadata.validate()?;
+                Ok(())
+            }
         }
 
         /// Fields from the multipart form for updating an entity
@@ -107,7 +142,14 @@ cfg_if::cfg_if! {
             pub remove_critical_sectors: Vec<CriticalSector>,
             pub add_countries: Vec<Country>,
             pub remove_countries: Vec<Country>,
-
+            pub add_collection_tags: HashMap<String, HashSet<String>>,
+            pub delete_collection_tags: HashMap<String, HashSet<String>>,
+            pub collection_tags_case_insensitive: Option<bool>,
+            pub collection_ignore_groups: Option<bool>,
+            pub collection_start: Option<DateTime<Utc>>,
+            pub collection_end: Option<DateTime<Utc>>,
+            pub clear_collection_start: Option<bool>,
+            pub clear_collection_end: Option<bool>,
         }
     }
 }
@@ -421,6 +463,11 @@ pub enum EntityMetadata {
     Device(DeviceEntity),
     /// A vendor entity
     Vendor(VendorEntity),
+    /// A collection entity
+    ///
+    /// Collections are dynamic lists of items in Thorium (e.g. samples, repos, etc.)
+    /// based on search parameters like tags
+    Collection(CollectionEntity),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
@@ -434,12 +481,15 @@ pub enum EntityMetadataRequest {
     Device(DeviceEntityRequest),
     /// A vendor entity
     Vendor(VendorEntityRequest),
+    /// A request to create a collection entity
+    Collection(CollectionEntityRequest),
     /// An entity that can't be described by any of the other variants
     Other,
 }
 
 impl EntityMetadataRequest {
     /// Add this entity metadata to a form
+    #[cfg(feature = "client")]
     pub fn add_to_form(
         self,
         form: reqwest::multipart::Form,
@@ -448,6 +498,7 @@ impl EntityMetadataRequest {
         match self {
             EntityMetadataRequest::Device(device) => device.add_to_form(form),
             EntityMetadataRequest::Vendor(vendor) => vendor.add_to_form(form),
+            EntityMetadataRequest::Collection(collection) => collection.add_to_form(form),
             // just set our kind to other
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }

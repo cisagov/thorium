@@ -1,6 +1,7 @@
-import { CreateDevice, Device, DeviceMeta } from './devices';
+import { Device, DeviceMeta } from './devices';
 import { CreateTags, Tags } from '../tags';
-import { CreateVendor, Vendor, VendorMeta } from './vendors';
+import { Vendor, VendorMeta } from './vendors';
+import { Collection, CollectionMeta } from './collections';
 
 // an enum of entity type keys
 export enum Entities {
@@ -8,11 +9,12 @@ export enum Entities {
   Repos = 'Repo',
   Vendor = 'Vendor',
   Device = 'Device',
+  Collection = 'Collection',
   Other = 'Other',
 }
 
 // entity metadata in the form of { Type: {metadata..}}
-export type EntityMeta = DeviceMeta | VendorMeta;
+export type EntityMeta = DeviceMeta | VendorMeta | CollectionMeta;
 
 export type Entity = {
   id: string; // UUID of entity
@@ -34,6 +36,12 @@ export type CreateEntity = Omit<Entity, 'id' | 'submitter' | 'created' | 'tags'>
   tags: CreateTags;
 };
 
+// Handles preprocessing of entity before upload; required for complex data
+//     we don't want to manage/process on every user input like collection tags
+export interface CreateEntityPreprocessor<T extends CreateEntity> {
+  preprocess(this: this, entity: T): T;
+}
+
 // format for updating entity metadata
 export type UpdateEntityMetadata = {
   add_urls?: string[];
@@ -46,6 +54,11 @@ export type UpdateEntityMetadata = {
   remove_critical_sectors?: string[];
   add_countries?: string[];
   remove_countries?: string[];
+  collection_tags_case_insensitive?: boolean;
+  collection_start?: string;
+  collection_end?: string;
+  clear_collection_start?: boolean;
+  clear_collection_end?: boolean;
 };
 
 // entity update format
@@ -62,7 +75,7 @@ export type UpdateEntityForm = {
 export const BlankUpdateEntity = {};
 
 // all possible entity variants
-export type EntityTypes = Device | Vendor;
+export type EntityTypes = Device | Vendor | Collection;
 
 // all possible entity metadata variants
-export type EntityMetaTypes = DeviceMeta | VendorMeta;
+export type EntityMetaTypes = DeviceMeta | VendorMeta | CollectionMeta;

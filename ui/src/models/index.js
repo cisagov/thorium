@@ -3,6 +3,7 @@ export * from './entities/devices';
 export * from './entities/entities';
 export * from './entities/sectors';
 export * from './entities/vendors';
+export * from './entities/collections';
 export * from './files';
 export * from './groups';
 export * from './pipelines';

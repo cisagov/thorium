@@ -29,13 +29,14 @@ export function scoreNode(node: any): number {
     // tags are specified by the user, they are important
     return 400;
   } else if (node.Entity?.kind == 'Device') {
-    // tags are specified by the user, they are important
     return 450;
   } else if (node.Entity?.kind == 'Vendor') {
-    // tags are specified by the user, they are important
+    return 450;
+  } else if (node.Entity?.kind == 'Collection') {
     return 450;
   }
-  return 0;
+  // this is an unknown node; just return a default size
+  return 300;
 }
 
 export function getNodeSize(score: number, numElements: number) {
