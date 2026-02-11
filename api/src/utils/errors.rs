@@ -475,3 +475,23 @@ impl From<std::convert::Infallible> for ApiError {
         ))
     }
 }
+
+/// Convert [`ApiError`] into an [`rmcp::ErrorData`]
+impl From<ApiError> for rmcp::ErrorData {
+    fn from(error: ApiError) -> Self {
+        // get our message or set a default
+        let message = error.msg.unwrap_or_else(|| "Unknown Error".to_owned());
+        // map our return code to an rmcp error code
+        let code = match error.code {
+            StatusCode::NOT_FOUND => rmcp::model::ErrorCode::RESOURCE_NOT_FOUND,
+            StatusCode::BAD_REQUEST => rmcp::model::ErrorCode::INVALID_REQUEST,
+            _ => rmcp::model::ErrorCode::INTERNAL_ERROR,
+        };
+        // build our rmcp error
+        rmcp::ErrorData {
+            code,
+            message: message.into(),
+            data: None,
+        }
+    }
+}

@@ -18,7 +18,7 @@ use super::ThoriumMCP;
 /// The params needed to start a new tree
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct StartTree {
-    /// The sha256 of samples to start growing a tree of related data from
+    /// The sha256 for samples to start growing a tree of related data from
     pub samples: Vec<String>,
     /// The different repo urls (example: ["https://github.com/cisagov/thorium"]) to build this tree from
     #[serde(default)]
