@@ -2,7 +2,13 @@
 
 mkdir -p /tmp/thorium/binwalk
 binwalk -e $1 -C /tmp/thorium/binwalk > /tmp/thorium/results
-mv /tmp/thorium/binwalk/*.extracted /tmp/thorium/children/carved/unknown/ || true
+
+if find "/tmp/results/binwalk" -maxdepth 1 -type f -name "*.extracted" -print -quit | grep -q .; then
+    mv /tmp/thorium/binwalk/*.extracted /tmp/thorium/children/carved/unknown/ 
+else
+    echo "INFO: No files extracted"
+    exit 0
+fi
 
 binHash=$(sha256sum $1)
 binHashArr=($binHash)

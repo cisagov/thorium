@@ -22,7 +22,7 @@
     "commit": null,
     "output": "None"
   },
-  "description": "",
+  "description": null,
   "security_context": {
     "user": null,
     "group": null,

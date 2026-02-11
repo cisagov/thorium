@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "sqlitedump",
+  "order": [
+    [
+      "sqlitedump"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

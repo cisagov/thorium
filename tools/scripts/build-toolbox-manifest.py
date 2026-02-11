@@ -14,6 +14,7 @@ def image_fields(manifest, root, toolbox, override_path):
     image_tags = []
     image_version = manifest.get("version", "")
     build_image = manifest.get("build", True)
+    base_image_token = manifest.get("base_image_token")
     allow_base_override = manifest.get("allow_base_override", True)
     if (image_version == ""):
         logging.error(f" No image version found for {name}")
@@ -43,6 +44,8 @@ def image_fields(manifest, root, toolbox, override_path):
     image["build_image"] = build_image
     image["image_tags"] = image_tags
     image["allow_base_override"] = allow_base_override
+    if base_image_token:
+        image["base_image_token"] = base_image_token
     # Thorium image configuration
     if ('config_from' in manifest and 'config' not in manifest):
         config_path = f"{root}/{manifest['config_from']}"
@@ -56,7 +59,7 @@ def image_fields(manifest, root, toolbox, override_path):
     return image
 
 def pipeline_fields(manifest, root):
-    """Build an piplines's toolbox fields from an pipeline manifest"""
+    """Build an pipelines's toolbox fields from an pipeline manifest"""
     pipeline = {}
     pipeline["description"] = manifest.get("description", "")
     pipeline["images"] = manifest.get("images", {})

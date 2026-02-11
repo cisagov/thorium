@@ -1,0 +1,6 @@
+name = "uefi-firmware-parser"
+type = "image"
+config_from = "uefi-firmware-parser.json"
+build_path = "./"
+image_name = "tools/github.com/theopolis/uefi-firmware-parser"
+version = "latest"

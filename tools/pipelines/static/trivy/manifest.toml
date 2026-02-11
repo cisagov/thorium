@@ -1,0 +1,9 @@
+
+name = "trivy"
+type = "pipeline"
+description = "An all-in-one security scanning tool."
+version = "latest"
+config_from = "trivy.json"
+
+[images.trivy]
+version = "latest"

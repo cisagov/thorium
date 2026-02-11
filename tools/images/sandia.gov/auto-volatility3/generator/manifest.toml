@@ -1,0 +1,7 @@
+name = "auto-volatility3"
+type = "image"
+config_from = "auto-volatility3.json"
+build_path = "./"
+image_name = "tools/sandia.gov/auto-volatility3"
+version = "latest"
+allow_base_override = false

@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "trivy",
+  "order": [
+    [
+      "trivy"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": "An all-in-one security scanning tool."
+}

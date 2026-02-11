@@ -15,16 +15,12 @@
   "volumes": [],
   "env": {},
   "args": {
-    "entrypoint": [
-      "/usr/local/bin/fn2hash"
-    ],
+    "entrypoint": null,
     "command": null,
     "reaction": null,
     "repo": null,
     "commit": null,
-    "output": {
-      "Kwarg": "--json"
-    }
+    "output": "None"
   },
   "description": null,
   "security_context": {

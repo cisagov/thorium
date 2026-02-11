@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "trufflehog",
+  "order": [
+    [
+      "trufflehog"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

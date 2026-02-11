@@ -1,0 +1,9 @@
+
+name = "auto-volatility3"
+type = "pipeline"
+description = ""
+version = "latest"
+config_from = "auto-volatility3.json"
+
+[images.auto-volatility3]
+version = "latest"

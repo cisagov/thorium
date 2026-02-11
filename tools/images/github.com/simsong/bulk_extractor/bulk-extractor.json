@@ -3,7 +3,7 @@
   "name": "bulk-extractor",
   "scaler": "K8s",
   "image": "",
-  "timeout": 600,
+  "timeout": 3600,
   "resources": {
     "cpu": "1000m",
     "memory": "4096Mi",

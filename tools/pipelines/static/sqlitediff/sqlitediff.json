@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "sqldiff",
+  "order": [
+    [
+      "sqldiff"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}

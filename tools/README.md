@@ -13,7 +13,7 @@ The `build-actions-matrix.py` script is used by our gitlab actions pipeline to d
 To update the `toolbox.json` file before committing changes, run the `build-toolbox-manifest.py`:
 
 ```bash
-python3 scripts/build-toolbox-manifest.py config.toml
+python3 scripts/build-toolbox-manifest.py -c config.toml
 ```
 
 ### Toolbox Config (`config.toml`)

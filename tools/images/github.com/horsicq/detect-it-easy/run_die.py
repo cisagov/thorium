@@ -22,7 +22,7 @@ def pullValueTags(values):
         if 'type' in v and 'string' in v:
             valueType = v['type']
             valueString = v['string']
-            valueString = valueString.replace(f"{valueType}:", "")
+            valueString = valueString.replace(f"{valueType}: ", "")
             # Cast some keys
             if valueType == 'Sign tool':
                 valueType = 'SignTool'
@@ -69,7 +69,10 @@ def run(file_path):
     results_json = json.loads(results)
 
     # detections actually returns a list, thus the need for [0]. The actual value is a json
-    detections = results_json['detects'][0]
+    detections = {}
+    # make sure detects exists and there was a valid value present
+    if 'detects' in results_json and isinstance(results_json['detects'], list) and len(results_json['detects']) > 0:
+        detections = results_json['detects'][0]
     detectionTags = pullDetectionTags(detections)
 
     # values are located in the 'detects' json one level down

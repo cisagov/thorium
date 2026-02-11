@@ -1,0 +1,9 @@
+
+name = "trufflehog"
+type = "pipeline"
+description = ""
+version = "latest"
+config_from = "trufflehog.json"
+
+[images.trufflehog]
+version = "latest"

@@ -1,0 +1,6 @@
+name = "sqlitedump"
+type = "image"
+config_from = "sqlitedump.json"
+build_path = "./"
+image_name = "tools/sqlite.org/sqlite/sqlitedump"
+version = "latest"

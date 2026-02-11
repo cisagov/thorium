@@ -1,0 +1,12 @@
+{
+  "group": "static",
+  "name": "uefi-extract",
+  "order": [
+    [
+      "uefi-firmware-parser"
+    ]
+  ],
+  "sla": 640800,
+  "triggers": {},
+  "description": null
+}
