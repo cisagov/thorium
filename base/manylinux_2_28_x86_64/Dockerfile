@@ -16,12 +16,14 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > installer && \
       sh installer --default-toolchain nightly-2025-08-01 -y
 ENV PATH="/root/.cargo/bin:$PATH"
 ENV RUSTFLAGS="-C target-feature=+aes,+sse2"
-# install maturin
+# install maturin (PyO3 build system)
 RUN pipx install maturin[patchelf]
 ENV PATH="/root/.local/bin:$PATH"
 RUN python3.10 -m pip install --no-cache-dir --user pipx && \
       python3.10 -m pipx ensurepath --global && \
       pipx install maturin
+# install twine (for uploading PyPi packages)
+RUN python3.10 -m pip install --upgrade twine
 # grab the Thorium binaries
 COPY ./ thorium
 # fetch our dependencies

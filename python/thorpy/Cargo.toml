@@ -19,5 +19,5 @@ vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
 thorium-api = { workspace = true, default-features = false, features = ["python"]}
-pyo3 = { version = "0.28", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono"] }
+pyo3 = { workspace = true }
 openssl = { workspace = true }

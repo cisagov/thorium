@@ -1,6 +1,11 @@
 [project]
 name = "thorium"
 description = "Thorium synchronous client"
+authors = [
+  { name="Michael Carson", email="mcarson@sandia.gov" },
+  { name="Gavin Baker", email="gmbaker@sandia.gov" },
+  { name="Jake Hamzawi", email="jehamza@sandia.gov" },
+]
 requires-python = ">=3.10"
 dependencies = []
 readme = "README.md"
@@ -14,3 +19,6 @@ dynamic = ["version"]
 [build-system]
 requires = ["maturin>=1,<2"]
 build-backend = "maturin"
+
+[tool.maturin]
+include = [{ path = "thorium.pyi", format = ["sdist", "wheel"] }]

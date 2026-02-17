@@ -169,7 +169,7 @@ shellexpand = { version = "3", optional = true }
 tokio-tar = { version = "0.3", optional = true }
 
 # python client dependencies
-pyo3 = { version = "0.28", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono"], optional = true }
+pyo3 = { workspace = true, optional = true }
 
 # tracing dependencies
 tracing = {  workspace = true, optional = true }
