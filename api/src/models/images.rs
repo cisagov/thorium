@@ -1075,9 +1075,12 @@ pub struct ImageArgs {
     pub repo: Option<String>,
     /// What kwarg to pass the repo commit in with
     pub commit: Option<String>,
-    /// What kwarg pass the output location as
+    /// What kwarg pass the result location as
     #[serde(default)]
     pub output: ArgStrategy,
+    /// What kwarg pass the result files location as
+    #[serde(default)]
+    pub output_files: ArgStrategy,
 }
 
 /// The args to pass to all jobs for an image
@@ -1111,8 +1114,10 @@ pub struct ImageArgsUpdate {
     /// Clear the reaction kwarg
     #[serde(default)]
     pub clear_commit: bool,
-    /// What kwarg pass the output location as
+    /// Update how to pass the the result files location in
     pub output: Option<ArgStrategy>,
+    /// Update how to pass the the result location in
+    pub output_files: Option<ArgStrategy>,
 }
 
 impl ImageArgsUpdate {
@@ -1210,6 +1215,13 @@ impl ImageArgsUpdate {
     #[must_use]
     pub fn output(mut self, output: ArgStrategy) -> Self {
         self.output = Some(output);
+        self
+    }
+
+    /// Set the kwarg for the output_files path
+    #[must_use]
+    pub fn output_files_files(mut self, output: ArgStrategy) -> Self {
+        self.output_files = Some(output);
         self
     }
 }

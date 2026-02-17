@@ -10,7 +10,7 @@ use thorium::models::{Component, NodeGetParams, Worker, WorkerStatus};
 use thorium::{Error, Keys, Thorium};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
-use tracing::{event, instrument, span, Level, Span};
+use tracing::{Level, Span, event, instrument, span};
 
 use super::keys;
 use super::launchers::{self, Launcher};
@@ -286,16 +286,15 @@ impl Reactor {
         let version = self.thorium.updates.get_version().await?;
         // get the current version
         let current = env!("CARGO_PKG_VERSION");
-        // log our current versions
-        event!(
-            Level::INFO,
-            reactor = current,
-            api = version.thorium.to_string()
-        );
         // compare to our version and see if its different
         if version.thorium != semver::Version::parse(current)? {
-            // start our update needed span
-            event!(Level::INFO, update_needed = true,);
+            // we need to update the reactor log the version difference
+            event!(
+                Level::INFO,
+                reactor = current,
+                api = version.thorium.to_string(),
+                update_needed = true,
+            );
             // set the halt spawning flag so we stop spawning new agents
             self.halt_spawning = true;
             // only update if we have no active jobs

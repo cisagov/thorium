@@ -196,6 +196,7 @@ impl ImageArgsUpdate {
         update_opt!(image.args.commit, self.commit);
         update_clear!(image.args.commit, self.clear_commit);
         update!(image.args.output, self.output);
+        update!(image.args.output_files, self.output_files);
     }
 }
 

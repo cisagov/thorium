@@ -43,6 +43,7 @@ pub fn calculate_image_args_update(
             commit: set_modified_opt!(old_args.commit, new_args.commit),
             // needs template
             output: set_modified!(old_args.output, new_args.output),
+            output_files: set_modified!(old_args.output_files, new_args.output_files),
         })
     }
 }

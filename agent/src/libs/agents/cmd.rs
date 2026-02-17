@@ -599,6 +599,8 @@ impl CmdBuilder {
                     isolated_results.unwrap_or(&image.output_collection.files.results);
                 // add our output arg if we need too
                 self.add_arg_by_strategy(results_path, &image.args.output);
+                // add our output files arg if we need too
+                self.add_arg_by_strategy(results_path, &image.args.output_files);
             }
         }
         // calculate how much space our kwargs will take
