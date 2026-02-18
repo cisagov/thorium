@@ -2045,6 +2045,11 @@ fn default_binaries_path() -> PathBuf {
     PathBuf::from("binaries")
 }
 
+/// Helps serde default the path to our raw documentation source markdown
+fn default_docs_src_path() -> PathBuf {
+    PathBuf::from("docs/src")
+}
+
 /// Helps serde default the path resource not found
 fn default_not_found_path() -> PathBuf {
     PathBuf::from("docs/user/static_resources/mascot.png")
@@ -2062,6 +2067,9 @@ pub struct Assets {
     /// The path to serve Thorium binaries from
     #[serde(default = "default_binaries_path")]
     pub binaries: PathBuf,
+    /// The path to our raw documentation source markdown for MCP tools
+    #[serde(default = "default_docs_src_path")]
+    pub docs_src: PathBuf,
     /// The path to the 404 page to serve on docs/binary serving 404s
     #[serde(default = "default_not_found_path")]
     pub not_found: PathBuf,
@@ -2074,6 +2082,7 @@ impl Default for Assets {
             user_docs: default_user_docs_path(),
             dev_docs: default_dev_docs_path(),
             binaries: default_binaries_path(),
+            docs_src: default_docs_src_path(),
             not_found: default_not_found_path(),
         }
     }

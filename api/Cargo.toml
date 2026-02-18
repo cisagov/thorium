@@ -205,3 +205,4 @@ rand = { version = "0.9.1", features = ["alloc", "small_rng"] }
 # udeps might think this is unused but its used by our doc tests
 tokio-test = "0.4"
 serial_test = "3"
+tempfile = "3"
