@@ -56,41 +56,32 @@ pub struct SearchResult {
 ///
 /// * `content` - The raw SUMMARY.md content
 fn parse_summary(content: &str) -> Vec<TocEntry> {
-    let mut entries = Vec::new();
-    for line in content.lines() {
-        // skip lines that don't contain a markdown link
-        let Some(bracket_start) = line.find('[') else {
-            continue;
-        };
-        let Some(bracket_end) = line[bracket_start..].find(']') else {
-            continue;
-        };
-        let bracket_end = bracket_start + bracket_end;
-        let Some(paren_start) = line[bracket_end..].find('(') else {
-            continue;
-        };
-        let paren_start = bracket_end + paren_start;
-        let Some(paren_end) = line[paren_start..].find(')') else {
-            continue;
-        };
-        let paren_end = paren_start + paren_end;
+    // Each line in SUMMARY.md is formatted as: "    - [Title](./path.md)"
+    // where the leading whitespace indicates nesting depth.
+    // We use filter_map to skip lines that aren't valid markdown links.
+    content
+        .lines()
+        .filter_map(|line| {
+            // find the opening '[' that starts the link title
+            let bracket_start = line.find('[')?;
+            // find the closing ']' after the title text
+            let bracket_end = bracket_start + line[bracket_start..].find(']')?;
+            // find the '(' that starts the link URL
+            let paren_start = bracket_end + line[bracket_end..].find('(')?;
+            // find the ')' that closes the link URL
+            let paren_end = paren_start + line[paren_start..].find(')')?;
 
-        let title = line[bracket_start + 1..bracket_end].to_string();
-        let raw_path = line[paren_start + 1..paren_end].to_string();
-        // strip the leading ./ if present
-        let path = raw_path.strip_prefix("./").unwrap_or(&raw_path).to_string();
+            // extract the title text between [ and ]
+            let title = line[bracket_start + 1..bracket_end].to_string();
+            // extract the path between ( and ), stripping the leading ./ if present
+            let raw_path = &line[paren_start + 1..paren_end];
+            let path = raw_path.strip_prefix("./").unwrap_or(raw_path).to_string();
+            // calculate depth from leading whitespace (4 spaces per nesting level)
+            let depth = (line.len() - line.trim_start().len()) / 4;
 
-        // calculate depth from leading whitespace (4 spaces per level)
-        let leading_spaces = line.len() - line.trim_start().len();
-        let depth = leading_spaces / 4;
-
-        entries.push(TocEntry {
-            title,
-            path,
-            depth,
-        });
-    }
-    entries
+            Some(TocEntry { title, path, depth })
+        })
+        .collect()
 }
 
 /// Validate a documentation path to prevent directory traversal
