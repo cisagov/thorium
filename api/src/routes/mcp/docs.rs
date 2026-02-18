@@ -50,10 +50,6 @@ pub struct SearchResult {
     pub snippets: Vec<String>,
 }
 
-/// An empty parameter set for tools that take no arguments
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-pub struct Empty {}
-
 /// Parse the SUMMARY.md file into a list of table of contents entries
 ///
 /// # Arguments
@@ -218,10 +214,9 @@ impl ThoriumMCP {
         name = "get_docs_toc",
         description = "Get the table of contents for the Thorium documentation. Returns a structured list of all documentation pages with their titles, paths, and nesting depth. Call this first to understand what documentation is available."
     )]
-    #[instrument(name = "ThoriumMCP::get_docs_toc", skip(self, _params, parts), err(Debug))]
+    #[instrument(name = "ThoriumMCP::get_docs_toc", skip(self, parts), err(Debug))]
     pub async fn get_docs_toc(
         &self,
-        Parameters(_params): Parameters<Empty>,
         RmcpExtension(parts): RmcpExtension<axum::http::request::Parts>,
     ) -> Result<CallToolResult, ErrorData> {
         // validate authorization
