@@ -278,7 +278,9 @@ impl AgentExecutor for BareMetal {
         log_path: &str,
     ) -> Result<InFlight, Error> {
         // convert our output path to a string
-        let output = self.results_path.to_string_lossy().to_string();
+        let results = self.results_path.to_string_lossy().to_string();
+        // convert our output path to a string
+        let result_files = self.result_files_path.to_string_lossy().to_string();
         // get a ref to our dependency settings
         let dep_conf = &image.dependencies;
         // build our initial command based on our configured entrypoints
@@ -307,7 +309,7 @@ impl AgentExecutor for BareMetal {
             .add_tags(&self.tags, &dep_conf.tags)
             .add_children(&self.children, &dep_conf.children)
             .add_cache(&self.cache, &dep_conf.cache)
-            .build(image, Some(&output))?;
+            .build(image, Some(&results), Some(&result_files))?;
         // cast our command to a str
         let built_str = cmd.join(" ");
         // log the command we are executing

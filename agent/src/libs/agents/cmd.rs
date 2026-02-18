@@ -582,10 +582,17 @@ impl CmdBuilder {
     }
 
     /// Build the final command to execute
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image we are building a command for
+    /// * `isolated_results` - The path write isolated results too
+    /// * `isolated_result_files` - The path write isolated result files too
     pub fn build(
         mut self,
         image: &Image,
         isolated_results: Option<&String>,
+        isolated_result_files: Option<&String>,
     ) -> Result<Vec<String>, Error> {
         // if our command is overridden then just return that
         if let Some(override_cmd) = self.opts.override_cmd {
@@ -599,8 +606,11 @@ impl CmdBuilder {
                     isolated_results.unwrap_or(&image.output_collection.files.results);
                 // add our output arg if we need too
                 self.add_arg_by_strategy(results_path, &image.args.output);
-                // add our output files arg if we need too
-                self.add_arg_by_strategy(results_path, &image.args.output_files);
+                // use either our images result files arg or an isolated version of result-files if we have one
+                let result_files_path =
+                    isolated_result_files.unwrap_or(&image.output_collection.files.result_files);
+                // add our output result files arg if we need too
+                self.add_arg_by_strategy(result_files_path, &image.args.output_files);
             }
         }
         // calculate how much space our kwargs will take
@@ -738,7 +748,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         assert_eq!(cmd, vec_string!["/usr/bin/python3", "corn.py"]);
     }
@@ -759,7 +769,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         assert_eq!(
             cmd,
@@ -783,7 +793,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         assert_eq!(
             cmd,
@@ -807,7 +817,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -836,7 +846,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "old1", "old2"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(cmd, vec_string!["/usr/bin/bash", "woot.sh", "pos1", "pos2"]);
@@ -861,7 +871,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "old1", "old2"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -900,7 +910,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_repos(&image, &job.repos, &repo_paths)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -941,7 +951,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "old1", "old2"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -967,7 +977,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "--keep=this", "old1", "old2"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -994,7 +1004,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "--keep", "this", "old1", "old2"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1026,7 +1036,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(cmd, vec_string!("/usr/bin/python3", "corn.py", "--1", "1"));
@@ -1050,7 +1060,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "--drop=this"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(cmd, vec_string!("/usr/bin/python3", "corn.py", "--1", "1"));
@@ -1074,7 +1084,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "--drop=this", "pos1"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1101,7 +1111,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py", "--drop", "this", "pos1"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1127,7 +1137,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1160,7 +1170,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1195,7 +1205,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1230,7 +1240,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1267,7 +1277,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1306,7 +1316,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1344,7 +1354,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1380,7 +1390,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1418,7 +1428,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1456,7 +1466,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1496,7 +1506,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1538,7 +1548,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1574,7 +1584,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // convert built to a set so that order does not matter
         let built_set: HashSet<_> = cmd.iter().collect();
@@ -1618,7 +1628,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1648,7 +1658,7 @@ mod tests {
             slice_string!["/usr/bin/python3"],
             slice_string!["corn.py"],
         )
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1690,7 +1700,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1736,7 +1746,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1785,7 +1795,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1834,7 +1844,7 @@ mod tests {
             slice_string!["corn.py"],
         )
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1889,7 +1899,7 @@ mod tests {
         .add_samples(&sample_paths, &image.dependencies.samples)
         .add_repos(&image, &job.repos, &repo_paths)
         .add_ephemeral(&job.ephemeral, &ephem_paths, &image.dependencies.ephemeral)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -1968,7 +1978,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -2015,7 +2025,7 @@ mod tests {
             ],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our overlayed command
         assert_eq!(
@@ -2056,7 +2066,7 @@ mod tests {
             ],
         )
         .add_samples(&sample_paths, &image.dependencies.samples)
-        .build(&image, None)
+        .build(&image, None, None)
         .unwrap();
         // validate our args
         assert_eq!(

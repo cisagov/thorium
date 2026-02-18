@@ -25,9 +25,9 @@ pub async fn save(_user: &User, tree: &mut Tree, shared: &Shared) -> Result<(), 
     let serialized = serialize!(&tree);
     // build the key to save this cursor data too
     let key = cursors::data(CursorKind::Tree, &tree.id, shared);
-    // save this cursors data to redis
+    // save this cursors data to redis and expire it after 3 days
     let _: () = query!(
-        cmd("set").arg(key).arg(serialized).arg("EX").arg(2_628_000),
+        cmd("set").arg(key).arg(serialized).arg("EX").arg(259_200),
         shared
     )
     .await?;

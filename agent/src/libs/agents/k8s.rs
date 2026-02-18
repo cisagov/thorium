@@ -317,7 +317,7 @@ impl AgentExecutor for K8s {
             .add_cache(&self.cache, &dep_conf.cache)
             // if this is a windows job then change our command to run in windows
             .windows(self.windows)
-            .build(image, None)?;
+            .build(image, None, None)?;
         // cast our command to a str
         let built_str = cmd.join(" ");
         // log our built command
