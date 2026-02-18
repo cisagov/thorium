@@ -54,8 +54,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build binaries
         run: |
-          rustup default nightly-2025-08-01
-          rustup install nightly-2025-08-01
+          rustup default nightly
+          rustup install nightly
           lscpu
           # build binaries
           cargo build --release --features vendored-openssl
@@ -120,7 +120,7 @@ jobs:
         with:
           command: build
           target: ${{ matrix.platform.target }}
-          toolchain: nightly-2025-08-01
+          toolchain: nightly
           args: "--features vendored-openssl --release"
           strip: true
       - name: Upload ${{ matrix.platform.target }} binary artifacts

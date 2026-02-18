@@ -68,10 +68,18 @@ impl BurstableResources {
     pub fn enough(&self, other: &BurstableResources) -> bool {
         // check if we have enough cpu to spawn this worker
         if self.cpu < other.cpu {
+            println!(
+                "BurstableResources::enough not enough cpu: {} < {}",
+                self.cpu, other.cpu
+            );
             return false;
         }
         // check if we have enough memory to spawn this worker
         if self.memory < other.memory {
+            println!(
+                "BurstableResources::enough not enough memory: {} < {}",
+                self.memory, other.memory
+            );
             return false;
         }
         true
@@ -422,28 +430,53 @@ impl Resources {
     /// * `resources` - The resources we need to spawn a worker
     #[must_use]
     pub fn enough(&self, resources: &Resources) -> bool {
+        println!("Resources::enough full -> {self:#?}");
         // check if we have enough cpu to spawn this worker
         if self.cpu < resources.cpu {
+            println!(
+                "Resources::enough not enough cpu: {} < {}",
+                self.cpu, resources.cpu
+            );
             return false;
         }
         // check if we have enough memory to spawn this worker
         if self.memory < resources.memory {
+            println!(
+                "Resources::enough not enough memory: {} < {}",
+                self.memory, resources.memory
+            );
             return false;
         }
         // check if we have enough storage to spawn this worker
         if self.ephemeral_storage < resources.ephemeral_storage {
+            println!(
+                "Resources::enough not enough ephemeral_storage: {} < {}",
+                self.ephemeral_storage, resources.ephemeral_storage
+            );
             return false;
         }
         // check if we have enough open Nvidia gpus to spawn this worker
         if self.nvidia_gpu < resources.nvidia_gpu {
+            println!(
+                "Resources::enough not enough nvidia_gpu: {} < {}",
+                self.nvidia_gpu, resources.nvidia_gpu
+            );
             return false;
         }
         // check if we have enough open AMD gpus to spawn this worker
         if self.amd_gpu < resources.amd_gpu {
+            println!(
+                "Resources::enough not enough amd_gpu: {} < {}",
+                self.amd_gpu, resources.amd_gpu
+            );
             return false;
         }
         // make sure we have enough remaining burstable resources
         if !self.burstable.enough(&resources.burstable) {
+            println!(
+                "Resources::enough not enough burstable: {} < {}",
+                self.burstable, resources.burstable
+            );
             return false;
         }
         true

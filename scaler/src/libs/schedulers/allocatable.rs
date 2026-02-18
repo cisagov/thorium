@@ -58,6 +58,7 @@ pub struct AllocatableUpdate {
 }
 
 /// The resources we can allocate across all clusters this scaler can see
+#[derive(Debug)]
 pub struct Allocatable {
     /// The Thorium config in use by this scaler
     conf: Conf,
@@ -292,6 +293,36 @@ impl Allocatable {
         }
     }
 
+    /// Increment this image spanwed count if this image has a spawn limit
+    fn increment_image_count(&mut self, image: &Image) {
+        // we only need to inrement this images count if it has a spawn limit set
+        if let SpawnLimits::Basic(_) = image.spawn_limit {
+            // get this groups image counts
+            let image_map = match self.image_counts.get_mut(&image.group) {
+                Some(image_entry) => image_entry,
+                None => {
+                    // insert a new group image count map
+                    self.image_counts
+                        .insert(image.group.clone(), HashMap::with_capacity(1));
+                    // get our groups count map
+                    self.image_counts.get_mut(&image.group).unwrap()
+                }
+            };
+            // get our images count
+            let count = match image_map.get_mut(&image.name) {
+                Some(count) => count,
+                None => {
+                    // add our image to our group map
+                    image_map.insert(image.name.clone(), 0);
+                    // get a mutable ref to our count
+                    image_map.get_mut(&image.name).unwrap()
+                }
+            };
+            // increment our count
+            *count += 1;
+        }
+    }
+
     /// Check if the target pool can support this image being spawned once
     ///
     /// # Arguments
@@ -319,7 +350,7 @@ impl Allocatable {
                     }
                 };
                 // get our images count
-                let count = match image_map.get_mut(&image.name) {
+                let count = match image_map.get(&image.name) {
                     Some(count) => count,
                     None => {
                         // add our image to our group map
@@ -330,8 +361,6 @@ impl Allocatable {
                 };
                 // check if we are above our limit or not
                 if *count < limit {
-                    // increment our count
-                    *count += 1;
                     // we can spawn this
                     true
                 } else {
@@ -379,7 +408,9 @@ impl Allocatable {
                 let nodes = match self.restrictions.check(cluster_name, image) {
                     IsRestricted::No => None,
                     IsRestricted::Yes(nodes) => Some(nodes),
-                    IsRestricted::WrongCluster => continue,
+                    IsRestricted::WrongCluster => {
+                        continue;
+                    }
                 };
                 // try to consume the resources for this image on a node
                 if let Some(node) = cluster.allocate_node(image, nodes, pool) {
@@ -446,6 +477,8 @@ impl Allocatable {
                 Some((cluster, node)) => {
                     // consume the resources from the correct pool
                     self.consume(image, pool);
+                    // incement the count for this image if it has a spawn limit
+                    self.increment_image_count(image);
                     // return our cluster and node
                     Some((cluster, node))
                 }
@@ -690,7 +723,6 @@ impl Allocatable {
                     Ordering::Greater => {
                         // decrement our count
                         *count -= 1;
-                        // skip this deadline
                         continue;
                     }
                     // we have no longer spawned a worker to meet this deadline
