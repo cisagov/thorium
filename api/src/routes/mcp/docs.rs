@@ -57,29 +57,33 @@ pub struct SearchResult {
 /// * `content` - The raw SUMMARY.md content
 fn parse_summary(content: &str) -> Vec<TocEntry> {
     // Each line in SUMMARY.md is formatted as: "    - [Title](./path.md)"
-    // where the leading whitespace indicates nesting depth.
-    // We use filter_map to skip lines that aren't valid markdown links.
+    // where the leading whitespace indicates nesting depth (4 spaces per level).
+    // Lines that don't contain a valid markdown link are skipped via filter_map.
     content
         .lines()
         .filter_map(|line| {
-            // find the opening '[' that starts the link title
-            let bracket_start = line.find('[')?;
-            // find the closing ']' after the title text
-            let bracket_end = bracket_start + line[bracket_start..].find(']')?;
-            // find the '(' that starts the link URL
-            let paren_start = bracket_end + line[bracket_end..].find('(')?;
-            // find the ')' that closes the link URL
-            let paren_end = paren_start + line[paren_start..].find(')')?;
+            // count leading whitespace to determine nesting depth
+            let leading_spaces = line.find(|c: char| !c.is_whitespace()).unwrap_or(0);
+            let trimmed = &line[leading_spaces..];
 
-            // extract the title text between [ and ]
-            let title = line[bracket_start + 1..bracket_end].to_string();
-            // extract the path between ( and ), stripping the leading ./ if present
-            let raw_path = &line[paren_start + 1..paren_end];
-            let path = raw_path.strip_prefix("./").unwrap_or(raw_path).to_string();
-            // calculate depth from leading whitespace (4 spaces per nesting level)
-            let depth = (line.len() - line.trim_start().len()) / 4;
+            // split on '[' to reach the start of the link title
+            let after_bracket = trimmed.split_once('[')?.1;
+            // split on ']' to extract the title and the remainder
+            let (title, after_title) = after_bracket.split_once(']')?;
+            // split on '(' and ')' to extract the raw path from the link URL
+            let raw_path = after_title.split_once('(')?.1.split_once(')')?.0;
 
-            Some(TocEntry { title, path, depth })
+            // strip the leading "./" that mdBook uses for relative paths
+            let path = raw_path
+                .strip_prefix("./")
+                .unwrap_or(raw_path)
+                .to_string();
+
+            Some(TocEntry {
+                title: title.to_string(),
+                path,
+                depth: leading_spaces / 4,
+            })
         })
         .collect()
 }
