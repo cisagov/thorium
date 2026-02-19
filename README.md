@@ -1,3 +1,5 @@
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cisagov/thorium)
+
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./api/docs/src/static_resources/logo_dark.svg">
