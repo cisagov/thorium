@@ -17,6 +17,8 @@ ADD ./ui/dist ui
 # copy ther user and developer docs in
 ADD ./api/docs/book docs/user
 ADD ./target/doc docs/dev
+# copy raw documentation markdown source for MCP documentation tools
+ADD ./api/docs/src docs/src
 # copy our binaries in
 ADD ./target/x86_64-unknown-linux-musl/release/thorctl binaries/linux/x86-64/thorctl
 ADD ./target/x86_64-unknown-linux-musl/release/thorium-agent binaries/linux/x86-64/thorium-agent
