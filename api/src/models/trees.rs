@@ -716,7 +716,7 @@ pub struct Tree {
     /// This trees id
     pub id: Uuid,
     /// The groups this tree will search
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
     /// The initial nodes for this tree
     pub initial: Vec<u64>,
@@ -730,7 +730,7 @@ pub struct Tree {
     #[serde(default, skip_serializing_if = "TreeRelatedQuery::is_empty")]
     pub related: TreeRelatedQuery,
     /// The nodes that have already been sent
-    #[serde(skip_serializing_if = "HashSet::is_empty")]
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
     pub sent: HashSet<u64>,
     ///// The associations that were discovered in this grow loop
     //pub associations: HashMap<AssociationTargetColumn, Vec<ListableAssociation>,

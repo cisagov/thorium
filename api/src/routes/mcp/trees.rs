@@ -6,25 +6,34 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content};
 use rmcp::{tool, tool_router};
 use schemars::JsonSchema;
+use serde_with::OneOrMany;
+use serde_with::formats::PreferMany;
 use std::collections::{BTreeMap, BTreeSet};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::client::ResultsClient;
-use crate::models::{ResultGetParams, TreeOpts, TreeQuery, TreeRelatedQuery};
+use crate::models::{TreeOpts, TreeQuery, TreeRelatedQuery};
 
 use super::ThoriumMCP;
 
 /// The params needed to start a new tree
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde_with::serde_as]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, utoipa::ToSchema)]
 pub struct StartTree {
     /// The sha256 for samples to start growing a tree of related data from
+    #[serde(default)]
+    #[serde_as(as = "OneOrMany<_, PreferMany>")]
+    #[schema(value_type = Vec<String>, example = "[\"63b0490d4736e740f26ea9483d55c254abe032845b70ba84ea463ca6582d106f\"]")]
     pub samples: Vec<String>,
     /// The different repo urls (example: ["https://github.com/cisagov/thorium"]) to build this tree from
     #[serde(default)]
+    #[serde_as(as = "OneOrMany<_, PreferMany>")]
+    #[schema(value_type = Vec<String>, example = "[\"github.com/cisagov/thorium\"]")]
     pub repos: Vec<String>,
     /// The entity ids to build this tree from
     #[serde(default)]
+    #[serde_as(as = "OneOrMany<_, PreferMany>")]
+    #[schema(value_type = Vec<String>, example = "[\"26acf2d8-e0a4-4909-b9db-39bf7bc098f0\"]")]
     pub entities: Vec<Uuid>,
     /// The different tag filters (example: {"<KEY>": ["<VALUE>"]}) to build this tree from
     #[serde(default)]

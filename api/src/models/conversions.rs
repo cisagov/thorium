@@ -244,7 +244,6 @@ impl<'de> Visitor<'de> for MillicpuVisitor {
     /// # Arguments
     ///
     /// * `value` - The ``str`` value to convert from
-    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
