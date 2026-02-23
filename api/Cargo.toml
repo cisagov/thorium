@@ -206,3 +206,4 @@ rand = { version = "0.9.1", features = ["alloc", "small_rng"] }
 tokio-test = "0.4"
 serial_test = "3"
 tempfile = "3"
+proptest = "1"

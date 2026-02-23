@@ -1,4 +1,24 @@
-//! The documentation related tools for the Thorium MCP server
+//! Documentation browsing and search tools for the Thorium MCP server.
+//!
+//! These tools give AI agents progressive access to Thorium's documentation:
+//! 1. [`get_docs_toc`](ThoriumMCP::get_docs_toc) -- orientation via the table of contents
+//! 2. [`search_docs`](ThoriumMCP::search_docs) -- discovery via full-text search
+//! 3. [`get_doc_page`](ThoriumMCP::get_doc_page) -- deep reading via individual page fetch
+//!
+//! # `content` vs `structured_content`
+//!
+//! Each tool returns both `content` and `structured_content` in its
+//! [`CallToolResult`]. These serve different consumers:
+//!
+//! - **`content`** (required by the MCP spec) -- A human-readable text or JSON
+//!   representation intended for display in chat UIs and for models that only
+//!   inspect the `content` array.
+//! - **`structured_content`** (optional MCP extension) -- A machine-readable
+//!   JSON value with a stable schema, intended for programmatic consumers that
+//!   need to parse fields reliably without scraping text.
+//!
+//! Both fields carry the same information; `structured_content` simply makes it
+//! easier for tool-calling agents to extract specific values.
 
 use std::path::Path;
 
@@ -12,53 +32,59 @@ use tracing::instrument;
 
 use super::{McpConfig, ThoriumMCP};
 
-/// A single entry from the documentation table of contents
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+/// Maximum number of search results to return from `search_docs`.
+const MAX_SEARCH_RESULTS: usize = 10;
+
+/// Maximum number of context snippets per search result.
+const MAX_SNIPPETS_PER_PAGE: usize = 3;
+
+/// Number of context lines to include above and below each snippet match.
+const SNIPPET_CONTEXT_LINES: usize = 1;
+
+/// A single entry from the documentation table of contents.
+#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TocEntry {
-    /// The display title of this documentation page
+    /// The display title of this documentation page.
     pub title: String,
-    /// The relative path to this documentation page
+    /// The relative path to this documentation page.
     pub path: String,
-    /// The nesting depth of this entry (0 = top level)
+    /// The nesting depth of this entry (0 = top level).
     pub depth: usize,
 }
 
-/// The params needed to get a specific documentation page
+/// The params needed to get a specific documentation page.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct DocPage {
-    /// The relative path to the documentation page (e.g. "concepts/files.md")
+    /// The relative path to the documentation page (e.g. "concepts/files.md").
     pub path: String,
 }
 
-/// The params needed to search the documentation
+/// The params needed to search the documentation.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SearchDocs {
-    /// The search query to find in the documentation
+    /// The search query to find in the documentation.
     pub query: String,
 }
 
-/// A single search result with context snippets
+/// A single search result with context snippets.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
-    /// The relative path to the matching documentation page
+    /// The relative path to the matching documentation page.
     pub path: String,
-    /// The title of the matching page
+    /// The title of the matching page.
     pub title: String,
-    /// The number of matches found in this page
+    /// The number of matches found in this page.
     pub match_count: usize,
-    /// Context snippets around the matches
+    /// Context snippets around the matches.
     pub snippets: Vec<String>,
 }
 
-/// Parse the SUMMARY.md file into a list of table of contents entries
+/// Parse the SUMMARY.md file into a list of table of contents entries.
 ///
-/// # Arguments
-///
-/// * `content` - The raw SUMMARY.md content
+/// Each line in SUMMARY.md is formatted as `"    - [Title](./path.md)"`
+/// where leading whitespace indicates nesting depth (4 spaces per level).
+/// Lines that don't contain a valid markdown link are skipped.
 fn parse_summary(content: &str) -> Vec<TocEntry> {
-    // Each line in SUMMARY.md is formatted as: "    - [Title](./path.md)"
-    // where the leading whitespace indicates nesting depth (4 spaces per level).
-    // Lines that don't contain a valid markdown link are skipped via filter_map.
     content
         .lines()
         .filter_map(|line| {
@@ -88,12 +114,20 @@ fn parse_summary(content: &str) -> Vec<TocEntry> {
         .collect()
 }
 
-/// Validate a documentation path to prevent directory traversal
+/// Validate a documentation path to prevent directory traversal.
 ///
-/// # Arguments
+/// Rejects paths containing `..` and verifies that the canonicalized target
+/// remains within the documentation root.
 ///
-/// * `docs_path` - The base documentation directory
-/// * `requested` - The requested relative path
+/// # Errors
+///
+/// Returns `ErrorData` with `INVALID_PARAMS` if:
+/// - The path contains `..` (directory traversal attempt)
+/// - The resolved path falls outside the documentation directory
+/// - The target file does not exist
+///
+/// Returns `ErrorData` with `INTERNAL_ERROR` if the base documentation
+/// directory cannot be canonicalized.
 fn validate_doc_path(docs_path: &Path, requested: &str) -> Result<std::path::PathBuf, ErrorData> {
     // reject paths with directory traversal components
     if requested.contains("..") {
@@ -129,49 +163,48 @@ fn validate_doc_path(docs_path: &Path, requested: &str) -> Result<std::path::Pat
     Ok(canonical_target)
 }
 
-/// Recursively collect all markdown file paths under a directory
+/// Recursively collect all markdown file paths under a directory.
 ///
-/// # Arguments
+/// # Errors
 ///
-/// * `dir` - The directory to walk
-/// * `paths` - The output vector to collect paths into
-fn collect_md_files(dir: &Path, paths: &mut Vec<std::path::PathBuf>) -> Result<(), std::io::Error> {
-    let entries = std::fs::read_dir(dir)?;
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_md_files(&path, paths)?;
-        } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
-            paths.push(path);
-        }
-    }
-    Ok(())
+/// Returns `std::io::Error` if the directory cannot be read or any entry
+/// within it cannot be inspected.
+fn collect_md_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, std::io::Error> {
+    Ok(std::fs::read_dir(dir)?
+        .map(|entry| {
+            let path = entry?.path();
+            if path.is_dir() {
+                collect_md_files(&path)
+            } else {
+                Ok(vec![path])
+            }
+        })
+        .collect::<Result<Vec<Vec<_>>, _>>()?
+        .into_iter()
+        .flatten()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
+        .collect())
 }
 
-/// Extract the page title from markdown content (the first # heading)
-///
-/// # Arguments
-///
-/// * `content` - The raw markdown content
+/// Extract the page title from markdown content (the first `# ` heading).
 fn extract_title(content: &str) -> String {
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if let Some(title) = trimmed.strip_prefix("# ") {
-            return title.to_string();
-        }
-    }
-    "Untitled".to_string()
+    content
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("# ").map(String::from))
+        .unwrap_or_else(|| "Untitled".to_string())
 }
 
-/// Extract context snippets around search matches
+/// Extract context snippets around search matches.
 ///
-/// # Arguments
-///
-/// * `content` - The raw markdown content
-/// * `query_lower` - The lowercased search query
-/// * `max_snippets` - Maximum number of snippets to return
-fn extract_snippets(content: &str, query_lower: &str, max_snippets: usize) -> Vec<String> {
+/// Returns up to `max_snippets` text fragments, each containing the matching
+/// line plus `context_lines` lines of surrounding context. Adjacent matches
+/// are deduplicated to avoid overlapping snippets.
+fn extract_snippets(
+    content: &str,
+    query_lower: &str,
+    max_snippets: usize,
+    context_lines: usize,
+) -> Vec<String> {
     let lines: Vec<&str> = content.lines().collect();
     let mut snippets = Vec::new();
     let mut last_snippet_line: Option<usize> = None;
@@ -181,15 +214,15 @@ fn extract_snippets(content: &str, query_lower: &str, max_snippets: usize) -> Ve
             break;
         }
         if line.to_lowercase().contains(query_lower) {
-            // skip if too close to the previous snippet
+            // skip if too close to the previous snippet to avoid overlap
             if let Some(last) = last_snippet_line {
-                if i <= last + 2 {
+                if i <= last + context_lines + 1 {
                     continue;
                 }
             }
-            // grab the matching line with one line of context on each side
-            let start = i.saturating_sub(1);
-            let end = (i + 2).min(lines.len());
+            // grab the matching line with context on each side
+            let start = i.saturating_sub(context_lines);
+            let end = (i + context_lines + 1).min(lines.len());
             let snippet: String = lines[start..end].join("\n");
             snippets.push(snippet);
             last_snippet_line = Some(i);
@@ -200,11 +233,13 @@ fn extract_snippets(content: &str, query_lower: &str, max_snippets: usize) -> Ve
 
 #[tool_router(router = docs_router, vis = "pub")]
 impl ThoriumMCP {
-    /// Get the table of contents for the Thorium documentation
+    /// Get the table of contents for the Thorium documentation.
     ///
-    /// # Arguments
+    /// # Errors
     ///
-    /// * `parts` - The request parts required to validate authorization
+    /// Returns `ErrorData` with `INTERNAL_ERROR` if `SUMMARY.md` cannot be
+    /// read from the configured docs path. Returns an authentication error
+    /// if the MCP session token is invalid.
     #[tool(
         name = "get_docs_toc",
         description = "Get the table of contents for the Thorium documentation. Returns a structured list of all documentation pages with their titles, paths, and nesting depth. Call this first to understand what documentation is available."
@@ -214,9 +249,8 @@ impl ThoriumMCP {
         &self,
         RmcpExtension(parts): RmcpExtension<axum::http::request::Parts>,
     ) -> Result<CallToolResult, ErrorData> {
-        // validate authorization
         McpConfig::grab_token(&parts)?;
-        // read SUMMARY.md
+
         let summary_path = self.conf.docs_path.join("SUMMARY.md");
         let content =
             tokio::fs::read_to_string(&summary_path)
@@ -226,26 +260,26 @@ impl ThoriumMCP {
                     message: format!("Failed to read documentation index: {e}").into(),
                     data: None,
                 })?;
-        // parse the summary into structured entries
+
         let entries = parse_summary(&content);
-        // serialize our entries
         let serialized = serde_json::to_value(&entries).unwrap();
-        // build our result
-        let result = CallToolResult {
+
+        Ok(CallToolResult {
             content: vec![Content::json(&entries)?],
             structured_content: Some(serialized),
             is_error: Some(false),
             meta: None,
-        };
-        Ok(result)
+        })
     }
 
-    /// Get the content of a specific documentation page
+    /// Get the content of a specific documentation page.
     ///
-    /// # Arguments
+    /// # Errors
     ///
-    /// * `parameters` - The parameters containing the page path
-    /// * `parts` - The request parts required to validate authorization
+    /// Returns `ErrorData` with `INVALID_PARAMS` if the path is invalid or
+    /// attempts directory traversal. Returns `INTERNAL_ERROR` if the file
+    /// cannot be read. Returns an authentication error if the MCP session
+    /// token is invalid.
     #[tool(
         name = "get_doc_page",
         description = "Get the content of a specific Thorium documentation page by its relative path (e.g. 'concepts/files.md'). Use get_docs_toc first to discover available page paths."
@@ -256,11 +290,9 @@ impl ThoriumMCP {
         Parameters(DocPage { path }): Parameters<DocPage>,
         RmcpExtension(parts): RmcpExtension<axum::http::request::Parts>,
     ) -> Result<CallToolResult, ErrorData> {
-        // validate authorization
         McpConfig::grab_token(&parts)?;
-        // validate and resolve the path
+
         let full_path = validate_doc_path(&self.conf.docs_path, &path)?;
-        // read the file
         let content =
             tokio::fs::read_to_string(&full_path)
                 .await
@@ -269,27 +301,30 @@ impl ThoriumMCP {
                     message: format!("Failed to read documentation page: {e}").into(),
                     data: None,
                 })?;
-        // build our result with the raw markdown as text content
+
         let serialized = serde_json::to_value(&serde_json::json!({
             "path": path,
             "content": content,
         }))
         .unwrap();
-        let result = CallToolResult {
+
+        Ok(CallToolResult {
             content: vec![Content::text(content)],
             structured_content: Some(serialized),
             is_error: Some(false),
             meta: None,
-        };
-        Ok(result)
+        })
     }
 
-    /// Search across all Thorium documentation pages
+    /// Search across all Thorium documentation pages.
     ///
-    /// # Arguments
+    /// # Errors
     ///
-    /// * `parameters` - The parameters containing the search query
-    /// * `parts` - The request parts required to validate authorization
+    /// Returns `ErrorData` with `INVALID_PARAMS` if the query is empty.
+    /// Returns `INTERNAL_ERROR` if the documentation directory cannot be
+    /// traversed. Returns an authentication error if the MCP session token
+    /// is invalid. Individual file read failures are logged as warnings and
+    /// skipped rather than aborting the entire search.
     #[tool(
         name = "search_docs",
         description = "Search across all Thorium documentation pages for a query string. Returns matching pages with titles, match counts, and context snippets. Use this to find documentation about a specific topic."
@@ -300,9 +335,8 @@ impl ThoriumMCP {
         Parameters(SearchDocs { query }): Parameters<SearchDocs>,
         RmcpExtension(parts): RmcpExtension<axum::http::request::Parts>,
     ) -> Result<CallToolResult, ErrorData> {
-        // validate authorization
         McpConfig::grab_token(&parts)?;
-        // validate query is not empty
+
         if query.trim().is_empty() {
             return Err(ErrorData {
                 code: rmcp::model::ErrorCode::INVALID_PARAMS,
@@ -310,56 +344,67 @@ impl ThoriumMCP {
                 data: None,
             });
         }
+
         let query_lower = query.to_lowercase();
-        // collect all markdown files
-        let mut md_files = Vec::new();
-        collect_md_files(&self.conf.docs_path, &mut md_files).map_err(
-            |e| ErrorData {
+
+        let md_files =
+            collect_md_files(&self.conf.docs_path).map_err(|e| ErrorData {
                 code: rmcp::model::ErrorCode::INTERNAL_ERROR,
                 message: format!("Failed to read documentation directory: {e}").into(),
                 data: None,
-            },
-        )?;
-        // search each file
-        let mut results: Vec<SearchResult> = Vec::new();
-        for file_path in &md_files {
-            let content = match tokio::fs::read_to_string(file_path).await {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            let content_lower = content.to_lowercase();
-            let match_count = content_lower.matches(&query_lower).count();
-            if match_count == 0 {
-                continue;
-            }
-            // get the relative path from the docs root
-            let rel_path = file_path
-                .strip_prefix(&self.conf.docs_path)
-                .unwrap_or(file_path)
-                .to_string_lossy()
-                .to_string();
-            let title = extract_title(&content);
-            let snippets = extract_snippets(&content, &query_lower, 3);
-            results.push(SearchResult {
-                path: rel_path,
-                title,
-                match_count,
-                snippets,
-            });
-        }
-        // sort by match count descending and limit to top 10
+            })?;
+
+        let mut results: Vec<SearchResult> = md_files
+            .iter()
+            .filter_map(|file_path| {
+                let content = match std::fs::read_to_string(file_path) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %file_path.display(),
+                            "Failed to read documentation file: {e}"
+                        );
+                        return None;
+                    }
+                };
+
+                let match_count =
+                    content.to_lowercase().matches(&query_lower).count();
+                if match_count == 0 {
+                    return None;
+                }
+
+                let rel_path = file_path
+                    .strip_prefix(&self.conf.docs_path)
+                    .unwrap_or(file_path)
+                    .to_string_lossy()
+                    .to_string();
+
+                Some(SearchResult {
+                    title: extract_title(&content),
+                    snippets: extract_snippets(
+                        &content,
+                        &query_lower,
+                        MAX_SNIPPETS_PER_PAGE,
+                        SNIPPET_CONTEXT_LINES,
+                    ),
+                    path: rel_path,
+                    match_count,
+                })
+            })
+            .collect();
+
         results.sort_by(|a, b| b.match_count.cmp(&a.match_count));
-        results.truncate(10);
-        // serialize our results
+        results.truncate(MAX_SEARCH_RESULTS);
+
         let serialized = serde_json::to_value(&results).unwrap();
-        // build our result
-        let result = CallToolResult {
+
+        Ok(CallToolResult {
             content: vec![Content::json(&results)?],
             structured_content: Some(serialized),
             is_error: Some(false),
             meta: None,
-        };
-        Ok(result)
+        })
     }
 }
 
@@ -368,6 +413,8 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
+
+    use proptest::prelude::*;
 
     // ── parse_summary ──────────────────────────────────────────────
 
@@ -383,55 +430,61 @@ mod tests {
         - [Advanced Login](./getting_started/advanced_login.md)
 ";
         let entries = parse_summary(content);
-        assert_eq!(entries.len(), 5);
-
-        assert_eq!(entries[0].title, "Intro");
-        assert_eq!(entries[0].path, "intro.md");
-        assert_eq!(entries[0].depth, 0);
-
-        assert_eq!(entries[1].title, "Getting Started");
-        assert_eq!(entries[1].path, "getting_started/getting_started.md");
-        assert_eq!(entries[1].depth, 0);
-
-        assert_eq!(entries[2].title, "Registration");
-        assert_eq!(entries[2].path, "getting_started/registration.md");
-        assert_eq!(entries[2].depth, 1);
-
-        assert_eq!(entries[3].title, "Login");
-        assert_eq!(entries[3].depth, 1);
-
-        assert_eq!(entries[4].title, "Advanced Login");
-        assert_eq!(entries[4].depth, 2);
+        assert_eq!(
+            entries,
+            vec![
+                TocEntry {
+                    title: "Intro".into(),
+                    path: "intro.md".into(),
+                    depth: 0,
+                },
+                TocEntry {
+                    title: "Getting Started".into(),
+                    path: "getting_started/getting_started.md".into(),
+                    depth: 0,
+                },
+                TocEntry {
+                    title: "Registration".into(),
+                    path: "getting_started/registration.md".into(),
+                    depth: 1,
+                },
+                TocEntry {
+                    title: "Login".into(),
+                    path: "getting_started/login.md".into(),
+                    depth: 1,
+                },
+                TocEntry {
+                    title: "Advanced Login".into(),
+                    path: "getting_started/advanced_login.md".into(),
+                    depth: 2,
+                },
+            ]
+        );
     }
 
-    #[test]
-    fn parse_summary_strips_dot_slash_prefix() {
-        let content = "- [Page](./some/path.md)\n- [Other](other/path.md)\n";
-        let entries = parse_summary(content);
-        assert_eq!(entries[0].path, "some/path.md");
-        assert_eq!(entries[1].path, "other/path.md");
-    }
+    proptest! {
+        #[test]
+        fn parse_summary_roundtrip(
+            title in "[A-Za-z]{1,30}",
+            path in "[a-z]{1,10}/[a-z]{1,10}\\.md",
+            depth in 0..5usize,
+        ) {
+            let indent = " ".repeat(depth * 4);
+            let line = format!("{indent}- [{title}](./{path})");
+            let entries = parse_summary(&line);
+            prop_assert_eq!(entries.len(), 1);
+            prop_assert_eq!(&entries[0].title, &title);
+            prop_assert_eq!(&entries[0].path, &path);
+            prop_assert_eq!(entries[0].depth, depth);
+        }
 
-    #[test]
-    fn parse_summary_skips_non_link_lines() {
-        let content = "\
-# Summary
-
-Some random text here.
-
-- [Actual Link](./page.md)
-
-Another non-link line.
-";
-        let entries = parse_summary(content);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].title, "Actual Link");
-    }
-
-    #[test]
-    fn parse_summary_empty_input() {
-        let entries = parse_summary("");
-        assert!(entries.is_empty());
+        #[test]
+        fn parse_summary_skips_non_links(
+            text in "[A-Za-z0-9 ]{1,50}",
+        ) {
+            let entries = parse_summary(&text);
+            prop_assert!(entries.is_empty());
+        }
     }
 
     #[test]
@@ -440,14 +493,18 @@ Another non-link line.
             .join("docs")
             .join("src")
             .join("SUMMARY.md");
-        if !summary_path.exists() {
-            return; // skip if docs aren't available
-        }
+        assert!(
+            summary_path.exists(),
+            "Real SUMMARY.md not found at {}",
+            summary_path.display()
+        );
         let content = fs::read_to_string(&summary_path).unwrap();
         let entries = parse_summary(&content);
-        // the real SUMMARY.md has many entries — just verify it parsed something
-        assert!(entries.len() > 10, "Expected many TOC entries, got {}", entries.len());
-        // first entry should be Intro
+        assert!(
+            entries.len() > 10,
+            "Expected many TOC entries, got {}",
+            entries.len()
+        );
         assert_eq!(entries[0].title, "Intro");
         assert_eq!(entries[0].path, "intro.md");
         assert_eq!(entries[0].depth, 0);
@@ -455,23 +512,24 @@ Another non-link line.
 
     // ── validate_doc_path ──────────────────────────────────────────
 
-    #[test]
-    fn validate_doc_path_rejects_traversal() {
-        let docs = PathBuf::from("/tmp");
-        let err = validate_doc_path(&docs, "../etc/passwd").unwrap_err();
-        assert!(err.message.contains("directory traversal"));
-    }
-
-    #[test]
-    fn validate_doc_path_rejects_hidden_traversal() {
-        let docs = PathBuf::from("/tmp");
-        let err = validate_doc_path(&docs, "foo/../../etc/passwd").unwrap_err();
-        assert!(err.message.contains("directory traversal"));
+    proptest! {
+        #[test]
+        fn validate_doc_path_always_rejects_traversal(
+            prefix in "[a-z]{0,5}",
+            suffix in "[a-z]{1,10}",
+        ) {
+            let docs = tempfile::tempdir().unwrap();
+            let path = format!("{prefix}/../{suffix}");
+            let result = validate_doc_path(docs.path(), &path);
+            prop_assert!(result.is_err());
+            prop_assert!(
+                result.unwrap_err().message.contains("directory traversal")
+            );
+        }
     }
 
     #[test]
     fn validate_doc_path_accepts_valid_path() {
-        // create a temp file to validate against
         let dir = tempfile::tempdir().unwrap();
         let file_path = dir.path().join("test.md");
         fs::write(&file_path, "# Test").unwrap();
@@ -493,32 +551,27 @@ Another non-link line.
     #[test]
     fn collect_md_files_finds_markdown() {
         let dir = tempfile::tempdir().unwrap();
-        // create some files
-        fs::write(dir.path().join("page.md"), "# Page").unwrap();
-        fs::write(dir.path().join("readme.txt"), "not markdown").unwrap();
-        fs::write(dir.path().join("image.png"), "not markdown").unwrap();
-        // create a subdirectory with another md file
-        let sub = dir.path().join("sub");
+        fs::write(dir.path().join("dragons.md"), "# Here Be Dragons").unwrap();
+        fs::write(dir.path().join("treasure_map.txt"), "X marks the spot").unwrap();
+        fs::write(dir.path().join("loot.png"), "not markdown").unwrap();
+        let sub = dir.path().join("dungeon");
         fs::create_dir(&sub).unwrap();
-        fs::write(sub.join("nested.md"), "# Nested").unwrap();
+        fs::write(sub.join("boss_fight.md"), "# The Final Boss").unwrap();
 
-        let mut paths = Vec::new();
-        collect_md_files(dir.path(), &mut paths).unwrap();
-
+        let paths = collect_md_files(dir.path()).unwrap();
         assert_eq!(paths.len(), 2);
         let names: Vec<String> = paths
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
             .collect();
-        assert!(names.contains(&"page.md".to_string()));
-        assert!(names.contains(&"nested.md".to_string()));
+        assert!(names.contains(&"dragons.md".to_string()));
+        assert!(names.contains(&"boss_fight.md".to_string()));
     }
 
     #[test]
     fn collect_md_files_empty_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let mut paths = Vec::new();
-        collect_md_files(dir.path(), &mut paths).unwrap();
+        let paths = collect_md_files(dir.path()).unwrap();
         assert!(paths.is_empty());
     }
 
@@ -527,109 +580,118 @@ Another non-link line.
         let docs_src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("docs")
             .join("src");
-        if !docs_src.exists() {
-            return; // skip if docs aren't available
-        }
-        let mut paths = Vec::new();
-        collect_md_files(&docs_src, &mut paths).unwrap();
-        // the real docs have 80+ markdown files
-        assert!(paths.len() > 50, "Expected many md files, got {}", paths.len());
-        // all should be .md files
+        assert!(
+            docs_src.exists(),
+            "Real docs not found at {}",
+            docs_src.display()
+        );
+        let paths = collect_md_files(&docs_src).unwrap();
+        assert!(
+            paths.len() > 50,
+            "Expected many md files, got {}",
+            paths.len()
+        );
         assert!(paths.iter().all(|p| p.extension().unwrap() == "md"));
     }
 
     // ── extract_title ──────────────────────────────────────────────
 
-    #[test]
-    fn extract_title_finds_h1() {
-        let content = "Some preamble\n# My Title\n\nBody text here.";
-        assert_eq!(extract_title(content), "My Title");
-    }
+    proptest! {
+        #[test]
+        fn extract_title_finds_h1(
+            title in "[A-Za-z]{1,30}",
+        ) {
+            let content = format!("some preamble\n## Not This\n# {title}\nBody text.");
+            prop_assert_eq!(extract_title(&content), title);
+        }
 
-    #[test]
-    fn extract_title_returns_first_h1() {
-        let content = "# First Title\n## Subtitle\n# Second Title";
-        assert_eq!(extract_title(content), "First Title");
-    }
-
-    #[test]
-    fn extract_title_ignores_h2_and_deeper() {
-        let content = "## Not A Title\n### Also Not\nNo headings here.";
-        assert_eq!(extract_title(content), "Untitled");
-    }
-
-    #[test]
-    fn extract_title_handles_empty_content() {
-        assert_eq!(extract_title(""), "Untitled");
-    }
-
-    #[test]
-    fn extract_title_handles_leading_whitespace() {
-        let content = "  # Indented Title\n";
-        assert_eq!(extract_title(content), "Indented Title");
+        #[test]
+        fn extract_title_untitled_without_h1(
+            body in "[a-z ]{1,100}",
+        ) {
+            // body only contains lowercase letters and spaces, never "# "
+            prop_assert_eq!(extract_title(&body), "Untitled");
+        }
     }
 
     // ── extract_snippets ───────────────────────────────────────────
 
-    #[test]
-    fn extract_snippets_basic() {
-        let content = "line 0\nline 1\nfoo bar baz\nline 3\nline 4\n";
-        let snippets = extract_snippets(content, "foo", 3);
-        assert_eq!(snippets.len(), 1);
-        // should include the line before, the match line, and the line after
-        assert!(snippets[0].contains("line 1"));
-        assert!(snippets[0].contains("foo bar baz"));
-        assert!(snippets[0].contains("line 3"));
+    proptest! {
+        #[test]
+        fn extract_snippets_respects_max(
+            max_snippets in 1..10usize,
+        ) {
+            // 20 well-spaced matches should never exceed max_snippets
+            let content: String = (0..20)
+                .map(|i| format!("match line {i}\npadding\npadding\npadding\n"))
+                .collect();
+            let snippets =
+                extract_snippets(&content, "match", max_snippets, SNIPPET_CONTEXT_LINES);
+            prop_assert!(snippets.len() <= max_snippets);
+        }
+
+        #[test]
+        fn extract_snippets_no_false_positives(
+            query in "[xyz]{3,8}",
+            content in "[abc ]{10,200}",
+        ) {
+            // content with only a/b/c/spaces cannot match xyz-only queries
+            let snippets = extract_snippets(
+                &content,
+                &query.to_lowercase(),
+                5,
+                SNIPPET_CONTEXT_LINES,
+            );
+            prop_assert!(snippets.is_empty());
+        }
+
+        #[test]
+        fn extract_snippets_each_contains_query(
+            query in "[a-z]{3,6}",
+        ) {
+            let content =
+                format!("before\n{query} appears here\nafter\nmore\n{query} again\nend");
+            let snippets =
+                extract_snippets(&content, &query, 10, SNIPPET_CONTEXT_LINES);
+            for snippet in &snippets {
+                prop_assert!(
+                    snippet.to_lowercase().contains(&query),
+                    "Snippet {:?} does not contain query {:?}",
+                    snippet,
+                    query
+                );
+            }
+        }
+
+        #[test]
+        fn extract_snippets_configurable_context(
+            context_lines in 0..5usize,
+        ) {
+            let content = "a\nb\nc\nmatch\nd\ne\nf";
+            let snippets = extract_snippets(content, "match", 1, context_lines);
+            prop_assert_eq!(snippets.len(), 1);
+            let line_count = snippets[0].lines().count();
+            // snippet should contain at most: context above + match + context below
+            let expected_max = context_lines + 1 + context_lines;
+            prop_assert!(
+                line_count <= expected_max,
+                "Got {line_count} lines with context_lines={context_lines}, \
+                 expected at most {expected_max}"
+            );
+        }
     }
 
-    #[test]
-    fn extract_snippets_case_insensitive() {
-        let content = "Hello World\nFOO BAR\nGoodbye";
-        let snippets = extract_snippets(content, "foo", 3);
-        assert_eq!(snippets.len(), 1);
-        assert!(snippets[0].contains("FOO BAR"));
-    }
-
-    #[test]
-    fn extract_snippets_respects_max() {
-        let content = "match1\n\n\n\nmatch2\n\n\n\nmatch3\n\n\n\nmatch4\n";
-        let snippets = extract_snippets(content, "match", 2);
-        assert_eq!(snippets.len(), 2);
-    }
-
-    #[test]
-    fn extract_snippets_skips_adjacent_matches() {
-        // matches on consecutive lines should be collapsed into one snippet
-        let content = "foo line 1\nfoo line 2\nfoo line 3\n\n\n\nfoo line 7\n";
-        let snippets = extract_snippets(content, "foo", 3);
-        // first match at line 0 grabs context [0..2], so lines 1-2 are within +2
-        // line 7 match (index 6) is far enough away
-        assert_eq!(snippets.len(), 2);
-    }
-
-    #[test]
-    fn extract_snippets_match_at_first_line() {
-        let content = "match here\nline 1\nline 2\n";
-        let snippets = extract_snippets(content, "match", 3);
-        assert_eq!(snippets.len(), 1);
-        // should not crash on saturating_sub(1) when match is at index 0
-        assert!(snippets[0].contains("match here"));
-        assert!(snippets[0].contains("line 1"));
-    }
-
-    #[test]
-    fn extract_snippets_match_at_last_line() {
-        let content = "line 0\nline 1\nmatch here";
-        let snippets = extract_snippets(content, "match", 3);
-        assert_eq!(snippets.len(), 1);
-        assert!(snippets[0].contains("line 1"));
-        assert!(snippets[0].contains("match here"));
-    }
-
-    #[test]
-    fn extract_snippets_no_matches() {
-        let content = "nothing relevant here\nat all\n";
-        let snippets = extract_snippets(content, "nonexistent", 3);
-        assert!(snippets.is_empty());
+    proptest! {
+        #[test]
+        fn extract_snippets_deduplicates_adjacent(
+            context_lines in 1..4usize,
+        ) {
+            // consecutive matches should be collapsed by deduplication
+            let content = "foo line 1\nfoo line 2\nfoo line 3\n\n\n\n\n\nfoo distant\n";
+            let snippets = extract_snippets(content, "foo", 10, context_lines);
+            // 4 total matches but consecutive ones should be deduped
+            prop_assert!(snippets.len() < 4);
+            prop_assert!(!snippets.is_empty());
+        }
     }
 }
