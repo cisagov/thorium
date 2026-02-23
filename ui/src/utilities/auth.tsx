@@ -231,9 +231,14 @@ export const RequireAuth: React.FC<AuthHookProps> = ({ children }) => {
 export const RequireAdmin: React.FC<AuthHookProps> = ({ children }) => {
   const { userInfo } = useAuth();
   const role = userInfo?.role as unknown as RoleKey;
-  return role == RoleKey.Admin ? (
-    children
-  ) : (
-    <Navigate replace to={window.location.href} state={{ path: location.pathname + location.search + location.hash }} />
-  );
+  // userInfo is still loading (null)
+  if (userInfo === null) {
+    return null;
+  }
+  // userInfo loaded, but user is not an Admin
+  if (role !== RoleKey.Admin) {
+    return <Navigate to="/" replace state={{ path: location.pathname + location.search + location.hash }} />;
+  }
+  // user is an Admin
+  return children;
 };
