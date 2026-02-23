@@ -9,8 +9,10 @@ use rmcp::transport::streamable_http_server::StreamableHttpService;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::{ErrorData, tool_handler};
 use std::net::IpAddr;
+use std::path::PathBuf;
 use std::str::FromStr;
 
+mod docs;
 mod files;
 mod images;
 mod pipelines;
@@ -21,12 +23,14 @@ use crate::client::Thorium;
 use crate::utils::AppState;
 
 /// The config info needed for mcp clients
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct McpConfig {
     // The ip address to talk to the API at
     pub ip: IpAddr,
     /// The port to ues to talk to our api
     pub port: u16,
+    /// The path to our raw documentation source markdown
+    pub docs_path: PathBuf,
 }
 
 impl McpConfig {
@@ -87,6 +91,7 @@ impl From<&Conf> for McpConfig {
         McpConfig {
             ip,
             port: conf.thorium.port,
+            docs_path: conf.thorium.assets.docs_src.clone(),
         }
     }
 }
@@ -120,7 +125,8 @@ impl ThoriumMCP {
             tool_router: Self::sample_router()
                 + Self::images_router()
                 + Self::pipelines_router()
-                + Self::tree_router(),
+                + Self::tree_router()
+                + Self::docs_router(),
         }
     }
 }
@@ -136,7 +142,7 @@ pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
     let mcp_conf = McpConfig::from(conf);
     // create a new service
     let service = StreamableHttpService::new(
-        move || Ok(ThoriumMCP::new(mcp_conf)),
+        move || Ok(ThoriumMCP::new(mcp_conf.clone())),
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
