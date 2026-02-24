@@ -16,10 +16,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://cee-gitlab.sandia.gov/ragnarokkr/thorium/thorium.git`"
+    "url": "git+https://github.com/cisagov/thorium.git`"
   },
   "bugs": {
-    "url": "https://cee-gitlab.sandia.gov/ragnarokkr/thorium/thorium/issues"
+    "url": "https://github.com/cisagov/thorium/issues"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -1,4 +1,4 @@
-import React, { KeyboardEventHandler } from 'react';
+import React, { KeyboardEventHandler, useEffect } from 'react';
 
 import CreatableSelect from 'react-select/creatable';
 import Select from 'react-select';
@@ -65,6 +65,12 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
   const [value, setValue] = React.useState<SelectOption[]>(formatInitialValues(values, valuesMap));
   const [valueOptions, setValueOptions] = React.useState<SelectOption[]>(formatInitialValues(options ? options : [], valuesMap));
   const selectStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)');
+
+  // update internal options if prop options change
+  useEffect(() => {
+    const initialOptionValues = formatInitialValues(options ? options : [], valuesMap);
+    setValueOptions((prev) => [...prev, ...initialOptionValues]);
+  }, [options]);
 
   // control optional props to prevent menu from opening
   const selectProps: any = {};

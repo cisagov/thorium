@@ -43,17 +43,18 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
     updateForm.append('metadata[remove_urls]', url);
   });
   // metadata: vendors
-  const addVendors: Vendor[] | undefined = pendingMeta?.vendors?.filter(
-    (pendingVendor: Vendor) => !metadata.vendors.map((vendor: Vendor) => vendor.id).includes(pendingVendor.id),
+  console.log(metadata.vendors);
+  const addVendors: string[] | undefined = pendingMeta?.vendors?.filter(
+    (pendingVendor: string) => !metadata.vendors.map((vendor: Vendor) => vendor.id).includes(pendingVendor),
   );
-  const removeVendors: Vendor[] | undefined = metadata?.vendors?.filter(
-    (vendor: Vendor) => !pendingMeta.vendors.map((pendingVendor: Vendor) => pendingVendor.id).includes(vendor.id),
+  const removeVendors: string[] | undefined = metadata?.vendors?.filter(
+    (vendor: Vendor) => !pendingMeta.vendors.map((pendingVendor: string) => pendingVendor).includes(vendor.id),
   );
-  addVendors?.map((vendor: Vendor) => {
-    updateForm.append('metadata[add_vendors]', vendor.id);
+  addVendors?.map((vendor: string) => {
+    updateForm.append('metadata[add_vendors]', vendor);
   });
-  removeVendors?.map((vendor: Vendor) => {
-    updateForm.append('metadata[remove_vendors]', vendor.id);
+  removeVendors?.map((vendor: string) => {
+    updateForm.append('metadata[remove_vendors]', vendor);
   });
   // metadata: critical_system/critical_sectors
   if (metadata?.critical_system != pendingMeta?.critical_system) {

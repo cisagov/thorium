@@ -1,11 +1,12 @@
-import { useEffect, useState, JSX, useRef } from 'react';
+import { useEffect, useState, JSX } from 'react';
 import { Row, Form } from 'react-bootstrap';
 
 // project imports
 import { EntityDetails, FieldBadge, SelectInputArray, InfoHeader, InfoValue, LinkBadge } from '@components';
-import { BlankDevice, CreateVendor, CriticalSector, Device, DeviceMetaFields, Entities, Entity, Filters, ValueMap, Vendor } from '@models';
-import { getEntity, listEntities } from '@thorpi';
+import { BlankDevice, CriticalSector, Device, DeviceMetaFields, Entities, Entity, Vendor } from '@models';
+import { getEntity } from '@thorpi';
 import { FaHardDrive } from 'react-icons/fa6';
+import { getAvailableVendors } from '../utilities';
 
 const DeviceMetaInfo = (
   device: Device,
@@ -13,58 +14,19 @@ const DeviceMetaInfo = (
   handleUpdate: <K extends keyof Entity>(field: K, value: Entity[K]) => void,
   editing: boolean,
 ): JSX.Element => {
-  const vendorsMap = useRef<{ [key: string]: string }>({});
-  const vendorInfoMap = useRef<{ [key: string]: Vendor }>({});
+  const [vendorsMap, setVendorsMap] = useState<{ [key: string]: string }>({});
 
   // update metadata and then pass back to entity update
   function updatePendingMeta<T extends keyof DeviceMetaFields>(field: T, value: DeviceMetaFields[T]): void {
     const updates: DeviceMetaFields = structuredClone(pendingDevice.metadata.Device);
     if (field == 'vendors' && value != undefined) {
-      // this will be a list of vendor IDs rather than the vendors, we will do a lookup to put the correct values back
-      const newVendors: Vendor[] = [];
-      const vendorIDs = value as string[];
-      vendorIDs.forEach((vendorID: string) => {
-        // for newly created vendors, they may not be in the map
-        if (vendorInfoMap.current.hasOwnProperty(vendorID)) {
-          newVendors.push(vendorInfoMap.current[vendorID]);
-        }
-      });
-      updates[field] = newVendors as any;
-    } else {
       updates[field] = value;
     }
     handleUpdate('metadata', { Device: updates });
   }
 
-  const createVendorHandler = (vendorID: string) => {
-    // get vendor, add it to the vendor id/name map
-    getEntity(vendorID, console.log).then((vendor) => {
-      if (vendor != null) {
-        const newVendorID = vendor.id;
-        vendorsMap.current[newVendorID] = newVendorID;
-        // add new vendor info to vendor info map
-        vendorInfoMap.current[newVendorID] = vendor;
-      }
-    });
-  };
-
-  const getAvailableVendors = async () => {
-    // TODO: actually loop to grab all vendors
-    const filters: Filters = { kinds: [Entities.Vendor], limit: 10000 };
-    const { entityList } = await listEntities(filters, console.log, true, null);
-    if (entityList) {
-      entityList.forEach((vendor: Vendor) => {
-        vendorsMap.current[vendor.id] = vendor.name;
-      });
-      // keep track of all vendor info in object with id as a key
-      entityList.forEach((vendor: Vendor) => {
-        vendorInfoMap.current[vendor.id] = vendor;
-      });
-    }
-  };
-
   useEffect(() => {
-    getAvailableVendors();
+    getAvailableVendors(setVendorsMap);
   }, []);
 
   return (
@@ -76,10 +38,10 @@ const DeviceMetaInfo = (
             <SelectInputArray
               isCreatable={false}
               values={device.metadata.Device.vendors?.length > 0 ? device.metadata.Device.vendors.map((vendor: Vendor) => vendor.id) : []}
-              options={Object.keys(vendorsMap.current)}
+              options={Object.keys(vendorsMap)}
               onChange={(vendorID) => updatePendingMeta('vendors', vendorID as any)}
               onCreate={(name) => console.log('Attempting to create a new vendor: ${}')}
-              valuesMap={vendorsMap.current}
+              valuesMap={vendorsMap}
             />
           ) : (
             <>

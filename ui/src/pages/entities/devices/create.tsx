@@ -1,20 +1,10 @@
-import { JSX, useRef, useState } from 'react';
+import { JSX, useEffect, useState } from 'react';
 import { Row, Col, Form } from 'react-bootstrap';
-import { getNames as getCountryNames, getCode as getCountryCode, Country } from 'country-list';
 
 // project imports
-import { SelectInputArray, InfoHeader, InfoValue, EntityCreate, SelectInput } from '@components';
-import {
-  BlankCreateDevice,
-  BlankCreateVendor,
-  CreateDevice,
-  CreateVendor,
-  CriticalSector,
-  DeviceMetaFields,
-  Entities,
-  Vendor,
-  VendorMetaFields,
-} from '@models';
+import { SelectInputArray, InfoHeader, InfoValue, EntityCreate } from '@components';
+import { BlankCreateDevice, CreateDevice, CriticalSector, DeviceMetaFields, Entities, Vendor } from '@models';
+import { getAvailableVendors } from '../utilities';
 
 const DeviceMetaInfo = (
   device: CreateDevice,
@@ -22,8 +12,11 @@ const DeviceMetaInfo = (
 ): JSX.Element => {
   // vendor creation state hooks
   const [pendingVendorName, setPendingVendorName] = useState('');
-  const [vendorsMap, setVendorsMap] = useState<{ [id: string]: string }>({});
-  const vendorInfoMap = useRef<{ [key: string]: Vendor }>({});
+  const [vendorsMap, setVendorsMap] = useState<{ [key: string]: string }>({});
+
+  useEffect(() => {
+    getAvailableVendors(setVendorsMap);
+  }, []);
 
   // update metadata and then pass back to entity update
   function updatePendingMeta<T extends keyof DeviceMetaFields>(field: T, value: DeviceMetaFields[T]): void {
@@ -40,7 +33,7 @@ const DeviceMetaInfo = (
           <SelectInputArray
             isCreatable={false}
             values={device.metadata.Device.vendors?.length > 0 ? device.metadata.Device.vendors.map((vendor: Vendor) => vendor.id) : []}
-            options={Object.values(vendorsMap)}
+            options={Object.keys(vendorsMap)}
             onChange={(vendorID) => updatePendingMeta('vendors', [vendorID] as any)}
             onCreate={(name) => setPendingVendorName(name ? name : '')}
             valuesMap={vendorsMap}
