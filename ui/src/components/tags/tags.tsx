@@ -3,7 +3,7 @@ import { Button, Modal } from 'react-bootstrap';
 
 // project imports
 import { OverlayTipBottom } from '@components';
-import { FormattedFileInfoTagKeys, DangerTagKeys } from './utilities';
+import { getTagColorClass, getTagBadgeText, TagUpperKeyEnum } from './utilities';
 import { Entities } from '@models';
 
 interface TagBadgeProps {
@@ -16,58 +16,11 @@ interface TagBadgeProps {
 
 const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, resource }) => {
   const [showRedirectModal, setShowRedirectModal] = useState(false);
-  let badgeClass = '';
-  let tagText = '';
 
-  const upperTag = tag.toUpperCase();
-  // format traffic light protocol tags
-  if (upperTag == 'TLP') {
-    // on details page, only print value because TLP is in a different col
-    if (!condensed) {
-      tagText = value.toUpperCase();
-    } else {
-      tagText = `TLP: ${value.toUpperCase()}`;
-    }
-    switch (value.toUpperCase()) {
-      case 'RED':
-        badgeClass = 'tlp-red-btn';
-        break;
-      case 'AMBER':
-        badgeClass = 'tlp-amber-btn';
-        break;
-      case 'AMBER+STRICT':
-        badgeClass = 'tlp-amber-btn';
-        break;
-      case 'GREEN':
-        badgeClass = 'tlp-green-btn';
-        break;
-      case 'WHITE':
-        badgeClass = 'tlp-clear-btn';
-        break;
-      case 'CLEAR':
-        badgeClass = 'tlp-clear-btn';
-        break;
-    }
-  } else if (upperTag == 'RESULTS') {
-    badgeClass = 'general-tag';
-    tagText = `${tag}: ${value}`;
-  } else if (upperTag == 'ATT&CK') {
-    badgeClass = 'attack-tag';
-    tagText = `${value}`;
-  } else if (upperTag == 'MBC') {
-    badgeClass = 'mbc-tag';
-    tagText = `${value}`;
-  } else if (FormattedFileInfoTagKeys.includes(upperTag)) {
-    badgeClass = 'info-tag';
-    tagText = `${tag}: ${value}`;
-  } else {
-    if (DangerTagKeys.includes(tag.toUpperCase())) {
-      badgeClass = 'danger-tag';
-    } else {
-      badgeClass = 'other-tag';
-    }
-    tagText = `${tag}: ${value}`;
-  }
+  const badgeClass = getTagColorClass(tag, value);
+  const tagText = getTagBadgeText(tag, value, condensed);
+  const upperTag = tag.toUpperCase() as TagUpperKeyEnum;
+
   // returned rendered component
   if (action == 'scroll') {
     const scrollToResult = (value: string) => {
@@ -87,7 +40,7 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
       </OverlayTipBottom>
     );
     // link to external mitre docs for Att&ck tags
-  } else if (action == 'docs' && upperTag == 'ATT&CK') {
+  } else if (action == 'docs' && upperTag == TagUpperKeyEnum.ATTACK) {
     const tactic = value.split(' ');
     const attackID = tactic.at(-1)?.split('.')[0];
     const attackSubID = tactic.at(-1)?.split('.').at(1);
@@ -135,7 +88,7 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
       </>
     );
     // link to external mitre docs for MBC tags
-  } else if (action == 'docs' && upperTag == 'MBC') {
+  } else if (action == 'docs' && upperTag == TagUpperKeyEnum.MBC) {
     const splitIndex = value.lastIndexOf(' ');
     const identifier = value.slice(splitIndex);
     const splitText = value.slice(0, splitIndex).split('::');

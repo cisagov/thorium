@@ -9,7 +9,7 @@ import styled from 'styled-components';
 
 // project imports
 import { OverlayTipRight } from '@components';
-import { RequireAuth, useAuth, getApiUrl } from '@utilities';
+import { RequireAuth, useAuth, getApiUrl, clearTagDataFromLocalStorage } from '@utilities';
 import { RoleKey, UserInfo } from '@models';
 
 const NavBanner = () => {
@@ -19,6 +19,7 @@ const NavBanner = () => {
 
   // call auth logout and redirect to login
   const handleLogout = () => {
+    clearTagDataFromLocalStorage();
     // re-render navbar to remove username
     logout().then(() => {
       navigate('/');

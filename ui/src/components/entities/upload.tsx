@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Alert, Button, Card, Col, Container, Form, ProgressBar, Row, Tabs, Tab } from 'react-bootstrap';
 import { FaChevronDown, FaChevronUp, FaRedo } from 'react-icons/fa';
 import { isIP } from 'is-ip';
+import { TagEntry } from 'models';
 
 // project imports
 import {
@@ -15,10 +16,10 @@ import {
   submitReactions,
   Subtitle,
   UploadDropzone,
-  SelectInput,
   SelectInputArray,
+  TagSelect,
 } from '@components';
-import { useAuth } from '@utilities';
+import { useAuth, hasInvalidTags } from '@utilities';
 import { uploadFile } from '@thorpi';
 import { AssociationCreate, AssociationKind, BlankAssociationCreate, Entity } from '@models';
 import { createAssociation } from '@thorpi';
@@ -124,7 +125,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
   const [uploadError, setUploadError] = useState<string[]>([]);
   const [runReactionsRes, setRunReactionsRes] = useState('');
   const [uploadSHA256, setUploadSHA256] = useState<string[]>([]);
-  const [tags, setTags] = useState([{ key: '', value: '' }]);
+  const [tags, setTags] = useState<TagEntry[]>([]);
   const [selectedGroups, setSelectedGroups] = useState(entity ? entity.groups : []);
   const [reactionsList, setReactionsList] = useState([]);
   const [uploadInProgress, setUploadInProgress] = useState(false);
@@ -155,8 +156,8 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
     const desiredTags = Object.keys(selectedTLP).filter((tlp) => {
       return selectedTLP[tlp];
     });
-    const finalTlpTags = [];
-    desiredTags.map((tlp) => {
+    const finalTlpTags: TagEntry[] = [];
+    desiredTags.forEach((tlp) => {
       finalTlpTags.push({ key: 'TLP', value: tlp });
     });
     return finalTlpTags;
@@ -192,7 +193,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
     // Add tlp tags to form if set
     const filteredTLPTags = tlpTags();
     if (filteredTLPTags) {
-      filteredTLPTags.map((tag) => {
+      filteredTLPTags.forEach((tag) => {
         // a valid key and value must be set for each uploaded tag
         if (tag['key'] && tag['value']) {
           formBase.append(`tags[${tag['key']}]`, tag['value']);
@@ -203,7 +204,11 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
     // Add tags to form if set
     if (tags) {
       // Tags
-      tags.map((tag) => {
+      if (hasInvalidTags(tags, true)) {
+        setUploadError(['Invalid tags present. Please delete or fix before uploading']);
+        return;
+      }
+      tags.forEach((tag) => {
         // a valid key must be set for each uploaded tag
         if (tag['key'] && tag['value']) {
           formBase.append(`tags[${tag['key']}]`, tag['value']);
@@ -281,7 +286,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
         if (originTool) {
           formBase.append('origin[tool]', originTool);
         }
-        let totalType = originType + carvedType;
+        const totalType = originType + carvedType;
         formBase.append('origin[origin_type]', totalType);
         if (totalType == 'CarvedPcap') {
           if (originSourceIp) {
@@ -545,7 +550,6 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
           // Remove this submission from the set of failures if its in there
           if (uploadFailures.size > 0) {
             setUploadFailures((uploadFailures) => {
-              // eslint-disable-next-line no-unused-vars
               const { [submission.path]: _, rest } = uploadFailures;
               return rest;
             });
@@ -1533,7 +1537,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
                           </Col>
                         </Row>
                       </Card>
-                      {/* eslint-disable-next-line max-len*/}
+                      {}
                       {uploadReactionRes
                         .filter((result) => result.sha256 === value.sha256)
                         .map((val) => (
@@ -1695,13 +1699,7 @@ export const Upload: React.FC<UploadProps> = ({ entity }) => {
               <Subtitle>Tags</Subtitle>
             </Col>
             <Col className={(uploadInProgress ? 'disabled ' : '') + 'upload-field'}>
-              <SelectableDictionary
-                entries={tags}
-                setEntries={setTags}
-                keyPlaceholder={'Add Tag Key'}
-                valuePlaceholder={'Add Tag Value'}
-                setError={setUploadError}
-              />
+              <TagSelect tags={tags} setTags={setTags} placeholderText="Add Tags" />
             </Col>
           </Row>
           <Row className="mb-4 alt-label">

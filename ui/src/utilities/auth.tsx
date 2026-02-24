@@ -2,6 +2,7 @@ import React, { createContext, JSX, useContext, useEffect, useState } from 'reac
 import { Navigate } from 'react-router-dom';
 import { authUserPass, createUser, logout, whoami } from '@thorpi';
 import { UserInfo, RoleKey } from '@models';
+import { clearTagDataFromLocalStorage, fetchTags } from './tags';
 
 type AuthContextType = {
   userInfo: UserInfo | null;
@@ -53,7 +54,9 @@ function useAuthProvider() {
           setUserInfo(response);
           setToken(response.token);
           setLastUpdateDate(Date.now());
+          fetchTags(); //kick off fetch async function
         } else {
+          clearTagDataFromLocalStorage();
           document.cookie = 'THORIUM_TOKEN=; max-age=0;';
           setToken('');
         }
@@ -106,7 +109,7 @@ function useAuthProvider() {
               setUserInfo(response);
               setToken(response.token);
               setLastUpdateDate(Date.now());
-              resolve(response as UserInfo);
+              resolve(response);
             } else {
               document.cookie = 'THORIUM_TOKEN=; max-age=0;';
               setUserInfo(null);

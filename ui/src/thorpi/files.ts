@@ -1,7 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { CreateTags, Filters } from '@models';
+import { CreateTags, Filters, TagCounts } from '@models';
 
 // Debugging errors randomly inserted.
 // Valid values 0-100 (percentage chance of error)
@@ -274,5 +274,43 @@ export async function updateFileSubmission(sha256: string, data: any, errorHandl
     .catch((error) => {
       parseRequestError(error, errorHandler, 'Update File Submission');
       return false;
+    });
+}
+
+/**
+ * Get File Tag Counts
+ * @async
+ * @function
+ * @param {object} [data] - optional request parameters which includes:
+ *   - groups:  to which the files are viewable
+ *   - start: start date for search range
+ *   - submission: uuid for previously searched submission
+ *   - end: end date for search range
+ *   - limit:  the max number of submissions to return
+ * @param {(error: string) => void} errorHandler - error handler function
+ * @param {string} cursor - the cursor value to continue listing from
+ * @returns {Promise<TagCounts | null>} - Promise object representing a list of file details.
+ */
+export async function countFileTags(
+  data: Filters,
+  errorHandler: (error: string) => void,
+  cursor?: string | null,
+): Promise<TagCounts | null> {
+  const url = '/files/count/';
+  // pass in limit and cursor value
+  if (cursor) {
+    data.cursor = cursor;
+  }
+  return client
+    .get(url, { params: data })
+    .then((res) => {
+      if (res?.status == 200 && res.data) {
+        return res.data as TagCounts;
+      }
+      return null;
+    })
+    .catch((error) => {
+      parseRequestError(String(error), errorHandler, 'List Files');
+      return null;
     });
 }

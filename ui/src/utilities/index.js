@@ -8,3 +8,4 @@ export * from './role';
 export * from './select';
 export * from './users';
 export * from './url';
+export * from './tags';

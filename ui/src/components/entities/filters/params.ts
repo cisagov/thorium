@@ -1,6 +1,7 @@
 // project imports
 import { Filters, FilterTags } from 'models';
 import { DEFAULT_HIDE_TAG_KEYS } from './filters';
+import { tagIsInvalid } from '@utilities';
 
 // verify defaults and excluded arrays are equal sets of keys
 const excludeKeysAreDefault = (excludeKeys: string[]) => {
@@ -29,8 +30,10 @@ export function encodeFiltersToParams(filters: Filters) {
   }
   // encode nested tags
   for (const key in filters.tags) {
-    filters.tags[key].map((value) => {
-      encodedFilters.push(`tags[${encodeURIComponent(key)}]=${encodeURIComponent(value)}`);
+    filters.tags[key].forEach((value) => {
+      if (!tagIsInvalid({ key: key, value: value })) {
+        encodedFilters.push(`tags[${encodeURIComponent(key)}]=${encodeURIComponent(value)}`);
+      }
     });
   }
   // start (earliest) filter date range

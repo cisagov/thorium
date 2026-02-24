@@ -6,10 +6,16 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { FaFilter } from 'react-icons/fa';
 
 // project imports
-import { OverlayTipRight, Subtitle, SelectableDictionary, Title, OverlayTipLeft, SelectInputArray } from '@components';
+import { OverlayTipRight, Subtitle, Title, OverlayTipLeft, SelectInputArray, TagSelect } from '@components';
 import { decodeParamsToFilters, encodeFiltersToParams } from './params';
-import { safeDateToStringConversion, safeStringToDateConversion } from '@utilities';
-import { FilterTypes, Filters, FilterTags, Entities } from '@models';
+import {
+  filterTagsToTagEntryList,
+  safeDateToStringConversion,
+  safeStringToDateConversion,
+  tagEntryListToFilterTags,
+  tagIsInvalid,
+} from '@utilities';
+import { FilterTypes, Filters, FilterTags, Entities, TagEntry } from '@models';
 import styled from 'styled-components';
 
 // default tag keys to hide for each entity item being listed
@@ -17,6 +23,23 @@ export const DEFAULT_HIDE_TAG_KEYS = ['Results', 'Parent', 'submitter'];
 
 // default number of results to render when listing files
 export const DEFAULT_LIST_LIMIT = 25;
+
+const clearInvalidTags = (filters: Filters): Filters => {
+  const newTags: FilterTags = {};
+  if (filters.tags == null) {
+    return filters;
+  }
+  const tagKeys = Object.keys(filters.tags);
+  tagKeys.forEach((key) => {
+    const values = filters.tags ? filters.tags[key] : [];
+    const filteredTags = values.filter((value) => !tagIsInvalid({ key: key, value: value }));
+    if (filteredTags.length > 0) {
+      newTags[key] = filteredTags;
+    }
+  });
+
+  return { ...filters, tags: newTags };
+};
 
 // get all possible limit options including the current value
 function getLimitOptions(currentLimit: number): Array<number> {
@@ -111,25 +134,6 @@ export const FilterDatePicker: React.FC<FilterDateProps> = ({ max = null, min = 
   );
 };
 
-const convertTagsObjectArrayToTags = (entries: TagObject[]): FilterTags => {
-  // update tag object list
-  const tags: FilterTags = {};
-  entries.map((tag) => {
-    if (tag.key == '' || tag.value == '') {
-      return;
-    }
-    if (tag.key in tags) {
-      // don't send duplicate tags
-      if (!tags[tag.key].includes(tag.value)) {
-        tags[tag.key].push(tag.value);
-      }
-    } else {
-      tags[tag.key] = [tag.value];
-    }
-  });
-  return tags;
-};
-
 interface FilterTagDisplayKeysProps {
   selected: string[];
   disabled: boolean;
@@ -149,53 +153,6 @@ const FilterTagDisplayKeys: React.FC<FilterTagDisplayKeysProps> = ({ selected, o
         onChange={(newGroups: string[]) => {
           onChange(newGroups);
         }}
-      />
-    </FilterDiv>
-  );
-};
-
-interface FilterTagsProps {
-  selected: FilterTags | null | undefined;
-  disabled: boolean;
-  onChange: (tags: FilterTags) => void;
-}
-
-interface TagObject {
-  key: string;
-  value: string;
-}
-
-const FilterTagsField: React.FC<FilterTagsProps> = ({ selected, onChange, disabled }) => {
-  const [tags, setTags] = useState({});
-
-  useEffect(() => {
-    const tagObjectList: TagObject[] = [];
-    // convert object tags into a list of individual tag objects
-    if (selected) {
-      Object.keys(selected).map((tagKey: string) => {
-        selected[tagKey].map((tagValue: string) => {
-          tagObjectList.push({ key: tagKey, value: tagValue });
-        });
-      });
-    }
-    setTags(tagObjectList);
-  }, []);
-
-  return (
-    <FilterDiv>
-      <SelectableDictionary
-        disabled={disabled}
-        entries={tags}
-        setEntries={(tags: TagObject[]) => {
-          onChange(convertTagsObjectArrayToTags(tags));
-          setTags(tags);
-        }}
-        keys={null}
-        deleted={null}
-        setDeleted={void 0}
-        trim={true}
-        keyPlaceholder={'key'}
-        valuePlaceholder={'value'}
       />
     </FilterDiv>
   );
@@ -222,6 +179,7 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
 }) => {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<Filters>({});
+  const [tags, setTags] = useState<TagEntry[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   // show filters or don't
   const [hideFilters, setHideFilters] = useState(true);
@@ -265,8 +223,11 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
   }, [groups]);
 
   const updateBrowsingFilters = (): void => {
-    setSearchParams(encodeFiltersToParams(filters));
-    onChange(filters);
+    const newFilters = clearInvalidTags(filters);
+    setFilters(newFilters);
+    if (newFilters.tags) setTags(filterTagsToTagEntryList(newFilters.tags));
+    setSearchParams(encodeFiltersToParams(newFilters));
+    onChange(newFilters);
   };
 
   // read filter values from url search query
@@ -274,6 +235,7 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
     // get filters from query params
     const paramFilters: Filters = decodeParamsToFilters(searchParams);
     setFilters(paramFilters);
+    if (paramFilters.tags) setTags(filterTagsToTagEntryList(paramFilters.tags));
     onChange(paramFilters);
   };
 
@@ -282,6 +244,7 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
     const newFilters: Filters = {};
     setSearchParams(encodeFiltersToParams(newFilters));
     setFilters(newFilters);
+    if (newFilters.tags) setTags(filterTagsToTagEntryList(newFilters.tags));
     onChange(newFilters);
   };
 
@@ -299,7 +262,6 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
         <Col className="d-flex justify-content-center">
           {title && <Title>{title}</Title>}
           <OverlayTipRight tip={`${hideFilters ? 'Expand' : 'Hide'} filters`}>
-            {/* @ts-ignore*/}
             <Button variant="" className="mt-3 clear-btn" onClick={() => setHideFilters(!hideFilters)}>
               <FaFilter size="18" />
             </Button>
@@ -345,7 +307,17 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
               </Row>
               <Row>
                 <Col className="d-flex justify-content-center">
-                  <FilterTagsField disabled={disabled} selected={filters.tags} onChange={(tags) => updateFilters('tags', tags)} />
+                  <FilterDiv>
+                    <TagSelect
+                      tags={tags}
+                      setTags={(tagEntries) => {
+                        setTags(tagEntries);
+                        const newTags = tagEntryListToFilterTags(tagEntries);
+                        updateFilters('tags', newTags);
+                      }}
+                      placeholderText="Select Tags"
+                    />
+                  </FilterDiv>
                 </Col>
               </Row>
               <Row>
@@ -379,7 +351,7 @@ export const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
                         id="case-insensitive"
                         label=""
                         checked={filters.tags_case_insensitive}
-                        onChange={(e) => updateFilters('tags_case_insensitive', !filters.tags_case_insensitive)}
+                        onChange={() => updateFilters('tags_case_insensitive', !filters.tags_case_insensitive)}
                       />
                     </OverlayTipRight>
                   </Form.Group>

@@ -26,6 +26,7 @@ export * from './tags/badges';
 export { default as CondensedFileTags } from './tags/condensed_file_tags';
 export { default as CondensedEntityTags } from './tags/condensed_entity_tags';
 export { default as EditableTags } from './tags/editable_tags';
+export { default as TagSelect } from './tags/tag_select/tag_select';
 export * from './tags/tags';
 export * from './tags/utilities';
 // ---------------------------------------------------------
