@@ -23,6 +23,7 @@ const Image = ({ result, sha256, tool }) => {
   useEffect(() => {
     const fetchFiles = async () => {
       const fileData = [];
+      if (!('files' in result)) return;
       for (const fileName of result.files) {
         const extension = fileName.split('.').pop();
         if (!SupportedImageFormats.includes(extension)) continue;

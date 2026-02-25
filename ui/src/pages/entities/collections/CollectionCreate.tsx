@@ -79,7 +79,7 @@ const CollectionMetaInfo = (
         </InfoValue>
       </Row>
       <Row className="mt-3">
-        <InfoHeader>Start</InfoHeader>
+        <InfoHeader>Newest</InfoHeader>
         <InfoValue>
           <FilterDatePicker
             max={maxDate}
@@ -91,7 +91,7 @@ const CollectionMetaInfo = (
         </InfoValue>
       </Row>
       <Row className="mt-3">
-        <InfoHeader>End</InfoHeader>
+        <InfoHeader>Oldest</InfoHeader>
         <InfoValue>
           <FilterDatePicker
             max={collection.metadata.Collection.start ? collection.metadata.Collection.start : maxDate}

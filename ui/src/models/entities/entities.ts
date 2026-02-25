@@ -7,6 +7,8 @@ import { Collection, CollectionMeta } from './collections';
 // an enum of entity type keys
 export enum Entities {
   File = 'File',
+  FileSystem = 'FileSystem',
+  Folder = 'Folder',
   Repos = 'Repo',
   Vendor = 'Vendor',
   Device = 'Device',

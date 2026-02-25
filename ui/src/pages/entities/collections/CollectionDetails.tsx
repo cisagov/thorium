@@ -160,7 +160,6 @@ const CollectionDetails = () => {
       }
     });
   };
-
   return (
     <EntityDetails
       getEntityDetails={getCollectionDetails}

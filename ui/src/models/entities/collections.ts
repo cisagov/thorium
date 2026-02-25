@@ -49,9 +49,9 @@ export const BlankCollection: Collection = {
   kind: Entities.Collection,
   metadata: {
     Collection: {
-      collection_kind: CollectionKind.Files, // default to Files
+      collection_kind: CollectionKind.Files,
       collection_tags: {},
-      tags_case_insensitive: false,
+      tags_case_insensitive: true,
       ignore_groups: false,
       start: null,
       end: null,

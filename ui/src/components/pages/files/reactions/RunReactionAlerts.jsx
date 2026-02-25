@@ -1,3 +1,6 @@
+import { Alert } from 'react-bootstrap';
+import { Link } from 'react-router';
+
 // Alert component for error and info responses for component submission
 const RunReactionAlerts = ({ responses }) => {
   return (

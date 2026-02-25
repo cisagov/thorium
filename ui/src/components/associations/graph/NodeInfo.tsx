@@ -195,6 +195,27 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
             <FieldBadge color="Gray" field={entity.metadata.Collection.ignore_groups} />
           </>
         );
+      } else if (entity?.kind == 'FileSystem') {
+        return (
+          <>
+            <Subtitle className="mt-2">SHA256</Subtitle>
+            <FieldBadge color="Gray" noNull={true} field={entity.metadata.FileSystem.sha256} />
+            <hr />
+            <Subtitle className="mt-2">Tools</Subtitle>
+            {entity.metadata.FileSystem.tools.length > 0 ? (
+              <FieldBadge color="Gray" noNull={true} field={entity.metadata.FileSystem.tools} />
+            ) : (
+              <small>N/A</small>
+            )}
+          </>
+        );
+      } else if (entity?.kind == 'Folder') {
+        return (
+          <>
+            <Subtitle className="mt-2">SHA256</Subtitle>
+            <FieldBadge color="Gray" noNull={true} field={entity.metadata.Folder.overall_sha256} />
+          </>
+        );
       }
       return <></>;
     };

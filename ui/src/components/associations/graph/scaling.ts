@@ -25,16 +25,18 @@ export function scoreNode(node: any): number {
   } else if (node?.Repo) {
     return 400;
   } else if (node?.Tag) {
-    // tags are specified by the user, they are important
     return 350;
   } else if (node.Entity?.kind == 'Device') {
     return 450;
+  } else if (node.Entity?.kind == 'FileSystem') {
+    return 400;
   } else if (node.Entity?.kind == 'Vendor') {
     return 450;
   } else if (node.Entity?.kind == 'Collection') {
+    return 450;
+  } else if (node.Entity?.kind == 'Folder') {
     return 350;
   }
-  // this is an unknown node; just return a default size
   return 300;
 }
 

@@ -22,12 +22,14 @@ const FileDetails = lazy(async () => import('./pages/files/FileDetails'));
 const DeviceDetails = lazy(async () => await import('./pages/entities/devices/DeviceDetails'));
 const VendorDetails = lazy(async () => await import('./pages/entities/vendors/VendorDetails'));
 const CollectionDetails = lazy(async () => await import('./pages/entities/collections/CollectionDetails'));
+const FileSystemDetails = lazy(async () => await import('./pages/entities/file_systems/FileSystemDetails'));
 const RepoDetails = lazy(() => import('./pages/repos/RepoDetails'));
 const FilesBrowsing = lazy(() => import('./pages/files/FilesBrowsing'));
 const RepoBrowsing = lazy(() => import('./pages/repos/RepoBrowsing'));
 const DeviceBrowsing = lazy(async () => await import('./pages/entities/devices/DeviceBrowsing'));
 const VendorBrowsing = lazy(async () => await import('./pages/entities/vendors/VendorBrowsing'));
 const CollectionBrowsing = lazy(async () => await import('./pages/entities/collections/CollectionBrowsing'));
+const FileSystemBrowsing = lazy(async () => await import('./pages/entities/file_systems/FileSystemBrowsing'));
 const CreateDevice = lazy(async () => await import('./pages/entities/devices/DeviceCreate'));
 const CreateVendor = lazy(async () => await import('./pages/entities/vendors/VendorCreate'));
 const CreateCollection = lazy(async () => await import('./pages/entities/collections/CollectionCreate'));
@@ -64,6 +66,9 @@ const Resources = () => (
     <Route path="/collections" element={<PageWrapper Contents={CollectionBrowsing} />} />
     <Route path="/collections/" element={<PageWrapper Contents={CollectionBrowsing} />} />
     <Route path="/collection/:entityID" element={<PageWrapper Contents={CollectionDetails} />} />
+    <Route path="/filesystems" element={<PageWrapper Contents={FileSystemBrowsing} />} />
+    <Route path="/filesystem" element={<PageWrapper Contents={FileSystemBrowsing} />} />
+    <Route path="/filesystem/:entityID" element={<PageWrapper Contents={FileSystemDetails} />} />
     <Route path="/create/vendor" element={<PageWrapper Contents={CreateVendor} />} />
     <Route path="/create/device" element={<PageWrapper Contents={CreateDevice} />} />
     <Route path="/create/collection" element={<PageWrapper Contents={CreateCollection} />} />

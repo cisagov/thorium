@@ -30,7 +30,7 @@ const ResultsFiles = ({ result, sha256, tool }) => {
       }
     });
   };
-  const filesRef = useRef();
+  const filesRef = useRef(null);
   if (result && result.files) {
     return (
       <>

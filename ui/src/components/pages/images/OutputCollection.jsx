@@ -26,6 +26,8 @@ const OutputCollectionToolTips = {
   children: `Path to children samples extracted by the image.`,
   auto_tag: `Specific keys that will get automatically added as tags from the image 
     results. JSON formatted results are required to use auto tagging.`,
+  as_filesystem: `Preserve full directory structure by uploading children files and folders as
+    a filesystem entity.`,
 };
 
 const OutputCollectionTemplate = {
@@ -38,6 +40,7 @@ const OutputCollectionTemplate = {
   select_groups: {},
   groups: [],
   children: '',
+  as_filesystem: false,
   auto_tag: [],
   select_auto_tag: [{ key: '', value: '' }],
 };
@@ -101,6 +104,15 @@ const DisplayOutputCollection = ({ outputCollection }) => {
             </Col>
             <Col style={{ flex: 12.5 }}>
               <FieldBadge field={outputCollection['children']} color={'#7e7c7c'} />
+            </Col>
+          </Row>
+          <Row>
+            <Col style={{ flex: 0.1 }}></Col>
+            <Col style={{ flex: 2.2 }}>
+              <em>{`as filesystem`}</em>
+            </Col>
+            <Col style={{ flex: 12.5 }}>
+              <FieldBadge field={outputCollection['as_filesystem']} color={'#7e7c7c'} />
             </Col>
           </Row>
           {Object.entries(outputCollection['auto_tag']).length > 0 && (
@@ -378,6 +390,20 @@ const OutputCollectionInputs = ({ initialOutputCollection, updateRequestOutputCo
             placeholder="/tmp/thorium/children"
             disabled={disabled}
             onChange={(e) => updateOutputCollection('children', '', String(e.target.value).trim())}
+          />
+        </OverlayTipRight>
+      </Form.Group>
+      <Form.Group className="mt-1">
+        <Form.Label>
+          <Subtitle>As Filesystem</Subtitle>
+        </Form.Label>
+        <OverlayTipRight tip={OutputCollectionToolTips.as_filesystem}>
+          <Form.Check
+            type="switch"
+            id="as-filesystem"
+            label=""
+            checked={outputCollection.as_filesystem}
+            onChange={(e) => updateOutputCollection('as_filesystem', '', !outputCollection.as_filesystem)}
           />
         </OverlayTipRight>
       </Form.Group>

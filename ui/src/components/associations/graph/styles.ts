@@ -10,6 +10,9 @@ import VendorSVG from '@assets/icons/vendor.svg';
 import VendorSearchSVG from '@assets/icons/vendor-add.svg';
 import DeviceSVG from '@assets/icons/device.svg';
 import CollectionSVG from '@assets/icons/collection.svg';
+import FolderSearchSVG from '@assets/icons/folder-add.svg';
+import FolderSVG from '@assets/icons/folder.svg';
+import FileSystemSVG from '@assets/icons/filesystem.svg';
 import OtherSVG from '@assets/icons/other.svg';
 
 // replace hardcoded key in SVG with actual colors
@@ -20,6 +23,8 @@ export const RepoGrowableIcon = RepoSVG.replace('REPLACEME', '64cc66');
 export const TagGrowableIcon = TagSearchSVG.replace('REPLACEME', '64cc66');
 export const VendorGrowableIcon = VendorSearchSVG.replace('REPLACEME', '64cc66');
 export const CollectionGrowableIcon = CollectionSVG.replace('REPLACEME', '64cc66');
+export const FileSystemGrowableIcon = FileSystemSVG.replace('REPLACEME', '64cc66');
+export const FolderGrowableIcon = FolderSearchSVG.replace('REPLACEME', '64cc66');
 export const DeviceIcon = DeviceSVG.replace('REPLACEME', 'ed9624');
 export const FileIcon = FileSVG.replace('REPLACEME', 'f1d592');
 export const OtherIcon = OtherSVG.replace('REPLACEME', 'cacfca');
@@ -27,6 +32,8 @@ export const RepoIcon = RepoSVG.replace('REPLACEME', 'f03c2e');
 export const TagIcon = TagSVG.replace('REPLACEME', '427d8c');
 export const VendorIcon = VendorSVG.replace('REPLACEME', '8f30b8');
 export const CollectionIcon = CollectionSVG.replace('REPLACEME', '8f30b8');
+export const FileSystemIcon = FileSystemSVG.replace('REPLACEME', '8f30b8');
+export const FolderIcon = FolderSVG.replace('REPLACEME', 'f1d592');
 export const InitialDeviceIcon = DeviceSVG.replace('REPLACEME', '00998C');
 export const InitialFileIcon = FileSVG.replace('REPLACEME', '00998C');
 export const InitialOtherIcon = OtherSVG.replace('REPLACEME', '00998C');
@@ -34,6 +41,8 @@ export const InitialRepoIcon = RepoSVG.replace('REPLACEME', '00998C');
 export const InitialTagIcon = TagSVG.replace('REPLACEME', '00998C');
 export const InitialVendorIcon = VendorSVG.replace('REPLACEME', '00998C');
 export const InitialCollectionIcon = CollectionSVG.replace('REPLACEME', '00998C');
+export const InitialFileSystemIcon = FileSystemSVG.replace('REPLACEME', '00998C');
+export const InitialFolderIcon = FolderSVG.replace('REPLACEME', '00998C');
 
 // get edge color based on theme
 const getEdgeColor = (style: CSSStyleDeclaration) => {
@@ -186,6 +195,30 @@ export const buildStyleSheet = (rootNodes: string[]): StylesheetJson => {
       },
     },
     {
+      selector: '.basic-filesystem',
+      style: {
+        'background-image': `url(${FileSystemIcon})`,
+      },
+    },
+    {
+      selector: '.growable-filesystem',
+      style: {
+        'background-image': `url(${FileSystemGrowableIcon})`,
+      },
+    },
+    {
+      selector: '.basic-folder',
+      style: {
+        'background-image': `url(${FolderIcon})`,
+      },
+    },
+    {
+      selector: '.growable-folder',
+      style: {
+        'background-image': `url(${FolderGrowableIcon})`,
+      },
+    },
+    {
       selector: '.has-node-label',
       style: {
         label: 'data(label)',
@@ -239,6 +272,18 @@ export const buildStyleSheet = (rootNodes: string[]): StylesheetJson => {
       selector: `.initial-collection`,
       style: {
         'background-image': `url(${InitialCollectionIcon})`,
+      },
+    },
+    {
+      selector: `.initial-filesystem`,
+      style: {
+        'background-image': `url(${InitialFileSystemIcon})`,
+      },
+    },
+    {
+      selector: `.initial-folder`,
+      style: {
+        'background-image': `url(${InitialFolderIcon})`,
       },
     },
   ];

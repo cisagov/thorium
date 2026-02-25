@@ -10,6 +10,7 @@ import Subtitle from '@components/shared/titles/Subtitle';
 import { OverlayTipTop, OverlayTipLeft } from '@components/shared/overlay/tips';
 import { useAuth } from '@utilities/auth';
 import { listReactions } from '@thorpi/reactions';
+import { getStatusBadge } from './reactions';
 
 // Alert component for error and info responses for component deletion
 const DeleteReactionAlerts = ({ responses }) => {

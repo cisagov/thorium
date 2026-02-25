@@ -4,6 +4,7 @@ import { Button, Row } from 'react-bootstrap';
 // project imports
 import RunReactionAlerts from './RunReactionAlerts';
 import SelectPipelines from './SelectPipelines';
+import { submitReactions } from './reactions';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import { useAuth } from '@utilities/auth';
 

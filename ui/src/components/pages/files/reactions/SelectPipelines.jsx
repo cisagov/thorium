@@ -8,6 +8,7 @@ import { orderComparePipelineName } from './pipelines';
 import Title from '@components/shared/titles/Title';
 import { OverlayTipTop } from '@components/shared/overlay/tips';
 import { listPipelines } from '@thorpi/pipelines';
+import { buildReactionsList } from './reactions';
 
 // Component for allowing a user to select pipelines to run on a given sha256
 const SelectPipelines = ({ userInfo, setReactionsList, setError, currentSelections }) => {
