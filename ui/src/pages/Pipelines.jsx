@@ -181,7 +181,8 @@ const Pipelines = () => {
     const thoriumRole = getThoriumRole(userInfo.role);
     // user can modify if they created the pipeline or have a privileged role in Thorium
     const userCanModify =
-      ((pipeline.creator == userInfo.username || ['Manager', 'Owner'].includes(groupRole)) && thoriumRole == 'Developer') ||
+      (((userInfo !== null && pipeline.creator == userInfo.username) || ['Manager', 'Owner'].includes(groupRole)) &&
+        thoriumRole == 'Developer') ||
       thoriumRole == 'Admin';
     // creators or group managers/owners can delete pipelines even if they are not developers
     const userCanDelete = pipeline.creator == userInfo.username || ['Manager', 'Owner'].includes(groupRole) || thoriumRole == 'Admin';

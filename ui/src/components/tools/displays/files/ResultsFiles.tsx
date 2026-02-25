@@ -4,11 +4,12 @@ import { Col, Row } from 'react-bootstrap';
 // project imports
 import { getResultsFile } from '@thorpi/results';
 import { useAuth } from '@utilities/auth';
+import { ResultRenderProps } from '../../props';
 
 // generic json dump using react-json-view library
-const ResultsFiles = ({ result, sha256, tool }) => {
+const ResultsFiles: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
   const { checkCookie } = useAuth();
-  const downloadFile = async (sha256, tool, id, fileName) => {
+  const downloadFile = async (sha256: string, tool: string, id: string, fileName: string) => {
     await getResultsFile(sha256, tool, id, fileName, checkCookie).then((res) => {
       if (res.data && res.headers) {
         // turn response data to blob object
@@ -26,7 +27,7 @@ const ResultsFiles = ({ result, sha256, tool }) => {
         // Start download
         link.click();
         // Clean up and remove the link
-        link.parentNode.removeChild(link);
+        link.parentNode?.removeChild(link);
       }
     });
   };
@@ -34,7 +35,7 @@ const ResultsFiles = ({ result, sha256, tool }) => {
   if (result && result.files) {
     return (
       <>
-        <Row id={`files_${tool}`} ref={filesRef} className="tool-results-text">
+        <Row id={`files_${tool}`} ref={filesRef}>
           <Col className="d-flex justify-content-center">
             <h5>Result Files</h5>
           </Col>

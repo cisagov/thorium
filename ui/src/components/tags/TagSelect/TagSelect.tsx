@@ -1,7 +1,6 @@
 import React, { useState, useEffect, KeyboardEvent, useRef, FocusEvent } from 'react';
-import { Modal } from 'react-bootstrap';
+import { Modal, Button } from 'react-bootstrap';
 import styled from 'styled-components';
-import { Button } from '@mui/material';
 
 // project imports
 import TagDropdown from './TagDropdown';

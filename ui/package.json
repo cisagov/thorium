@@ -7,7 +7,8 @@
   "scripts": {
     "lint": "node_modules/eslint/bin/eslint.js src",
     "fix": "node_modules/eslint/bin/eslint.js src --fix",
-    "build": "tsc && vite build --mode production",
+    "build": "tsc -p tsconfig.prod.json && vite build --mode production",
+    "build-check": "tsc -p tsconfig.json && vite build --mode production",
     "build-preview": "vite build --mode preview",
     "dev": "vite",
     "format": "prettier src --write",
@@ -22,11 +23,8 @@
     "url": "https://github.com/cisagov/thorium/issues"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
     "@headless-tree/core": "^1.6.3",
     "@headless-tree/react": "^1.6.3",
-    "@mui/material": "^7.3.9",
     "axios": "^1.14.0",
     "bootstrap": "^5.3.8",
     "classnames": "^2.5.1",

@@ -3,19 +3,11 @@ import { RoleKey, ThoriumRole, UserInfo } from '@models/users';
 import { Group } from '@models/groups';
 
 // get the Thorium role for a given user: Admin, Developer, or User
-export function getThoriumRole(role: ThoriumRole | ''): keyof ThoriumRole | '' {
-  if (typeof role == 'string') {
-    return role;
-  } else if (typeof role === 'object' && typeof role !== 'function' && role !== null) {
-    if ('Developer' in role) {
-      return 'Developer' as keyof ThoriumRole;
-    } else {
-      return '';
-    }
-  } else {
-    // role might be null or function, either way thats invalid, use an empty string.
-    return '';
+export function getThoriumRole(role: ThoriumRole): RoleKey {
+  if (Object.keys(role).includes(RoleKey.Developer)) {
+    return RoleKey.Developer;
   }
+  return role as any as RoleKey;
 }
 
 // get the Group role for a given user as a string: Owner, Manager, Monitor, or User

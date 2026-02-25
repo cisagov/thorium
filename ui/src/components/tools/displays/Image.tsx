@@ -9,24 +9,26 @@ import ResultsFiles from './files/ResultsFiles';
 import ChildrenFiles from './files/ChildrenFiles';
 import { getResultsFile } from '@thorpi/results';
 import { useAuth } from '@utilities/auth';
+import { ResultRenderProps } from '../props';
+import { Value } from '@models/results';
 
 const SupportedImageFormats = ['png', 'jpeg', 'gif', 'apng', 'avif', 'svg', 'svgz', 'webp'];
 
-const Image = ({ result, sha256, tool }) => {
-  const [images, setImages] = useState([]);
-  const [errors, setErrors] = useState([]);
-  const [warnings, setWarnings] = useState([]);
-  const [resultsJson, setResultsJson] = useState({});
+const Image: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
+  const [images, setImages] = useState<string[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [resultsJson, setResultsJson] = useState<Value>({});
   const [isJson, setIsJson] = useState(true);
 
   const { checkCookie } = useAuth();
   useEffect(() => {
     const fetchFiles = async () => {
-      const fileData = [];
-      if (!('files' in result)) return;
+      const fileData: string[] = [];
+      if (result.files === undefined) return;
       for (const fileName of result.files) {
         const extension = fileName.split('.').pop();
-        if (!SupportedImageFormats.includes(extension)) continue;
+        if (!SupportedImageFormats.includes(extension ? extension : '')) continue;
         // get images from the API and build a local URL path for display
         const res = await getResultsFile(sha256, tool, result.id, fileName, checkCookie);
         if (res && res.data) {
@@ -41,7 +43,7 @@ const Image = ({ result, sha256, tool }) => {
     };
     fetchFiles();
     // set alerts and process results to json
-    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson);
+    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, false);
   }, [result, sha256, tool]);
 
   return (
@@ -67,7 +69,7 @@ const Image = ({ result, sha256, tool }) => {
               </Col>
             </Row>
           ))}
-          {isJson && Object.keys(resultsJson).length > 0 && (
+          {isJson && (
             <Row>
               <Col>
                 <JSONTree
@@ -82,7 +84,7 @@ const Image = ({ result, sha256, tool }) => {
           )}
         </center>
         <ResultsFiles result={result} sha256={sha256} tool={tool} />
-        <ChildrenFiles result={result} tool={tool} />
+        <ChildrenFiles result={result} sha256={sha256} tool={tool} />
       </Card>
     </>
   );

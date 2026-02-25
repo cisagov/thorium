@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, Button, Col, Container, Form, Modal, Row } from 'react-bootstrap';
 import styled from 'styled-components';
-import Avatar from '@mui/material/Avatar';
+import { FaCircleUser } from 'react-icons/fa6';
 
 // project imports
 import Page from '@components/pages/Page';
@@ -10,6 +10,7 @@ import Subtitle from '@components/shared/titles/Subtitle';
 import { useAuth } from '@utilities/auth';
 import { getThoriumRole } from '@utilities/role';
 import { updateUser } from '@thorpi/users';
+import { RoleKey, ThoriumRole } from '@models/users';
 
 const ProfileCard = styled.div`
   width: 50rem;
@@ -46,7 +47,11 @@ const ProfileCard = styled.div`
 
 const Themes = ['Dark', 'Light', 'Ocean', 'Automatic'];
 
-const Role = ({ role }) => {
+type RoleProps = {
+  role: ThoriumRole;
+};
+
+const Role: React.FC<RoleProps> = ({ role }) => {
   const roleString = getThoriumRole(role);
   return (
     <Container>
@@ -55,18 +60,23 @@ const Role = ({ role }) => {
           <Subtitle>Role</Subtitle>
         </Col>
         <Col>
-          {role && role == 'Admin' && (
+          {roleString && roleString == RoleKey.Admin && (
             <Badge pill bg="" className="bg-maroon px-3 py-2">
               {roleString}
             </Badge>
           )}
-          {role && role == 'Developer' && (
+          {roleString && roleString == RoleKey.Developer && (
             <Badge pill bg="" className="bg-corn-flower px-3 py-2">
               {roleString}
             </Badge>
           )}
-          {role && role == 'User' && (
+          {roleString && roleString == RoleKey.User && (
             <Badge pill bg="" className="bg-cadet px-3 py-2">
+              {roleString}
+            </Badge>
+          )}
+          {roleString && roleString == RoleKey.Reporter && (
+            <Badge pill bg="" className="bg-grey px-3 py-2">
               {roleString}
             </Badge>
           )}
@@ -215,7 +225,7 @@ const UserProfile = () => {
     <Page title="Profile · Thorium" className="d-flex justify-content-center">
       <ProfileCard>
         <Row className="d-flex justify-content-center">
-          <Avatar sx={{ width: 150, height: 150 }} />
+          <FaCircleUser size={150} />
         </Row>
         <Row className="d-flex justify-content-center">
           <h2 className="pt-3 d-flex justify-content-center">{userInfo?.username}</h2>
@@ -225,7 +235,7 @@ const UserProfile = () => {
         <Groups groups={userInfo?.groups} />
         <hr />
         {/* Thorium role (not group role) */}
-        <Role role={userInfo?.role} />
+        {userInfo && <Role role={userInfo.role} />}
         <hr />
         {/* User Token */}
         <Token />

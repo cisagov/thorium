@@ -1,8 +1,16 @@
 import { Alert, Card, Col, Row } from 'react-bootstrap';
 
-const TC2 = ({ result }) => {
+// project imports
+import { ResultRenderProps } from '@components/tools/props';
+
+const TC2: React.FC<ResultRenderProps> = ({ result }) => {
   // return a list of links to children files, one file per row
-  if (result && result.result && result.result['children'] && Object.keys(result.result.children).length > 0) {
+  if (
+    result.result != null &&
+    typeof result.result === 'object' &&
+    'children' in result.result &&
+    Object.keys(result.children).length > 0
+  ) {
     return (
       <Card className="scroll-log tool-result">
         <Card.Body>
@@ -12,7 +20,7 @@ const TC2 = ({ result }) => {
             </Col>
           </Row>
           <br />
-          {Object.values(result.result.children).map((sha256, idx) => (
+          {Object.values(result.children).map((sha256, idx) => (
             <Row key={idx}>
               <Col className="d-flex justify-content-center">
                 <a className="highlight-dark" href={'/file/' + sha256}>

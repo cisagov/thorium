@@ -7,11 +7,13 @@ import { getAlerts } from './alerts';
 import ResultsFiles from './displays/files/ResultsFiles';
 import ChildrenFiles from './displays/files/ChildrenFiles';
 import '@styles/main.scss';
+import { ResultRenderProps } from './props';
+import { Value } from '@models/results';
 
-const SafeHtml = ({ result, sha256, tool }) => {
-  const [errors, setErrors] = useState([]);
-  const [warnings, setWarnings] = useState([]);
-  const [resultsJson, setResultsJson] = useState([]);
+const SafeHtml: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
+  const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [resultsJson, setResultsJson] = useState<Value>([]);
   const [isJson, setIsJson] = useState(true);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ const SafeHtml = ({ result, sha256, tool }) => {
           ))}
           <SanitizeHTML html={result.result} />
           <ResultsFiles result={result} sha256={sha256} tool={tool} />
-          <ChildrenFiles result={result} tool={tool} />
+          <ChildrenFiles result={result} sha256={sha256} tool={tool} />
         </Card.Body>
       </Card>
     </>

@@ -12,7 +12,7 @@ import RenderErrorAlert from './components/shared/alerts/RenderErrorAlert';
 import { PageWrapper } from './components/pages/Page';
 import { WindowManager } from './components/shared/windows/WindowManager';
 import { Auth } from './utilities/auth';
-import './styles/main.scss';
+import '@styles/main.scss';
 import { CanvasMargin } from './styles/margin';
 
 // import pages lazily

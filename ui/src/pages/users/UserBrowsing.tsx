@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Badge, ButtonGroup, Button, Card, Col, Form, Modal, Row } from 'react-bootstrap';
 
 // project imports
@@ -9,11 +9,16 @@ import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import { useAuth } from '@utilities/auth';
 import { getThoriumRole } from '@utilities/role';
 import { deleteUser, listUsers, updateSingleUser } from '@thorpi/users';
+import { RoleKey, ThoriumRole, UserInfo } from '@models/users';
+
+type SingleUserInfoProps = {
+  user: UserInfo;
+  impersonate: (userToken: string, tokenExpires: string) => void;
+};
 
 // component to represent each user's info
-const SingleUserInfo = ({ user, impersonate }) => {
-  const [singleUserRole, setSingleUserRole] = useState(user.role);
-
+const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate }) => {
+  const [singleUserRole, setSingleUserRole] = useState(getThoriumRole(user.role));
   return (
     <Card key={user.username} className="panel mt-1">
       <Row className="align-items-center m-2">
@@ -22,11 +27,11 @@ const SingleUserInfo = ({ user, impersonate }) => {
         </Col>
         <Col className="user-role-col">
           <small>
-            <i className="secondary-text">{getThoriumRole(singleUserRole)}</i>
+            <i className="secondary-text">{singleUserRole}</i>
           </small>
         </Col>
         <Col className="user-group-col">
-          {user.groups.sort().map((group, idx) => (
+          {user.groups.sort().map((group) => (
             <Badge bg="" key={group} className="m-1 bg-cadet">
               {group}
             </Badge>
@@ -37,9 +42,8 @@ const SingleUserInfo = ({ user, impersonate }) => {
             impersonate={impersonate}
             username={user.username}
             token={user.token}
-            role={getThoriumRole(singleUserRole)}
+            role={singleUserRole}
             user={user}
-            singleUserRole={singleUserRole}
             setSingleUserRole={setSingleUserRole}
           />
         </Col>
@@ -48,8 +52,17 @@ const SingleUserInfo = ({ user, impersonate }) => {
   );
 };
 
+type ManipulateUserButtonsProps = {
+  impersonate: (userToken: string, tokenExpires: string) => void;
+  username: string;
+  token: string;
+  role: RoleKey;
+  user: UserInfo;
+  setSingleUserRole: (role: RoleKey) => void;
+};
+
 // component for buttons related to each user
-const ManipulateUserButtons = ({ impersonate, username, token, role, user, singleUserRole, setSingleUserRole }) => {
+const ManipulateUserButtons: React.FC<ManipulateUserButtonsProps> = ({ impersonate, username, token, role, user, setSingleUserRole }) => {
   const [deleteError, setDeleteError] = useState('');
   // Delete user modal state manipulation
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -59,7 +72,6 @@ const ManipulateUserButtons = ({ impersonate, username, token, role, user, singl
   const [showImpersonateModal, setShowImpersonateModal] = useState(false);
   const handleCloseImpersonateModal = () => setShowImpersonateModal(false);
   const handleShowImpersonateModal = () => setShowImpersonateModal(true);
-
   return (
     <ButtonGroup>
       <OverlayTipLeft
@@ -89,7 +101,7 @@ const ManipulateUserButtons = ({ impersonate, username, token, role, user, singl
             className="warning-btn"
             onClick={() => {
               handleCloseImpersonateModal();
-              impersonate(token, user.expires);
+              impersonate(token, user.token_expiration);
             }}
           >
             Confirm
@@ -116,7 +128,6 @@ const ManipulateUserButtons = ({ impersonate, username, token, role, user, singl
             onClick={async () => {
               if (await deleteUser(username, setDeleteError)) {
                 handleCloseDeleteModal();
-                getUserInfo();
               }
             }}
           >
@@ -128,8 +139,15 @@ const ManipulateUserButtons = ({ impersonate, username, token, role, user, singl
   );
 };
 
+type EditRolesProps = {
+  role: RoleKey;
+  username: string;
+  user: UserInfo;
+  setRole: (role: RoleKey) => void;
+};
+
 // component to edit role
-const EditRoles = ({ role, username, user, setRole }) => {
+const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) => {
   const [showEditRoleModal, setShowEditRoleModal] = useState(false);
   const [updateRoleError, setUpdateRoleError] = useState('');
   const [editRole, setEditRole] = useState(role);
@@ -137,8 +155,10 @@ const EditRoles = ({ role, username, user, setRole }) => {
   const [newBareMetal, setNewBareMetal] = useState(user.role.Developer ? user.role.Developer.bare_metal : false);
   const [newWindows, setNewWindows] = useState(user.role.Developer ? user.role.Developer.windows : false);
   const [newExternal, setNewExternal] = useState(user.role.Developer ? user.role.Developer.external : false);
+
+  // close edit role modal
   const handleCloseEditRoleModal = (response) => {
-    if (!response || (response && editRole != 'Developer')) {
+    if (!response || (response && editRole != RoleKey.Developer)) {
       // reset developer values back to default if leaving modal with no update
       setNewK8s(user.role.Developer ? user.role.Developer.k8s : true);
       setNewBareMetal(user.role.Developer ? user.role.Developer.bare_metal : false);
@@ -153,6 +173,7 @@ const EditRoles = ({ role, username, user, setRole }) => {
     setShowEditRoleModal(false);
   };
 
+  // open edit role modal
   const handleShowEditRoleModal = () => setShowEditRoleModal(true);
 
   const updateRole = async () => {
@@ -197,15 +218,15 @@ const EditRoles = ({ role, username, user, setRole }) => {
         </Modal.Header>
         <Modal.Body>
           <Form.Group className="mb-2">
-            <Form.Select value={editRole} onChange={(e) => setEditRole(e.target.value)}>
-              {['Admin', 'Analyst', 'Developer', 'User'].map((selectedRole) => (
+            <Form.Select value={editRole} onChange={(e) => setEditRole(e.target.value as RoleKey)}>
+              {Object.keys(RoleKey).map((selectedRole) => (
                 <option key={selectedRole} value={selectedRole}>
                   {selectedRole}
                 </option>
               ))}
             </Form.Select>
           </Form.Group>
-          {editRole == 'Developer' && (
+          {editRole == RoleKey.Developer && (
             <Row>
               <Col>
                 <Form.Group>
@@ -274,7 +295,7 @@ const EditRoles = ({ role, username, user, setRole }) => {
           )}
         </Modal.Body>
         <Modal.Footer className="d-flex justify-content-center">
-          <Button className="ok-btn" disabled={role == editRole && role != 'Developer'} onClick={() => updateRole()}>
+          <Button className="ok-btn" disabled={role == editRole && role != RoleKey.Developer} onClick={() => updateRole()}>
             Update
           </Button>
         </Modal.Footer>
@@ -285,8 +306,8 @@ const EditRoles = ({ role, username, user, setRole }) => {
 
 // component to view a list of users
 const UserBrowsing = () => {
-  const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [users, setUsers] = useState<UserInfo[]>([]);
   const { checkCookie, impersonate } = useAuth();
 
   // get user details

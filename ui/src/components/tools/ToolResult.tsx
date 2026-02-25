@@ -20,6 +20,7 @@ import SafeHtml from './SafeHtml';
 import Title from '@components/shared/titles/Title';
 import RenderErrorAlert from '@components/shared/alerts/RenderErrorAlert';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
+import Markdown from './displays/Markdown';
 
 const BtnCol = styled(Col)`
   text-align: right;
@@ -29,21 +30,24 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
   const [isOpen, setOpened] = useState(false);
   const [scrollRef, setScrollRef] = useState('');
   const [height, setHeight] = useState(0);
-  const resultRef = useRef();
+  const resultRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     // watch for changes to size and update the height
     if (!resultRef.current) return;
     const resizeObserver = new ResizeObserver(() => {
       // Do what you want to do when the size of the element changes
-      setHeight(resultRef.current.clientHeight);
+      if (resultRef.current === null) return;
+      setHeight(resultRef.current?.clientHeight);
     });
     resizeObserver.observe(resultRef.current);
     return () => resizeObserver.disconnect(); // clean up
   }, []);
 
   const scrollToFiles = (value) => {
-    document.getElementById(value).scrollIntoView({ behavior: 'smooth' });
+    const element = document?.getElementById(value);
+    if (element === null) return;
+    element.scrollIntoView({ behavior: 'smooth' });
   };
 
   // when the scroll ref changes, jump to ref
@@ -58,7 +62,7 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
     // update url location with selected results section
     updateURLSection('results', `${tool}`);
     // copy url with updated section to clipboard
-    navigator.clipboard.writeText(window.location);
+    navigator.clipboard.writeText(window.location.href);
     // notify user that url location was copied to clipboard with toast notification
     const notify = () => toast(`Copied "${window.location}" to clipboard!`);
     notify();
@@ -140,9 +144,13 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
             >
               <div className={isOpen ? '' : 'collapsed'}>
                 <Row className="d-flex justify-content-center">
-                  {type == 'Custom' && (header == 'symantec' || header == 'clamav') && <AvMulti result={result} />}
+                  {type == 'Custom' && (header == 'symantec' || header == 'clamav') && (
+                    <AvMulti result={result} sha256={sha256} tool={tool} />
+                  )}
                   {type == 'Custom' && header == 'vbaextraction' && <VBA result={result} />}
-                  {type == 'Custom' && (header == 'titanium-core2' || header == 'tc2') && <TC2 result={result} />}
+                  {type == 'Custom' && (header == 'titanium-core2' || header == 'tc2') && (
+                    <TC2 result={result} sha256={sha256} tool={tool} />
+                  )}
                   {type == 'Disassembly' && <Disassembly result={result} sha256={sha256} tool={tool} />}
                   {type == 'Hidden' && false && <div>Hide this result</div>}
                   {(type == 'Html' || type == 'HTML') && <SafeHtml result={result} sha256={sha256} tool={tool} />}

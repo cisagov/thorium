@@ -5,6 +5,8 @@ import { Alert, Card, Table } from 'react-bootstrap';
 import { getAlerts } from '../alerts';
 import ResultsFiles from './files/ResultsFiles';
 import ChildrenFiles from './files/ChildrenFiles';
+import { ResultRenderProps } from '../props';
+import { Value } from '@models/results';
 
 const JsonTable = ({ results }) => {
   if (results && Array.isArray(results)) {
@@ -105,7 +107,7 @@ const HtmlHeading = ({ heading }) => {
 
 const splitTableSections = (results) => {
   const rows = results.trim().split('\n');
-  let htmlSegments = [];
+  let htmlSegments: string[] = [];
   let tableRows = '';
   rows.map((row) => {
     if (row === '' || row.startsWith('#') || !row.includes(',')) {
@@ -141,10 +143,10 @@ const CsvMultiTable = ({ results }) => {
   );
 };
 
-const Tables = ({ result, sha256, tool }) => {
-  const [errors, setErrors] = useState([]);
-  const [warnings, setWarnings] = useState([]);
-  const [resultsJson, setResultsJson] = useState([]);
+const Tables: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
+  const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [resultsJson, setResultsJson] = useState<Value>([]);
   const [isJson, setIsJson] = useState(true);
 
   useEffect(() => {
@@ -156,7 +158,7 @@ const Tables = ({ result, sha256, tool }) => {
   let parsedResult = '';
   // result is a string, replace new lines and format as such
   if (!isJson) {
-    parsedResult = result.result.replace(/\\n/g, '\n').replace(/["]+/g, '');
+    parsedResult = result?.result && typeof result.result === 'string' ? result.result.replace(/\\n/g, '\n').replace(/["]+/g, '') : '';
   } else {
     // ignore the results, they aren't strings
     if (JSON.stringify(resultsJson) == '{}') {
@@ -181,7 +183,7 @@ const Tables = ({ result, sha256, tool }) => {
       ))}
       {isJson ? <JsonTable results={parsedResult} /> : <CsvMultiTable results={parsedResult} />}
       <ResultsFiles result={result} sha256={sha256} tool={tool} />
-      <ChildrenFiles result={result} tool={tool} />
+      <ChildrenFiles result={result} sha256={sha256} tool={tool} />
     </Card>
   );
 };

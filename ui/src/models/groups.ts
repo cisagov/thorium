@@ -1,30 +1,21 @@
 export type GroupAllowed = {
   /// Whether files are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   files: boolean;
   /// Whether repos are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   repos: boolean;
   /// Whether tags are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   tags: boolean;
   /// Whether images are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   images: boolean;
   /// Whether pipelines are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   pipelines: boolean;
   /// Whether reactions are allowed to be created in this group
-  /// #[serde(default = "default_true")]
   reactions: boolean;
   /// Whether results are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   results: boolean;
   /// Whether comments are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   comments: boolean;
   /// Whether entities are allowed to be added to this group
-  /// #[serde(default = "default_true")]
   entities: boolean;
 };
 
@@ -53,6 +44,5 @@ export type Group = {
   /// Description of the group,
   description?: string;
   /// The data that is allowed to be added to this group
-  /// #[serde(default)]
   allowed: GroupAllowed;
 };

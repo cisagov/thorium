@@ -7,6 +7,8 @@ import String from './String';
 import { getAlerts } from '../alerts';
 import ResultsFiles from './files/ResultsFiles';
 import ChildrenFiles from './files/ChildrenFiles';
+import { ResultRenderProps } from '../props';
+import { Value } from '@models/results';
 
 const OceanJsonTheme = {
   scheme: 'Ocean',
@@ -31,15 +33,15 @@ const OceanJsonTheme = {
 };
 
 // generic json dump using react-json-view library
-const JSON = ({ result, sha256, tool }) => {
-  const [errors, setErrors] = useState([]);
-  const [warnings, setWarnings] = useState([]);
-  const [resultsJson, setResultsJson] = useState({});
+const JSON: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
+  const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [resultsJson, setResultsJson] = useState<Value>({});
   const [isJson, setIsJson] = useState(true);
 
   useEffect(() => {
     // set alerts and process results to json
-    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson);
+    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, false);
   }, [result]);
 
   return (
@@ -58,7 +60,7 @@ const JSON = ({ result, sha256, tool }) => {
               </center>
             ))}
           </Row>
-          {Object.keys(resultsJson).length > 0 && (
+          {isJson && (
             <Row>
               <Col>
                 <JSONTree
@@ -72,10 +74,10 @@ const JSON = ({ result, sha256, tool }) => {
             </Row>
           )}
           <ResultsFiles result={result} sha256={sha256} tool={tool} />
-          <ChildrenFiles result={result} tool={tool} />
+          <ChildrenFiles result={result} sha256={sha256} tool={tool} />
         </Card>
       ) : (
-        <String result={result} warnings={warnings} errors={errors} />
+        <String result={result} sha256={sha256} tool={tool} warnings={warnings} errors={errors} />
       )}
     </>
   );

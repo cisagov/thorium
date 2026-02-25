@@ -3,10 +3,8 @@ import { Tags } from './tags';
 
 export type PcapNetworkProtocol = {
   /// The TCP protocol
-  /// #[serde(rename = "TCP", alias = "Tcp", alias = "tcp")]
   Tcp?: 'TCP' | 'Tcp' | 'tcp';
   /// The UDP protocol
-  /// #[serde(rename = "UDP", alias = "Udp", alias = "udp")]
   Udp?: 'UDP' | 'Udp' | 'udp';
 };
 
@@ -14,10 +12,8 @@ export type CarvedOrigin = {
   /// The sample was carved from a packet capture
   Pcap?: {
     /// The source IP this sample was sent from
-    /// #[cfg_attr(feature = "api", schema(value_type = String))]
     src_ip?: string;
     /// The destination IP this sample was going to
-    /// #[cfg_attr(feature = "api", schema(value_type = String))]
     dest_ip?: string;
     /// The source port this sample was sent from
     src_port?: number;

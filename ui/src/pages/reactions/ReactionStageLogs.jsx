@@ -10,9 +10,7 @@ import { useAuth } from '@utilities/auth';
 import { getReactionStageLogs } from '@thorpi/reactions';
 
 const ReactionStageLogs = () => {
-  const { reactionID } = useParams();
-  const { group } = useParams();
-  const { stage } = useParams();
+  const { reactionID, group, stage } = useParams();
   const [cursor, setCursor] = useState(0);
   const [startLogLine, setStartLogLine] = useState(0);
   const [endLogLine, setEndLogLine] = useState(0);
@@ -140,13 +138,13 @@ const ReactionStageLogs = () => {
   const endLogsRef = useRef(null);
   useEffect(() => {
     const scrollDown = () => {
-      endLogsRef.current?.scrollIntoView(false, {
+      endLogsRef.current?.scrollIntoView({
         block: 'end',
         behavior: 'auto',
       });
     };
     const scrollUp = () => {
-      startLogsRef.current?.scrollIntoView(true, {
+      startLogsRef.current?.scrollIntoView({
         block: 'start',
         behavior: 'auto',
       });

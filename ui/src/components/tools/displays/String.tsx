@@ -5,11 +5,18 @@ import { Alert, Card, Row } from 'react-bootstrap';
 import { getAlerts } from '../alerts';
 import ResultsFiles from './files/ResultsFiles';
 import ChildrenFiles from './files/ChildrenFiles';
+import { ResultRenderProps } from '../props';
+import { Value } from '@models/results';
 
-const String = ({ result, sha256, tool, warnings, errors }) => {
-  const [parsedErrors, setParsedErrors] = useState([]);
-  const [parsedWarnings, setParsedWarnings] = useState([]);
-  const [resultsJson, setResultsJson] = useState({});
+type StringResultRenderProps = ResultRenderProps & {
+  warnings: string[];
+  errors: string[];
+};
+
+const String: React.FC<StringResultRenderProps> = ({ result, sha256, tool, warnings, errors }) => {
+  const [parsedErrors, setParsedErrors] = useState<string[]>([]);
+  const [parsedWarnings, setParsedWarnings] = useState<string[]>([]);
+  const [resultsJson, setResultsJson] = useState<Value>({});
   const [isJson, setIsJson] = useState(true);
 
   // Check to see if this is json or string
@@ -27,7 +34,7 @@ const String = ({ result, sha256, tool, warnings, errors }) => {
   let newResult = '';
   // result is a string, replace new lines and format as such
   if (!isJson) {
-    newResult = result.result.replace(/\\n/g, '\n').replace(/["]+/g, '');
+    newResult = result?.result && typeof result.result === 'string' ? result.result.replace(/\\n/g, '\n').replace(/["]+/g, '') : '';
   } else {
     // ignore the results, they aren't strings
     if (JSON.stringify(resultsJson) == '{}') {
@@ -56,7 +63,7 @@ const String = ({ result, sha256, tool, warnings, errors }) => {
         <pre>{newResult}</pre>
       </Row>
       <ResultsFiles result={result} sha256={sha256} tool={tool} />
-      <ChildrenFiles result={result} tool={tool} />
+      <ChildrenFiles result={result} sha256={sha256} tool={tool} />
     </Card>
   );
 };

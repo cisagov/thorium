@@ -6,6 +6,8 @@ export enum RoleKey {
   Reporter = 'Reporter',
 }
 
+type ThoriumDeveloperRoleValue = { k8s: boolean; bare_metal: boolean; windows: boolean; external: boolean; kvm: boolean };
+
 export type Role = {
   Admin: RoleKey.Admin;
   Analyst: RoleKey.Analyst;
@@ -16,11 +18,12 @@ export type Role = {
   Reporter: RoleKey.Reporter;
 };
 
-type ThoriumDeveloperRoleValue = { k8s: boolean; bare_metal: boolean; windows: boolean; external: boolean; kvm: boolean };
-type ThoriumRoleValue = string | ThoriumDeveloperRoleValue;
-
 export type ThoriumRole = {
-  [role in RoleKey]: ThoriumRoleValue;
+  Admin?: RoleKey.Admin;
+  Analyst?: RoleKey.Analyst;
+  Developer?: ThoriumDeveloperRoleValue;
+  User?: RoleKey.User;
+  Reporter?: RoleKey.Reporter;
 };
 
 export type UserInfo = {

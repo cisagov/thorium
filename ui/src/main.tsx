@@ -4,7 +4,7 @@ import 'core-js/stable';
 
 // project imports
 import Thorium from './Thorium';
-import './styles/main.scss';
+import '@styles/main.scss';
 
 createRoot(document.getElementById('thorium')!).render(
   <StrictMode>

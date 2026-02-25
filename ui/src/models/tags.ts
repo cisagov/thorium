@@ -38,7 +38,6 @@ export type TagKeyCounts = {
 
 export type TagCounts = {
   /// The id for this cursor if it can be continued
-  // #[serde(skip_serializing_if = "Option::is_none")]
   cursor?: string;
   /// The total number of items that were counted
   total: number;

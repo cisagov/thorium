@@ -1,6 +1,11 @@
 import { Card, Row, Col } from 'react-bootstrap';
 
-const AvMulti = ({ result }) => {
+// project imports
+import { ResultRenderProps } from '@components/tools/props';
+
+const AvMulti: React.FC<ResultRenderProps> = ({ result }) => {
+  const avResult = result.result != null && typeof result.result == 'object' ? result.result : {};
+
   return (
     <Card className="scroll-log tool-result">
       <Card.Body>
@@ -10,17 +15,17 @@ const AvMulti = ({ result }) => {
         </Row>
         <Row>
           <Col xs={4}>{'Version:'}</Col>
-          <Col>{result.result.Version}</Col>
+          <Col>{result?.result != null ? result.result['Version'] : ''}</Col>
         </Row>
         <Row>
           <Col xs={4}>{'Result:'}</Col>
-          <Col>{result.result.Result ? result.result.Result : 'Error'}</Col>
+          <Col>{'Result' in avResult ? (avResult.Result as string) : 'Error'}</Col>
         </Row>
-        {result.result['Errors'] && (
+        {'Errors' in avResult && (
           <Row>
             <Col xs={4}>{'Errors:'}</Col>
             <Col>
-              <pre>{result.result.Errors}</pre>
+              <pre>{avResult.Errors as string}</pre>
             </Col>
           </Row>
         )}

@@ -1,6 +1,14 @@
+import React from 'react';
 import { Button } from 'react-bootstrap';
 
-const SelectGroups = ({ groups, setGroups, disabled, clearState = null }) => {
+type SelectGroupsProps = {
+  groups: string[];
+  setGroups: (groups: string[]) => void;
+  disabled: boolean;
+  clearState: () => void;
+};
+
+const SelectGroups: React.FC<SelectGroupsProps> = ({ groups, setGroups, disabled, clearState = null }) => {
   if (groups) {
     return (
       <>
@@ -14,14 +22,12 @@ const SelectGroups = ({ groups, setGroups, disabled, clearState = null }) => {
               disabled={disabled}
               onClick={() => {
                 setGroups({ ...groups, [group]: !groups[group] });
-                if (clearState) {
+                if (clearState != null) {
                   clearState();
                 }
               }}
             >
-              <font size="3">
-                <b>{group}</b>
-              </font>
+              <b style={{ fontSize: '1rem' }}>{group}</b>
             </Button>
           ))}
       </>

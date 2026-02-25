@@ -1,10 +1,19 @@
+import { Value } from '@models/results';
+
 // set warnings and errors from results
-const getAlerts = (result, setResults, setWarnings, setErrors, setIsJson, ignoreJsonError) => {
+const getAlerts = (
+  result: Value,
+  setResults: (results: Value) => void,
+  setWarnings: (warnings: string[]) => void,
+  setErrors: (errors: string[]) => void,
+  setIsJson: (isJson: boolean) => void,
+  ignoreJsonError: boolean,
+) => {
   // handle empty result
   const jsonFormattedResults = result;
   let isJson = false;
-  const errors = [];
-  const warnings = [];
+  const errors: string[] = [];
+  const warnings: string[] = [];
 
   // check if an empty result was returned by tool run
   if (result && (result == '' || result == '{}' || result == '[]')) {
