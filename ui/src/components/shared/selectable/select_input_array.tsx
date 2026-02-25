@@ -121,9 +121,7 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         onChange={(newValue: SelectOption[]) => {
           setValue(newValue);
           // pass current selected options to parent callback
-          const updatedValues = inputValue
-            ? [...newValue.map((option) => option.value), inputValue]
-            : [...newValue.map((option) => option.value)];
+          const updatedValues = newValue.map((option) => option.value);
           onChange(updatedValues);
         }}
         onInputChange={(newValue) => setInputValue(newValue)}
@@ -146,9 +144,7 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         onChange={(newValue: SelectOption[]) => {
           setValue(newValue);
           // pass current selected options to parent callback
-          const updatedValues = inputValue
-            ? [...newValue.map((option) => option.value), inputValue]
-            : [...newValue.map((option) => option.value)];
+          const updatedValues = newValue.map((option) => option.value);
           onChange(updatedValues);
         }}
         onInputChange={(newValue) => setInputValue(newValue)}
