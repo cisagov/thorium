@@ -1,4 +1,5 @@
-//! OpenAI support for ThoriumAgent
+//! OpenAI support for [`ThorChat`]
+use crate::{CtlConf, Error};
 use openai_api_rs::v1::api::OpenAIClient;
 use openai_api_rs::v1::chat_completion::chat_completion::{
     ChatCompletionRequest, ChatCompletionResponse,
@@ -7,26 +8,20 @@ use openai_api_rs::v1::chat_completion::{
     self, ChatCompletionMessage, Content, MessageRole, Tool, ToolChoiceType,
 };
 use openai_api_rs::v1::types::{Function, FunctionParameters, JSONSchemaDefine, JSONSchemaType};
-use rmcp::model::{CallToolRequestParam, CallToolResult, ListToolsResult, RawContent};
+use rmcp::model::{
+    CallToolRequestParam, CallToolResult, ListToolsResult, RawContent, ResourceContents,
+};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use thorium::{CtlConf, Error};
+use uuid::Uuid;
 
-use super::{AiResponse, AiSupport};
+use crate::ai::{AiMsgRole, AiResponse, AiSupport, SharedThorChatContext};
 
 pub struct OpenAI {
     /// The AI client to use for reasoning
     ai: OpenAIClient,
-    /// The different tools we can support
-    tools: Vec<Tool>,
-    /// A list of enabled tools
-    enabled_tools: Vec<String>,
-    /// A list of disabled toold,
-    disabled_tools: Vec<String>,
-    /// Keep track of any already called tools
-    already_called: Vec<String>,
-    /// The current conversation history
-    history: Vec<ChatCompletionMessage>,
+    /// The context for this chat/AI
+    context: SharedThorChatContext<Self>,
     /// Whether or not debug mode is enabled
     debug: bool,
     /// The model to use
@@ -35,7 +30,12 @@ pub struct OpenAI {
 
 impl OpenAI {
     /// Create a new chat bot
-    pub async fn new(conf: &CtlConf) -> Result<Self, Error> {
+    ///
+    /// # Arguments
+    ///
+    /// * `conf` - A thorctl config
+    /// * `context` - The shared context to get/add messages to
+    pub async fn new(conf: &CtlConf, context: &SharedThorChatContext<Self>) -> Result<Self, Error> {
         // make sure we have our ai settings configured
         let ai_conf = match &conf.ai {
             Some(ai_conf) => ai_conf,
@@ -51,41 +51,25 @@ impl OpenAI {
             .with_api_key(&ai_conf.api_key)
             .build()
             .map_err(|err| Error::new(format!("Failed to build OpenAI Client: {err:?}")))?;
-        // track our chat history
-        let mut history = Vec::with_capacity(10);
-        // build the base prompt for our ai
-        let base_prompt = "You are an expert file analysis AI assistant for Thorium a file analysis and data generation platform. Only call tools when you believe they will provide useful results.";
-        // build the message to ask our ai
-        let msg = ChatCompletionMessage {
-            role: MessageRole::system,
-            content: Content::Text(base_prompt.into()),
-            name: None,
-            tool_calls: None,
-            tool_call_id: None,
-        };
-        // add this msg to our chat history
-        history.push(msg);
         // create a thorchat object
         let openai = OpenAI {
             ai,
-            tools: vec![],
-            enabled_tools: vec![],
-            disabled_tools: vec![],
-            already_called: vec![],
-            history,
+            context: context.clone(),
             debug: false,
             model: ai_conf.model.clone(),
         };
         Ok(openai)
     }
 
+    /// Parse a chat response from the LLM
+    ///
+    /// # Arguments
+    ///
+    /// * `chat_response` - The response to parse
     fn parse_chat_response(
         &mut self,
         chat_response: ChatCompletionResponse,
     ) -> Result<AiResponse, Error> {
-        if self.debug {
-            println!("DEBUG RESP: {:#?}", chat_response);
-        }
         match chat_response.choices.get(0) {
             // map this choice back to a response to ThoriumChat
             Some(choice) => {
@@ -110,28 +94,22 @@ impl OpenAI {
                                 ));
                             }
                         };
-                        // add the name of this tool to our already called tools
-                        self.already_called.push(name.to_string());
+                        // generate an id for this tool call
+                        let id = Uuid::new_v4();
                         // build our call tool request param
                         let params = CallToolRequestParam { name, arguments };
+                        // build the message to add to our chat history
+                        self.context.add_tool_call_request(id, params.clone());
                         // add this call to our list of tool calls
-                        calls.push(params);
+                        calls.push((id, params));
                     }
                     // return our tool calls
                     Ok(AiResponse::CallTool(calls))
                 } else {
                     // get the message from the ai if we got one
                     if let Some(message) = &choice.message.content {
-                        // clone the AI's response into our chat history
-                        let resp_msg = ChatCompletionMessage {
-                            role: MessageRole::assistant,
-                            content: Content::Text(message.to_owned()),
-                            name: None,
-                            tool_calls: None,
-                            tool_call_id: None,
-                        };
-                        // add the llm's response to our history
-                        self.history.push(resp_msg);
+                        // add this message from the llm to our chat
+                        self.context.add_chat(AiMsgRole::Assistant, message)?;
                     }
                     // this must be a response to the caller
                     Ok(AiResponse::Response(choice.message.content.clone()))
@@ -141,26 +119,14 @@ impl OpenAI {
         }
     }
 
+    /// Send the latest chats to our LLM
     async fn send_chat(&mut self) -> Result<ChatCompletionResponse, Error> {
+        // get our current history
+        let history = self.context.history();
         // build a chat with shirty
-        let mut req = ChatCompletionRequest::new(self.model.clone(), self.history.clone());
-        // build a list of tools that we haven't already called
-        let tools_iter = self
-            .tools
-            .iter()
-            .filter(|tool| !self.already_called.contains(&tool.function.name))
-            .filter(|tool| !self.disabled_tools.contains(&tool.function.name));
-        // if we have any enabled tools then only allow those to be used
-        let tools = if !self.enabled_tools.is_empty() {
-            // only get tools in our enabled set
-            tools_iter
-                .filter(|tool| self.enabled_tools.contains(&tool.function.name))
-                .map(|tool| tool.clone())
-                .collect::<Vec<Tool>>()
-        } else {
-            // get the names of the tools we can use
-            tools_iter.map(|tool| tool.clone()).collect::<Vec<Tool>>()
-        };
+        let mut req = ChatCompletionRequest::new(self.model.clone(), history);
+        // get a list of tools
+        let tools = self.context.tools();
         // only add our tools if we have some
         if !tools.is_empty() {
             req = req
@@ -169,23 +135,31 @@ impl OpenAI {
                 // let the LLM decide what tools to call
                 .tool_choice(ToolChoiceType::Auto);
         }
-        // TODO do this differently with tracing
-        if self.debug {
-            println!("DEBUG SEND: {:#?}\n", self.history.last());
-        }
         // chat with our AI
         let resp = self.ai.chat_completion(req).await?;
         Ok(resp)
     }
 }
 
+#[async_trait::async_trait]
 impl AiSupport for OpenAI {
+    /// A tool this AI can use/call
+    type Tool = Tool;
+
+    ///  A single chat message for this LLM backend
+    type ChatMsg = ChatCompletionMessage;
+
     /// Setup this ai client
-    async fn setup(conf: &CtlConf) -> Result<Self, Error> {
-        OpenAI::new(conf).await
+    ///
+    /// # Arguments
+    ///
+    /// * `conf` - A thorctl config
+    /// * `context` - The shared context to get/add messages to
+    async fn setup(conf: &CtlConf, context: &SharedThorChatContext<Self>) -> Result<Self, Error> {
+        OpenAI::new(conf, context).await
     }
 
-    /// configure the debug mode for this ai
+    /// Configure the debug mode for this ai
     ///
     /// # Arguments
     ///
@@ -194,7 +168,20 @@ impl AiSupport for OpenAI {
         self.debug = enabled;
     }
 
+    /// Get a tools name
+    ///
+    /// # Arguments
+    ///
+    /// * `tool` - The tool to get a name for
+    fn tool_name(tool: &Self::Tool) -> &String {
+        &tool.function.name
+    }
+
     /// Tell our AI about our tools
+    ///
+    /// # Arguments
+    ///
+    /// * `mcp_tools` - The MCP tools to load
     fn load_tools(&mut self, mcp_tools: ListToolsResult) -> Result<(), Error> {
         // add each tool to our ai tools list
         for mcp_tool in mcp_tools.tools {
@@ -272,56 +259,67 @@ impl AiSupport for OpenAI {
                 },
             };
             // add our tool
-            self.tools.push(ai_tool);
+            self.context.add_tool(ai_tool);
         }
         Ok(())
     }
 
-    /// Disable a specific tool
+    /// Build a chat completion message
     ///
     /// # Arguments
     ///
-    /// * `tool` - The name of the mcp tool to disable
-    fn disable_tool<T: Into<String>>(&mut self, tool: T) {
-        // add this tool to our list of disabled tools
-        self.disabled_tools.push(tool.into());
+    /// * `role` - The role for this message
+    /// * `msg` - The message to convert
+    fn build_chat_msg(
+        role: AiMsgRole,
+        name: Option<String>,
+        msg: impl Into<String>,
+    ) -> Self::ChatMsg {
+        // convert this message role
+        let role = match role {
+            AiMsgRole::User => MessageRole::user,
+            AiMsgRole::System => MessageRole::system,
+            AiMsgRole::Assistant => MessageRole::assistant,
+            AiMsgRole::Function => MessageRole::function,
+            AiMsgRole::Tool => MessageRole::tool,
+        };
+        // build the message to ask our ai
+        ChatCompletionMessage {
+            role,
+            content: Content::Text(msg.into()),
+            name,
+            tool_calls: None,
+            tool_call_id: None,
+        }
     }
 
-    /// Enable a specific tool
-    ///
-    /// If you enable any tools then only enabled tools can be run
+    /// Add some tool results to our chat history
     ///
     /// # Arguments
     ///
-    /// * `tool` - The name of the mcp tool to enable
-    fn enable_tool<T: Into<String>>(&mut self, tool: T) {
-        // add this tool to our list of enabled tools
-        self.enabled_tools.push(tool.into());
-    }
-
-    /// Call a tool
+    /// * `tool_results` - The tool results to tell our AI about
     async fn add_tool_results(
         &mut self,
-        tool_results: Vec<(String, CallToolResult)>,
+        tool_results: Vec<(Uuid, String, CallToolResult)>,
     ) -> Result<AiResponse, Error> {
         // add each tool result to our chat history
-        for (name, tool_result) in tool_results {
+        for (id, name, tool_result) in tool_results {
             // add each page of content to our history
             for page in tool_result.content {
                 // get the raw content
                 let content = match page.raw {
-                    RawContent::Text(text) => Content::Text(text.text),
-                    _ => panic!("{page:#?} not yet supported"),
+                    RawContent::Text(text) => text.text,
+                    RawContent::Resource(resource) => {
+                        // get our resource contents
+                        match resource.resource {
+                            ResourceContents::TextResourceContents { text, .. } => text,
+                            ResourceContents::BlobResourceContents { blob, .. } => blob,
+                        }
+                    }
+                    _ => unimplemented!("{page:#?} not yet supported"),
                 };
                 // add this tool call to our chat history
-                let msg = ChatCompletionMessage {
-                    role: MessageRole::tool,
-                    content,
-                    name: Some(name.clone()),
-                    tool_calls: None,
-                    tool_call_id: None,
-                };
-                self.history.push(msg);
+                self.context.add_tool_result(id, name.clone(), content);
             }
         }
         // send our results back to our ai for a response
@@ -331,19 +329,16 @@ impl AiSupport for OpenAI {
     }
 
     /// Ask this agent a question
-    async fn ask<T: Into<String>>(&mut self, question: T) -> Result<AiResponse, Error> {
-        // build the message to ask our ai
-        let msg = ChatCompletionMessage {
-            role: MessageRole::user,
-            content: Content::Text(question.into()),
-            name: None,
-            tool_calls: None,
-            tool_call_id: None,
-        };
-        // add this msg to our chat history
-        self.history.push(msg);
-        // clear our already called tools
-        self.already_called.clear();
+    ///
+    /// # Arguments
+    ///
+    /// * `question` - The question to ask
+    async fn ask<T: Into<String> + Send + Sync>(
+        &mut self,
+        question: T,
+    ) -> Result<AiResponse, Error> {
+        // add this message to our history
+        self.context.add_chat(AiMsgRole::User, question)?;
         // send our question to the ai
         let chat_response = self.send_chat().await?;
         // parse this response

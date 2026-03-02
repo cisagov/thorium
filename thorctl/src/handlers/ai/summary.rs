@@ -1,8 +1,8 @@
 //! An agent to write a summary for data in Thorium
 
 use thorium::Error;
+use thorium::ai::{AiSupport, ThorChat};
 
-use super::{AiSupport, ThorChat};
 use crate::args::ai::Summary;
 
 pub async fn handle<A: AiSupport>(thorchat: &mut ThorChat<A>, cmd: &Summary) -> Result<(), Error> {
@@ -37,14 +37,13 @@ pub async fn handle<A: AiSupport>(thorchat: &mut ThorChat<A>, cmd: &Summary) -> 
          ### Results Summary",
         cmd.target,
     );
-    // enable debug mode if needed
-    thorchat.ai.debug_mode(cmd.debug);
-    // only enable the relevant tools
-    thorchat.enable_tool("get_sample");
-    thorchat.enable_tool("get_sample_results");
     // ask our ai to summarize this hash and print its response
     match thorchat.ask(question).await? {
-        Some(response) => Ok(println!("\n\n{response}")),
+        Some(response) => {
+            // print the AI's summary
+            println!("\n\n{response}");
+            Ok(())
+        }
         None => Err(Error::new("AI returned no response")),
     }
 }

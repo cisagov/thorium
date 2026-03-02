@@ -12,7 +12,7 @@ license-file = "../LICENSE"
 vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
-thorium-api = { workspace = true, features = ["client", "kanal-err", "dialoguer-err", "openai", "rmcp-err"]}
+thorium-api = { workspace = true, features = ["client", "kanal-err", "dialoguer-err", "openai", "rmcp-err", "ai"]}
 clap = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { version = "0.1", features = ["io-util"] }
@@ -51,4 +51,11 @@ cfg-if = "1"
 reqwest = { workspace = true , default-features = false, features = ["rustls-tls"] }
 rmcp = { version = "0.8", features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"]}
 openai-api-rs = "8"
-tui-banner = "0.2"
+tui-banner = { version = "0.2", git = "https://github.com/mjcarson/tui-banner.git", branch = "ManuallyDrivenWaveAnimation" }
+color-eyre = "0.6.3"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+ratatui = "0.30.0"
+unicode-width = "0.2"
+ansi-to-tui = "8.0.1"
+unicode-segmentation = "1.12.0"
+tui-markdown = "0.3.7"

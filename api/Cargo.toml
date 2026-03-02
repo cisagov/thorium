@@ -11,7 +11,7 @@ license-file = "../LICENSE"
 name = "thorium"
 
 [features]
-default = ["api", "client", "trace"]
+default = ["api", "client", "trace", "ai"]
 # include api dependencies
 api = [
   "bb8-redis", "redis", "argon2", "crossbeam", "futures", "futures-cpupool", "tokio", "async-recursion", "rand", "colored",
@@ -72,6 +72,9 @@ vendored-openssl = ["openssl/vendored"]
 
 # exposes code/implementations used only by the search-streamer
 search-streamer = []
+
+# include ai support
+ai = ["openai", "rmcp-err", "client"]
 
 # include openai support in the client
 openai = ["openai-api-rs"]
@@ -187,10 +190,11 @@ rustix = { version = "1.0", optional = true }
 kanal = { version = "0.1.1", optional = true }
 dialoguer = { version = "0.11", optional = true }
 
-# test utilities dependencies
+# ai dependencies
+owo-colors = "4"
 
 # mcp dependencies
-rmcp = { version = "0.8", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth"], optional = true }
+rmcp = { version = "0.8", features = ["server", "macros", "transport-sse-server", "transport-io", "transport-streamable-http-server", "auth", "client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "reqwest"], optional = true }
 
 # openai support
 openai-api-rs = { version = "8", optional = true }
