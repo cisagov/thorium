@@ -2,6 +2,7 @@
 
 use chrono::prelude::*;
 use schemars::JsonSchema;
+use std::collections::HashMap;
 
 use crate::{matches_vec, same};
 
@@ -117,6 +118,7 @@ impl UserCreate {
     ///            kvm: false,
     ///        });
     /// ```
+    #[must_use]
     pub fn role(mut self, role: UserRole) -> Self {
         self.role = role;
         self
@@ -132,6 +134,7 @@ impl UserCreate {
     /// UserCreate::new("mcarson", "Guest", "email@email.com")
     ///     .admin();
     /// ```
+    #[must_use]
     pub fn admin(mut self) -> Self {
         self.role = UserRole::Admin;
         self
@@ -151,6 +154,7 @@ impl UserCreate {
     /// UserCreate::new("mcarson", "Guest", "email@email.com")
     ///    .settings(UserSettings::default().theme(Theme::Dark));
     /// ```
+    #[must_use]
     pub fn settings(mut self, settings: UserSettings) -> Self {
         self.settings = settings;
         self
@@ -169,6 +173,7 @@ impl UserCreate {
     ///
     /// UserCreate::new("mcarson", "Guest", "email@email.com").skip_verification();
     /// ```
+    #[must_use]
     pub fn skip_verification(mut self) -> Self {
         self.skip_verification = true;
         self
@@ -197,6 +202,30 @@ pub struct UnixInfo {
     pub user: u64,
     /// The unix group id of this user
     pub group: u64,
+}
+
+/// An AI endpoint configuration
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct AiEndpoint {
+    /// The URL endpoint for the AI service
+    pub url: String,
+    /// The API key for the AI service
+    pub api_key: String,
+    /// The model to use from this AI service
+    pub model: String,
+}
+
+/// AI settings for a user
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct AiSettings {
+    /// Multiple named AI endpoints
+    #[serde(default)]
+    pub endpoints: HashMap<String, AiEndpoint>,
+    /// The default endpoint name
+    #[serde(default)]
+    pub default_endpoint: String,
 }
 
 /// The different themes supported in the webUI
@@ -228,10 +257,13 @@ impl Default for Theme {
 pub struct UserSettings {
     /// The theme this user uses in the webUI
     pub theme: Theme,
+    /// The AI settings for this user
+    #[serde(default)]
+    pub ai: Option<AiSettings>,
 }
 
 impl UserSettings {
-    /// Update the theme for this user
+    /// Set the theme
     ///
     /// # Arguments
     ///
@@ -242,12 +274,167 @@ impl UserSettings {
     }
 }
 
+/// An update to an AI endpoint configuration
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct AiEndpointUpdate {
+    /// The URL endpoint for the AI service
+    pub url: Option<String>,
+    /// The API key for the AI service
+    pub api_key: Option<String>,
+    /// The model to use from this AI service
+    pub model: Option<String>,
+}
+
+impl AiEndpointUpdate {
+    /// Set the URL for the AI endpoint
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL endpoint for the AI service
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::AiEndpointUpdate;
+    ///
+    /// AiEndpointUpdate::default().url("https://<llm-server>");
+    /// ```
+    #[must_use]
+    pub fn url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
+    /// Set the API key for the AI endpoint
+    ///
+    /// # Arguments
+    ///
+    /// * `api_key` - The API key for the AI service
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::AiEndpointUpdate;
+    ///
+    /// AiEndpointUpdate::default().api_key("<api_key>");
+    /// ```
+    #[must_use]
+    pub fn api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(api_key.into());
+        self
+    }
+
+    /// Set the model for the AI endpoint
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The model to use from this AI service
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::AiEndpointUpdate;
+    ///
+    /// AiEndpointUpdate::default().model("<model>");
+    /// ```
+    #[must_use]
+    pub fn model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    /// Check if this update contains everything needed for a new endpoint
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.url.is_some() && self.api_key.is_some() && self.model.is_some()
+    }
+}
+
+/// An update to AI settings for a user
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct AiSettingsUpdate {
+    /// Endpoints to add/update
+    #[serde(default)]
+    pub endpoints: HashMap<String, AiEndpointUpdate>,
+    /// Endpoint names to remove
+    #[serde(default)]
+    pub remove_endpoints: Vec<String>,
+    /// Set the default endpoint
+    #[serde(default)]
+    pub default_endpoint: Option<String>,
+}
+
+impl AiSettingsUpdate {
+    /// Create a new AI settings update
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the endpoint to update
+    /// * `update` - The endpoint update to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{AiSettingsUpdate, AiEndpointUpdate};
+    ///
+    /// AiSettingsUpdate::default().endpoint("<endpoint>", AiEndpointUpdate::default().api_key("<api_key>"));
+    /// ```
+    #[must_use]
+    pub fn endpoint(mut self, name: impl Into<String>, update: AiEndpointUpdate) -> Self {
+        // insert or repalce this endpoints settings
+        self.endpoints.insert(name.into(), update);
+        self
+    }
+
+    /// Add an endpoint name to be removed from the AI settings
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the endpoint to remove
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::AiSettingsUpdate;
+    ///
+    /// AiSettingsUpdate::default().remove_endpoint("old_endpoint");
+    /// ```
+    #[must_use]
+    pub fn remove_endpoint(mut self, name: impl Into<String>) -> Self {
+        self.remove_endpoints.push(name.into());
+        self
+    }
+
+    /// Set the default endpoint for AI operations
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the endpoint to set as default
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::AiSettingsUpdate;
+    ///
+    /// AiSettingsUpdate::default().default_endpoint("main_endpoint");
+    /// ```
+    #[must_use]
+    pub fn default_endpoint(mut self, name: impl Into<String>) -> Self {
+        self.default_endpoint = Some(name.into());
+        self
+    }
+}
+
 /// The update to apply to a users settings
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct UserSettingsUpdate {
     /// The theme this user uses in the webUI
     pub theme: Option<Theme>,
+    /// The AI settings update for this user
+    pub ai: Option<AiSettingsUpdate>,
 }
 
 impl UserSettingsUpdate {
@@ -264,8 +451,20 @@ impl UserSettingsUpdate {
     ///
     /// UserSettingsUpdate::default().theme(Theme::Dark);
     /// ```
+    #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
         self.theme = Some(theme);
+        self
+    }
+
+    /// Update the AI settings for this user
+    ///
+    /// # Arguments
+    ///
+    /// * `ai` - The AI settings update to apply
+    #[must_use]
+    pub fn ai(mut self, ai: AiSettingsUpdate) -> Self {
+        self.ai = Some(ai);
         self
     }
 }
@@ -332,7 +531,7 @@ impl PartialEq<ScrubbedUser> for ScrubbedUser {
     ///
     /// # Arguments
     ///
-    /// * `request` - The ScrubbedUser to compare against
+    /// * `request` - The [`ScrubbedUser`] to compare against
     fn eq(&self, request: &ScrubbedUser) -> bool {
         // make sure the username is the same
         same!(self.username, request.username);

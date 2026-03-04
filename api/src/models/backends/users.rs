@@ -13,19 +13,20 @@ use chrono::prelude::*;
 use headers::{Header, HeaderName, HeaderValue};
 use ldap3::{Scope, SearchEntry};
 use rand::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str;
 use tracing::{Level, Span, event, instrument};
 
 use super::db;
 use crate::conf::Ldap;
 use crate::models::{
-    AuthResponse, Group, ImageScaler, Key, ScrubbedUser, UnixInfo, User, UserCreate, UserRole,
-    UserSettingsUpdate, UserUpdate,
+    AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, Group, ImageScaler,
+    Key, ScrubbedUser, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate,
+    UserUpdate,
 };
 use crate::utils::shared::EmailClient;
 use crate::utils::{ApiError, AppState, Shared, bounder};
-use crate::{bad, conflict, is_admin, ldap, unauthorized, unavailable};
+use crate::{bad, conflict, is_admin, ldap, unauthorized, unavailable, update};
 
 /// The header name for our secret key
 static SECRET_KEY_HEADER: HeaderName = HeaderName::from_static("secret-key");
@@ -424,17 +425,116 @@ impl AuthMethods {
     }
 }
 
+impl AiEndpointUpdate {
+    /// Create a full endpoing from this update
+    ///
+    /// If all required fields are not set this will error
+    pub fn to_endpoint(self) -> Result<AiEndpoint, ApiError> {
+        // convert this update into a new endpoint
+        match (self.url, self.api_key, self.model) {
+            (Some(url), Some(api_key), Some(model)) => Ok(AiEndpoint {
+                url,
+                api_key,
+                model,
+            }),
+            _ => bad!(format!("Missing required fields for new endpoint")),
+        }
+    }
+
+    /// Apply this update to an existing endpoint
+    ///
+    /// # Arguments
+    ///
+    /// * `endpoint` - The endpoint to apply this update too
+    pub fn apply(self, mut endpoint: AiEndpoint) -> AiEndpoint {
+        // update this endpoints settings
+        update!(endpoint.url, self.url);
+        update!(endpoint.api_key, self.api_key);
+        update!(endpoint.model, self.model);
+        endpoint
+    }
+}
+
+impl AiSettingsUpdate {
+    /// Apply any updated AI settings
+    ///
+    /// # Arguments
+    ///
+    /// * `existing` - Any existing settings to update
+    pub fn apply(mut self, existing: &mut Option<AiSettings>) -> Result<(), ApiError> {
+        // check if we have existing existing to update
+        let mut settings = match existing.take() {
+            Some(settings) => settings,
+            None => {
+                // we don't have any existing settings so well need to make new ones
+                // We have to make sure that users provide us enough info to build our new settings
+                let default_endpoint = match self.default_endpoint.take() {
+                    Some(default) => default,
+                    None => {
+                        return bad!(
+                        "A default endpoint must be provided if no previous AI settings were set"
+                            .to_owned()
+                    );
+                    }
+                };
+                // make sure they provided us settings for our default endpoint
+                let endpoint = match self.endpoints.remove(&default_endpoint) {
+                    // turn this endpoint update into an endpoint
+                    Some(endpoint_update) => endpoint_update.to_endpoint()?,
+                    None => {
+                        return bad!(format!(
+                            "Settings for {default_endpoint} must be specified to set it as a default"
+                        ));
+                    }
+                };
+                // insert our default endpoints settings into a map
+                let mut endpoints = HashMap::with_capacity(self.endpoints.len());
+                // add our new default endpoint
+                endpoints.insert(default_endpoint.clone(), endpoint);
+                // build the base ai settings object
+                AiSettings {
+                    endpoints,
+                    default_endpoint,
+                }
+            }
+        };
+        // apply the rest of our updates to our settings
+        update!(settings.default_endpoint, self.default_endpoint);
+        // apply our endpoint updates
+        for (name, endpoint_update) in self.endpoints {
+            // get and update this endpoint if it already exists or create a new one
+            let endpoint = match settings.endpoints.remove(&name) {
+                Some(endpoint) => endpoint_update.apply(endpoint),
+                // this endpoint does not yet exist so create it
+                None => endpoint_update.to_endpoint()?,
+            };
+            // reinsert our endpoint
+            settings.endpoints.insert(name, endpoint);
+        }
+        // drop any endpoints that we want to delete
+        settings
+            .endpoints
+            .retain(|name, _| !self.remove_endpoints.contains(name));
+        // set our new ai settings for this user
+        *existing = Some(settings);
+        Ok(())
+    }
+}
+
 impl UserSettingsUpdate {
     /// Apply any updated settings to this user
     ///
     /// # Arguments
     ///
-    /// * `user` - The user to update
-    pub fn apply(self, user: &mut User) {
+    /// * `settings` - The user settings to update
+    pub fn apply(self, settings: &mut UserSettings) -> Result<(), ApiError> {
         // update our theme if an update was set
-        if let Some(theme) = self.theme {
-            user.settings.theme = theme;
+        update!(settings.theme, self.theme);
+        // apply any AI settings updates
+        if let Some(ai_update) = self.ai {
+            ai_update.apply(&mut settings.ai)?;
         }
+        Ok(())
     }
 }
 
@@ -853,7 +953,7 @@ impl User {
         }
         // apply any settings updates
         if let Some(settings) = update.settings {
-            settings.apply(&mut self);
+            settings.apply(&mut self.settings)?;
         }
         // save update user to the backend
         db::users::save(&self, shared).await?;
@@ -903,7 +1003,7 @@ impl User {
         crate::update!(target.role, update.role);
         // apply any settings updates
         if let Some(settings) = update.settings {
-            settings.apply(&mut target);
+            settings.apply(&mut target.settings)?;
         }
         // save update user to the backend
         db::users::save(&target, shared).await?;

@@ -11,8 +11,8 @@ use super::OpenApiSecurity;
 
 // our imports
 use crate::models::{
-    AuthResponse, Key, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings,
-    UserSettingsUpdate, UserUpdate,
+    AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, Key, ScrubbedUser,
+    Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::{ApiError, AppState};
 use crate::{is_admin, unauthorized, unavailable};
@@ -465,7 +465,7 @@ async fn sync_ldap(user: User, State(state): State<AppState>) -> Result<StatusCo
 #[derive(OpenApi)]
 #[openapi(
     paths(list, create, update, resend_email_verification, verify_email, list_details, auth, get_user, update_user, info, logout, logout_user, delete_user, sync_ldap),
-    components(schemas(AuthResponse, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate)),
+    components(schemas(AuthResponse, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate, AiSettings, AiSettingsUpdate, AiEndpoint, AiEndpointUpdate)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct UserApiDocs;

@@ -7202,6 +7202,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sysinfo",
  "thorium-api",
  "tokio",

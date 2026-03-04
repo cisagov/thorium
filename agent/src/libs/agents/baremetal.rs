@@ -139,6 +139,15 @@ impl AgentExecutor for BareMetal {
         (results, result_files)
     }
 
+    /// Perform an initial setup for all jobs this agent executes
+    ///
+    /// This are configs that are global to all jobs and currently that is only AI settings
+    #[instrument(name = "AgentExecutor<BareMetal>::init", skip_all, err(Debug))]
+    async fn init(&self) -> Result<(), Error> {
+        // AI settings are not supported for baremetal yet since the format is likely to change
+        Ok(())
+    }
+
     /// Setup the environment for executing a single job in Thorium
     ///
     /// # Arguments

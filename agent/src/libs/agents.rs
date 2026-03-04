@@ -426,6 +426,11 @@ pub trait AgentExecutor {
     /// Get the paths to this executors current jobs results and result files
     fn result_paths(&self, image: &Image) -> (String, String);
 
+    /// Perform an initial setup for all jobs this agent executes
+    ///
+    /// This are configs that are global to all jobs and currently that is only AI settings
+    async fn init(&self) -> Result<(), Error>;
+
     /// Setup the environment for executing a single job in Thorium
     ///
     /// # Arguments

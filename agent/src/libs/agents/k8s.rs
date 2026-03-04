@@ -152,6 +152,29 @@ impl AgentExecutor for K8s {
         (results, result_files)
     }
 
+    /// Perform an initial setup for all jobs this agent executes
+    ///
+    /// This are configs that are global to all jobs and currently that is only AI settings
+    #[instrument(name = "AgentExecutor<K8s>::init", skip_all, err(Debug))]
+    async fn init(&self) -> Result<(), Error> {
+        // only setup AI settings on linux
+        if !self.windows {
+            // get our user settings
+            let user = self.thorium.users.info().await?;
+            // get our ai settings
+            if let Some(settings) = &user.settings.ai {
+                // get our default endpoints settings
+                if let Some(endpoint) = settings.endpoints.get(&settings.default_endpoint) {
+                    // serialize our endpoint settings
+                    let serialized = serde_yaml::to_string(&endpoint)?;
+                    // write our endpoint settings to disk
+                    tokio::fs::write("/tmp/thorium/ai.yaml", serialized).await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Setup the environment for executing a single job in Thorium
     ///
     /// # Arguments

@@ -34,9 +34,11 @@ pub struct Worker {
     /// The node this worker is on
     pub node: String,
     /// This workers lifetime
-    pub lifetime: Lifetime,
+    lifetime: Lifetime,
     /// Stop claiming new jobs as an update is needed
-    pub halt_claiming: bool,
+    halt_claiming: bool,
+    /// Whether this agent has already been initialized
+    agent_intialized: bool,
 }
 
 impl Worker {
@@ -63,6 +65,7 @@ impl Worker {
             node,
             lifetime,
             halt_claiming: false,
+            agent_intialized: false,
         };
         Ok(worker)
     }
@@ -157,6 +160,24 @@ impl Worker {
                 match Agent::new(self, &self.target, job) {
                     // agent successfully built so start executing it
                     Ok(agent) => {
+                        // if we haven't run the agent initialization step then do that
+                        if !self.agent_intialized {
+                            // initialize this worker for our agents
+                            if let Err(error) = agent.executor.init().await {
+                                // log that we failed to init our worker and should exit
+                                event!(
+                                    Level::ERROR,
+                                    msg = "Failed to initialize worker",
+                                    error = error.to_string(),
+                                );
+                                // make sure our worker doesn't claim any new jobs
+                                self.halt_claiming = true;
+                                // exit this worker when possible
+                                return ClaimJobStatus::ExitWhenPossible;
+                            }
+                            // mark that this worker has been initialized for agents
+                            self.agent_intialized = true;
+                        }
                         // try to spawn this worker
                         let handle =
                             tokio::spawn(async move { agents::execute(agent, log_path).await });
