@@ -18,7 +18,8 @@ api = [
   "scylla", "ldap3", "itertools", "sha-1", "sha2", "md-5", "data-encoding", "anyhow", "elasticsearch", "zip", "async-trait",
   "axum", "http", "tower", "axum-macros", "tower-http", "tokio-stream", "generic-array", "futures-util", "tokio-util", "serde_qs",
   "aws-sdk-s3", "aws-types", "aws-smithy-http", "aws-credential-types", "scylla-utils", "http-body", "axum-extra", "once_cell", "utoipa",
-  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "mime", "rmcp"
+  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "mime", "rmcp",
+  "async-walkdir"
   ]
 
 # include scylla utility functions
@@ -122,6 +123,7 @@ headers = { version = "0.4", optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", features = ["full"], optional = true }
 async-recursion = { version = "1", optional = true }
+async-walkdir = { version = "2", optional = true }
 rand = { version = "0.9.1", features = ["alloc"], optional = true }
 colored = { version = "3", optional = true }
 scylla = { version = "1.2", features = ["chrono-04"], optional = true }

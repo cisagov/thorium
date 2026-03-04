@@ -22,6 +22,8 @@
 
 use std::path::Path;
 
+use async_walkdir::WalkDir;
+use futures::stream::StreamExt;
 use rmcp::ErrorData;
 use rmcp::handler::server::tool::Extension as RmcpExtension;
 use rmcp::handler::server::wrapper::Parameters;
@@ -64,6 +66,24 @@ pub struct DocPage {
 pub struct SearchDocs {
     /// The search query to find in the documentation.
     pub query: String,
+    /// Maximum number of results to return (default: 10).
+    #[serde(default)]
+    pub max_results: Option<usize>,
+    /// Maximum number of context snippets per result (default: 3).
+    #[serde(default)]
+    pub max_snippets: Option<usize>,
+    /// Number of context lines above and below each match (default: 1).
+    #[serde(default)]
+    pub context_lines: Option<usize>,
+}
+
+/// A context snippet around a search match with its location in the source file.
+#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Snippet {
+    /// The text content of the snippet with surrounding context lines.
+    pub text: String,
+    /// The 1-based line number where the match occurs in the source file.
+    pub line_offset: usize,
 }
 
 /// A single search result with context snippets.
@@ -76,15 +96,15 @@ pub struct SearchResult {
     /// The number of matches found in this page.
     pub match_count: usize,
     /// Context snippets around the matches.
-    pub snippets: Vec<String>,
+    pub snippets: Vec<Snippet>,
 }
 
-/// Parse the SUMMARY.md file into a list of table of contents entries.
+/// Parse TOC entries from raw SUMMARY.md content.
 ///
 /// Each line in SUMMARY.md is formatted as `"    - [Title](./path.md)"`
 /// where leading whitespace indicates nesting depth (4 spaces per level).
 /// Lines that don't contain a valid markdown link are skipped.
-fn parse_summary(content: &str) -> Vec<TocEntry> {
+fn parse_toc_entries(content: &str) -> Vec<TocEntry> {
     content
         .lines()
         .filter_map(|line| {
@@ -112,6 +132,25 @@ fn parse_summary(content: &str) -> Vec<TocEntry> {
             })
         })
         .collect()
+}
+
+/// Read and parse the SUMMARY.md table of contents from the documentation root.
+///
+/// Combines file I/O with [`parse_toc_entries`] so callers don't need to know
+/// about the `SUMMARY.md` convention.
+///
+/// # Errors
+///
+/// Returns `ErrorData` with `INTERNAL_ERROR` if `SUMMARY.md` cannot be read.
+async fn parse_summary(docs_path: &Path) -> Result<Vec<TocEntry>, ErrorData> {
+    let content = tokio::fs::read_to_string(docs_path.join("SUMMARY.md"))
+        .await
+        .map_err(|e| ErrorData {
+            code: rmcp::model::ErrorCode::INTERNAL_ERROR,
+            message: format!("Failed to read documentation index: {e}").into(),
+            data: None,
+        })?;
+    Ok(parse_toc_entries(&content))
 }
 
 /// Validate a documentation path to prevent directory traversal.
@@ -163,35 +202,43 @@ fn validate_doc_path(docs_path: &Path, requested: &str) -> Result<std::path::Pat
     Ok(canonical_target)
 }
 
-/// Recursively collect all markdown file paths under a directory.
+/// Collect all markdown file paths under a directory using async traversal.
+///
+/// Uses [`async_walkdir::WalkDir`] to avoid blocking the async runtime on
+/// large directory trees.
 ///
 /// # Errors
 ///
 /// Returns `std::io::Error` if the directory cannot be read or any entry
 /// within it cannot be inspected.
-fn collect_md_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, std::io::Error> {
-    Ok(std::fs::read_dir(dir)?
-        .map(|entry| {
-            let path = entry?.path();
-            if path.is_dir() {
-                collect_md_files(&path)
-            } else {
-                Ok(vec![path])
-            }
-        })
-        .collect::<Result<Vec<Vec<_>>, _>>()?
-        .into_iter()
-        .flatten()
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
-        .collect())
+async fn collect_md_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, std::io::Error> {
+    let mut paths = Vec::new();
+    let mut walker = WalkDir::new(dir);
+    while let Some(entry) = walker.next().await {
+        let entry = entry.map_err(std::io::Error::from)?;
+        let path = entry.path();
+        if !path.is_dir() && path.extension().and_then(|e| e.to_str()) == Some("md") {
+            paths.push(path);
+        }
+    }
+    Ok(paths)
 }
 
 /// Extract the page title from markdown content (the first `# ` heading).
-fn extract_title(content: &str) -> String {
+///
+/// Falls back to the file stem (filename without extension) if a path is
+/// provided and no `# ` heading is found. Returns `"Untitled"` only when
+/// both the heading and the path are absent.
+fn extract_title(content: &str, path: Option<&Path>) -> String {
     content
         .lines()
         .find_map(|line| line.trim().strip_prefix("# ").map(String::from))
-        .unwrap_or_else(|| "Untitled".to_string())
+        .unwrap_or_else(|| {
+            path.and_then(|p| p.file_stem())
+                .and_then(|s| s.to_str())
+                .map(String::from)
+                .unwrap_or_else(|| "Untitled".to_string())
+        })
 }
 
 /// Extract context snippets around search matches.
@@ -204,7 +251,7 @@ fn extract_snippets(
     query_lower: &str,
     max_snippets: usize,
     context_lines: usize,
-) -> Vec<String> {
+) -> Vec<Snippet> {
     let lines: Vec<&str> = content.lines().collect();
     let mut snippets = Vec::new();
     let mut last_snippet_line: Option<usize> = None;
@@ -223,8 +270,11 @@ fn extract_snippets(
             // grab the matching line with context on each side
             let start = i.saturating_sub(context_lines);
             let end = (i + context_lines + 1).min(lines.len());
-            let snippet: String = lines[start..end].join("\n");
-            snippets.push(snippet);
+            let text: String = lines[start..end].join("\n");
+            snippets.push(Snippet {
+                text,
+                line_offset: i + 1, // 1-based line number
+            });
             last_snippet_line = Some(i);
         }
     }
@@ -251,17 +301,7 @@ impl ThoriumMCP {
     ) -> Result<CallToolResult, ErrorData> {
         McpConfig::grab_token(&parts)?;
 
-        let summary_path = self.conf.docs_path.join("SUMMARY.md");
-        let content =
-            tokio::fs::read_to_string(&summary_path)
-                .await
-                .map_err(|e| ErrorData {
-                    code: rmcp::model::ErrorCode::INTERNAL_ERROR,
-                    message: format!("Failed to read documentation index: {e}").into(),
-                    data: None,
-                })?;
-
-        let entries = parse_summary(&content);
+        let entries = parse_summary(&self.conf.docs_path).await?;
         let serialized = serde_json::to_value(&entries).unwrap();
 
         Ok(CallToolResult {
@@ -332,7 +372,12 @@ impl ThoriumMCP {
     #[instrument(name = "ThoriumMCP::search_docs", skip(self, parts), err(Debug))]
     pub async fn search_docs(
         &self,
-        Parameters(SearchDocs { query }): Parameters<SearchDocs>,
+        Parameters(SearchDocs {
+            query,
+            max_results,
+            max_snippets,
+            context_lines,
+        }): Parameters<SearchDocs>,
         RmcpExtension(parts): RmcpExtension<axum::http::request::Parts>,
     ) -> Result<CallToolResult, ErrorData> {
         McpConfig::grab_token(&parts)?;
@@ -345,57 +390,60 @@ impl ThoriumMCP {
             });
         }
 
+        let max_results = max_results.unwrap_or(MAX_SEARCH_RESULTS);
+        let max_snippets = max_snippets.unwrap_or(MAX_SNIPPETS_PER_PAGE);
+        let context_lines = context_lines.unwrap_or(SNIPPET_CONTEXT_LINES);
         let query_lower = query.to_lowercase();
 
         let md_files =
-            collect_md_files(&self.conf.docs_path).map_err(|e| ErrorData {
-                code: rmcp::model::ErrorCode::INTERNAL_ERROR,
-                message: format!("Failed to read documentation directory: {e}").into(),
-                data: None,
-            })?;
+            collect_md_files(&self.conf.docs_path)
+                .await
+                .map_err(|e| ErrorData {
+                    code: rmcp::model::ErrorCode::INTERNAL_ERROR,
+                    message: format!("Failed to read documentation directory: {e}").into(),
+                    data: None,
+                })?;
 
-        let mut results: Vec<SearchResult> = md_files
-            .iter()
-            .filter_map(|file_path| {
-                let content = match std::fs::read_to_string(file_path) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::warn!(
-                            path = %file_path.display(),
-                            "Failed to read documentation file: {e}"
-                        );
-                        return None;
-                    }
-                };
-
-                let match_count =
-                    content.to_lowercase().matches(&query_lower).count();
-                if match_count == 0 {
-                    return None;
+        let mut results: Vec<SearchResult> = Vec::new();
+        for file_path in &md_files {
+            let content = match tokio::fs::read_to_string(file_path).await {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!(
+                        path = %file_path.display(),
+                        "Failed to read documentation file: {e}"
+                    );
+                    continue;
                 }
+            };
 
-                let rel_path = file_path
-                    .strip_prefix(&self.conf.docs_path)
-                    .unwrap_or(file_path)
-                    .to_string_lossy()
-                    .to_string();
+            let match_count =
+                content.to_lowercase().matches(&query_lower).count();
+            if match_count == 0 {
+                continue;
+            }
 
-                Some(SearchResult {
-                    title: extract_title(&content),
-                    snippets: extract_snippets(
-                        &content,
-                        &query_lower,
-                        MAX_SNIPPETS_PER_PAGE,
-                        SNIPPET_CONTEXT_LINES,
-                    ),
-                    path: rel_path,
-                    match_count,
-                })
-            })
-            .collect();
+            let rel_path = file_path
+                .strip_prefix(&self.conf.docs_path)
+                .unwrap_or(file_path)
+                .to_string_lossy()
+                .to_string();
+
+            results.push(SearchResult {
+                title: extract_title(&content, Some(file_path)),
+                snippets: extract_snippets(
+                    &content,
+                    &query_lower,
+                    max_snippets,
+                    context_lines,
+                ),
+                path: rel_path,
+                match_count,
+            });
+        }
 
         results.sort_by(|a, b| b.match_count.cmp(&a.match_count));
-        results.truncate(MAX_SEARCH_RESULTS);
+        results.truncate(max_results);
 
         let serialized = serde_json::to_value(&results).unwrap();
 
@@ -429,7 +477,7 @@ mod tests {
     - [Login](./getting_started/login.md)
         - [Advanced Login](./getting_started/advanced_login.md)
 ";
-        let entries = parse_summary(content);
+        let entries = parse_toc_entries(content);
         assert_eq!(
             entries,
             vec![
@@ -471,7 +519,7 @@ mod tests {
         ) {
             let indent = " ".repeat(depth * 4);
             let line = format!("{indent}- [{title}](./{path})");
-            let entries = parse_summary(&line);
+            let entries = parse_toc_entries(&line);
             prop_assert_eq!(entries.len(), 1);
             prop_assert_eq!(&entries[0].title, &title);
             prop_assert_eq!(&entries[0].path, &path);
@@ -482,7 +530,7 @@ mod tests {
         fn parse_summary_skips_non_links(
             text in "[A-Za-z0-9 ]{1,50}",
         ) {
-            let entries = parse_summary(&text);
+            let entries = parse_toc_entries(&text);
             prop_assert!(entries.is_empty());
         }
     }
@@ -499,7 +547,7 @@ mod tests {
             summary_path.display()
         );
         let content = fs::read_to_string(&summary_path).unwrap();
-        let entries = parse_summary(&content);
+        let entries = parse_toc_entries(&content);
         assert!(
             entries.len() > 10,
             "Expected many TOC entries, got {}",
@@ -548,8 +596,8 @@ mod tests {
 
     // ── collect_md_files ───────────────────────────────────────────
 
-    #[test]
-    fn collect_md_files_finds_markdown() {
+    #[tokio::test]
+    async fn collect_md_files_finds_markdown() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("dragons.md"), "# Here Be Dragons").unwrap();
         fs::write(dir.path().join("treasure_map.txt"), "X marks the spot").unwrap();
@@ -558,7 +606,7 @@ mod tests {
         fs::create_dir(&sub).unwrap();
         fs::write(sub.join("boss_fight.md"), "# The Final Boss").unwrap();
 
-        let paths = collect_md_files(dir.path()).unwrap();
+        let paths = collect_md_files(dir.path()).await.unwrap();
         assert_eq!(paths.len(), 2);
         let names: Vec<String> = paths
             .iter()
@@ -568,15 +616,15 @@ mod tests {
         assert!(names.contains(&"boss_fight.md".to_string()));
     }
 
-    #[test]
-    fn collect_md_files_empty_dir() {
+    #[tokio::test]
+    async fn collect_md_files_empty_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let paths = collect_md_files(dir.path()).unwrap();
+        let paths = collect_md_files(dir.path()).await.unwrap();
         assert!(paths.is_empty());
     }
 
-    #[test]
-    fn collect_md_files_against_real_docs() {
+    #[tokio::test]
+    async fn collect_md_files_against_real_docs() {
         let docs_src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("docs")
             .join("src");
@@ -585,7 +633,7 @@ mod tests {
             "Real docs not found at {}",
             docs_src.display()
         );
-        let paths = collect_md_files(&docs_src).unwrap();
+        let paths = collect_md_files(&docs_src).await.unwrap();
         assert!(
             paths.len() > 50,
             "Expected many md files, got {}",
@@ -602,7 +650,7 @@ mod tests {
             title in "[A-Za-z]{1,30}",
         ) {
             let content = format!("some preamble\n## Not This\n# {title}\nBody text.");
-            prop_assert_eq!(extract_title(&content), title);
+            prop_assert_eq!(extract_title(&content, None), title);
         }
 
         #[test]
@@ -610,8 +658,17 @@ mod tests {
             body in "[a-z ]{1,100}",
         ) {
             // body only contains lowercase letters and spaces, never "# "
-            prop_assert_eq!(extract_title(&body), "Untitled");
+            prop_assert_eq!(extract_title(&body, None), "Untitled");
         }
+    }
+
+    #[test]
+    fn extract_title_falls_back_to_filename() {
+        let path = Path::new("concepts/getting_started.md");
+        assert_eq!(
+            extract_title("no heading here", Some(path)),
+            "getting_started"
+        );
     }
 
     // ── extract_snippets ───────────────────────────────────────────
@@ -655,9 +712,9 @@ mod tests {
                 extract_snippets(&content, &query, 10, SNIPPET_CONTEXT_LINES);
             for snippet in &snippets {
                 prop_assert!(
-                    snippet.to_lowercase().contains(&query),
+                    snippet.text.to_lowercase().contains(&query),
                     "Snippet {:?} does not contain query {:?}",
-                    snippet,
+                    snippet.text,
                     query
                 );
             }
@@ -670,7 +727,7 @@ mod tests {
             let content = "a\nb\nc\nmatch\nd\ne\nf";
             let snippets = extract_snippets(content, "match", 1, context_lines);
             prop_assert_eq!(snippets.len(), 1);
-            let line_count = snippets[0].lines().count();
+            let line_count = snippets[0].text.lines().count();
             // snippet should contain at most: context above + match + context below
             let expected_max = context_lines + 1 + context_lines;
             prop_assert!(
@@ -678,6 +735,8 @@ mod tests {
                 "Got {line_count} lines with context_lines={context_lines}, \
                  expected at most {expected_max}"
             );
+            // "match" is on line 4 (1-based)
+            prop_assert_eq!(snippets[0].line_offset, 4);
         }
     }
 
