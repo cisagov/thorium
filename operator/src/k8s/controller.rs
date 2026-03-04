@@ -48,7 +48,13 @@ impl SharedInfo {
 async fn get_k8s_clients() -> Result<Vec<(String, Client)>, Error> {
     // try to load the kubeconfig from the environment
     let Some(kube_conf) = Kubeconfig::from_env()? else {
-        return Err(Error::new("Failed to load k8s config"));
+        println!("Couldn't find kubeconfig falling back to service account");
+        // try to get a kubconfig from the environment
+        let client = Client::try_default().await?;
+        // assume we are using the default k8s context name
+        let name = "kubernetes-admin@cluster.local".to_owned();
+        // service accounts will only have a single client ever
+        return Ok(vec![(name, client)]);
     };
     // build a list of clients and their context names
     let mut clients = Vec::with_capacity(1);
