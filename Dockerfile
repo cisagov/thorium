@@ -30,8 +30,6 @@ ADD ./target/x86_64-pc-windows-gnu/release/thorium-reactor.exe binaries/windows/
 # copy macos binaries to target paths
 ADD ./target/x86_64-apple-darwin/release/thorctl binaries/darwin/x86-64/thorctl
 ADD ./target/aarch64-apple-darwin/release/thorctl binaries/darwin/arm64/thorctl
-# copy arm binaries to target paths
-ADD ./target/aarch64-unknown-linux-musl/release/thorctl binaries/linux/aarch64/thorctl
 # copy the thorctl install script to the right path
 ADD ./api/docs/src/scripts/install-thorctl.sh binaries/install-thorctl.sh
 
