@@ -1,5 +1,5 @@
 import { countFileTags } from '@thorpi';
-import { FilterTags, TagEntry, TagOptions } from 'models';
+import { RequestTags, TagEntry, TagOptions } from 'models';
 
 import rawAttackTagDefaults from '../../mitre_tags/attackTagsList.tags?raw';
 import rawMbcTagDefaults from '../../mitre_tags/MBCTagsList.tags?raw';
@@ -18,7 +18,7 @@ const mbcTagOptions = String(rawMbcTagDefaults).split('\n');
 
 /**
  * Save tag count to local storage.
- * @param {TagOptions} newTagCounts Tag Options to save
+ * @param {TagOptions} newTagCounts - Tag Options to save
  *
  * Saves TagOption data to local storage with a timeout
  * Strips out ATT&CK and MBC data (which we can load from the static files)
@@ -52,13 +52,13 @@ async function loadTagsFromApi() {
 }
 
 /**
- * Fetch tags
+ * Fetch tag options from local storage
  *
  * Checks if tags are present in local storage, is not corrupted, and not expired.
  * If any checks fail, send an api request to save tags to local storage.
  * If tags are valid don't do anything. Load using {@link load}
  * */
-export async function fetchTags() {
+export async function fetchLocalStorageTags() {
   let storageData: StorageType | null = null;
   const storageDataString = localStorage.getItem('tagCounts');
 
@@ -80,6 +80,9 @@ export async function fetchTags() {
   return null;
 }
 
+/**
+ * Remove tag options from local storage
+ * */
 export function clearTagDataFromLocalStorage() {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
 }
@@ -110,8 +113,8 @@ export function loadTagOptionsFromLocalStorage(): TagOptions | null {
 
 /**
  * Check if a tag is invalid.
- * @param {TagEntry} tag Tag to check. Has a key and a value
- * @param {boolean} ignore_empty boolean flag to ignore empty tags
+ * @param {TagEntry} tag - Tag to check. Has a key and a value
+ * @param {boolean} ignore_empty - boolean flag to ignore empty tags
  * @returns {boolean} true if the tag is valid, false otherwise
  *
  * A tag is invalid if either the key or the value are empty.
@@ -132,8 +135,9 @@ export function tagIsInvalid(tag: TagEntry, ignore_empty: boolean = false): bool
 
 /**
  * Check if any tag is invalid.
- * @param {TagEntry[]} tags Tags to check. Each has a key and value
- * @param {boolean} ignore_empty Boolean flag to ignore empty tags
+ *
+ * @param {TagEntry[]} tags - Tags to check. Each has a key and value
+ * @param {boolean} ignore_empty - Boolean flag to ignore empty tags
  * @returns {boolean} true if all tags are valid, false otherwise
  *
  * This function uses {@link tagIsInvalid} to determine if any tags are invalid.
@@ -150,14 +154,14 @@ export function hasInvalidTags(tags: TagEntry[], ignore_empty: boolean = true): 
 }
 
 /**
- * Conversion function between FilterTags and TagEntry[]
- * @param {FilterTags} tags
+ * Conversion function between RequestTags and TagEntry[]
+ * @param {RequestTags} tags
  * @returns {TagEntry[]}
  *
- * Conversion function to flatten FilterTags object. Useful for TagSelect
+ * Conversion function to flatten RequestTags object. Useful for TagSelect
  * component
  **/
-export function filterTagsToTagEntryList(tags: FilterTags): TagEntry[] {
+export function requestTagsToTagEntryList(tags: RequestTags): TagEntry[] {
   const tagEntries: TagEntry[] = [];
   Object.keys(tags).forEach((key) => {
     const values = tags[key];
@@ -169,15 +173,15 @@ export function filterTagsToTagEntryList(tags: FilterTags): TagEntry[] {
 }
 
 /**
- * Conversion function between TagEntry[] and FilterTags
+ * Conversion function between TagEntry[] and RequestTags
  * @param {TagEntry[]} tagEntry
- * @returns {FilterTags}
+ * @returns {RequestTags}
  *
- * Conversion function from TagEntry[] to FilterTags object. Useful for TagSelect
+ * Conversion function from TagEntry[] to RequestTags object. Useful for TagSelect
  * component
  **/
-export function tagEntryListToFilterTags(tagEntry: TagEntry[]): FilterTags {
-  const newTags: FilterTags = {};
+export function tagEntriesToRequestTags(tagEntry: TagEntry[]): RequestTags {
+  const newTags: RequestTags = {};
   tagEntry.forEach((tag) => {
     if (tag.key in newTags) {
       if (!newTags[tag.key].includes(tag.value)) {
@@ -191,9 +195,51 @@ export function tagEntryListToFilterTags(tagEntry: TagEntry[]): FilterTags {
 }
 
 /**
+ * Computes which collection tag values were added and removed between two tag maps.
+ *
+ * A tag map is shaped as: `{ [key: string]: string[] }`, where each key can have multiple values.
+ *
+ * @param {RequestTags} currentTags - The existing collection tags in the Thorium backend.
+ * @param {RequestTags} pendingTags - The edited (pending) collection tags.
+ * @returns An object containing:
+ *  - `toAdd`: keys/values present in `pendingTags` but not in `currentTags`
+ *  - `toDelete`: keys/values present in `currentTags` but not in `pendingTags`
+ */
+export function diffTagUpdate(
+  currentTags: RequestTags | undefined,
+  pendingTags: RequestTags | undefined,
+): { toAdd: RequestTags; toDelete: RequestTags } {
+  // set current/pending tags to empty map if undefined
+  const current = currentTags ?? {};
+  const pending = pendingTags ?? {};
+  // get a set of all keys both in current and pending
+  const keys = new Set<string>([...Object.keys(current), ...Object.keys(pending)]);
+  // declare maps of keys/values to add and delete
+  const toAdd: RequestTags = {};
+  const toDelete: RequestTags = {};
+  for (const k of keys) {
+    // get the set of values from current/pending, or default to empty set
+    const currentValues = new Set(current[k] ?? []);
+    const pendingValues = new Set(pending[k] ?? []);
+    // values to add are everything in pending that's not in current
+    const valuesToAdd = [...pendingValues].filter((v) => !currentValues.has(v));
+    // values to delete are everything in current that's not in pending
+    const valuesToDelete = [...currentValues].filter((v) => !pendingValues.has(v));
+    // add the values to add and delete to our main maps
+    if (valuesToAdd.length) {
+      toAdd[k] = valuesToAdd;
+    }
+    if (valuesToDelete.length) {
+      toDelete[k] = valuesToDelete;
+    }
+  }
+  return { toAdd, toDelete };
+}
+
+/**
  * Check if a specific tag is empty
- * @param {TagEntry} tag
- * @returns {boolean}
+ * @param {TagEntry} tag - tag to check
+ * @returns {boolean} whether tag contains key and/or value string
  *
  * If key and value, stripped of spaces / newlines, is empty, return true
  * */

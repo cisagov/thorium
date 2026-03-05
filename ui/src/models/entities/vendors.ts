@@ -46,12 +46,7 @@ export const BlankVendor: Vendor = {
   kind: Entities.Vendor,
   metadata: {
     Vendor: {
-      countries: [
-        {
-          code: 'US',
-          name: 'United States of America',
-        },
-      ],
+      countries: [],
       critical_sectors: [],
     },
   },
@@ -68,7 +63,7 @@ export const BlankCreateVendor: CreateVendor = {
   kind: Entities.Vendor,
   metadata: {
     Vendor: {
-      countries: ['United States of America'],
+      countries: [],
       critical_sectors: [],
     },
   },

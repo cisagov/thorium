@@ -1,8 +1,9 @@
 // project imports
-import { DEFAULT_HIDE_TAG_KEYS, SelectInputArray, TagSelect } from '@components';
+import { SelectInputArray, TagSelect } from '@components';
+import { DEFAULT_HIDE_TAG_KEYS } from './utilities';
 import { FilterDiv } from './shared';
-import { FilterTags } from '@models';
-import { filterTagsToTagEntryList, tagEntryListToFilterTags } from '@utilities';
+import { RequestTags } from '@models';
+import { requestTagsToTagEntryList, tagEntriesToRequestTags } from '@utilities';
 
 interface FilterTagDisplayKeysProps {
   selected: string[];
@@ -27,18 +28,18 @@ export const FilterTagDisplayKeys: React.FC<FilterTagDisplayKeysProps> = ({ sele
 };
 
 interface FilterTagsProps {
-  selected: FilterTags | null | undefined;
+  selected: RequestTags | null | undefined;
   disabled: boolean;
-  onChange: (tags: FilterTags) => void;
+  onChange: (tags: RequestTags) => void;
 }
 
 export const FilterTagsField: React.FC<FilterTagsProps> = ({ selected, onChange, disabled }) => {
   return (
     <FilterDiv>
       <TagSelect
-        tags={filterTagsToTagEntryList(selected ? selected : {})}
+        tags={requestTagsToTagEntryList(selected ? selected : {})}
         setTags={(tagEntries) => {
-          onChange(tagEntryListToFilterTags(tagEntries));
+          onChange(tagEntriesToRequestTags(tagEntries));
         }}
         placeholderText="Select Tags"
       />

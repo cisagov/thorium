@@ -2,8 +2,8 @@ import React, { Fragment } from 'react';
 import { Col, Row } from 'react-bootstrap';
 
 // project imports
-import { filterIncludedTags, filterExcludedTags, FormattedFileInfoTagKeys, DangerTagKeys, MitreTagKeys } from './utilities';
-import { TagBadge } from './tags';
+import { filterIncludedTags, filterExcludedTags, FormattedFileInfoTagKeys, DangerTagKeys, MitreTagKeys } from '@components';
+import TagBadge from '../tag_badge';
 import { Entities, Tags } from '@models';
 
 interface CondensedFileTagProps {

@@ -1,5 +1,5 @@
 import { JSX } from 'react';
-import { Row, Col } from 'react-bootstrap';
+import { Row } from 'react-bootstrap';
 import { getNames as getCountryNames, Country } from 'country-list';
 
 // project imports

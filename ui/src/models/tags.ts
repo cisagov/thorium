@@ -8,16 +8,21 @@ export type Tags = {
   };
 };
 
-export type FilterTags = {
+// create/patch tags structure
+export type RequestTags = {
   [key: string]: string[];
+};
+
+// used in TagSelect component
+// instead of tag key and list of values each key/value pair has its own entry
+export type TagEntry = {
+  key: string;
+  value: string;
 };
 
 export type TreeTags = {
   tags: { [key: string]: string[] };
 };
-
-// create tags structure, same as Filter Tags for browsing
-export type CreateTags = FilterTags;
 
 export enum TagTypes {
   Files = 'Files',
@@ -45,12 +50,4 @@ export type TagCounts = {
 
 export type TagOptions = {
   [key: string]: string[];
-};
-
-//used in TagSelect component.
-// instead of tag key and list of values each
-// key/value pair has its own entry
-export type TagEntry = {
-  key: string;
-  value: string;
 };

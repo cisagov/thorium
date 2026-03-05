@@ -1,5 +1,5 @@
 import { Device, DeviceMeta } from './devices';
-import { CreateTags, Tags } from '../tags';
+import { RequestTags, Tags } from '../tags';
 import { Vendor, VendorMeta } from './vendors';
 import { Collection, CollectionMeta } from './collections';
 
@@ -33,14 +33,8 @@ export type Entity = {
 //    permissions array (vector in Rust) which is included when getting an
 //    existing entity
 export type CreateEntity = Omit<Entity, 'id' | 'submitter' | 'created' | 'tags'> & {
-  tags: CreateTags;
+  tags: RequestTags;
 };
-
-// Handles preprocessing of entity before upload; required for complex data
-//     we don't want to manage/process on every user input like collection tags
-export interface CreateEntityPreprocessor<T extends CreateEntity> {
-  preprocess(this: this, entity: T): T;
-}
 
 // format for updating entity metadata
 export type UpdateEntityMetadata = {

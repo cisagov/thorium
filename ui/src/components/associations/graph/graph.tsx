@@ -21,7 +21,7 @@ cytoscape.use(elk);
 cytoscape.use(svg);
 
 // project imports
-import { Seed, Graph, BranchNode, Direction, BlankGraph } from '@models';
+import { Seed, Graph, BranchNode, Direction, BlankGraph, Entities } from '@models';
 import { RenderErrorAlert } from '@components';
 import { getInitialTree, growTree } from '@thorpi';
 import { isNode, Node, NodeInfo } from './nodes';
@@ -111,46 +111,14 @@ const addNode = (
         },
         classes: classes,
       });
-    } else if ('Entity' in nodeData && nodeData.Entity?.kind == 'Device') {
+    } else if (nodeData.Entity?.kind && Object.keys(Entities).includes(nodeData.Entity.kind)) {
+      const nodeType = nodeData.Entity.kind.toLocaleLowerCase();
       if (growable.includes(node)) {
-        classes.push('growable-device');
+        classes.push(`growable-${nodeType}`);
       } else if (isInitialNode) {
-        classes.push('initial-device');
+        classes.push(`initial-${nodeType}`);
       } else {
-        classes.push('basic-device');
-      }
-      elements.push({
-        data: {
-          id: node,
-          label: nodeData.Entity.name,
-          diameter: getNodeSize(scoreNode(graph.data_map[node]), nodeCount),
-        },
-        classes: classes,
-      });
-    } else if ('Entity' in nodeData && nodeData.Entity?.kind == 'Vendor') {
-      console.log('Vendor');
-      if (growable.includes(node)) {
-        classes.push('growable-vendor');
-      } else if (isInitialNode) {
-        classes.push('initial-vendor');
-      } else {
-        classes.push('basic-vendor');
-      }
-      elements.push({
-        data: {
-          id: node,
-          label: nodeData.Entity.name,
-          diameter: getNodeSize(scoreNode(graph.data_map[node]), nodeCount),
-        },
-        classes: classes,
-      });
-    } else if ('Entity' in nodeData && nodeData.Entity?.kind == 'Collection') {
-      if (growable.includes(node)) {
-        classes.push('growable-collection');
-      } else if (isInitialNode) {
-        classes.push('initial-collection');
-      } else {
-        classes.push('basic-collection');
+        classes.push(`basic-${nodeType}`);
       }
       elements.push({
         data: {
@@ -204,7 +172,6 @@ const addEdge = (
   if (initialLabel) {
     classes.push('has-edge-label');
   }
-  console.log(target);
   elements.push({
     data: { source: sourceNode, target: targetNode, label: getEdgeLabel(targetNode, sourceNode, target, graph) },
     classes: classes,
@@ -265,34 +232,13 @@ const grow = async (
     // remove any growable classes for source
     if (cyInstance?.current && data?.growable && !data.growable.map((node) => node.toString()).includes(source)) {
       const node = cyInstance.current.$(`#${source}`);
-      if (node.hasClass('growable-file')) {
-        node.removeClass('growable-file');
-        node.addClass('basic-file');
-      }
-      if (node.hasClass('growable-repo')) {
-        node.removeClass('growable-repo');
-        node.addClass('basic-repo');
-      }
-      if (node.hasClass('growable-tag')) {
-        node.removeClass('growable-tag');
-        node.addClass('basic-tag');
-      }
-      if (node.hasClass('growable-vendor')) {
-        node.removeClass('growable-vendor');
-        node.addClass('basic-vendor');
-      }
-      if (node.hasClass('growable-device')) {
-        node.removeClass('growable-device');
-        node.addClass('basic-device');
-      }
-      if (node.hasClass('growable-collection')) {
-        node.removeClass('growable-collection');
-        node.addClass('basic-collection');
-      }
-      if (node.hasClass('growable-other')) {
-        node.removeClass('growable-other');
-        node.addClass('basic-other');
-      }
+      Object.keys(Entities).forEach((entityType) => {
+        const type = entityType.toLocaleLowerCase();
+        if (node.hasClass(`growable-${type}`)) {
+          node.removeClass(`growable-${type}`);
+          node.addClass(`basic-${type}`);
+        }
+      });
     }
     // update nodes that are no longer growable
     if (data?.growable && data.growable.length > 0) {

@@ -1,10 +1,12 @@
 import { useEffect, useRef, KeyboardEvent, FocusEvent, useLayoutEffect } from 'react';
 import { styled } from 'styled-components';
-import { TagEntry } from 'models';
-import { EditingMode } from './editing_types';
-import { tagIsInvalid } from '@utilities';
-import { getTagColorClass } from '../utilities';
 import { FaX } from 'react-icons/fa6';
+
+// project imports
+import { TagEntry } from '@models';
+import { tagIsInvalid } from '@utilities';
+import { getTagColorClass } from '@components';
+import { EditingMode } from './editing_types';
 
 type TagFieldProps = {
   value: string;

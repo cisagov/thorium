@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Row } from 'react-bootstrap';
+import { Country } from 'country-list';
 
 // project imports
 import {
@@ -19,7 +20,6 @@ import {
 import { useAuth } from '@utilities';
 import { Entities, Filters, Vendor } from '@models';
 import { listEntities } from '@thorpi';
-import { Country } from 'country-list';
 
 // get files using filters and and an optional cursor
 const getVendors = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {

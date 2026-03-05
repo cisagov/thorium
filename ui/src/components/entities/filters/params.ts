@@ -1,5 +1,5 @@
 // project imports
-import { Filters, FilterTags } from 'models';
+import { Filters, RequestTags } from 'models';
 import { tagIsInvalid } from '@utilities';
 import { DEFAULT_HIDE_TAG_KEYS } from './utilities';
 
@@ -61,7 +61,7 @@ export function encodeFiltersToParams(filters: Filters) {
 // decode search params to filters
 export function decodeParamsToFilters(searchParams: URLSearchParams) {
   const params: Filters = {};
-  const tags: FilterTags = {};
+  const tags: RequestTags = {};
   // Iterate over each search parameter
   for (const [key, value] of searchParams.entries()) {
     // skip empty values

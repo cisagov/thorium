@@ -1,4 +1,4 @@
-import { BranchNode, Direction, FilterTags, Graph, SubmissionChunk } from '@models';
+import { BranchNode, RequestTags, Graph, SubmissionChunk } from '@models';
 
 // get the file name from full path
 export const stripFilePath = (filePath: string): string => {
@@ -23,7 +23,7 @@ export const formatSubmissionNames = (submissions: SubmissionChunk[]) => {
 };
 
 // format tag label name
-export const formatTagNames = (tags: FilterTags, truncate: boolean) => {
+export const formatTagNames = (tags: RequestTags, truncate: boolean) => {
   const tagStrings: string[] = [];
   Object.keys(tags).map((key: string) => {
     tags[key].map((value: string) => {

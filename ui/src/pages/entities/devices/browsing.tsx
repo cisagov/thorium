@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Col, Row } from 'react-bootstrap';
-import styled from 'styled-components';
+import { Row } from 'react-bootstrap';
 
 // project imports
 import {
@@ -18,7 +17,7 @@ import {
   Page,
 } from '@components';
 import { useAuth } from '@utilities';
-import { Device, Entities, Entity, Filters } from '@models';
+import { Device, Entities, Filters } from '@models';
 import { listEntities } from '@thorpi';
 
 // get files using filters and and an optional cursor

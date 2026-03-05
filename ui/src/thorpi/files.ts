@@ -1,7 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { CreateTags, Filters, TagCounts } from '@models';
+import { Filters, RequestTags, TagCounts } from '@models';
 
 // Debugging errors randomly inserted.
 // Valid values 0-100 (percentage chance of error)
@@ -175,11 +175,11 @@ export async function getFileDetails(sha256: string, errorHandler: (error: strin
  * @async
  * @function
  * @param {string} sha256 - sha256 hash of sample to update
- * @param {CreateTags} tags - tags to add (and optionally groups to add them to)
+ * @param {RequestTags} tags - tags to add (and optionally groups to add them to)
  * @param {(error: string) => void} errorHandler - error handler function
  * @returns {Promise<boolean>} - promise object representing tags post response.
  */
-export async function uploadTags(sha256: string, tags: CreateTags, errorHandler: (error: string) => void): Promise<boolean> {
+export async function uploadTags(sha256: string, tags: RequestTags, errorHandler: (error: string) => void): Promise<boolean> {
   const url = '/files/tags/' + sha256;
   return client
     .post(url, tags)
@@ -200,11 +200,11 @@ export async function uploadTags(sha256: string, tags: CreateTags, errorHandler:
  * @async
  * @function
  * @param {string} sha256 - sha256 hash of sample to update
- * @param {CreateTags} tags - tags to delete (and optionally groups to delete them from)
+ * @param {RequestTags} tags - tags to delete (and optionally groups to delete them from)
  * @param {(error: string) => void} errorHandler - error handler function
  * @returns {Promise<boolean>} - promise of delete file tags success boolean
  */
-export async function deleteTags(sha256: string, tags: CreateTags, errorHandler: (error: string) => void): Promise<boolean> {
+export async function deleteTags(sha256: string, tags: RequestTags, errorHandler: (error: string) => void): Promise<boolean> {
   const url = '/files/tags/' + sha256;
   return client
     .delete(url, { data: tags })

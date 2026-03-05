@@ -1,53 +1,12 @@
 import { getCode as getCountryCode, Country } from 'country-list';
 
 // project imports
-import { CollectionTags, CreateEntity, CreateTags, CriticalSector, Entities, Entity, Vendor } from '@models';
+import { RequestTags, CreateEntity, CriticalSector, Entities, Entity, Vendor } from '@models';
+import { diffTagUpdate } from '@utilities';
 
 const reformatCriticalSectors = (sector: string): string => {
   return sector.replaceAll(' and ', '').replaceAll(',', '').replaceAll(' ', '');
 };
-
-/**
- * Computes which collection tag values were added and removed between two tag maps.
- *
- * A tag map is shaped as: `{ [key: string]: string[] }`, where each key can have multiple values.
- *
- * @param currentTags - The existing collection tags in the Thorium backend.
- * @param pendingTags - The edited (pending) collection tags.
- * @returns An object containing:
- *  - `toAdd`: keys/values present in `pending` but not in `current`
- *  - `toDelete`: keys/values present in `current` but not in `pending`
- */
-function diffCollectionTags(
-  currentTags: CollectionTags | undefined,
-  pendingTags: CollectionTags | undefined,
-): { toAdd: CollectionTags; toDelete: CollectionTags } {
-  // set current/pending tags to empty map if undefined
-  const current = currentTags ?? {};
-  const pending = pendingTags ?? {};
-  // get a set of all keys both in current and pending
-  const keys = new Set<string>([...Object.keys(current), ...Object.keys(pending)]);
-  // declare maps of keys/values to add and delete
-  const toAdd: CollectionTags = {};
-  const toDelete: CollectionTags = {};
-  for (const k of keys) {
-    // get the set of values from current/pending, or default to empty set
-    const currentValues = new Set(current[k] ?? []);
-    const pendingValues = new Set(pending[k] ?? []);
-    // values to add are everything in pending that's not in current
-    const valuesToAdd = [...pendingValues].filter((v) => !currentValues.has(v));
-    // values to delete are everything in current that's not in pending
-    const valuesToDelete = [...currentValues].filter((v) => !pendingValues.has(v));
-    // add the values to add and delete to our main maps
-    if (valuesToAdd.length) {
-      toAdd[k] = valuesToAdd;
-    }
-    if (valuesToDelete.length) {
-      toDelete[k] = valuesToDelete;
-    }
-  }
-  return { toAdd, toDelete };
-}
 
 export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): FormData {
   const updateForm = new FormData();
@@ -124,7 +83,7 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
   }
   // metadata: sensitive_location
   if (metadata?.sensitive_location != pendingMeta.sensitive_location && typeof pendingMeta?.sensitive_location == 'boolean') {
-    updateForm.set('metadata[sensitive_location][]', `${pendingMeta.sensitive_location}`);
+    updateForm.set('metadata[sensitive_location]', `${pendingMeta.sensitive_location}`);
   }
   // metadata: countries
   const addCountries: Country[] | undefined = pendingMeta?.countries?.filter(
@@ -166,7 +125,7 @@ export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): Fo
       }
     }
     // collection_tags add/delete
-    const { toAdd, toDelete } = diffCollectionTags(metadata?.collection_tags, pendingMeta?.collection_tags);
+    const { toAdd, toDelete } = diffTagUpdate(metadata?.collection_tags, pendingMeta?.collection_tags);
     Object.entries(toAdd).forEach(([k, vals]) => {
       vals.forEach((v) => {
         updateForm.append(`metadata[add_collection_tags][${k}][]`, v);
@@ -288,7 +247,7 @@ export function copyEntityFields<T extends CreateEntity, K extends Entity>(exist
   }
   newEntity.metadata[existingEntity.kind] = newMeta;
   //tags
-  const newTags: CreateTags = {};
+  const newTags: RequestTags = {};
   Object.keys(existingEntity.tags).map((key: string) => {
     if (!(key in newTags)) {
       newTags[key] = [];

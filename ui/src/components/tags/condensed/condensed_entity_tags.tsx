@@ -2,8 +2,7 @@ import React from 'react';
 import { Alert, Col, Row } from 'react-bootstrap';
 
 // project imports
-import { filterIncludedTags, filterExcludedTags } from './utilities';
-import { TagBadge } from './tags';
+import { filterIncludedTags, filterExcludedTags, TagBadge } from '@components';
 import { Entities, Tags } from '@models';
 
 interface CondensedEntityTagProps {

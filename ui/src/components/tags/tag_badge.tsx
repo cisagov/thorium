@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Button, Modal } from 'react-bootstrap';
 
 // project imports
-import { OverlayTipBottom } from '@components';
-import { TagUpperKeyEnum, getTagColorClass, getTagBadgeText } from './utilities';
+import { getTagBadgeText, getTagColorClass, OverlayTipBottom, TagUpperKeyEnum } from '@components';
 import { Entities } from '@models';
 import { useSearchParams } from 'react-router';
 
@@ -181,4 +180,4 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
   }
 };
 
-export { TagBadge };
+export default TagBadge;

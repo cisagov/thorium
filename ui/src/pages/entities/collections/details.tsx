@@ -2,20 +2,30 @@ import { JSX } from 'react';
 import { Row, Form } from 'react-bootstrap';
 import { FaFolder } from 'react-icons/fa6';
 
-import { EntityDetails, FieldBadge, InfoValue, FilterDatePicker, EditableCollectionTags, EntityDetailsLabel } from '@components';
+// project imports
+import {
+  EntityDetails,
+  FieldBadge,
+  InfoValue,
+  FilterDatePicker,
+  EntityDetailsLabel,
+  TagSelect,
+  buildCollectionsBrowsingUrl,
+} from '@components';
 import { BlankCollection, Collection, CollectionMeta, CollectionMetaFields, Entities } from '@models';
-import { safeDateToStringConversion } from '@utilities';
+import { requestTagsToTagEntryList, safeDateToStringConversion, tagEntriesToRequestTags } from '@utilities';
 import { getEntity } from '@thorpi';
 
 const CollectionTips = {
   kind: `The type of items this collection contains`,
   collectionTags: `The tags on items in this collection; all items in the collection
     must have at least one of the given tags`,
-  tagsCaseInsensitive: `If set, tags on items can match the above tags regardless of case`,
-  ignoreGroups: `If set, items from all of the user's groups may be included in the collection;
-    otherwise, items are restricted to the groups the collection itself is in`,
+  tagsCaseInsensitive: `If true, tags on items can match tags regardless of case`,
+  ignoreGroups: `If true, items from all of the user's groups will be included in the collection.
+  Otherwise, collection items are restricted to the groups of the collection itself.`,
   start: `The most recent time an item must have been uploaded for it to be included`,
   end: `The oldest time an item must have been uploaded for it to be included`,
+  link: `Navigate to view the files in this collection`,
 };
 
 const CollectionMetaInfo = (
@@ -24,14 +34,14 @@ const CollectionMetaInfo = (
   handleUpdate: <K extends keyof Collection>(field: K, value: Collection[K]) => void,
   editing: boolean,
 ): JSX.Element => {
+  // current date is the latest you can set for start/end
+  const maxDate = new Date();
+  // handle any updates to Collection entity metadata
   function updatePendingMeta<T extends keyof CollectionMetaFields>(field: T, value: CollectionMetaFields[T]) {
     const updates: CollectionMetaFields = structuredClone(pendingCollection.metadata.Collection);
     updates[field] = value;
     handleUpdate('metadata', { Collection: updates });
   }
-  // current date is the latest you can set for start/end
-  const maxDate = new Date();
-
   return (
     <>
       {!editing && (
@@ -44,9 +54,10 @@ const CollectionMetaInfo = (
         <EntityDetailsLabel label="Collection Tags" tip={CollectionTips.collectionTags} />
         <InfoValue>
           {editing ? (
-            <EditableCollectionTags
-              value={(pendingCollection.metadata as CollectionMeta).Collection.collection_tags ?? {}}
-              onChange={(next) => updatePendingMeta('collection_tags', next)}
+            <TagSelect
+              tags={requestTagsToTagEntryList((pendingCollection.metadata as CollectionMeta).Collection.collection_tags ?? {})}
+              setTags={(updatedTags) => updatePendingMeta('collection_tags', tagEntriesToRequestTags(updatedTags))}
+              placeholderText="Add Tags"
             />
           ) : (
             <>
@@ -56,7 +67,7 @@ const CollectionMetaInfo = (
                   (((collection.metadata as CollectionMeta).Collection.collection_tags ?? {})[key] ?? [])
                     .slice()
                     .sort()
-                    .map((value) => <FieldBadge key={key} color="Gray" field={`${key}: ${value}`} />),
+                    .map((value) => <FieldBadge key={`${key}_${value}`} color="Gray" field={`${key}: ${value}`} />),
                 )}
             </>
           )}
@@ -97,7 +108,7 @@ const CollectionMetaInfo = (
         </InfoValue>
       </Row>
       <Row className="mt-3">
-        <EntityDetailsLabel label="Start" tip={CollectionTips.start} />
+        <EntityDetailsLabel label="Newest" tip={CollectionTips.start} />
         <InfoValue>
           {editing ? (
             <FilterDatePicker
@@ -115,7 +126,7 @@ const CollectionMetaInfo = (
         </InfoValue>
       </Row>
       <Row className="mt-3">
-        <EntityDetailsLabel label="End" tip={CollectionTips.end} />
+        <EntityDetailsLabel label="Oldest" tip={CollectionTips.end} />
         <InfoValue>
           {editing ? (
             <FilterDatePicker
@@ -129,6 +140,12 @@ const CollectionMetaInfo = (
           ) : (
             ''
           )}
+        </InfoValue>
+      </Row>
+      <Row className="mt-3">
+        <EntityDetailsLabel label={`${collection.metadata.Collection.collection_kind}`} tip={CollectionTips.link} />
+        <InfoValue>
+          <a href={buildCollectionsBrowsingUrl(collection)}>View</a>
         </InfoValue>
       </Row>
     </>

@@ -5,10 +5,8 @@ import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 
 // project imports
-import { AlertBanner, OverlayTipBottom, OverlayTipRight, Subtitle } from '@components';
+import { AlertBanner, OverlayTipBottom, OverlayTipRight, Subtitle, TagBadge, TLPLevels, FormattedFileInfoTagKeys } from '@components';
 import { createReactSelectStyles } from '@utilities';
-import { FormattedFileInfoTagKeys, TLPLevels } from './utilities';
-import { TagBadge } from './tags';
 import { deleteTags, getFileDetails, uploadTags } from '@thorpi';
 import rawAttackTagDefaults from '../../../mitre_tags/attackTagsList.tags?raw';
 import rawMbcTagDefaults from '../../../mitre_tags/MBCTagsList.tags?raw';

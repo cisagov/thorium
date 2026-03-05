@@ -1,42 +1,23 @@
-import { JSX, useEffect, useState } from 'react';
+import { JSX } from 'react';
 import { Row, Form } from 'react-bootstrap';
 
-import { EntityCreate, InfoHeader, InfoValue, SelectInput, FilterDatePicker, SelectableDictionary } from '@components';
-import {
-  BlankCreateCollection,
-  CreateCollection,
-  CollectionKind,
-  CollectionMetaFields,
-  Entities,
-  TagEntry,
-  CreateCollectionPreprocessor,
-  CreateEntityPreprocessor,
-} from '@models';
-import { safeDateToStringConversion } from '@utilities';
+// project imports
+import { EntityCreate, InfoHeader, InfoValue, SelectInput, FilterDatePicker, TagSelect } from '@components';
+import { BlankCreateCollection, CreateCollection, CollectionKind, CollectionMetaFields, Entities, CollectionMeta } from '@models';
+import { requestTagsToTagEntryList, safeDateToStringConversion, tagEntriesToRequestTags } from '@utilities';
 
 const CollectionMetaInfo = (
   collection: CreateCollection,
   onChange: <K extends keyof CreateCollection>(field: K, value: CreateCollection[K]) => void,
-  preprocessor?: CreateEntityPreprocessor<CreateCollection>,
 ): JSX.Element => {
+  // current date is the latest you can set for start/end
+  const maxDate = new Date();
   // helper to update nested metadata
   const updatePendingMeta = <T extends keyof CollectionMetaFields>(field: T, value: CollectionMetaFields[T]) => {
     const updates: CollectionMetaFields = structuredClone(collection.metadata.Collection);
     updates[field] = value;
     onChange('metadata', { Collection: updates });
   };
-  // make sure we got a collection preprocessor; initialize one if we didn't
-  const collectionPreprocessor = ((preprocessor as CreateCollectionPreprocessor | undefined) ??= new CreateCollectionPreprocessor());
-
-  const [tags, setTags] = useState<TagEntry[]>([{ key: '', value: '' }]);
-
-  useEffect(() => {
-    collectionPreprocessor.editbleTags = tags;
-  }, [tags, collectionPreprocessor]);
-
-  // current date is the latest you can set for start/end
-  const maxDate = new Date();
-
   return (
     <>
       <Row>
@@ -54,17 +35,11 @@ const CollectionMetaInfo = (
       </Row>
       <Row>
         <InfoHeader>Collection Tags</InfoHeader>
-        <InfoValue>
-          <SelectableDictionary
-            entries={tags}
-            setEntries={setTags}
-            keyPlaceholder={'Add Tag Key'}
-            valuePlaceholder={'Add Tag Value'}
-            disabled={false}
-            setDeleted={void 0}
-            keys={null}
-            deleted={null}
-            trim={true}
+        <InfoValue className="mt-2">
+          <TagSelect
+            tags={requestTagsToTagEntryList((collection.metadata as CollectionMeta).Collection.collection_tags ?? {})}
+            setTags={(updatedTags) => updatePendingMeta('collection_tags', tagEntriesToRequestTags(updatedTags))}
+            placeholderText="Add Tags"
           />
         </InfoValue>
       </Row>
@@ -118,14 +93,7 @@ const CollectionMetaInfo = (
 };
 
 const CreateCollectionContainer = () => {
-  return (
-    <EntityCreate
-      kind={Entities.Collection}
-      metadata={CollectionMetaInfo}
-      blank={BlankCreateCollection}
-      preprocessor={new CreateCollectionPreprocessor()}
-    />
-  );
+  return <EntityCreate kind={Entities.Collection} metadata={CollectionMetaInfo} blank={BlankCreateCollection} />;
 };
 
 export default CreateCollectionContainer;

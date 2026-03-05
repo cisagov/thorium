@@ -3,7 +3,7 @@ export function scoreTags(tags: any): number {
   let score = 0;
   Object.keys(tags).map((tagKey) => {
     Object.keys(tags[tagKey]).map((tagValue) => {
-      // bcheck tag key and then add additional values based on certain tags
+      // check tag key and then add additional values based on certain tags
       if (['YaraRuleHit', 'ClamAV', 'AVHit'].includes(tagKey)) {
         score += 100;
       } else if (['MBC', 'ATT&CK'].includes(tagKey)) {
@@ -20,20 +20,19 @@ export function scoreNode(node: any): number {
   if (node?.Sample) {
     if (node.Sample?.tags) {
       const tags = node.Sample.tags;
-      console.log(scoreTags(tags));
       return Math.min(350, Math.max(250, scoreTags(tags)));
     }
   } else if (node?.Repo) {
     return 400;
   } else if (node?.Tag) {
     // tags are specified by the user, they are important
-    return 400;
+    return 350;
   } else if (node.Entity?.kind == 'Device') {
     return 450;
   } else if (node.Entity?.kind == 'Vendor') {
     return 450;
   } else if (node.Entity?.kind == 'Collection') {
-    return 450;
+    return 350;
   }
   // this is an unknown node; just return a default size
   return 300;

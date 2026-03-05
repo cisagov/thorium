@@ -4,7 +4,7 @@ import styled from 'styled-components';
 
 // project imports
 import { scaling } from '@styles';
-import { LoadingSpinner, DEFAULT_LIST_LIMIT } from '@components';
+import { DEFAULT_LIST_LIMIT, LoadingSpinner } from '@components';
 import { Filters, SearchFilters } from '@models';
 
 export const BrowsingCard = styled(Card)`

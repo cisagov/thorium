@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 
 // project imports
 import {
@@ -67,6 +67,11 @@ export const OverlayWindow: React.FC<{
     resized: false, // window has changed size
     moved: false, // window has been repositioned
   });
+
+  // force repositioning after parentRef current set on initial render
+  useLayoutEffect(() => {
+    setPosition(getInitialPosition({ width, height }, placement, bounds, padding, isInitialRelative, parentRef, nodeRef));
+  }, []);
 
   const onDragMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();

@@ -25,6 +25,7 @@ const DeviceMetaInfo = (
     handleUpdate('metadata', { Device: updates });
   }
 
+  // get vendor map on component load
   useEffect(() => {
     getAvailableVendors(setVendorsMap);
   }, []);

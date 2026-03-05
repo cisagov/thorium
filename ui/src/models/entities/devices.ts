@@ -35,7 +35,6 @@ export type CreateDevice = CreateEntity & {
 };
 
 export const BlankDevice: Device = {
-  // need to
   id: '',
   name: '',
   groups: [],

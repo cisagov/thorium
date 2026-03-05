@@ -2,7 +2,7 @@ import React, { createContext, JSX, useContext, useEffect, useState } from 'reac
 import { Navigate } from 'react-router-dom';
 import { authUserPass, createUser, logout, whoami } from '@thorpi';
 import { UserInfo, RoleKey } from '@models';
-import { clearTagDataFromLocalStorage, fetchTags } from './tags';
+import { clearTagDataFromLocalStorage, fetchLocalStorageTags } from './tags';
 
 type AuthContextType = {
   userInfo: UserInfo | null;
@@ -34,7 +34,7 @@ function getCookie(name: string) {
 }
 
 function buildCookie(token: string, expiration: string) {
-  return `THORIUM_TOKEN=${token}; Secure; SameSite=Strict expires=${expiration}; path=/; domain: ${location.hostname}`;
+  return `THORIUM_TOKEN=${token}; Secure; SameSite=Strict; expires=${expiration}; path=/; domain: ${location.hostname}`;
 }
 
 /*
@@ -55,7 +55,7 @@ function useAuthProvider() {
           setUserInfo(response);
           setToken(response.token);
           setLastUpdateDate(Date.now());
-          fetchTags(); //kick off fetch async function
+          fetchLocalStorageTags();
         } else {
           clearTagDataFromLocalStorage();
           document.cookie = 'THORIUM_TOKEN=; max-age=0;';

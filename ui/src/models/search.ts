@@ -1,5 +1,5 @@
 import { Entities } from './entities/entities';
-import { FilterTags } from './tags';
+import { RequestTags } from './tags';
 
 export enum FilterTypes {
   Groups = 'Groups',
@@ -13,7 +13,7 @@ export enum FilterTypes {
 export interface Filters {
   limit?: number;
   groups?: Array<string>;
-  tags?: FilterTags;
+  tags?: RequestTags;
   start?: string | null;
   end?: string | null;
   tags_case_insensitive?: boolean;

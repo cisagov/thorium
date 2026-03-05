@@ -1,13 +1,15 @@
 import React, { useState, useEffect, KeyboardEvent, useRef, FocusEvent } from 'react';
+import { Modal } from 'react-bootstrap';
+import styled from 'styled-components';
+import { Button } from '@mui/material';
+
+// project imports
 import TagDropdown from './dropdown';
 import TagEntryField from './tag_entry_field';
 import { EditingMode, FocusState, KeyName } from './editing_types';
-import { TagEntry, TagOptions } from 'models';
+import { TagEntry, TagOptions } from '@models';
 import { loadTagOptionsFromLocalStorage, tagEntryIsEmpty } from '@utilities';
-import { Modal } from 'react-bootstrap';
-import { Button } from '@mui/material';
-import { getCurrTypedText, getDropdownOptions, updateTags } from './utils';
-import styled from 'styled-components';
+import { getCurrTypedText, getDropdownOptions, updateTags } from './utilities';
 
 const TagSelectContainer = styled.div`
   width: 100%;

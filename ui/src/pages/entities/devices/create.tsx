@@ -10,8 +10,6 @@ const DeviceMetaInfo = (
   device: CreateDevice,
   onChange: <K extends keyof CreateDevice>(field: K, value: CreateDevice[K]) => void,
 ): JSX.Element => {
-  // vendor creation state hooks
-  const [pendingVendorName, setPendingVendorName] = useState('');
   const [vendorsMap, setVendorsMap] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
@@ -35,7 +33,6 @@ const DeviceMetaInfo = (
             values={device.metadata.Device.vendors?.length > 0 ? device.metadata.Device.vendors.map((vendor: Vendor) => vendor.id) : []}
             options={Object.keys(vendorsMap)}
             onChange={(vendorID) => updatePendingMeta('vendors', [vendorID] as any)}
-            onCreate={(name) => setPendingVendorName(name ? name : '')}
             valuesMap={vendorsMap}
           />
         </InfoValue>

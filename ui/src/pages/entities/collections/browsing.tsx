@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Row } from 'react-bootstrap';
+
+// project imports
 import {
   BrowsingCard,
   BrowsingContents,
@@ -41,6 +43,7 @@ const CollectionListHeaders = () => (
 interface CollectionItemProps {
   collection: Collection;
 }
+
 const CollectionItem: React.FC<CollectionItemProps> = ({ collection }) => {
   const kind = collection.metadata.Collection.collection_kind ?? '';
   return (
@@ -84,7 +87,6 @@ const CollectionBrowsingContainer = () => {
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<Filters>({});
   const { userInfo } = useAuth();
-
   return (
     <Page title="Collections · Thorium">
       <BrowsingFilters

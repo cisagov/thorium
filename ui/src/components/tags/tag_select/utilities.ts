@@ -1,5 +1,5 @@
 import { EditingMode, FocusState } from './editing_types';
-import { TagEntry, TagOptions } from 'models';
+import { TagEntry, TagOptions } from '@models';
 
 /**
  * Helper function for getting the current typed text based on state

@@ -1,7 +1,6 @@
 import React, { FocusEvent } from 'react';
 import { styled } from 'styled-components';
-import { FaX } from 'react-icons/fa6';
-import { FaAngleDown } from 'react-icons/fa';
+import { FaX, FaAngleDown } from 'react-icons/fa6';
 
 const ButtonContainer = styled.div`
   display: flex;

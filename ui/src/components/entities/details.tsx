@@ -1,29 +1,28 @@
-import React, { useEffect, useState, createContext, useContext, Fragment, JSX } from 'react';
+import { useEffect, useState, createContext, useContext, Fragment, JSX, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Row, Col, Form, Modal } from 'react-bootstrap';
 import { FaBackspace, FaQuestionCircle, FaRegEdit, FaSave, FaTrash } from 'react-icons/fa';
 import { FaFileCirclePlus, FaSquarePlus } from 'react-icons/fa6';
+import styled from 'styled-components';
 
 // project imports
 import {
   AssociationTree,
   AssociationGraph,
-  CondensedEntityTags,
   FieldBadge,
-  InfoHeader,
-  InfoValue,
   OverlayTipBottom,
   Page,
   SelectInputArray,
   Subtitle,
   Title,
+  CondensedEntityTags,
 } from '@components';
 import { useAuth } from '@utilities';
-import { Entity } from '@models';
+import { Entity, ButtonProps } from '@models';
 import { deleteEntity, updateEntity } from '@thorpi';
 import { buildUpdateEntityForm } from './utilities';
-import styled from 'styled-components';
-import { ListCollectionButton } from './collections/details';
+import { InfoHeader, InfoValue } from './shared';
+import { ListCollectionButton } from './collections/list_collection_button';
 
 export type MetadataComponent = (
   entity: Entity,
@@ -47,7 +46,7 @@ type EntityDetailsContextType = {
 // Page context
 const EntityContext = createContext<EntityDetailsContextType | undefined>(undefined);
 
-// custom device create context hook
+// custom entity details context hook
 const useEntityContext = () => {
   const context = useContext(EntityContext);
   if (context === undefined) {
@@ -56,6 +55,7 @@ const useEntityContext = () => {
   return context;
 };
 
+// Entity shared fields
 const EntityInfo = () => {
   const { entity, metadata, pendingEntity, editing, updatePendingEntity } = useEntityContext();
   const { userInfo } = useAuth();
@@ -167,11 +167,7 @@ const EntityInfo = () => {
   );
 };
 
-type ButtonProps = {
-  disabled: boolean;
-};
-
-const DeleteButton: React.FC<ButtonProps> = ({ disabled }) => {
+const DeleteButton: React.FC<ButtonProps> = ({ disabled = false }) => {
   const navigate = useNavigate();
   const { entity, setError } = useEntityContext();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -198,7 +194,6 @@ const DeleteButton: React.FC<ButtonProps> = ({ disabled }) => {
   return (
     <>
       <OverlayTipBottom tip={`Delete "${entity.name}"`}>
-        {/* @ts-ignore */}
         <Button className="icon-btn mx-1" variant="" disabled={disabled} onClick={handleOpenDeleteModal}>
           <FaTrash size={20} />
         </Button>
@@ -217,7 +212,6 @@ const DeleteButton: React.FC<ButtonProps> = ({ disabled }) => {
           </div>
         </Modal.Body>
         <Modal.Footer className="d-flex justify-content-center">
-          {/* @ts-ignore */}
           <Button className="danger-btn" onClick={handleRemoveClick} disabled={disableConfirmButton}>
             Confirm
           </Button>
@@ -230,13 +224,12 @@ const DeleteButton: React.FC<ButtonProps> = ({ disabled }) => {
   );
 };
 
-const UploadFileButton: React.FC<ButtonProps> = ({ disabled }) => {
+const UploadFileButton: React.FC<ButtonProps> = ({ disabled = false }) => {
   const navigate = useNavigate();
   const { entity } = useEntityContext();
   return (
     <>
       <OverlayTipBottom tip={`Upload files associated with this ${entity.kind}.`}>
-        {/*@ts-ignore*/}
         <Button className="icon-btn mx-1" variant="" disabled={disabled} onClick={() => navigate(`/upload`, { state: { entity: entity } })}>
           <FaFileCirclePlus size={20} />
         </Button>
@@ -245,15 +238,14 @@ const UploadFileButton: React.FC<ButtonProps> = ({ disabled }) => {
   );
 };
 
-const CreateButton: React.FC<ButtonProps> = ({ disabled }) => {
+const CreateButton: React.FC<ButtonProps> = ({ className, disabled = false }) => {
   const navigate = useNavigate();
   const { entity } = useEntityContext();
   return (
     <>
       <OverlayTipBottom tip={`Copy this ${entity.kind}.`}>
-        {/*@ts-ignore*/}
         <Button
-          className="icon-btn mx-1"
+          className={`${className} icon-btn mx-1`}
           variant=""
           disabled={disabled}
           onClick={() => navigate(`/create/${entity.kind.toLowerCase()}`, { state: { entity: entity } })}
@@ -285,13 +277,8 @@ const EditButton: React.FC<ButtonProps> = ({ disabled }) => {
   );
 };
 
-interface DeviceButtonProps {
-  className?: string;
-}
-
-const EntityButtons: React.FC<DeviceButtonProps> = ({ className }) => {
-  const { userInfo } = useAuth();
-  const { editing, entity } = useEntityContext();
+const EntityButtons: React.FC<ButtonProps> = ({ className, disabled }) => {
+  const { entity } = useEntityContext();
   // submitter and User++ can modify an entity
   // modify/create needs to have permissions within the group no in Thorium
   const canModify = true; // TODO: grab group membership of selected groups and check roles
@@ -302,13 +289,16 @@ const EntityButtons: React.FC<DeviceButtonProps> = ({ className }) => {
       <DeleteButton disabled={!canModify} />
       <CreateButton disabled={!canCreate} />
       <UploadFileButton disabled={!canCreate} />
-      {entity.kind === 'Collection' && entity.metadata.Collection.collection_kind === 'Files' && <ListCollectionButton entity={entity} />}
+      {entity.kind === 'Collection' && entity.metadata.Collection.collection_kind === 'Files' && (
+        <ListCollectionButton collection={entity} />
+      )}
     </div>
   );
 };
 
 type EntityHeaderProps = {
   icon: (size: number) => JSX.Element; // default icon to display
+  className?: string;
 };
 
 const IconTitle = styled.div`
@@ -318,10 +308,10 @@ const IconTitle = styled.div`
   gap: 8px;
 `;
 
-const EntityHeader: React.FC<EntityHeaderProps> = ({ icon }) => {
+const EntityHeader: React.FC<EntityHeaderProps> = ({ className, icon }) => {
   const { entity } = useEntityContext();
   return (
-    <Card className="panel">
+    <Card className={`panel ${className}`}>
       <Card.Body>
         <IconTitle>
           <div className="pe-8">{icon(100)}</div>
@@ -337,7 +327,7 @@ type EntityDetailsLabelProps = {
   tip: string;
 };
 
-export function EntityDetailsLabel({ label, tip }: EntityDetailsLabelProps): JSX.Element {
+export const EntityDetailsLabel: React.FC<EntityDetailsLabelProps> = ({ label, tip }) => {
   return (
     <InfoHeader>
       {label}
@@ -346,20 +336,20 @@ export function EntityDetailsLabel({ label, tip }: EntityDetailsLabelProps): JSX
       </OverlayTipBottom>
     </InfoHeader>
   );
-}
+};
 
-type EntityDetailsProps<T extends Entity> = {
-  getEntityDetails: (entityID: string, setError: (err: string) => void, updateEntity: (entity: T) => void) => void;
-  blank: T;
+type EntityDetailsProps = {
+  getEntityDetails: (entityID: string, setError: (err: string) => void, updateEntity: (entity: Entity) => void) => void;
+  blank: Entity;
   metadata: MetadataComponent;
   icon: (size: number) => JSX.Element;
 };
 
-export function EntityDetails<T extends Entity>({ getEntityDetails, blank, metadata, icon }: EntityDetailsProps<T>): JSX.Element {
+export const EntityDetails: React.FC<EntityDetailsProps> = ({ getEntityDetails, blank, metadata, icon }) => {
   const { entityID } = useParams();
   // pull device state if its there
-  const [entity, setEntity] = useState<Entity>(blank);
-  const [pendingEntity, setPendingEntity] = useState<Entity>(blank);
+  const [entity, setEntity] = useState(blank);
+  const [pendingEntity, setPendingEntity] = useState(blank);
   const [error, setError] = useState<string>('');
   const [editing, setEditing] = useState(false);
 
@@ -376,7 +366,7 @@ export function EntityDetails<T extends Entity>({ getEntityDetails, blank, metad
   }
 
   // update entity state
-  const handleEntityUpdate = (newEntity: T) => {
+  const handleEntityUpdate = (newEntity: Entity) => {
     setEntity(newEntity);
     setPendingEntity(newEntity);
   };
@@ -400,6 +390,9 @@ export function EntityDetails<T extends Entity>({ getEntityDetails, blank, metad
       getEntityDetails(entityID, setError, handleEntityUpdate);
     }
   }, []);
+
+  // ensure association tree is consistent
+  const associationInitial = useMemo(() => ({ entities: entityID ? [entityID] : [] }), [entityID]);
 
   return (
     <EntityContext.Provider
@@ -429,7 +422,7 @@ export function EntityDetails<T extends Entity>({ getEntityDetails, blank, metad
             <div className="d-flex justify-content-center">
               <Subtitle>Graph</Subtitle>
             </div>
-            {entityID && <AssociationGraph inView initial={{ entities: [entityID ? entityID : ''] }} />}
+            {entityID && <AssociationGraph inView initial={associationInitial} />}
           </Card.Body>
         </Card>
         <Card className="panel mt-4">
@@ -437,10 +430,10 @@ export function EntityDetails<T extends Entity>({ getEntityDetails, blank, metad
             <div className="text-center">
               <Subtitle>Associations</Subtitle>
             </div>
-            {entityID && <AssociationTree initial={{ entities: [entityID ? entityID : ''] }} />}
+            {entityID && <AssociationTree initial={associationInitial} />}
           </Card.Body>
         </Card>
       </Page>
     </EntityContext.Provider>
   );
-}
+};

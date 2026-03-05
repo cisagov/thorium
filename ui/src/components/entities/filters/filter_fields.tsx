@@ -7,7 +7,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { OverlayTipRight, Subtitle } from '@components';
 import { decodeParamsToFilters, encodeFiltersToParams } from './params';
 import { safeDateToStringConversion } from '@utilities';
-import { FilterTags, FilterTypes, Filters } from '@models';
+import { RequestTags, FilterTypes, Filters } from '@models';
 import { FilterGroups } from './groups';
 import { FilterTagDisplayKeys, FilterTagsField } from './tags';
 import { FilterDatePicker } from './date';
@@ -123,7 +123,7 @@ export const FilterFields: React.FC<FilterWindowProps> = ({ disabled, onChange, 
               <FilterTagsField
                 selected={filters.tags}
                 disabled={disabled}
-                onChange={(newTags: FilterTags) => updateFilters('tags', newTags)}
+                onChange={(newTags: RequestTags) => updateFilters('tags', newTags)}
               />
             </Col>
           </Row>

@@ -188,6 +188,31 @@ export const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
             )}
           </>
         );
+      } else if (entity?.kind == 'Collection') {
+        return (
+          <>
+            <Subtitle className="mt-2">Type</Subtitle>
+            <FieldBadge color="Gray" noNull={true} field={entity.metadata.Collection.collection_kind} />
+            <Subtitle className="mt-2">Collection Tags</Subtitle>
+            <FieldBadge color="Gray" noNull={true} field={entity.metadata.Collection.collection_tags} />
+            {entity.metadata.start != null && (
+              <>
+                <Subtitle className="mt-2">Newest</Subtitle>
+                <FieldBadge color="Gray" field={entity.metadata.Collection.start} />
+              </>
+            )}
+            {entity.metadata.end != null && (
+              <>
+                <Subtitle className="mt-2">Oldest</Subtitle>
+                <FieldBadge color="Gray" field={entity.metadata.Collection.end} />
+              </>
+            )}
+            <Subtitle className="mt-2">Case Insensitive Tags</Subtitle>
+            <FieldBadge color="Gray" field={entity.metadata.Collection.tags_case_insensitive} />
+            <Subtitle className="mt-2">Ignore Groups</Subtitle>
+            <FieldBadge color="Gray" field={entity.metadata.Collection.ignore_groups} />
+          </>
+        );
       }
       return <></>;
     };

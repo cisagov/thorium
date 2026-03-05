@@ -4,7 +4,7 @@ import { createReactSelectStyles, tagEntryIsEmpty } from '@utilities';
 import { TagEntry } from 'models';
 import { styled } from 'styled-components';
 import { EditingMode, FocusState } from './editing_types';
-import { updateTags } from './utils';
+import { updateTags } from './utilities';
 import TagEntryButtons from './tag_entry_buttons';
 
 const TagEntryFieldDiv = styled.div`

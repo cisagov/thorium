@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getResults } from '@thorpi';
-import { Alert, Col, Row, Container } from 'react-bootstrap';
+import { Alert } from 'react-bootstrap';
 
 // project imports
 import { LoadingSpinner, Tool } from '@components';

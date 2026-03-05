@@ -6,24 +6,22 @@ import styled from 'styled-components';
 // project imports
 import { InfoHeader, InfoValue, OverlayTipBottom, Page, SelectInputArray, Title } from '@components';
 import { useAuth } from '@utilities';
-import { CreateEntity, Entities, CreateEntityPreprocessor } from '@models';
+import { CreateEntity, Entities } from '@models';
 import { createEntity } from '@thorpi';
 import { buildCreateEntityForm, copyEntityFields } from './utilities';
 
-export type MetadataComponent = (
+export type CreateMetadataComponent = (
   entity: CreateEntity,
   onChange: <K extends keyof CreateEntity>(field: K, value: CreateEntity[K]) => void,
-  preprocessor?: CreateEntityPreprocessor<any>,
 ) => JSX.Element;
 
 type EntityCreateContextType = {
   kind: Entities;
   entity: CreateEntity;
-  metadata: MetadataComponent;
+  metadata: CreateMetadataComponent;
   updatePendingEntity: <K extends keyof CreateEntity>(field: K, value: CreateEntity[K]) => void;
   error: string; // any error message returned when trying to create a new entity
   setError: (error: string) => void; // set create error message callback
-  preprocessor?: CreateEntityPreprocessor<any>; // handles any extra preprocessing to be done on the entity before creation
 };
 
 // Page context
@@ -40,7 +38,7 @@ const useEntityContext = () => {
 
 // Entity shared fields
 const EntityInfo = () => {
-  const { entity, metadata, updatePendingEntity, preprocessor } = useEntityContext();
+  const { entity, metadata, updatePendingEntity } = useEntityContext();
   const { userInfo } = useAuth();
   return (
     <>
@@ -74,7 +72,7 @@ const EntityInfo = () => {
             </InfoValue>
           </Row>
           <hr className="my-3" />
-          {metadata(entity, updatePendingEntity, preprocessor)}
+          {metadata(entity, updatePendingEntity)}
           <hr className="my-3" />
           <Row>
             <InfoHeader>Description</InfoHeader>
@@ -98,40 +96,31 @@ const EntityInfo = () => {
   );
 };
 
-type EntityCreateButtonProps = {
-  preprocessor?: CreateEntityPreprocessor<any>;
-};
-
-function EntityCreateButton<T extends CreateEntity>({ preprocessor }: EntityCreateButtonProps) {
+const EntityCreateButton = () => {
   const navigate = useNavigate();
   const { entity, kind, setError } = useEntityContext();
-  const { userInfo } = useAuth();
   // user must have roles in one of the groups
   const userCanCreate = true; //TODO grab group membership of selected groups and check roles
   const CreateEntityMessage = userCanCreate
     ? `Create a new ${kind}. You must be a user, manager, or owner in a selected group to create this ${kind}.`
     : `You must be a user, manager, or owner in a selected group to create this ${kind}.`;
-
   const handleCreateEntity = (): void => {
-    const processedEntity = preprocessor ? preprocessor.preprocess(entity) : entity;
-    createEntity(buildCreateEntityForm(processedEntity, kind), setError).then((response) => {
+    createEntity(buildCreateEntityForm(entity, kind), setError).then((response) => {
       if (response != null) {
-        navigate(`/${kind}/${response.id}`);
+        navigate(`/${kind.toLocaleLowerCase()}/${response.id}`);
       }
     });
   };
-
   return (
     <div className="d-flex justify-content-center pt-4">
       <OverlayTipBottom tip={CreateEntityMessage}>
-        {/* @ts-ignore*/}
-        <Button className="primary-btn" variant="info" disabled={!userCanCreate} onClick={() => handleCreateEntity()}>
+        <Button className="secondary-btn" variant="info" disabled={!userCanCreate} onClick={() => handleCreateEntity()}>
           Create
         </Button>
       </OverlayTipBottom>
     </div>
   );
-}
+};
 
 const CreateEntityTitle = styled.div`
   display: grid;
@@ -140,25 +129,23 @@ const CreateEntityTitle = styled.div`
   padding-top: 0.5rem;
 `;
 
-type EntityDetailsProps<T extends CreateEntity> = {
-  blank: T;
+type EntityDetailsProps = {
+  blank: CreateEntity;
   kind: Entities;
-  metadata: MetadataComponent;
-  preprocessor?: CreateEntityPreprocessor<T>;
+  metadata: CreateMetadataComponent;
 };
 
-export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata, preprocessor }: EntityDetailsProps<T>): JSX.Element {
+export const EntityCreate: React.FC<EntityDetailsProps> = ({ blank, kind, metadata }) => {
   const { state } = useLocation();
   // pull device state if its there
   const [entity, setEntity] = useState<CreateEntity>(state?.entity ? copyEntityFields(state.entity, blank) : blank);
   const [error, setError] = useState<string>('');
   // Update pending device info fields by key
   function updatePendingEntity<K extends keyof CreateEntity>(field: K, value: CreateEntity[K]): void {
-    const updates: CreateEntity = structuredClone(entity);
+    const updates = structuredClone(entity);
     updates[field] = value;
     setEntity(updates);
   }
-
   return (
     <EntityContext.Provider
       value={{
@@ -168,7 +155,6 @@ export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata, pr
         error,
         setError,
         kind,
-        preprocessor,
       }}
     >
       <Page className="full-min-width" title={`Create ${kind}`}>
@@ -177,8 +163,8 @@ export function EntityCreate<T extends CreateEntity>({ blank, kind, metadata, pr
         </CreateEntityTitle>
         <EntityInfo />
         {error != '' && <Alert variant="danger text-center">{error}</Alert>}
-        <EntityCreateButton preprocessor={preprocessor} />
+        <EntityCreateButton />
       </Page>
     </EntityContext.Provider>
   );
-}
+};
