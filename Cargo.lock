@@ -1110,6 +1110,8 @@ dependencies = [
  "bytes",
  "flate2",
  "futures-core",
+ "futures-task",
+ "futures-util",
  "generic-array",
  "miniz_oxide",
  "pin-project",
@@ -1117,6 +1119,7 @@ dependencies = [
  "rust-crypto",
  "tokio",
  "tokio-test",
+ "tokio-util",
 ]
 
 [[package]]

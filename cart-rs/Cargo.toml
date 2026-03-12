@@ -20,6 +20,7 @@ generic-array = "0.14"
 bytes = "1.10"
 futures-core = "0.3"
 pin-project = "1.1"
-
-[dev-dependencies]
 tokio-test = "0.4"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
+futures-task = "0.3"

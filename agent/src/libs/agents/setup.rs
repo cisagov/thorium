@@ -18,7 +18,7 @@ use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use crate::libs::DownloadedCache;
-use crate::log;
+use crate::{log, purge};
 
 /// Create any required parent dirs for this file
 ///
@@ -333,13 +333,44 @@ pub async fn download_samples<P: AsRef<Path>>(
     let mut opts = FileDownloadOpts::default().uncart();
     // crawl over any samples and try to download them
     for sha256 in &job.samples {
+        // keep track of how many times we have tried to download this sample
+        let mut attempts = 0;
         // build the path to download our files too
         let dl_target = build_sample_path(thorium, image, &target, sha256, logs).await?;
-        // download and uncart this file to disk
-        thorium
-            .files
-            .download(sha256, &dl_target, &mut opts)
-            .await?;
+        // retry this sample until it works or we have tried 3 times
+        loop {
+            // download and uncart this file to disk
+            let dl_attempt = thorium.files.download(sha256, &dl_target, &mut opts).await;
+            // if this download ran into an IO or 500 error then try again
+            match dl_attempt {
+                // this download worked so continue
+                Ok(_) => break,
+                // An error occured check if we should retry or fail out this job
+                Err(error) => {
+                    // increment our attempt count
+                    attempts += 1;
+                    // if we have made three attempts then fail this job
+                    if attempts >= 3 {
+                        return Err(error);
+                    }
+                    // check what kind of error this was
+                    match error {
+                        Error::IO(error) => {
+                            // log that this download failed
+                            log!(logs, "Downloading {sha256} failed with {error:?}");
+                        }
+                        Error::Thorium { code, msg } => {
+                            // log that this download failed
+                            log!(logs, "Downloading {sha256} failed with {code}: {msg:?}");
+                        }
+                        // treat all other errors as fatal
+                        error => return Err(error),
+                    }
+                }
+            }
+            // delete this incorrectly downloaded file
+            purge!(dl_target);
+        }
         // only pass in downloaded samples if its enabled
         if image.dependencies.samples.strategy != DependencyPassStrategy::Disabled {
             // add this downloaded sample to our list

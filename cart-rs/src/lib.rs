@@ -244,7 +244,7 @@ use flate2::{Compress, Compression, FlushCompress, Status};
 use futures_core::ready;
 use generic_array::{ArrayLength, GenericArray};
 use miniz_oxide::inflate::stream::InflateState;
-use miniz_oxide::MZFlush;
+use miniz_oxide::{MZError, MZFlush, MZStatus};
 use rc4::{KeyInit, StreamCipher};
 use std::convert::TryFrom;
 use std::io::prelude::*;
@@ -479,6 +479,8 @@ pub struct UncartStream<R: AsyncBufRead> {
     decompressed_consumed: usize,
     /// The zlib decompressor to use
     zlib: Box<InflateState>,
+    /// Whether the inflater has said it is done yet
+    inflater_done: bool,
 }
 
 impl<R: AsyncBufRead> UncartStream<R> {
@@ -508,6 +510,7 @@ impl<R: AsyncBufRead> UncartStream<R> {
             decompressed_remaining: 0,
             decompressed_consumed: 0,
             zlib: InflateState::new_boxed_with_window_bits(15),
+            inflater_done: false,
         }
     }
 
@@ -536,7 +539,7 @@ impl<R: AsyncBufRead> UncartStream<R> {
         // keep reading until we have uncarted all input data or have filled our output buffer
         'decrypt_and_decompress: loop {
             // determine if we have more data to decompress still
-            if *this.decompressed_remaining == 0 || local_remaining == 0 {
+            if local_remaining == 0 {
                 // if we don't already have decrypted data to decompress then get more
                 if this.decrypt_start == this.decrypt_end {
                     // determine if this is our first read by checking if the decryptor has been built
@@ -548,8 +551,8 @@ impl<R: AsyncBufRead> UncartStream<R> {
                         this.rc4,
                         cx
                     ))?;
+                    // check if we are actually done uncarting this data
                     if bytes_read == 0 {
-                        // if no more data was read, return immediately, signalling that uncarting is complete
                         return Poll::Ready(Ok(()));
                     }
                     // mark bytes from the input CaRT as consumed
@@ -577,23 +580,35 @@ impl<R: AsyncBufRead> UncartStream<R> {
                 );
                 // increment the decompress start point by the number of bytes consumed from the decrypted buffer
                 *this.decrypt_start += decompress_result.bytes_consumed;
-                // return an error if one occurred in decompressing
-                if let Err(err) = decompress_result.status {
-                    match err {
-                        miniz_oxide::MZError::Data | miniz_oxide::MZError::Buf => {
-                            return Poll::Ready(Err(std::io::Error::new(
-                                ErrorKind::InvalidData,
-                                "CaRT file cannot be decompressed because data is missing/corrupted",
-                            )));
-                        }
-                        _ => {
-                            return Poll::Ready(Err(std::io::Error::new(
-                                ErrorKind::InvalidData,
-                                "An unknown error occurred while decompressing the carted data",
-                            )))
-                        }
+                match decompress_result.status {
+                    // we didn't run into any problems inflating that chunk
+                    Ok(MZStatus::Ok) => (),
+                    // we have finished inflating our compressed data
+                    Ok(MZStatus::StreamEnd) => {
+                        // our inflator is only done if we have consumed all of our decompressed data
+                        *this.inflater_done = true;
                     }
-                };
+                    // we have reached a point where inflation cannot continue without a pre-set dictionary
+                    Ok(MZStatus::NeedDict) => {
+                        return Poll::Ready(Err(std::io::Error::new(
+                            ErrorKind::InvalidData,
+                            "CaRT file cannot be decompressed because a pre-set dictionary was not provided",
+                        )));
+                    }
+                    // handle errors
+                    Err(MZError::Data | MZError::Buf) => {
+                        return Poll::Ready(Err(std::io::Error::new(
+                            ErrorKind::InvalidData,
+                            "CaRT file cannot be decompressed because data is missing/corrupted",
+                        )));
+                    }
+                    _ => {
+                        return Poll::Ready(Err(std::io::Error::new(
+                            ErrorKind::InvalidData,
+                            "An unknown error occurred while decompressing the carted data",
+                        )));
+                    }
+                }
                 // cap the end point to copy from the decompress buffer to the space left in the output buffer
                 let decompress_end =
                     std::cmp::min(output.len() - returned, decompress_result.bytes_written);
@@ -645,7 +660,12 @@ impl<R: AsyncBufRead> UncartStream<R> {
         *this.decompressed_consumed = local_consumed;
         // advance the output buffer
         buf.advance(returned);
-        Poll::Ready(Ok(()))
+        // only return Okay if we have data to return or if our inflater is done
+        if *this.inflater_done || returned != 0 {
+            Poll::Ready(Ok(()))
+        } else {
+            Poll::Pending
+        }
     }
 
     /// Read and decrypt data from the input buffer and store the result in the internal
@@ -830,8 +850,6 @@ impl<T: ArrayLength<u8>> CartStreamManual<T> {
             .unwrap();
         // return an error if a failed status was returned
         if status == Status::BufError {
-            println!("skip -> {}", self.skip);
-            println!("outp -> {}", self.output.len());
             return Err(Error::new("Zip Compression Buffer Error".to_owned()));
         }
         // get the total number of bytes that were compressed in this loop
