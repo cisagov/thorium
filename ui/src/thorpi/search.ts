@@ -1,7 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { ElasticIndex, SearchFilters } from '@models';
+import { ElasticIndex, SearchFilters } from '@models/search';
 
 /**
  * Search for query string

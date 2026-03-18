@@ -1,4 +1,5 @@
-import { RoleKey } from '@models';
+// project imports
+import { RoleKey } from '@models/users';
 
 // get the Thorium role for a given user: Admin, Developer, or User
 export const getUserRole = (role: any): RoleKey | undefined => {

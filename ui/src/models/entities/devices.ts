@@ -1,6 +1,7 @@
+// project imports
 import { CriticalSector } from './sectors';
 import { CreateEntity, Entities, Entity } from './entities';
-import { BlankCreateVendor, BlankVendor, Vendor } from './vendors';
+import { BlankVendor, Vendor } from './vendors';
 
 export type DeviceMetaFields = {
   urls?: string[];

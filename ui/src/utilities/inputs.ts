@@ -6,7 +6,7 @@ export function safeStringToDateConversion(date: string | null) {
     return parseISO(date as unknown as string);
   } catch (e) {
     if (e instanceof RangeError) {
-      // this hits if the passed in vaqlue is not a valid date
+      // this hits if the passed in value is not a valid date
       return null;
     } else {
       throw e;

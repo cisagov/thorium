@@ -1,6 +1,4 @@
-export * from './overlay_window/window';
-export * from './utilities';
-export * from './manager/manager';
-export * from './resize';
-export * from './bounds';
-export * from './placement';
+export { WindowManager } from './WindowManager';
+export { OverlayWindow } from './OverlayWindow';
+export { PositionType } from './bounds';
+export { Placement } from './placement';

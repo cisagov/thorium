@@ -1,12 +1,1 @@
-export { default as Tool } from './tool';
-export { default as Image } from './image';
-export { default as String } from './string';
-export { default as SafeHtml } from './safe_html';
-export { default as Markdown } from './markdown';
-export { Json, OceanJsonTheme } from './json';
-export { default as Xml } from './xml';
-export { default as Tables } from './table';
-export { default as Disassembly } from './disassembly';
-export { ResultsFiles, ChildrenFiles } from './files';
-export { getAlerts } from './alerts';
-export { default as Results } from './results';
+export { default as ToolResult } from './ToolResult';

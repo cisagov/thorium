@@ -1,5 +1,7 @@
-import { getImage, listGroups, listImages } from '@thorpi';
-import { Group } from 'models';
+// project imports
+import { getImage, listImages } from '@thorpi/images';
+import { listGroups } from '@thorpi/groups';
+import { Group } from '@models/groups';
 
 /**
  * Get a single image spec from the Thorium API

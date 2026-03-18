@@ -1,6 +1,6 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
-import { Pipeline, PipelineCreate } from 'models/pipelines';
+import { Pipeline, PipelineCreate } from '@models/pipelines';
 import client, { parseRequestError } from './client';
 
 /**

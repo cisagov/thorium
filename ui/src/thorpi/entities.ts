@@ -1,6 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
-import { EntityTypes, Filters, UpdateEntityForm } from 'models';
+import { Filters } from '@models/search';
+import { EntityTypes } from '@models/entities/entities';
 import client, { parseRequestError } from './client';
 
 /**
@@ -13,7 +14,7 @@ import client, { parseRequestError } from './client';
  */
 export const createEntity = async (data: FormData, errorHandler: (error: string) => void): Promise<{ id: string } | null> => {
   // build url parameters including optional args if specified
-  let url = '/entities/';
+  const url = '/entities/';
   return client
     .post(url, data)
     .then((res) => {
@@ -88,7 +89,7 @@ export const updateEntity = async (id: string, data: FormData, errorHandler: (er
  */
 export const deleteEntity = async (id: string, errorHandler: (error: string) => void): Promise<boolean> => {
   // build url parameters including optional args if specified
-  let url = `/entities/${id}`;
+  let url = `/entities${id}`;
   return client
     .delete(url)
     .then((res) => {

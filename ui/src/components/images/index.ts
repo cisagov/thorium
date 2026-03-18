@@ -1,9 +1,0 @@
-export { default as ImageFields } from './image_fields';
-export { default as ImageNetworkPolicies } from './image_network_policies';
-export { default as ImageResources } from './image_resources';
-export { default as ImageArguments } from './image_arguments';
-export { default as ImageOutputCollection } from './image_output_collection';
-export { default as ImageDependencies } from './image_dependencies';
-export { default as ImageEnvironmentVariables } from './image_env_variables';
-export { default as ImageVolumes } from './image_volumes';
-export { default as ImageSecurityContext } from './image_security_context';

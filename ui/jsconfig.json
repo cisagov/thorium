@@ -1,16 +1,22 @@
 { 
   "compilerOptions": {
-    "baseUrl": "src",
-    "jsx": "react",
+    "jsx": "react-jsx",
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+      "checkJs": true
+    },
     "esModuleInterop": true,
-    "target": "ES2015",
-    "moduleResolution": "node",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
     "paths": {
-      "@components": ["components/index.js"],
-      "@thorpi": ["thorpi/index.js"],
-      "@styles": ["styles/index.ts"],
-      "@utilities": ["utilities/index.js"],
+      "@assets": ["./src/assets/*"],
+      "@styles": ["./src/styles/index.ts"],
+      "@components/*": ["./src/components/*"],
+      "@models/*": ["./src/models/*"],
+      "@thorpi/*": ["./src/thorpi/*"],
+      "@utilities/*": ["./src/utilities/*"],
+      "@entities/*": ["./src/components/entities/*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "vite.config.ts"],
 }

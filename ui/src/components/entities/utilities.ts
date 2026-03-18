@@ -1,11 +1,31 @@
 import { getCode as getCountryCode, Country } from 'country-list';
 
 // project imports
-import { RequestTags, CreateEntity, CriticalSector, Entities, Entity, Vendor } from '@models';
-import { diffTagUpdate } from '@utilities';
+import { RequestTags } from '@models/tags';
+import { Filters } from '@models/search';
+import { CriticalSector } from '@models/entities/sectors';
+import { Vendor } from '@models/entities/vendors';
+import { CreateEntity, Entities, Entity } from '@models//entities';
+import { diffTagUpdate } from '@utilities/tags';
+import { listEntities } from '@thorpi/entities';
+
+// default number of results to render when listing resources
+export const DEFAULT_LIST_LIMIT = 25;
 
 const reformatCriticalSectors = (sector: string): string => {
   return sector.replaceAll(' and ', '').replaceAll(',', '').replaceAll(' ', '');
+};
+
+export const getAvailableVendors = async (updateVendors: (vendorsMap: { [key: string]: string }) => void) => {
+  const filters: Filters = { kinds: [Entities.Vendor], limit: 10000 };
+  const vendorsMap: { [key: string]: string } = {};
+  const { entityList } = await listEntities(filters, console.log, true, null);
+  if (entityList) {
+    entityList.forEach((vendor: Vendor) => {
+      vendorsMap[vendor.id] = vendor.name;
+    });
+  }
+  updateVendors(vendorsMap);
 };
 
 export function buildUpdateEntityForm(entity: Entity, pendingEntity: Entity): FormData {

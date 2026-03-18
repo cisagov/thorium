@@ -30,9 +30,9 @@ export async function getVersion(errorHandler: (error: string) => void): Promise
  * @async
  * @function
  * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<string | boolean>} - Request response
+ * @returns {Promise<string | null>} - Request response
  */
-export async function getBanner(errorHandler: (error: string) => void): Promise<string | boolean> {
+export async function getBanner(errorHandler: (error: string) => void): Promise<string | null> {
   const url = '/banner';
   return client
     .get(url)
@@ -40,10 +40,10 @@ export async function getBanner(errorHandler: (error: string) => void): Promise<
       if (res?.status && res.status == 200 && res.data) {
         return res.data;
       }
-      return false;
+      return null;
     })
     .catch((error) => {
       parseRequestError(error, errorHandler, 'Get Banner');
-      return false;
+      return null;
     });
 }

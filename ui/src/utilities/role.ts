@@ -1,12 +1,14 @@
-import { Group, RoleKey, ThoriumRole, UserInfo } from '@models';
+// project imports
+import { RoleKey, ThoriumRole, UserInfo } from '@models/users';
+import { Group } from '@models/groups';
 
 // get the Thorium role for a given user: Admin, Developer, or User
-export function getThoriumRole(role: ThoriumRole) {
+export function getThoriumRole(role: ThoriumRole | ''): keyof ThoriumRole | '' {
   if (typeof role == 'string') {
     return role;
   } else if (typeof role === 'object' && typeof role !== 'function' && role !== null) {
     if ('Developer' in role) {
-      return 'Developer';
+      return 'Developer' as keyof ThoriumRole;
     } else {
       return '';
     }

@@ -1,7 +1,9 @@
 import React, { createContext, JSX, useContext, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { authUserPass, createUser, logout, whoami } from '@thorpi';
-import { UserInfo, RoleKey } from '@models';
+
+// project imports
+import { authUserPass, createUser, logout, whoami } from '@thorpi/users';
+import { UserInfo, RoleKey } from '@models/users';
 import { clearTagDataFromLocalStorage, fetchLocalStorageTags } from './tags';
 
 type AuthContextType = {

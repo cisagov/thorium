@@ -1,4 +1,6 @@
-import { BranchNode, RequestTags, Graph, SubmissionChunk } from '@models';
+import { RequestTags } from '@models/tags';
+import { SubmissionChunk } from '@models/files';
+import { BranchNode, Graph } from '@models/trees';
 
 // get the file name from full path
 export const stripFilePath = (filePath: string): string => {

@@ -1,4 +1,5 @@
-import { RequestTags, TagEntry } from 'models/tags';
+// project imports
+import { RequestTags } from '../tags';
 import { CreateEntity, Entities, Entity } from './entities';
 
 export enum CollectionKind {

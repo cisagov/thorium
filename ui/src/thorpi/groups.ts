@@ -1,6 +1,6 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
-import { Group } from 'models';
+import { Group } from '@models/groups';
 import client, { parseRequestError } from './client';
 
 /**

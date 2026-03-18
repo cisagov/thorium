@@ -1,6 +1,6 @@
-import { countFileTags } from '@thorpi';
-import { RequestTags, TagEntry, TagOptions } from 'models';
-
+// project imports
+import { countFileTags } from '@thorpi/files';
+import { RequestTags, TagEntry, TagOptions } from '@models/tags';
 import rawAttackTagDefaults from '../../mitre_tags/attackTagsList.tags?raw';
 import rawMbcTagDefaults from '../../mitre_tags/MBCTagsList.tags?raw';
 

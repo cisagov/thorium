@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "baseUrl": "src",
-    "target": "ESNext", //"ES2015",
+    "allowJs": true,
+    //"checkJs": true,
+    "target": "ESNext",
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "allowJs": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
@@ -12,20 +12,21 @@
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "paths": {
-      "@components": ["components/index.js"],
-      "@models": ["models/index.ts"],
-      "@thorpi": ["thorpi/index.js"],
-      "@styles": ["styles/index.ts"],
-      "@utilities": ["utilities/index.js"],
+      "@assets": ["./src/assets/*"],
+      "@styles": ["./src/styles/index.ts"],
+      "@components/*": ["./src/components/*"],
+      "@models/*": ["./src/models/*"],
+      "@thorpi/*": ["./src/thorpi/*"],
+      "@utilities/*": ["./src/utilities/*"],
+      "@entities/*": ["./src/components/entities/*"]
     }
   },
-  "include": ["src/**/*"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src/**/*", "vite.config.ts"],
 }

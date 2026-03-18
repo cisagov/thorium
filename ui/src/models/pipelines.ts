@@ -1,3 +1,4 @@
+// project imports
 import { TagTypes } from './tags';
 
 export enum EventTriggerType {

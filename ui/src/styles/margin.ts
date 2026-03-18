@@ -1,4 +1,4 @@
-import { Margin } from '@components';
+import { Margin } from '@components/shared/windows/bounds';
 
 export const CanvasMargin: Margin = {
   top: 47,

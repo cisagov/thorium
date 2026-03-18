@@ -2,7 +2,7 @@
 // and injects the token via axios intercepts
 import { AxiosResponse } from 'axios';
 import client, { parseRequestError } from './client';
-import { UserAuthResponse, UserInfo } from '@models';
+import { UserAuthResponse, UserInfo } from '@models/users';
 
 /**
  * Auth user by password to get a token

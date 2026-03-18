@@ -1,8 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
-import { Graph } from 'models';
+import { Graph } from '@models/trees';
 import client, { parseRequestError } from './client';
-// @ts-ignore
 import JSONBigInt from 'json-bigint';
 
 // this will force big ints to be strings

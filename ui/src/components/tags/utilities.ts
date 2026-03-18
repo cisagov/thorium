@@ -1,5 +1,6 @@
 // project imports
-import { Tags } from '@models';
+import { Tags } from '@models/tags';
+import { DangerTagKeys, FormattedFileInfoTagKeys } from './tag_groups';
 
 // filter tags to only include specific tags
 export const filterIncludedTags = (tags: Tags, includeList: string[]): Tags => {
@@ -19,53 +20,6 @@ export const filterExcludedTags = (tags: Tags, excludeList: string[]): Tags => {
   });
   return Object.fromEntries(Object.entries(tags).filter(([k, v]) => !upperExcludedList.includes(k.toUpperCase())));
 };
-
-// Lists of preformatted or categorized tags
-export const FileInfoTagKeys = [
-  'FileType',
-  'FileTypeExtension',
-  'Match',
-  'FileTypeMatch',
-  'Format',
-  'FileFormat',
-  'Compiler',
-  'CompilerVersion',
-  'CompilerFlags',
-  'FileSize',
-  'Arch',
-  'Endianess',
-  'PEType',
-  'MachineType',
-  'MIMEType',
-  'EntryPoint',
-  'linker',
-  'packer',
-  'type',
-  'tool',
-  'imphash',
-  'detections',
-  'Sign tool',
-  'SignTool',
-];
-
-export const TLPLevels = ['CLEAR', 'GREEN', 'AMBER', 'AMBER+STRICT', 'RED'];
-
-export const DangerTagKeys = [
-  'SYMANTECAV',
-  'CLAMAV',
-  'YARARULEHITS',
-  'YARAHIT',
-  'SURICATASIGHIT',
-  'SURICATAALERT',
-  'IDSALERT',
-  'PACKED',
-  'CVEBINTOOLCVE',
-];
-
-export const MitreTagKeys = ['ATT&CK', 'MBC'];
-
-// need capitalized file info keys for value checks (all keys cast to uppercase)
-export const FormattedFileInfoTagKeys = FileInfoTagKeys.map((tag) => tag.toUpperCase());
 
 export enum TagUpperKeyEnum {
   TLP = 'TLP',

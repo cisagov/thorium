@@ -1,7 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { Filters } from '@models';
+import { Filters } from '@models/search';
 
 /**
  * Get a list of repos by date range.

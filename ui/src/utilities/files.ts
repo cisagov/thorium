@@ -1,4 +1,5 @@
-import { SubmissionChunk } from 'models';
+// project imports
+import { SubmissionChunk } from '@models/files';
 
 // return if thing is likely sha256 hash based on length and base64 characters
 export function isValidSha256(someString: string): boolean {

@@ -1,0 +1,15 @@
+// spacing needs to be set before bootstrap is imported
+$spacer: 1rem;
+$spacers: (
+  0: 0,
+  1: $spacer * 0.1,
+  2: $spacer * 0.25,
+  3: $spacer * 0.5,
+  4: $spacer,
+  5: $spacer * 2,
+  6: $spacer * 3,
+  7: $spacer * 4,
+  8: $spacer * 5,
+  9: $spacer * 6,
+  10: $spacer * 7,
+);
