@@ -1,4 +1,4 @@
-import { KeyboardEvent, useRef, FocusEvent } from 'react';
+import { KeyboardEvent, useRef, FocusEvent, ClipboardEvent } from 'react';
 import { styled } from 'styled-components';
 
 // project imports
@@ -83,6 +83,25 @@ const TagEntryField: React.FC<TagEntryProps> = ({
     }
   }
 
+  function handlePaste(e: ClipboardEvent, idx: number, editMode: EditingMode) {
+    if (editMode !== EditingMode.First) return; //paste as normal in value
+    const clipboardText = e.clipboardData.getData('text');
+    const split_string = clipboardText.split('=');
+    if (split_string.length < 2) return; //no '='; paste as normal
+    // if cursor is in middle or before typed text handle paste as normal
+    const enteredText = (e.target as HTMLInputElement).value;
+    const cursorPosition = (e.target as HTMLInputElement).selectionStart;
+    if (enteredText.length > 0 && cursorPosition !== enteredText.length) return;
+    //create new tag with already typed text (empty string if nothing typed)
+    const newTag: Partial<TagEntry> = {
+      key: enteredText + split_string[0],
+      value: split_string.slice(1).join('='),
+    };
+    setTags(updateTags(tags, idx, newTag)); //update current tag with pasted text
+    setEditState({ idx: idx, editMode: EditingMode.Second }); //send cursor to back
+    e.preventDefault(); //prevent normal paste
+  }
+
   function handleFocusTrash() {
     setEditState({ idx: -1, editMode: EditingMode.Disabled });
   }
@@ -100,6 +119,7 @@ const TagEntryField: React.FC<TagEntryProps> = ({
         handleDelete={() => deleteKey(idx)}
         handleBlur={handleBlur}
         handleFocusTrash={handleFocusTrash}
+        onPaste={(e, state) => handlePaste(e, idx, state)}
       />
     );
   });

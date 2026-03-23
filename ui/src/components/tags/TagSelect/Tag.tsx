@@ -1,4 +1,4 @@
-import { useEffect, useRef, KeyboardEvent, FocusEvent, useLayoutEffect } from 'react';
+import { useEffect, useRef, KeyboardEvent, FocusEvent, ClipboardEvent, useLayoutEffect } from 'react';
 import { styled } from 'styled-components';
 import { FaX } from 'react-icons/fa6';
 
@@ -17,6 +17,7 @@ type TagFieldProps = {
   onFocus: () => void;
   onKeyDown: (e: KeyboardEvent) => void;
   onBlur: (e: FocusEvent) => void;
+  onPaste: (e: ClipboardEvent) => void;
 };
 
 const TagFieldInput = styled.input`
@@ -42,7 +43,17 @@ const HiddenSpan = styled.span`
   letter-spacing: normal;
 `;
 
-const TagField: React.FC<TagFieldProps> = ({ value, isEditing, className, placeholder, onChangeValue, onFocus, onKeyDown, onBlur }) => {
+const TagField: React.FC<TagFieldProps> = ({
+  value,
+  isEditing,
+  className,
+  placeholder,
+  onChangeValue,
+  onFocus,
+  onKeyDown,
+  onBlur,
+  onPaste,
+}) => {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const spanRef = useRef<HTMLSpanElement>(null);
 
@@ -73,6 +84,7 @@ const TagField: React.FC<TagFieldProps> = ({ value, isEditing, className, placeh
         onBlur={onBlur}
         onFocus={onFocus}
         placeholder={placeholder}
+        onPaste={onPaste}
       />
     </>
   );
@@ -108,9 +120,20 @@ type TagProps = {
   handleDelete: () => void;
   handleBlur: (e: FocusEvent) => void;
   handleFocusTrash: () => void;
+  onPaste: (e: ClipboardEvent, state: EditingMode) => void;
 };
 
-const Tag: React.FC<TagProps> = ({ data, editMode, onChange, handleFocus, handleKeyDown, handleDelete, handleBlur, handleFocusTrash }) => {
+export const Tag: React.FC<TagProps> = ({
+  data,
+  editMode,
+  onChange,
+  handleFocus,
+  handleKeyDown,
+  handleDelete,
+  handleBlur,
+  handleFocusTrash,
+  onPaste,
+}) => {
   const tagClass = getTagColorClass(data.key, data.value);
   return (
     <TagContainer
@@ -128,6 +151,7 @@ const Tag: React.FC<TagProps> = ({ data, editMode, onChange, handleFocus, handle
         onKeyDown={(e) => handleKeyDown(e, EditingMode.First)}
         onBlur={handleBlur}
         onChangeValue={(v) => onChange({ key: v })}
+        onPaste={(e) => onPaste(e, EditingMode.First)}
       />
       <span className={tagClass} onClick={() => handleFocus(EditingMode.Disabled)}>
         <b> {'='} </b>
@@ -141,6 +165,7 @@ const Tag: React.FC<TagProps> = ({ data, editMode, onChange, handleFocus, handle
         onKeyDown={(e) => handleKeyDown(e, EditingMode.Second)}
         onBlur={handleBlur}
         onChangeValue={(v) => onChange({ value: v })}
+        onPaste={(e) => onPaste(e, EditingMode.Second)}
       />
       <TagDeleteButton
         tabIndex={0}
