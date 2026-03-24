@@ -2479,6 +2479,10 @@ pub struct Elastic {
 
 impl Elastic {
     /// Cast this elastic cert config into a ```CertificateValidation``` object
+    ///
+    /// # Error
+    ///
+    /// will panic if an invalid certificate is supplied
     #[cfg(feature = "api")]
     pub async fn to_cert_validation(&self) -> elasticsearch::cert::CertificateValidation {
         // if insecure certificates is turned on then ignore certificate validation
@@ -2490,25 +2494,27 @@ impl Elastic {
             None => elasticsearch::cert::CertificateValidation::Default,
             Some(ElasticCertValidation::Full(path)) => {
                 // read our CA cert from disk
-                let ca_bytes = tokio::fs::read(path).await.expect(&format!(
-                    "Failed to read elastic validation cert at {path:?}"
-                ));
+                let ca_bytes = tokio::fs::read(path).await.unwrap_or_else(|_| {
+                    panic!("Failed to read elastic validation cert at {path:?}")
+                });
                 // build our cert
-                let cert = elasticsearch::cert::Certificate::from_pem(&ca_bytes).expect(&format!(
-                    "Failed to parse certificate at {path:?} as a PEM encoded CA cert"
-                ));
+                let cert =
+                    elasticsearch::cert::Certificate::from_pem(&ca_bytes).unwrap_or_else(|_| {
+                        panic!("Failed to parse certificate at {path:?} as a PEM encoded CA cert")
+                    });
                 // return the right validation behavior
                 elasticsearch::cert::CertificateValidation::Full(cert)
             }
             Some(ElasticCertValidation::CA(path)) => {
                 // read our CA cert from disk
-                let ca_bytes = tokio::fs::read(path).await.expect(&format!(
-                    "Failed to read elastic validation cert at {path:?}"
-                ));
+                let ca_bytes = tokio::fs::read(path).await.unwrap_or_else(|_| {
+                    panic!("Failed to read elastic validation cert at {path:?}")
+                });
                 // build our cert
-                let cert = elasticsearch::cert::Certificate::from_pem(&ca_bytes).expect(&format!(
-                    "Failed to parse certificate at {path:?} as a PEM encoded CA cert"
-                ));
+                let cert =
+                    elasticsearch::cert::Certificate::from_pem(&ca_bytes).unwrap_or_else(|_| {
+                        panic!("Failed to parse certificate at {path:?} as a PEM encoded CA cert")
+                    });
                 // return the right validation behavior
                 elasticsearch::cert::CertificateValidation::Certificate(cert)
             }

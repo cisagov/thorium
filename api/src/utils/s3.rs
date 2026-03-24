@@ -419,7 +419,7 @@ impl S3Client {
             .await
         {
             Ok(hashes) => Ok(hashes),
-            Err(err) => {
+            Err(error) => {
                 // abort this multipart upload
                 self.client
                     .abort_multipart_upload()
@@ -429,7 +429,7 @@ impl S3Client {
                     .send()
                     .await?;
                 // return our error
-                return Err(ApiError::from(err));
+                return Err(error);
             }
         }
     }
@@ -576,7 +576,7 @@ impl S3Client {
             .await
         {
             Ok(sha256) => Ok(sha256),
-            Err(err) => {
+            Err(error) => {
                 // abort this multipart upload
                 self.client
                     .abort_multipart_upload()
@@ -586,7 +586,7 @@ impl S3Client {
                     .send()
                     .await?;
                 // return our error
-                return Err(ApiError::from(err));
+                return Err(error);
             }
         }
     }
@@ -722,7 +722,7 @@ impl S3Client {
         // cart and stream this file to s3
         match self.cart_and_stream_helper(&path, upload_id, field).await {
             Ok(()) => Ok(()),
-            Err(err) => {
+            Err(error) => {
                 // abort this multipart upload
                 self.client
                     .abort_multipart_upload()
@@ -732,7 +732,7 @@ impl S3Client {
                     .send()
                     .await?;
                 // return our error
-                return Err(ApiError::from(err));
+                return Err(error);
             }
         }
     }
@@ -852,9 +852,9 @@ impl S3Client {
             None => return unavailable!("Failed to get multipart upload ID".to_owned()),
         };
         // cart and stream this file to s3
-        match self.stream_helper(&path, upload_id, field).await {
+        match self.stream_helper(path, upload_id, field).await {
             Ok(()) => Ok(()),
-            Err(err) => {
+            Err(error) => {
                 // abort this multipart upload
                 self.client
                     .abort_multipart_upload()
@@ -864,7 +864,7 @@ impl S3Client {
                     .send()
                     .await?;
                 // return our error
-                return Err(ApiError::from(err));
+                return Err(error);
             }
         }
     }

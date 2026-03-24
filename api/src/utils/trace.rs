@@ -1,14 +1,18 @@
 //! Sets up tracing for Thorium using either jaeger or stdout/stderr
 
-use opentelemetry::trace::TraceContextExt;
-use opentelemetry::trace::TracerProvider;
+use opentelemetry::trace::{TraceContextExt, TracerProvider};
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::path::Path;
 use tracing::Span;
 use tracing_core::LevelFilter;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use tracing_subscriber::{filter::Filtered, fmt::Layer, layer::Layered, prelude::*, Registry};
+use tracing_subscriber::Registry;
+use tracing_subscriber::filter::Filtered;
+use tracing_subscriber::fmt::Layer;
+use tracing_subscriber::layer::Layered;
+use tracing_subscriber::prelude::*;
 
 use crate::conf::{LogLevel, Tracing, TracingLocal, TracingServices};
 
@@ -16,9 +20,9 @@ use crate::conf::{LogLevel, Tracing, TracingLocal, TracingServices};
 #[macro_export]
 macro_rules! info {
     ($level:expr, $($msg:tt)+) => {
-        if $level ==  crate::conf::LogLevel::Info
-        || $level ==  crate::conf::LogLevel::Debug
-        || $level ==  crate::conf::LogLevel::Trace  {
+        if $level ==  $crate::conf::LogLevel::Info
+        || $level ==  $crate::conf::LogLevel::Debug
+        || $level ==  $crate::conf::LogLevel::Trace  {
             println!("{}", serde_json::json!({"timestamp": chrono::Utc::now(), "level": "INFO", "msg": $($msg)+}));
         }
     }
@@ -28,10 +32,10 @@ macro_rules! info {
 #[macro_export]
 macro_rules! setup {
     ($level:expr, $($msg:tt)+) => {
-        if $level ==  crate::conf::LogLevel::Setup
-        || $level ==  crate::conf::LogLevel::Info
-        || $level ==  crate::conf::LogLevel::Debug
-        || $level ==  crate::conf::LogLevel::Trace  {
+        if $level ==  $crate::conf::LogLevel::Setup
+        || $level ==  $crate::conf::LogLevel::Info
+        || $level ==  $crate::conf::LogLevel::Debug
+        || $level ==  $crate::conf::LogLevel::Trace  {
             println!("{}", serde_json::json!({"timestamp": chrono::Utc::now(), "level": "SETP", "msg": $($msg)+}));
         }
     }
@@ -41,7 +45,7 @@ macro_rules! setup {
 #[macro_export]
 macro_rules! error {
     ($level:expr, $($msg:tt)+) => {
-        if $level !=  crate::conf::LogLevel::Off {
+        if $level !=  $crate::conf::LogLevel::Off {
             println!("{}", serde_json::json!({"timestamp": chrono::Utc::now(), "level": "ERRO", "msg": $($msg)+}));
         }
     }
@@ -80,10 +84,14 @@ fn setup_grpc(
         .with_endpoint(endpoint)
         .build()
         .expect("Failed to setup tracing grpc exporter");
+    // build the resource for this tracer
+    let resource = Resource::builder()
+        .with_service_name(name.to_owned())
+        .build();
     // setup our tracer provider
     let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         .with_batch_exporter(exporter)
-        //.with_simple_exporter(exporter)
+        .with_resource(resource)
         .build();
     // build a tracer
     let tracer = provider.tracer(name.to_owned());

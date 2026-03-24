@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use futures::stream::{self, StreamExt};
 use gxhash::GxHasher;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::hash::Hasher;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
 use uuid::Uuid;
@@ -11,7 +11,7 @@ use uuid::Uuid;
 use super::Association;
 use crate::models::{
     CollectionEntity, CollectionEntityRequest, CollectionKind, Country, DeviceEntityRequest,
-    TagMap, TreeBranch, TreeSupport, VendorEntity, VendorEntityRequest,
+    TagMap, TreeSupport, VendorEntity, VendorEntityRequest,
 };
 
 pub mod collections;
@@ -22,9 +22,6 @@ pub mod vendors;
 
 use devices::DeviceEntity;
 use shared::CriticalSector;
-
-#[cfg(feature = "scylla-utils")]
-use std::str::FromStr;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
@@ -49,6 +46,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
+        use std::collections::BTreeSet;
 
         /// The form for entity metadata
         #[derive(Debug, Default)]
@@ -250,7 +248,7 @@ impl TreeSupport for Entity {
                     .filter(|assoc| !ring.contains(tree, assoc.tree_hash()))
                     .unique_by(|assoc| assoc.tree_hash())
                     .map(Clone::clone)
-                    .collect::<Vec<Association>>();
+                    .collect::<Vec<super::Association>>();
                 // get this pages tree nodes in parallel
                 let mut node_stream = stream::iter(filtered_targets)
                     .map(|assoc| async move { assoc.get_tree_node(user, shared).await })

@@ -143,7 +143,7 @@ async fn collect_file(
             // check if our results file length is too large or empty
             let raw_result = match metadata.len() {
                 // results is empty so don't bother uploading it
-                len if len == 0 => {
+                0 => {
                     if image.display_type.requires_results() {
                         // log that our results file is empty
                         log!(logs, "Warning: Results file exists but is empty");
