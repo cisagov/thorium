@@ -284,7 +284,7 @@ macro_rules! multipart_text {
 #[macro_export]
 macro_rules! multipart_text_to_string {
     ($form:expr, $key:expr, $value:expr) => {
-        match $value.take().map(|v| v.to_string()) {
+        match $value.map(|v| v.to_string()) {
             Some(value) => $form.text($key, value),
             None => $form,
         }
@@ -321,6 +321,18 @@ macro_rules! multipart_list_conv {
         $value.drain(..).fold($form, |form, value| {
             form.text($key.to_owned(), value.to_string())
         })
+    };
+}
+
+/// converts a date to a string and adds it to a multipart form
+#[doc(hidden)]
+#[macro_export]
+macro_rules! multipart_date {
+    ($form:expr, $key:expr, $value:expr) => {
+        match $value.map(|v| v.to_rfc3339()) {
+            Some(value) => $form.text($key, value),
+            None => $form,
+        }
     };
 }
 

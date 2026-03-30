@@ -358,3 +358,17 @@ macro_rules! opt_tag {
         }
     };
 }
+
+/// Optionally add an origin value to tags after converting it to a string
+#[doc(hidden)]
+#[macro_export]
+macro_rules! opt_tag_to_string {
+    ($tags:expr, $key:expr, $value:expr) => {
+        if let Some(value) = $value {
+            // convert this value ot a string
+            let converted = value.to_string();
+            // insert this sconverted value
+            $tags.entry($key.to_owned()).or_default().insert(converted);
+        }
+    };
+}

@@ -17,21 +17,20 @@ use uuid::Uuid;
 use super::db;
 use crate::models::backends::GraphicSupport;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
-use crate::models::entities::filesystem::FileSystemFolderEntity;
-use crate::models::entities::{EntityMetadata, EntityMetadataForm};
+use crate::models::entities::EntityMetadataForm;
 use crate::models::{
     ApiCursor, AssociationKind, AssociationListOpts, AssociationRequest, AssociationTarget,
     AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
-    EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow,
-    EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, FileSystemEntity, Group,
-    GroupAllowAction, ListableAssociation, TagListRow, TagMap, TagType, TreeSupport, User,
-    VendorEntity,
+    EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow, EntityMetadata,
+    EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, FileSystemEntity,
+    FileSystemFolderEntity, Group, GroupAllowAction, ListableAssociation, TagListRow, TagMap,
+    TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity, WindowsProcessTreeEntity,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
     bad, bad_internal, deserialize, ensure_empty_segment, ensure_segments_complete, for_groups,
-    internal_err, not_found, serialize, tag, unauthorized, update, update_add_rem,
-    update_clear_opt, update_opt,
+    internal_err, not_found, opt_tag, opt_tag_to_string, serialize, tag, unauthorized, update,
+    update_add_rem, update_clear_opt, update_opt,
 };
 
 mod collections;
@@ -146,7 +145,6 @@ impl Entity {
                     tag!(tags, "CriticalSectors", sector.to_string());
                 }
             }
-            EntityMetadata::Collection(_) => (),
             EntityMetadata::FileSystem(fs) => {
                 tag!(tags, "FsSha256", fs.sha256.clone());
             }
@@ -155,7 +153,30 @@ impl Entity {
                 tag!(tags, "FolderDataSha256", folder.data_sha256.clone());
                 tag!(tags, "FolderAllSha256", folder.all_sha256.clone());
             }
-            EntityMetadata::Other => (),
+            EntityMetadata::WindowsProcess(win_proc) => {
+                tag!(tags, "PID", win_proc.pid.to_string());
+                opt_tag!(
+                    tags,
+                    "ParentPID",
+                    win_proc.parent_pid.map(|ppid| ppid.to_string())
+                );
+                opt_tag!(tags, "ProcessName", win_proc.name.clone());
+                opt_tag!(tags, "ProcessImagePath", win_proc.image_path.clone());
+                opt_tag!(tags, "ProcessCommand", win_proc.command.clone());
+                opt_tag!(
+                    tags,
+                    "ProcessOffset",
+                    win_proc.offset.map(|offset| offset.to_string())
+                );
+                opt_tag_to_string!(tags, "ProcessThreads", win_proc.threads);
+                opt_tag_to_string!(tags, "ProcessHandles", win_proc.handles);
+                opt_tag_to_string!(tags, "ProcessIsWow64", win_proc.is_wow64);
+                opt_tag_to_string!(tags, "ProcessSessionID", win_proc.session_id);
+            }
+            // other and windows process trees have no taggable data
+            EntityMetadata::Other
+            | EntityMetadata::Collection(_)
+            | EntityMetadata::WindowsProcessTree(_) => (),
         }
     }
 
@@ -211,7 +232,9 @@ impl Entity {
                 | EntityMetadata::Collection(_)
                 | EntityMetadata::Other
                 | EntityMetadata::FileSystem(_)
-                | EntityMetadata::Folder(_) => (),
+                | EntityMetadata::Folder(_)
+                | EntityMetadata::WindowsProcessTree(_)
+                | EntityMetadata::WindowsProcess(_) => (),
             }
         }
         Ok(self)
@@ -341,6 +364,26 @@ impl Entity {
                 fs.tools.append(&mut form.add_tools);
                 // remove any tools from old tools
                 fs.tools.retain(|tool| !form.remove_tools.contains(tool));
+            }
+            EntityMetadata::WindowsProcessTree(win_proc_tree) => {
+                // add new tools that dumped this windows process tree
+                win_proc_tree.tools.append(&mut form.add_tools);
+                // remove any tools from old tools
+                win_proc_tree
+                    .tools
+                    .retain(|tool| !form.remove_tools.contains(tool));
+            }
+            EntityMetadata::WindowsProcess(win_proc) => {
+                update_opt!(win_proc.name, form.name);
+                update_opt!(win_proc.image_path, form.image_path);
+                update_opt!(win_proc.command, form.command);
+                update_opt!(win_proc.offset, form.offset);
+                update_opt!(win_proc.threads, form.threads);
+                update_opt!(win_proc.handles, form.handles);
+                update_opt!(win_proc.is_wow64, form.is_wow64);
+                update_opt!(win_proc.session_id, form.session_id);
+                update_opt!(win_proc.create_time, form.create_time);
+                update_opt!(win_proc.exit_time, form.exit_time);
             }
             // other kinds have no metadata to update
             EntityMetadata::Other | EntityMetadata::Folder(_) => (),
@@ -631,11 +674,13 @@ impl Entity {
         match &mut self.metadata {
             // vendors in devices is built by association
             EntityMetadata::Device(device) => device.vendors.clear(),
-            // vendor/collection/other has no association specific data
+            // most other entities have no association specific data
             EntityMetadata::Vendor(_)
             | EntityMetadata::Collection(_)
             | EntityMetadata::FileSystem(_)
             | EntityMetadata::Folder(_)
+            | EntityMetadata::WindowsProcessTree(_)
+            | EntityMetadata::WindowsProcess(_)
             | EntityMetadata::Other => (),
         }
     }
@@ -664,11 +709,13 @@ impl EntityMetadata {
     /// Split an entity kind into its name and its serialized data if it has any
     pub fn split(&self) -> Result<(EntityKinds, Option<String>), ApiError> {
         let data = match self {
-            EntityMetadata::Device(device_entity) => Some(serialize!(device_entity)),
-            EntityMetadata::Vendor(vendor_entity) => Some(serialize!(vendor_entity)),
-            EntityMetadata::Collection(collection_entity) => Some(serialize!(collection_entity)),
-            EntityMetadata::FileSystem(fs_entity) => Some(serialize!(fs_entity)),
-            EntityMetadata::Folder(folder_entity) => Some(serialize!(folder_entity)),
+            EntityMetadata::Device(device) => Some(serialize!(device)),
+            EntityMetadata::Vendor(vendor) => Some(serialize!(vendor)),
+            EntityMetadata::Collection(collection) => Some(serialize!(collection)),
+            EntityMetadata::FileSystem(fs) => Some(serialize!(fs)),
+            EntityMetadata::Folder(folder) => Some(serialize!(folder)),
+            EntityMetadata::WindowsProcessTree(win_proc_tree) => Some(serialize!(win_proc_tree)),
+            EntityMetadata::WindowsProcess(win_proc) => Some(serialize!(win_proc)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -876,12 +923,14 @@ impl EntityMetadataForm {
         match name_segments.next().ok_or(bad_internal!(
             "Invalid entity metadata field: metadata field name is missing".to_string()
         ))? {
+            // the device/vendor specific form fields
             "critical_system" => {
                 self.critical_system = Some(field.text().await?.parse()?);
             }
             "sensitive_location" => {
                 self.sensitive_location = Some(field.text().await?.parse()?);
             }
+            // the collection specific form fields
             "collection_kind" => {
                 // try to cast the collection kind
                 let kind_raw = field.text().await.map_err(|_| {
@@ -922,11 +971,25 @@ impl EntityMetadataForm {
                     bad_internal!(format!("Invalid collection end datetime '{end_raw}'"))
                 })?);
             }
+            // the filesystem specific form fields
             "filesystem_id" => self.filesystem_id = Some(field.text().await?.parse::<Uuid>()?),
             "sha256" => self.sha256 = Some(field.text().await?),
             "names_sha256" => self.names_sha256 = Some(field.text().await?),
             "data_sha256" => self.data_sha256 = Some(field.text().await?),
             "all_sha256" => self.all_sha256 = Some(field.text().await?),
+            // the process specific form fields
+            "pid" => self.pid = Some(field.text().await?.parse()?),
+            "parent_pid" => self.parent_pid = Some(field.text().await?.parse()?),
+            "name" => self.name = Some(field.text().await?),
+            "image_path" => self.image_path = Some(field.text().await?),
+            "command" => self.command = Some(field.text().await?),
+            "offset" => self.offset = Some(field.text().await?.parse()?),
+            "threads" => self.threads = Some(field.text().await?.parse()?),
+            "handles" => self.handles = Some(field.text().await?.parse()?),
+            "is_wow64" => self.is_wow64 = Some(field.text().await?.parse()?),
+            "session_id" => self.session_id = Some(field.text().await?.parse()?),
+            "create_time" => self.create_time = Some(field.text().await?.parse()?),
+            "exit_time" => self.exit_time = Some(field.text().await?.parse()?),
             maybe_list => {
                 match maybe_list {
                     "urls" => {
@@ -1003,6 +1066,12 @@ impl EntityMetadataForm {
             EntityKinds::Folder => Ok(EntityMetadata::Folder(FileSystemFolderEntity::from_form(
                 self,
             )?)),
+            EntityKinds::WindowsProcessTree => Ok(EntityMetadata::WindowsProcessTree(
+                WindowsProcessTreeEntity::from_form(self)?,
+            )),
+            EntityKinds::WindowsProcess => Ok(EntityMetadata::WindowsProcess(
+                WindowsProcessEntity::from_form(self)?,
+            )),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }
     }

@@ -41,7 +41,8 @@ pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchPara
 pub use entities::collections::{CollectionEntity, CollectionEntityRequest, CollectionKind};
 pub use entities::countries::Country;
 pub use entities::devices::{DeviceEntity, DeviceEntityRequest};
-pub use entities::filesystem::{FileSystemEntity, FileSystemEntityBuilder};
+pub use entities::filesystem::{FileSystemEntity, FileSystemEntityBuilder, FileSystemFolderEntity};
+pub use entities::processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 pub use entities::shared::CriticalSector;
 pub use entities::vendors::{VendorEntity, VendorEntityRequest};
 pub use entities::{

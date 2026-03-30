@@ -18,11 +18,15 @@ pub mod collections;
 pub mod countries;
 pub mod devices;
 pub mod filesystem;
+pub mod flags;
+pub mod network_activity;
+pub mod processes;
 pub mod shared;
 pub mod vendors;
 
 use devices::DeviceEntity;
 use filesystem::{FileSystemEntity, FileSystemFolderEntity};
+use processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 use shared::CriticalSector;
 
 cfg_if::cfg_if! {
@@ -71,6 +75,18 @@ cfg_if::cfg_if! {
             pub data_sha256: Option<String>,
             pub all_sha256: Option<String>,
             pub tools: Vec<String>,
+            pub pid: Option<u64>,
+            pub parent_pid: Option<u64>,
+            pub name: Option<String>,
+            pub image_path: Option<String>,
+            pub command: Option<String>,
+            pub offset: Option<u64>,
+            pub threads: Option<u32>,
+            pub handles: Option<u32>,
+            pub is_wow64: Option<bool>,
+            pub session_id: Option<u32>,
+            pub create_time: Option<DateTime<Utc>>,
+            pub exit_time: Option<DateTime<Utc>>,
         }
 
         impl EntityMetadataForm {
@@ -158,6 +174,16 @@ cfg_if::cfg_if! {
             pub clear_collection_end: Option<bool>,
             pub add_tools: Vec<String>,
             pub remove_tools: Vec<String>,
+            pub name: Option<String>,
+            pub image_path: Option<String>,
+            pub command: Option<String>,
+            pub offset: Option<u64>,
+            pub threads: Option<u32>,
+            pub handles: Option<u32>,
+            pub is_wow64: Option<bool>,
+            pub session_id: Option<u32>,
+            pub create_time: Option<DateTime<Utc>>,
+            pub exit_time: Option<DateTime<Utc>>,
         }
     }
 }
@@ -480,6 +506,10 @@ pub enum EntityMetadata {
     FileSystem(FileSystemEntity),
     /// A folder within a filesystem entity
     Folder(FileSystemFolderEntity),
+    /// A Windows process tree entity
+    WindowsProcessTree(WindowsProcessTreeEntity),
+    /// A Windows process
+    WindowsProcess(WindowsProcessEntity),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
@@ -499,6 +529,10 @@ pub enum EntityMetadataRequest {
     FileSystem(FileSystemEntity),
     /// A filesystem folder entity
     Folder(FileSystemFolderEntity),
+    /// A windows process tree that has no data
+    WindowsProcessTree,
+    /// A windows process
+    WindowsProcess(WindowsProcessEntity),
     /// An entity that can't be described by any of the other variants
     Other,
 }
@@ -517,6 +551,11 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::Collection(collection) => collection.add_to_form(form),
             EntityMetadataRequest::FileSystem(fs) => fs.add_to_form(form),
             EntityMetadataRequest::Folder(folder) => folder.add_to_form(form),
+            // windows process tree entities don't really have any metadata
+            EntityMetadataRequest::WindowsProcessTree => {
+                Ok(form.text("kind", EntityKinds::WindowsProcessTree.as_str()))
+            }
+            EntityMetadataRequest::WindowsProcess(process) => process.add_to_form(form),
             // just set our kind to other
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }

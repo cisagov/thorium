@@ -33,8 +33,7 @@ impl FileSystemEntity {
     ///
     /// # Errors
     ///
-    /// * The vendor in the form does not exist in the given groups
-    /// * An error occurred checking if the vendor in the form exists
+    /// * A sha256 was not found in the form
     ///
     /// # Arguments
     ///
@@ -94,8 +93,7 @@ impl FileSystemFolderEntity {
     ///
     /// # Errors
     ///
-    /// * The vendor in the form does not exist in the given groups
-    /// * An error occurred checking if the vendor in the form exists
+    /// * Any of the required hashes were not found in the form
     ///
     /// # Arguments
     ///
@@ -161,6 +159,7 @@ impl FileSystemFolderEntity {
         let form = form.text("kind", super::EntityKinds::Folder.as_str());
         // set the sha256 for this entity
         let form = form.text("metadata[filesystem_id]", self.filesystem_id.to_string());
+        // set the hashes for this entity
         let form = form.text("metadata[names_sha256]", self.names_sha256);
         let form = form.text("metadata[data_sha256]", self.data_sha256);
         let form = form.text("metadata[all_sha256]", self.all_sha256);
@@ -238,6 +237,7 @@ impl FileSystemEntityBuilder {
     /// # Arguments
     ///
     /// * `name` - The name to use for this filesystem
+    /// * `root` - The root path prefix to strip from files in this filesystem
     #[cfg(feature = "client")]
     pub fn new(name: impl Into<String>, root: impl Into<PathBuf>) -> Result<Self, crate::Error> {
         // get root path as a path
@@ -253,9 +253,9 @@ impl FileSystemEntityBuilder {
             root: root.clone(),
         };
         // add a root directory
-        let entry = builder.contents.entry(PathBuf::from("/")).or_default();
-        //// add a None entry for this folder since it won't have a data hash
-        //entry.insert("/".to_owned(), None);
+        builder
+            .contents
+            .insert(PathBuf::from("/"), BTreeMap::default());
         Ok(builder)
     }
 

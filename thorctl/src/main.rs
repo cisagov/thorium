@@ -13,6 +13,8 @@ mod errors;
 mod handlers;
 mod utils;
 
+mod proc_reader;
+
 use args::{Args, SubCommands};
 
 use std::path::Path;
@@ -20,6 +22,8 @@ use thorium::models::FileSystemEntityBuilder;
 
 #[tokio::main]
 async fn main() {
+    // TODO do this elsewhere
+    proc_reader::run().await.unwrap();
     // get the command line args that were passed in
     let args = Args::parse();
     // fall into the right handler and execute this users command

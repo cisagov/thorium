@@ -59,3 +59,5 @@ unicode-width = "0.2"
 ansi-to-tui = "8.0.1"
 unicode-segmentation = "1.12.0"
 tui-markdown = "0.3.7"
+
+sigma-rust = "0.7.0"

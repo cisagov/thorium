@@ -60,10 +60,14 @@ pub enum AssociationKind {
     PerformedBy,
     /// This filesystem was extracted/carved from
     FileSystemIn,
-    /// This is a folder within a filesystem or another fodler
+    /// This is a folder within a filesystem or another folder
     FolderIn,
     /// This is a file in a folder in a filesytem
     FileIn,
+    /// A Process tree in or from something
+    ProcessTreeIn,
+    /// A Process in a process tree or a child process
+    ChildProcess,
 }
 
 impl std::fmt::Display for AssociationKind {
@@ -86,6 +90,8 @@ impl std::fmt::Display for AssociationKind {
             AssociationKind::FileSystemIn => write!(f, "FileSystemIn"),
             AssociationKind::FolderIn => write!(f, "FolderIn"),
             AssociationKind::FileIn => write!(f, "FileIn"),
+            AssociationKind::ProcessTreeIn => write!(f, "ProcessTreeIn"),
+            AssociationKind::ChildProcess => write!(f, "ChildProcess"),
         }
     }
 }
@@ -110,6 +116,8 @@ impl AssociationKind {
             AssociationKind::FileSystemIn => "FileSystemIn",
             AssociationKind::FolderIn => "FolderIn",
             AssociationKind::FileIn => "FileIn",
+            AssociationKind::ProcessTreeIn => "ProcessTreeIn",
+            AssociationKind::ChildProcess => "ChildProcess",
         }
     }
 }
@@ -136,6 +144,8 @@ impl FromStr for AssociationKind {
             "FileSystemIn" => Ok(AssociationKind::FileSystemIn),
             "FolderIn" => Ok(AssociationKind::FolderIn),
             "FileIn" => Ok(AssociationKind::FileIn),
+            "ProcessTreeIn" => Ok(AssociationKind::ProcessTreeIn),
+            "ChildProcess" => Ok(AssociationKind::ChildProcess),
             _ => Err(InvalidEnum(format!("Unknown AssociationKind: {raw}"))),
         }
     }
@@ -231,7 +241,11 @@ impl AssociationRequest {
     /// # Arguments
     ///
     /// * `groups` - The groups to add to this request
-    pub fn groups<T: Into<String>>(mut self, groups: Vec<T>) -> Self {
+    pub fn groups<I>(mut self, groups: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<String>,
+    {
         // extend our groups with our new groups
         self.groups
             .extend(groups.into_iter().map(|group| group.into()));
@@ -410,10 +424,10 @@ impl From<AssociationListOpts> for AssociationListParams {
     fn from(opts: AssociationListOpts) -> Self {
         AssociationListParams {
             groups: opts.groups,
-            start: opts.start.unwrap_or_else(|| Utc::now()),
+            start: opts.start.unwrap_or_else(Utc::now),
             end: opts.end,
             cursor: opts.cursor,
-            limit: opts.limit.unwrap_or_else(|| default_list_limit()),
+            limit: opts.limit.unwrap_or_else(default_list_limit),
         }
     }
 }
