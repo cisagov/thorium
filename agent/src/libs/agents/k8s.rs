@@ -167,6 +167,8 @@ impl AgentExecutor for K8s {
                 if let Some(endpoint) = settings.endpoints.get(&settings.default_endpoint) {
                     // serialize our endpoint settings
                     let serialized = serde_yaml::to_string(&endpoint)?;
+                    // create our parent folders
+                    tokio::fs::create_dir_all("/tmp/thorium").await?;
                     // write our endpoint settings to disk
                     tokio::fs::write("/tmp/thorium/ai.yaml", serialized).await?;
                 }

@@ -515,8 +515,21 @@ impl AiSettingsUpdate {
         settings
             .endpoints
             .retain(|name, _| !self.remove_endpoints.contains(name));
-        // set our new ai settings for this user
-        *existing = Some(settings);
+        // if we have no more ai endpoints then clear our ai settings
+        if settings.endpoints.is_empty() {
+            // clear any existing ai settings
+            *existing = None;
+        } else {
+            // make sure we still have a default endpoint
+            if !settings.endpoints.contains_key(&settings.default_endpoint) {
+                return bad!(format!(
+                    "Please change your default endpoint from {} before removing its config!",
+                    settings.default_endpoint
+                ));
+            }
+            // set our new ai settings for this user
+            *existing = Some(settings);
+        }
         Ok(())
     }
 }
