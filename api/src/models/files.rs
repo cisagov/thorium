@@ -28,7 +28,7 @@ use crate::{matches_adds, matches_removes, matches_update_opt, opt_tag, same, ta
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
         use crate::utils::{ApiError, Shared};
-        use super::{User, TagDeleteRequest};
+        use super::{User, TagDeleteRequest, TreeNode};
         use std::str::FromStr;
         use crate::models::{TreeRelationships, Directionality};
     }
@@ -2654,6 +2654,7 @@ impl TreeSupport for Sample {
     ///
     /// * `user` - The user that is building this tree
     /// * `tree` - The tree to build
+    /// * `child_node` - The node to look for parents from
     /// * `ring` - The current growth ring for this tree
     /// * `shared` - Shared Thorium objects
     #[cfg(feature = "api")]
@@ -2662,6 +2663,7 @@ impl TreeSupport for Sample {
         &self,
         user: &super::User,
         tree: &Tree,
+        child_node: &TreeNode,
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
@@ -2714,16 +2716,24 @@ impl TreeSupport for Sample {
             // get the hash of our current node
             let node_hash = self.tree_hash();
             // add this node to the ring
-            ring.add_node(node);
+            let is_hint = ring.add_parent_node(child_node, node);
             // build the relationship for this node
             let relationship = TreeRelationships::Origin(sub.origin.clone());
             // wrap our relationship in a branch
             let branch =
                 super::UnhashedTreeBranch::new(parent_hash, relationship, Directionality::From);
-            // get an entry to this parent nodes relationships
-            let entry = ring.relationships.entry(node_hash).or_default();
-            // insert our relationship
-            entry.insert(branch);
+            // add this relationship to our displayable branches or hinted ones
+            if is_hint {
+                // get an entry to this parent nodes hinted relationships
+                let entry = ring.hints.entry(node_hash).or_default();
+                // insert our relationship
+                entry.insert(branch);
+            } else {
+                // get an entry to this parent nodes displayable relationships
+                let entry = ring.relationships.entry(node_hash).or_default();
+                // insert our relationship
+                entry.insert(branch);
+            }
         }
         Ok(())
     }

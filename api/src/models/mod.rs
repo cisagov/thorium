@@ -132,8 +132,8 @@ pub use system::{
 };
 pub use tags::{TagCounts, TagKeyCounts};
 pub use trees::{
-    Directionality, Tree, TreeBranch, TreeGrowQuery, TreeNode, TreeOpts, TreeParams, TreeQuery,
-    TreeRelatedQuery, TreeRelationships, TreeSupport,
+    Directionality, Tree, TreeBounds, TreeBranch, TreeGrowQuery, TreeNode, TreeOpts, TreeParams,
+    TreeQuery, TreeRelatedQuery, TreeRelationships, TreeSupport,
 };
 pub use users::{
     AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, Key, ScrubbedUser,

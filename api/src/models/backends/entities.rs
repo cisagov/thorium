@@ -146,7 +146,7 @@ impl Entity {
                     tag!(tags, "CriticalSectors", sector.to_string());
                 }
             }
-            EntityMetadata::Collection(collection) => (),
+            EntityMetadata::Collection(_) => (),
             EntityMetadata::FileSystem(fs) => {
                 tag!(tags, "FsSha256", fs.sha256.clone());
             }
@@ -637,8 +637,6 @@ impl Entity {
             | EntityMetadata::FileSystem(_)
             | EntityMetadata::Folder(_)
             | EntityMetadata::Other => (),
-            // vendor/other has no association specific data
-            _ => (),
         }
     }
 }
@@ -924,6 +922,7 @@ impl EntityMetadataForm {
                     bad_internal!(format!("Invalid collection end datetime '{end_raw}'"))
                 })?);
             }
+            "filesystem_id" => self.filesystem_id = Some(field.text().await?.parse::<Uuid>()?),
             "sha256" => self.sha256 = Some(field.text().await?),
             "names_sha256" => self.names_sha256 = Some(field.text().await?),
             "data_sha256" => self.data_sha256 = Some(field.text().await?),
@@ -1389,9 +1388,9 @@ impl CursorCore for EntityListLine {
     type Ties = HashMap<String, Uuid>;
 
     fn bucket_limit(extra_filters: &Self::ExtraFilters) -> u32 {
-        // keep our cartesian product under 98 by dividing the number of kinds
+        // keep our cartesian product under 99 by dividing 99 by the number of kinds
         // we are searching against
-        (98 / extra_filters.len()) as u32
+        (99 / extra_filters.len()) as u32
     }
 
     fn partition_size(shared: &Shared) -> u16 {
@@ -1399,7 +1398,7 @@ impl CursorCore for EntityListLine {
     }
 
     fn get_id(params: &Self::Params) -> Option<Uuid> {
-        params.cursor.clone()
+        params.cursor
     }
 
     fn get_start_end(
@@ -1658,7 +1657,7 @@ impl ApiCursor<EntityListLine> {
         // create a stream of entities to populate with any association data
         let mut populator_stream = stream::iter(data)
             .map(|entity| entity.populate_associations(user, shared))
-            .buffer_unordered(20);
+            .buffered(20);
         // get populated items from our stream until we hit a problem or no more exist
         while let Some(entity) = populator_stream.next().await {
             // raise an error if we ran into a problem

@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::models::{TreeOpts, TreeQuery, TreeRelatedQuery};
+use crate::models::{TreeBounds, TreeOpts, TreeQuery, TreeRelatedQuery};
 
 use super::ThoriumMCP;
 
@@ -71,6 +71,7 @@ impl ThoriumMCP {
             entities,
             tags,
             related: TreeRelatedQuery::default(),
+            bounds: TreeBounds::default(),
         };
         // use default query options
         let opts = TreeOpts::default();

@@ -406,9 +406,9 @@ pub trait ScyllaCursorSupport: CursorCore {
             to_sort.insert(index, row);
         }
         // rebuild this ambiguous row list in order
-        for (_, index) in &sorted {
+        for index in sorted.values() {
             // get this row and insert it
-            if let Some(row) = to_sort.remove(&index) {
+            if let Some(row) = to_sort.remove(index) {
                 // add this row in the correct order
                 ambigous.push_back(row);
             }
@@ -484,7 +484,8 @@ pub struct CursorCount {
 }
 
 /// A tie query for data based on tags
-async fn ties_tags_query_helper<'a, D: CursorCore>(
+#[expect(clippy::too_many_arguments)]
+async fn ties_tags_query_helper<'a>(
     ties_prepared: &PreparedStatement,
     kind: TagType,
     group: &str,
@@ -515,6 +516,7 @@ async fn ties_tags_query_helper<'a, D: CursorCore>(
     fields(kind, key, value, buckets_len = buckets.len()),
     err(Debug)
 )]
+#[expect(clippy::too_many_arguments)]
 async fn tags_query_helper<'a, D: CursorCore>(
     query_prepared: &PreparedStatement,
     kind: TagType,
@@ -875,12 +877,7 @@ where
                     // get the type of tag this cursor is for
                     let tag_type = &tag_retain.tag_type;
                     // get the right chunk size based on the type of tags this is
-                    shared
-                        .config
-                        .thorium
-                        .tags
-                        .map_type(&tag_type)
-                        .partition_size
+                    shared.config.thorium.tags.map_type(tag_type).partition_size
                 } else {
                     // this is not a tag based query so use our types partitions size
                     D::partition_size(shared)
@@ -948,9 +945,17 @@ where
     }
 
     /// Find the buckets that have been confirmed to contain data
+    ///
+    /// # Arguments
+    ///
+    /// * `bucket_limit` - The most buckets to return for each group
+    /// * `stream_keys` - the stream keys to look for data in
+    /// * `found` - The buckets that we found that contain data
+    /// * `shared` - Shared Thorium objects
     #[rustfmt::skip]
     async fn find_buckets<'a>(
         &self,
+        bucket_limit: u32,
         stream_keys: &mut Vec<(&'a D::GroupBy, String, i32)>,
         found: &mut HashMap<&'a D::GroupBy, Vec<i32>>,
         shared: &Shared,
@@ -969,7 +974,7 @@ where
         for (_, stream_key, oldest_first) in stream_keys.iter() {
             // get the next 100 items
             pipe.cmd("zrange").arg(stream_key).arg(oldest_first).arg(end)
-                    .arg("byscore").arg("limit").arg(0).arg(100).arg("rev");
+                    .arg("byscore").arg("limit").arg(0).arg(bucket_limit).arg("rev");
         }
         // execute our queries
         let bucket_strings: Vec<Vec<String>> = pipe.query_async(conn!(shared)).await?;
@@ -1002,7 +1007,12 @@ where
     /// * `limit` - The max number of rows to return to the user plus 1
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "ScyllaCursor::query", skip(self, shared), err(Debug))]
-    async fn query(&mut self, limit: i32, shared: &Shared) -> Result<(), ApiError> {
+    async fn query(
+        &mut self,
+        limit: i32,
+        bucket_limit: u32,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
         // allocate space for the futures we are about to spawn
         let mut futures = Vec::with_capacity(self.retain.group_by.len());
         // build all of the keys we are getting valid buckets for
@@ -1024,7 +1034,7 @@ where
                 );
             }
             // get the next buckets that contain data
-            self.find_buckets(&mut stream_keys, &mut found, shared)
+            self.find_buckets(bucket_limit, &mut stream_keys, &mut found, shared)
                 .await?;
             // if we found no buckets then check if we have exhausted this cursor
             if found.is_empty() {
@@ -1168,12 +1178,11 @@ where
             }
         }
         // filter down to buckets in all of our bucket ranges
-        let intersection = in_range
+        in_range
             .iter()
             .filter(|(_, count)| **count as usize == tags_required)
             .map(|(bucket, _)| *bucket)
-            .collect::<Vec<i32>>();
-        intersection
+            .collect::<Vec<i32>>()
     }
 
     /// Finds the next chunk of buckets that contain data for some tags
@@ -1310,7 +1319,7 @@ where
                             // if this a tags cursor add this to our tag ties
                             if let Some(tag_ties) = &mut tag_ties {
                                 // add this tie to our tag tie map
-                                tied_row.add_tag_tie(*tag_ties);
+                                tied_row.add_tag_tie(tag_ties);
                             } else {
                                 // add this to our regular query tie map
                                 tied_row.add_tie(&mut self.retain.ties);
@@ -1353,6 +1362,8 @@ where
     async fn next_general(&mut self, shared: &Shared) -> Result<(), ApiError> {
         // Get the limit + 1 of data for each group so we can check if we end on any ties
         let limit = (self.limit + 1) as i32;
+        // get the number of buckets to check at once
+        let bucket_limit = D::bucket_limit(&self.retain.extra_filter);
         // get data from any previously tied queries
         let tied_queries = self.query_ties(limit, shared).await?;
         // if we had any queries based on ties then consume them
@@ -1366,7 +1377,7 @@ where
             }
         }
         // determine which partitions have data
-        self.query(limit, shared).await?;
+        self.query(limit, bucket_limit, shared).await?;
         // consume enough of our sorted data
         self.consume_sorted(None);
         Ok(())
@@ -1391,7 +1402,7 @@ where
                 // query for each value for this tag key
                 for value in values {
                     // execute the query to get this group/tag/key combos rows
-                    let query = ties_tags_query_helper::<D>(
+                    let query = ties_tags_query_helper(
                         prepared,
                         tags_retain.tag_type,
                         group,

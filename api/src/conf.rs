@@ -688,10 +688,7 @@ impl K8s {
     pub fn accept_invalid_certs(&self, context_name: &str) -> bool {
         // try to get our cluster
         match self.clusters.get(context_name) {
-            Some(cluster) => {
-                println!("INSECURE CERT SUPPORTED -> {}", cluster.insecure);
-                cluster.insecure
-            }
+            Some(cluster) => cluster.insecure,
             None => false,
         }
     }

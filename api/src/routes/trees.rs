@@ -40,9 +40,9 @@ async fn start_tree(
     Json(query): Json<TreeQuery>,
 ) -> Result<Json<Tree>, ApiError> {
     // build a tree from our params
-    let mut tree = Tree::from_query(&user, query, &state.shared).await?;
+    let (mut tree, bounds) = Tree::from_query(&user, query, &state.shared).await?;
     // grow this tree to the desired depth
-    tree.grow(&user, &params, &state.shared).await?;
+    tree.grow(&user, params, bounds, &state.shared).await?;
     // save this tree
     tree.save(&user, &state.shared).await?;
     // clear any non user facing info
@@ -89,7 +89,9 @@ async fn grow_tree(
     // set our growable nodes
     tree.growable.clone_from(&query.growable);
     // grow this tree
-    let added = tree.grow(&user, &params, &state.shared).await?;
+    let added = tree
+        .grow(&user, params, query.bounds, &state.shared)
+        .await?;
     // save the latest info on this tree
     tree.save(&user, &state.shared).await?;
     // trim to only the new info for this tree

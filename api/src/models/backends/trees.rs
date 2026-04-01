@@ -12,8 +12,8 @@ use uuid::Uuid;
 use super::db;
 use crate::models::{
     Association, AssociationListParams, AssociationTargetColumn, Directionality, Entity,
-    FileListOpts, FileListParams, Repo, Sample, Tree, TreeBranch, TreeNode, TreeParams, TreeQuery,
-    TreeRelationships, TreeSupport, TreeTags, UnhashedTreeBranch, User,
+    FileListOpts, FileListParams, Repo, Sample, Tree, TreeBounds, TreeBranch, TreeNode, TreeParams,
+    TreeQuery, TreeRelationships, TreeSupport, TreeTags, UnhashedTreeBranch, User,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{bad, internal_err};
@@ -44,11 +44,11 @@ impl TreeNode {
     ) -> Result<(), crate::utils::ApiError> {
         // gather parents for this new data
         match &self {
-            TreeNode::Sample(sample) => sample.gather_parents(user, tree, ring, shared).await,
+            TreeNode::Sample(sample) => sample.gather_parents(user, tree, self, ring, shared).await,
             // Only files actually have parents so the rest of these are basically noops
-            TreeNode::Repo(repo) => repo.gather_parents(user, tree, ring, shared).await,
-            TreeNode::Tag(tags) => tags.gather_parents(user, tree, ring, shared).await,
-            TreeNode::Entity(entity) => entity.gather_parents(user, tree, ring, shared).await,
+            TreeNode::Repo(repo) => repo.gather_parents(user, tree, self, ring, shared).await,
+            TreeNode::Tag(tags) => tags.gather_parents(user, tree, self, ring, shared).await,
+            TreeNode::Entity(entity) => entity.gather_parents(user, tree, self, ring, shared).await,
         }
     }
 
@@ -56,7 +56,6 @@ impl TreeNode {
     pub async fn gather_children(
         &self,
         user: &User,
-        params: &TreeParams,
         tree: &Tree,
         ring: &TreeRing,
         shared: &Shared,
@@ -67,14 +66,13 @@ impl TreeNode {
             TreeNode::Repo(repo) => repo.gather_children(user, tree, ring, shared).await,
             TreeNode::Tag(tags) => {
                 // only gather children from tag nodes if we want too
-                if params.gather_tag_children {
+                if ring.params.gather_tag_children {
                     tags.gather_children(user, tree, ring, shared).await
                 } else {
                     Ok(())
                 }
             }
             // entities only use associations to gather children
-            // so this is basically a no op
             TreeNode::Entity(entity) => entity.gather_children(user, tree, ring, shared).await,
         }
     }
@@ -217,6 +215,21 @@ impl TreeNode {
             loop {
                 // add these associations to our map of associations
                 for association in cursor.data.drain(..) {
+                    // only add this assocition if we are gathering things in that direction
+                    match association.direction {
+                        // only add to associations if we are gathering children
+                        Directionality::To if !ring.params.gather_children => continue,
+                        // only add from associations if we are gathering parents
+                        Directionality::From if !ring.params.gather_parents => continue,
+                        // filter our bidirectional associations if we aren't gathering parents or children
+                        Directionality::Bidirectional
+                            if !ring.params.gather_parents && !ring.params.gather_children =>
+                        {
+                            continue;
+                        }
+                        // add this association if its not filtred
+                        _ => (),
+                    }
                     // convert this association
                     let converted = Association::try_from(association)?;
                     // get an entry to this nodes associations
@@ -316,19 +329,43 @@ impl UnhashedTreeBranch {
 }
 
 /// The data to add to our tree for a single grow round
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct TreeRing {
+    /// The parameters for growing this tree
+    pub params: TreeParams,
+    /// The boundaries to limit this tree too
+    pub bounds: TreeBounds,
     /// The nodes that are newly added across growth events
     pub added: DashSet<u64>,
     /// The newly added nodes during this grow round
     pub nodes: DashMap<u64, TreeNode>,
-    /// The new associations populate
+    /// The new associations to populate
     pub associations: DashMap<u64, DashSet<Association>>,
-    /// The newly added relationships during this grow round
+    /// The displayble relationships across all rings in this grow
     pub relationships: DashMap<u64, DashSet<UnhashedTreeBranch>>,
+    /// The hinted relationships across all rings in this grow
+    pub hints: DashMap<u64, DashSet<UnhashedTreeBranch>>,
 }
 
 impl TreeRing {
+    /// Create a new tree ring
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params for growing this tree
+    /// * `bounds` - The boundaries to limit this tree too
+    pub fn new(params: TreeParams, bounds: TreeBounds) -> Self {
+        TreeRing {
+            params,
+            bounds,
+            added: DashSet::default(),
+            nodes: DashMap::default(),
+            associations: DashMap::default(),
+            relationships: DashMap::default(),
+            hints: DashMap::default(),
+        }
+    }
+
     /// Check if either our ring or tree contains an id
     ///
     /// # Arguments
@@ -339,6 +376,88 @@ impl TreeRing {
     pub fn contains(&self, tree: &Tree, hash: u64) -> bool {
         self.nodes.contains_key(&hash) || tree.data_map.contains_key(&hash)
     }
+
+    /// Add a new parent node and return if this node is hinted or displayed
+    ///
+    /// # Arguments
+    ///
+    /// * `child` - The child this parent came from
+    /// * `parent` - The parent node to add
+    pub fn add_parent_node(&self, child: &TreeNode, parent: TreeNode) -> bool {
+        // check if this parent node should be a hint or an automatically displayed node
+        let is_hint = self.bounds.is_hint_parent(child, &parent);
+        // hash our newly added node
+        let hash = parent.hash();
+        // insert our new node
+        self.nodes.insert(hash, parent);
+        // add our new node to our added set
+        self.added.insert(hash);
+        // return whether this node is hinted or not
+        is_hint
+    }
+
+    /// Determine if this associated relationship should be hinted or displayed
+    ///
+    /// # Arguments
+    ///
+    /// * `tree` - The tree to check in
+    /// * `node_hash` - The hash of source of this association
+    /// * `association` - The association to check
+    /// * `other` - The other node related ot this association
+    pub fn is_hint_association(
+        &self,
+        tree: &Tree,
+        node_hash: u64,
+        association: &Association,
+        other: &TreeNode,
+    ) -> Result<bool, ApiError> {
+        // check if this parent node should be a hint or an automatically displayed node
+        match self.nodes.get(&node_hash) {
+            Some(node_ref) => {
+                // get our actual node value
+                let node = node_ref.value();
+                // check if this association should be rendered or returned as a hint
+                Ok(self.bounds.is_hint_association(node, association, other))
+            }
+            None => {
+                // get this node from our tree
+                match tree.data_map.get(&node_hash) {
+                    // check if this association should be rendered or returned as a hint
+                    Some(node) => Ok(self.bounds.is_hint_association(node, association, other)),
+                    // somehow our source node isn't in our tree or ring
+                    // this should not be possible
+                    None => return internal_err!(format!("{node_hash} is not in tree or ring?")),
+                }
+            }
+        }
+    }
+
+    /// Add a new parent node
+    ///
+    /// # Arguments
+    ///
+    /// * `tree` - The tree this new node will eventually be added too
+    /// * `node_hash` - The hash that the association and this new node comes from
+    /// * `association` - The association to this new node
+    /// * `other` - The new node to add
+    pub fn add_associated_node(
+        &self,
+        tree: &Tree,
+        node_hash: u64,
+        association: &Association,
+        other: TreeNode,
+    ) -> Result<bool, ApiError> {
+        // check if this relationship should be hinted or displayed
+        let is_hint = self.is_hint_association(tree, node_hash, association, &other)?;
+        // hash our newly added node
+        let hash = other.hash();
+        // insert our new node
+        self.nodes.insert(hash, other);
+        // add our new node to our added set
+        self.added.insert(hash);
+        Ok(is_hint)
+    }
+
     /// Add a new node
     ///
     /// # Arguments
@@ -359,11 +478,23 @@ impl TreeRing {
     ///
     /// * `parent_hash` - The hash for the parent node
     /// * `branch` - The branch to add
-    pub fn add_branch(&self, parent_hash: u64, branch: UnhashedTreeBranch) {
-        // get an entry to this parent nodes branches
-        let entry = self.relationships.entry(parent_hash).or_default();
-        // add our new branch
-        entry.insert(branch);
+    /// * `is_hint` - Whether this branch is hinted or not
+    pub fn add_branch(&self, parent_hash: u64, branch: UnhashedTreeBranch, is_hint: bool) {
+        // add this to our displayable relationships or our hinted ones
+        if is_hint {
+            // this branch is not immediately displayble but could be hinted that it can
+            // be explored if the user wants
+            // get an entry to this parent nodes branches
+            let entry = self.hints.entry(parent_hash).or_default();
+            // add our new branch
+            entry.insert(branch);
+        } else {
+            // this branch should be immediately displayable to the user
+            // get an entry to this parent nodes branches
+            let entry = self.relationships.entry(parent_hash).or_default();
+            // add our new branch
+            entry.insert(branch);
+        }
     }
 
     /// Gather any file nodes with a specific parent value
@@ -434,7 +565,7 @@ impl Tree {
         user: &User,
         mut query: TreeQuery,
         shared: &Shared,
-    ) -> Result<Self, ApiError> {
+    ) -> Result<(Self, TreeBounds), ApiError> {
         // make sure we have some initial starting data for this query
         query.check_empty()?;
         // start with a default tree
@@ -470,7 +601,7 @@ impl Tree {
         }
         // add our tags for building relationships between nodes
         tree.related = query.related;
-        Ok(tree)
+        Ok((tree, query.bounds))
     }
 
     /// Filter out any nodes that have no children and are not growable
@@ -501,15 +632,12 @@ impl Tree {
     /// * `user` - The user that is growing this tree from a specific node
     /// * `hash` - The hash for the node to grow
     /// * `ring` - The current growth ring for this tree
-    /// * `params` - The params for growing this tree
     /// * `shared` - Shared Thorium objects
-    async fn grow_from_node<'a>(
-        &'a self,
+    async fn grow_from_node(
+        &self,
         user: &User,
         hash: u64,
         ring: &TreeRing,
-        params: &TreeParams,
-        //guard: &impl Guard,
         shared: &Shared,
     ) -> Result<(), ApiError> {
         // if we already have this nodes info then get it
@@ -517,20 +645,25 @@ impl Tree {
             // This initial node exists so we can grow from it
             Some(node) => {
                 // check if we want to gather this nodes parents
-                if params.gather_parents {
+                if ring.params.gather_parents {
                     // gather this nodes parents
                     node.gather_parents(user, self, ring, shared).await?;
                 }
-                // gather this nodes children
-                node.gather_children(user, params, self, ring, shared)
-                    .await?;
+                // check if we want to gather this nodes children
+                if ring.params.gather_children {
+                    // gather this nodes children
+                    node.gather_children(user, self, ring, shared).await?;
+                }
                 // check if we want to gather this nodes related nodes
-                if params.gather_related {
+                if ring.params.gather_related {
                     // gather any related nodes based on our related queries
                     node.gather_related(self, ring)?;
                 }
-                // gather any relationships or children from this nodes associations
-                node.gather_associations(self, ring, shared).await?;
+                // check if we want to gather this nodes associated nodes
+                if ring.params.gather_associated {
+                    // gather any relationships or children from this nodes associations
+                    node.gather_associations(self, ring, shared).await?;
+                }
                 Ok(())
             }
             // We are missing a node that was requested to be grown so return an error
@@ -559,23 +692,24 @@ impl Tree {
             for association in associations {
                 // get this associations tree hash
                 let other_hash = association.tree_hash();
+                // get this associations other node
+                let node = association.get_tree_node(user, shared).await?;
                 // check if we already have this associations other node
-                if !ring.contains(self, other_hash) {
-                    // get this associations other node
-                    let node = association.get_tree_node(user, shared).await?;
+                let is_hint = if !ring.contains(self, other_hash) {
                     // add this node to our ring
-                    ring.add_node(node);
-                }
+                    ring.add_associated_node(&self, source_hash, &association, node)?
+                } else {
+                    // check if this association should be rendered or returned as a hint
+                    ring.is_hint_association(&self, source_hash, &association, &node)?
+                };
                 // get this associationals direction
                 let direction = association.direction;
                 // build the relationship for this node
                 let relationship = TreeRelationships::Association(association);
                 // wrap this relationship in a branch
                 let branch = UnhashedTreeBranch::new(other_hash, relationship, direction);
-                // get an entry to the source nodes branches
-                let entry = ring.relationships.entry(source_hash).or_default();
-                // add this association to our relationships map in this tree ring
-                entry.insert(branch);
+                // add this branch to the right relationship map
+                ring.add_branch(source_hash, branch, is_hint);
             }
         }
         Ok(())
@@ -597,7 +731,7 @@ impl Tree {
         let nodes = std::mem::take(&mut ring.nodes);
         // merge our new nodes into our tree
         self.data_map.extend(nodes);
-        // instance our parents and their node hashes
+        // instance a map to store parent to child mappings
         let mut parents = HashMap::with_capacity(self.data_map.len());
         // build a set of parents to check origin info against
         for (node_hash, node) in &self.data_map {
@@ -634,9 +768,11 @@ impl Tree {
     /// # Arguments
     ///
     /// * `relationships` - The relationships to add to this tree
+    /// * `hints` - The hinted relationships to add to this tree
     fn add_relationships(
         &mut self,
         relationships: DashMap<u64, DashSet<UnhashedTreeBranch>>,
+        hints: DashMap<u64, DashSet<UnhashedTreeBranch>>,
     ) -> Result<(), ApiError> {
         // clear any existing branches
         self.branches.clear();
@@ -644,6 +780,18 @@ impl Tree {
         for (hash, branches) in relationships {
             // get an entry to this nodes branches
             let entry = self.branches.entry(hash).or_default();
+            // ignore any branches that loop back to themselves
+            for unhashed in branches {
+                // convert our unhashed branch to a hashed one
+                let branch = unhashed.to_branch(hash, &self.data_map)?;
+                // add our branches
+                entry.insert(branch);
+            }
+        }
+        // step over our current hinted relationships and add them
+        for (hash, branches) in hints {
+            // get an entry to this nodes hinted branches
+            let entry = self.hint_branches.entry(hash).or_default();
             // ignore any branches that loop back to themselves
             for unhashed in branches {
                 // convert our unhashed branch to a hashed one
@@ -660,13 +808,11 @@ impl Tree {
     /// # Arguments
     ///
     /// * `user` - The user that is growing this tree
-    /// * `params` - The params used to grow this tree
     /// * `ring` - The current tree ring of growth
     /// * `shared` - Shared Thorium objects
     async fn parallel_grow(
         &self,
         user: &User,
-        params: &TreeParams,
         ring: &TreeRing,
         shared: &Shared,
     ) -> Result<(), ApiError> {
@@ -675,7 +821,7 @@ impl Tree {
         // build futures to crawl
         for hash in &self.growable {
             // try to grow the tree from this node
-            futs.push(self.grow_from_node(user, *hash, ring, params, shared));
+            futs.push(self.grow_from_node(user, *hash, ring, shared));
         }
         // convert this list of futures into a stream
         let mut grow_stream = stream::iter(futs).buffer_unordered(10);
@@ -693,25 +839,27 @@ impl Tree {
     ///
     /// * `user` - The user that is growing this tree
     /// * `params` - The params used to grow this tree
+    /// * `bounds` - The boundaries to stay within when growing this tree
     /// * `shared` - Shared thorium objects
     pub async fn grow(
         &mut self,
         user: &User,
-        params: &TreeParams,
+        params: TreeParams,
+        bounds: TreeBounds,
         shared: &Shared,
     ) -> Result<DashSet<u64>, ApiError> {
         // track how many times this tree has grown
         let mut rings = 0;
         // have a tree ring for each growth
-        let mut ring = TreeRing::default();
+        let mut ring = TreeRing::new(params, bounds);
         // keep growing this tree until we reach the specified depth
-        while rings < params.limit {
+        while rings < ring.params.limit {
             // if we have no more growable nodes then end early
             if self.growable.is_empty() {
                 break;
             }
             // grow our growable nodes in parallel
-            self.parallel_grow(user, params, &ring, shared).await?;
+            self.parallel_grow(user, &ring, shared).await?;
             // get any data missing from any associations
             self.get_association_nodes(user, &mut ring, shared).await?;
             // merge our current ring but not its relationships into our tree
@@ -720,7 +868,7 @@ impl Tree {
             rings += 1;
         }
         // replace our relationships in our tree
-        self.add_relationships(ring.relationships)?;
+        self.add_relationships(ring.relationships, ring.hints)?;
         // return our newly added nodes
         Ok(ring.added)
     }

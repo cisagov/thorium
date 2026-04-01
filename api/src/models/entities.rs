@@ -66,6 +66,7 @@ cfg_if::cfg_if! {
             pub collection_start: Option<DateTime<Utc>>,
             pub collection_end: Option<DateTime<Utc>>,
             pub sha256: Option<String>,
+            pub filesystem_id: Option<Uuid>,
             pub names_sha256: Option<String>,
             pub data_sha256: Option<String>,
             pub all_sha256: Option<String>,

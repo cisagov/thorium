@@ -79,6 +79,8 @@ impl FileSystemEntity {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct FileSystemFolderEntity {
+    /// The id of the filesystem this fodler is from
+    pub filesystem_id: Uuid,
     /// The sha256 for just the file names in this folder
     pub names_sha256: String,
     /// The sha256 for just the file data/contents (not names) in this folder
@@ -101,28 +103,44 @@ impl FileSystemFolderEntity {
     #[cfg(feature = "api")]
     pub fn from_form(form: super::EntityMetadataForm) -> Result<Self, crate::utils::ApiError> {
         // if we don't have the sha256 field then return an error
+        let filesystem_id = match form.filesystem_id {
+            Some(names_sha256) => names_sha256,
+            None => {
+                return crate::bad!(
+                    "File system folder entities must have a filesystem id!".to_owned()
+                );
+            }
+        };
+        // if we don't have the sha256 field then return an error
         let names_sha256 = match form.names_sha256 {
             Some(names_sha256) => names_sha256,
             None => {
-                return crate::bad!("File system folder entities must have a sha256!".to_owned());
+                return crate::bad!(
+                    "File system folder entities must have a names sha256!".to_owned()
+                );
             }
         };
         // if we don't have the sha256 field then return an error
         let data_sha256 = match form.data_sha256 {
             Some(data_sha256) => data_sha256,
             None => {
-                return crate::bad!("File system folder entities must have a sha256!".to_owned());
+                return crate::bad!(
+                    "File system folder entities must have a data sha256!".to_owned()
+                );
             }
         };
         // if we don't have the sha256 field then return an error
         let all_sha256 = match form.all_sha256 {
             Some(all_sha256) => all_sha256,
             None => {
-                return crate::bad!("File system folder entities must have a sha256!".to_owned());
+                return crate::bad!(
+                    "File system folder entities must have an all sha256!".to_owned()
+                );
             }
         };
         // build our file system entity
         Ok(FileSystemFolderEntity {
+            filesystem_id,
             names_sha256,
             data_sha256,
             all_sha256,
@@ -142,6 +160,7 @@ impl FileSystemFolderEntity {
         // always set our entity kind
         let form = form.text("kind", super::EntityKinds::Folder.as_str());
         // set the sha256 for this entity
+        let form = form.text("metadata[filesystem_id]", self.filesystem_id.to_string());
         let form = form.text("metadata[names_sha256]", self.names_sha256);
         let form = form.text("metadata[data_sha256]", self.data_sha256);
         let form = form.text("metadata[all_sha256]", self.all_sha256);
@@ -592,6 +611,7 @@ impl FileSystemEntityBuilder {
         let all_sha256 = helpers::sha256_iter(files.keys().chain(self.sha256s.values()));
         // create a filesystem folder entity request
         let metadata = EntityMetadataRequest::Folder(FileSystemFolderEntity {
+            filesystem_id: context.id,
             names_sha256,
             data_sha256,
             all_sha256,

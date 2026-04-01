@@ -568,7 +568,7 @@ impl Repo {
             None => match &self.default_checkout {
                 Some(commitish) => commitish.value().to_owned(),
                 // we don't have a default checkout so try to get the latest commit
-                None => db::repos::latest_commit(&groups, &self, shared).await?,
+                None => db::repos::latest_commit(&groups, self, shared).await?,
             },
         };
         // get the repo data hash for this repo + commit combo

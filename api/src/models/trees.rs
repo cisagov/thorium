@@ -10,10 +10,7 @@ use std::hash::Hasher;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::models::Association;
-use crate::models::Entity;
-use crate::models::InvalidEnum;
-use crate::models::Repo;
+use crate::models::{Association, AssociationKind, Entity, EntityMetadata, InvalidEnum, Repo};
 
 use super::{Origin, Sample};
 
@@ -22,13 +19,23 @@ const fn default_tree_depth() -> usize {
     5
 }
 
-/// Help serde default the gather parents bool to true
+/// Help serde default the gather_parents bool to true
 const fn default_gather_parents() -> bool {
     true
 }
 
-/// Help serde default the gather related bool to true
+/// Help serde default the gather_children bool to true
+const fn default_gather_children() -> bool {
+    true
+}
+
+/// Help serde default the gather_related bool to true
 const fn default_gather_related() -> bool {
+    true
+}
+
+/// Help serde default the gather_associated bool to true
+const fn default_gather_associated() -> bool {
     true
 }
 
@@ -47,9 +54,15 @@ pub struct TreeParams {
     /// Skip gathering parents
     #[serde(default = "default_gather_parents")]
     pub gather_parents: bool,
+    /// Skip gathering children
+    #[serde(default = "default_gather_children")]
+    pub gather_children: bool,
     /// Gather any related objects/entities
-    #[serde(default = "default_gather_parents")]
+    #[serde(default = "default_gather_related")]
     pub gather_related: bool,
+    /// Gather any associated objects/entities
+    #[serde(default = "default_gather_associated")]
+    pub gather_associated: bool,
     /// Gather children from tag nodes
     #[serde(default = "default_gather_tag_children")]
     pub gather_tag_children: bool,
@@ -60,7 +73,9 @@ impl Default for TreeParams {
         TreeParams {
             limit: default_tree_depth(),
             gather_parents: default_gather_parents(),
+            gather_children: default_gather_children(),
             gather_related: default_gather_related(),
+            gather_associated: default_gather_associated(),
             gather_tag_children: default_gather_tag_children(),
         }
     }
@@ -285,8 +300,8 @@ impl TreeSupport for TreeTags {
                         Directionality::From,
                     );
                     // add these relationships to our ring
-                    ring.add_branch(node_hash, to);
-                    ring.add_branch(tag_hash, from);
+                    ring.add_branch(node_hash, to, false);
+                    ring.add_branch(tag_hash, from, false);
                 }
             }
             // if our cursor is exhausted then stop crawling
@@ -330,6 +345,108 @@ impl TreeRelatedQuery {
     }
 }
 
+/// The settings to use for determining which branches should not be automically grown
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct TreeBounds {
+    /// The filesystems to stay within
+    pub filesystem: Vec<Uuid>,
+}
+
+impl TreeBounds {
+    /// Check if any bound settings are set
+    pub fn is_empty(&self) -> bool {
+        self.filesystem.is_empty()
+    }
+
+    /// Help check if a node relationship should be hinted or not based on filesystem bounds
+    ///
+    /// # Arguments
+    ///
+    /// * `child` - The child node to check
+    /// * `parent` - The parent node to check
+    fn is_hint_fs(&self, child: &TreeNode, parent: &TreeNode) -> bool {
+        // start by checking against our parent
+        match parent {
+            // only folder/filesystem entities are allowed if they are from one of our
+            // in scope filesystems
+            TreeNode::Entity(entity) => match &entity.metadata {
+                EntityMetadata::Folder(folder) => !self.filesystem.contains(&folder.filesystem_id),
+                EntityMetadata::FileSystem(_) => !self.filesystem.contains(&entity.id),
+                _ => true,
+            },
+            // Samples are only allowed as parents of filesystem nodes or folder nodes
+            TreeNode::Sample(_) => match child {
+                TreeNode::Entity(entity) => match &entity.metadata {
+                    EntityMetadata::FileSystem(_) => !self.filesystem.contains(&entity.id),
+                    EntityMetadata::Folder(folder) => {
+                        !self.filesystem.contains(&folder.filesystem_id)
+                    }
+                    _ => true,
+                },
+                _ => true,
+            },
+            // everything else is always hinted when we have filesystem bounds
+            _ => true,
+        }
+    }
+
+    /// Check if a relationship to a parent is hinted or not
+    ///
+    /// # Arguments
+    ///
+    /// * `child` - The child node to check
+    /// * `parent` - The parent node to check
+    pub fn is_hint_parent(&self, child: &TreeNode, parent: &TreeNode) -> bool {
+        // check if this bound allows us to keep this parent node
+        if !self.filesystem.is_empty() {
+            // check if this parent should be automatically displayed or just a hint
+            self.is_hint_fs(child, parent)
+        } else {
+            false
+        }
+    }
+
+    /// Check if an association is hinted or not
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - The source node to check
+    /// * `association` - The association between these two nodes
+    /// * `other` - The other node to check
+    pub fn is_hint_association(
+        &self,
+        source: &TreeNode,
+        association: &Association,
+        other: &TreeNode,
+    ) -> bool {
+        // check if this bound allows us to keep this parent node
+        if !self.filesystem.is_empty() {
+            // get the correct node to check based on this association
+            let (child, parent) = match association.kind {
+                AssociationKind::FileIn | AssociationKind::FileSystemIn => {
+                    // check the right node for the filesystem id based on which
+                    // direction this association is in
+                    match association.direction {
+                        Directionality::To => (source, other),
+                        Directionality::From => (other, source),
+                        // This direction shouldn't ever be really be encountered here
+                        // just assume a direction since it shouldn't matter for bidirectional
+                        // relationships
+                        Directionality::Bidirectional => (source, other),
+                    }
+                }
+                // Any other association is never hinted
+                _ => return false,
+            };
+            // check if this parent should be automatically displayed or just a hint
+            self.is_hint_fs(child, parent)
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TreeQuery {
@@ -351,6 +468,9 @@ pub struct TreeQuery {
     /// The settings for finding related data in our tree
     #[serde(default)]
     pub related: TreeRelatedQuery,
+    /// The bounds to set when growing this tree
+    #[serde(default)]
+    pub bounds: TreeBounds,
 }
 
 impl TreeQuery {
@@ -431,6 +551,7 @@ pub trait TreeSupport:
         &self,
         _user: &super::User,
         _tree: &Tree,
+        _child_node: &TreeNode,
         _ring: &crate::models::backends::trees::TreeRing,
         _shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
@@ -483,6 +604,9 @@ pub struct TreeGrowQuery {
     /// The nodes to grow
     #[serde(deserialize_with = "u64_or_string")]
     pub growable: Vec<u64>,
+    /// The bounds to stay within
+    #[serde(default)]
+    pub bounds: TreeBounds,
 }
 
 impl TreeGrowQuery {
@@ -675,13 +799,20 @@ impl FromStr for Directionality {
 pub struct UnhashedTreeBranch {
     /// The relationship for this branch
     pub relationship: TreeRelationships,
-    // The node this is a branch too
+    // The node this is a branch to/from (based on direction)
     pub node: u64,
     /// The direction for this branch
     pub direction: Directionality,
 }
 
 impl UnhashedTreeBranch {
+    /// Create a new branch between two nodes that is not yet hashed
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - The hash for the node this branch is to/from (based on direction)
+    /// * `relationship` - The relationship this branch expresses
+    /// * `direction` - The direction for this branch
     pub(super) fn new(
         node: u64,
         relationship: TreeRelationships,
@@ -710,6 +841,7 @@ pub struct TreeBranch {
     pub direction: Directionality,
 }
 
+/// A Tree of related data in Thorium
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct Tree {
@@ -726,14 +858,14 @@ pub struct Tree {
     pub data_map: HashMap<u64, TreeNode>,
     /// The data in the leaves of this tree
     pub branches: HashMap<u64, HashSet<TreeBranch>>,
+    /// The branches to our hint data
+    pub hint_branches: HashMap<u64, HashSet<TreeBranch>>,
     /// The settings to use to relate our in tree nodes with other data
     #[serde(default, skip_serializing_if = "TreeRelatedQuery::is_empty")]
     pub related: TreeRelatedQuery,
     /// The nodes that have already been sent
     #[serde(default, skip_serializing_if = "HashSet::is_empty")]
     pub sent: HashSet<u64>,
-    ///// The associations that were discovered in this grow loop
-    //pub associations: HashMap<AssociationTargetColumn, Vec<ListableAssociation>,
 }
 
 impl Default for Tree {
@@ -746,6 +878,7 @@ impl Default for Tree {
             growable: Vec::with_capacity(10),
             data_map: HashMap::with_capacity(10),
             branches: HashMap::with_capacity(10),
+            hint_branches: HashMap::default(),
             related: TreeRelatedQuery::default(),
             sent: HashSet::with_capacity(10),
         }
