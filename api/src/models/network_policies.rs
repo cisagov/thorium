@@ -130,6 +130,28 @@ pub enum IpBlock {
     V6(Ipv6Block),
 }
 
+trait FullCidrString {
+    /// Output the full CIDR as a string, including the network length even if
+    /// the CIDR is a single host
+    ///
+    /// This is necessary for K8's network policies which only support CIDR's
+    /// with the network length, even when the network length is the size of
+    /// the family's length (32 for IPv4 and 128 for IPv6)
+    fn to_full_cidr_string(&self) -> String;
+}
+
+impl FullCidrString for Ipv4Cidr {
+    fn to_full_cidr_string(&self) -> String {
+        format!("{self:#}")
+    }
+}
+
+impl FullCidrString for Ipv6Cidr {
+    fn to_full_cidr_string(&self) -> String {
+        format!("{self:#}")
+    }
+}
+
 /// A custom label to use for matching network policies to [`NetworkPolicyCustomK8sRule`]s
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -285,7 +307,7 @@ impl NetworkPolicyRule {
                 return Err(Error::new(format!(
                     "Unable to parse CIDR '{}': CIDR is detected as neither IPv4 or IPv6",
                     cidr.as_ref()
-                )))
+                )));
             }
             AnyIpCidr::V4(cidr_v4) => {
                 let except_v4 = any_excepts
@@ -531,7 +553,7 @@ impl NetworkPolicyRuleRaw {
     ///
     /// * `port` - The port (or first port if a range) that allows communication
     /// * `end_port` - The last port in the range that of ports that allows communication;
-    ///                when specified, `port` is the first port in the range and `end_port` is the last
+    ///   when specified, `port` is the first port in the range and `end_port` is the last
     /// * `protocol` - The protocol allowed on the port(s); if `None`, all protocols are allowed
     #[must_use]
     pub fn port(
@@ -1298,14 +1320,14 @@ cfg_if::cfg_if! {
                     match thorium_ip_block {
                         IpBlock::V4(ipv4_block) => {
                             Self {
-                                cidr: ipv4_block.cidr.to_string(),
-                                except: ipv4_block.except.map(|cidrs| cidrs.into_iter().map(|cidr| cidr.to_string()).collect()),
+                                cidr: ipv4_block.cidr.to_full_cidr_string(),
+                                except: ipv4_block.except.map(|cidrs| cidrs.into_iter().map(|cidr| cidr.to_full_cidr_string()).collect()),
                             }
                         },
                         IpBlock::V6(ipv6_block) => {
                             Self {
-                                cidr: ipv6_block.cidr.to_string(),
-                                except: ipv6_block.except.map(|cidrs| cidrs.into_iter().map(|cidr| cidr.to_string()).collect()),
+                                cidr: ipv6_block.cidr.to_full_cidr_string(),
+                                except: ipv6_block.except.map(|cidrs| cidrs.into_iter().map(|cidr| cidr.to_full_cidr_string()).collect()),
                             }
                         },
                     }
