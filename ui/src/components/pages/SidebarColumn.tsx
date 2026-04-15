@@ -42,7 +42,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ to, short, full }) => {
 const NavPanel = styled.div`
   z-index: 0;
   left: 0;
-  top: ${CanvasMargin.top};
+  top: ${CanvasMargin.top}px;
   padding: 0.5rem 1rem;
   position: fixed;
   height: 100%;
