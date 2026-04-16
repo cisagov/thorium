@@ -65,7 +65,7 @@ const GroupRoleBadge = ({ group, user }) => {
         </Badge>
       </OverlayTrigger>
     );
-  } else if (user.role == 'Admin') {
+  } else if (user.role === 'Admin') {
     return (
       <OverlayTrigger placement="bottom" overlay={<Tooltip>You are a Thorium admin. You have all the permissions.</Tooltip>}>
         <Badge bg="" className="bg-maroon group-badge">

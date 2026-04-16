@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Badge, ButtonGroup, Button, Card, Col, Form, Modal, Row } from 'react-bootstrap';
+import { Badge, ButtonGroup, Button, Card, Col, Form, Modal, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import Page from '@components/pages/Page';
@@ -120,7 +121,7 @@ const ManipulateUserButtons: React.FC<ManipulateUserButtonsProps> = ({ impersona
         <Modal.Body>
           Do you really want to delete <b>{username}</b>
           {"'s"} user account?
-          {deleteError != '' && <Alert variant="danger">{deleteError}</Alert>}
+          {deleteError != '' && <AlertBanner>{deleteError}</AlertBanner>}
         </Modal.Body>
         <Modal.Footer className="d-flex justify-content-center">
           <Button
@@ -288,11 +289,7 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
               </Col>
             </Row>
           )}
-          {updateRoleError != '' && updateRoleError != 'Successful' && (
-            <center>
-              <Alert variant="danger">{updateRoleError}</Alert>
-            </center>
-          )}
+          {updateRoleError != '' && updateRoleError != 'Successful' && <AlertBanner>{updateRoleError}</AlertBanner>}
         </Modal.Body>
         <Modal.Footer className="d-flex justify-content-center">
           <Button className="ok-btn" disabled={role == editRole && role != RoleKey.Developer} onClick={() => updateRole()}>

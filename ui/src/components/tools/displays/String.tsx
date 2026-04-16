@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Alert, Card, Row } from 'react-bootstrap';
+import { Card, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import { getAlerts } from '../alerts';
@@ -49,14 +50,12 @@ const String: React.FC<StringResultRenderProps> = ({ result, sha256, tool, warni
     <Card className="scroll-log tool-result">
       <Row>
         {errors.map((err, idx) => (
-          <center key={idx}>
-            <Alert variant="danger">{err}</Alert>
-          </center>
+          <AlertBanner key={idx}>{err}</AlertBanner>
         ))}
         {warnings.map((warn, idx) => (
-          <center key={idx}>
-            <Alert variant="warning">{warn}</Alert>
-          </center>
+          <AlertBanner key={idx} severity={Severity.Warning}>
+            {warn}
+          </AlertBanner>
         ))}
       </Row>
       <Row>

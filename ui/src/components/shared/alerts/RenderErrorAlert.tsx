@@ -1,8 +1,8 @@
 import React from 'react';
-import { Alert } from 'react-bootstrap';
 import styled from 'styled-components';
+import AlertBanner from './AlertBanner';
 
-const PageAlertWrapper = styled(Alert)`
+const PageWrapper = styled.div`
   top: 60px;
   margin-left: 10rem;
   margin-right: 0.75rem;
@@ -10,13 +10,9 @@ const PageAlertWrapper = styled(Alert)`
   justify-content: center;
 `;
 
-const ComponentAlertWrapper = styled(Alert)`
-  text-align: center;
-`;
-
 interface RenderErrorProps {
-  message?: string; // message to display within alert
-  page?: boolean; // whether this alert is for a page or within an component
+  message?: string;
+  page?: boolean;
 }
 
 const RenderErrorAlert: React.FC<RenderErrorProps> = ({ message = '', page = true }) => {
@@ -27,15 +23,17 @@ const RenderErrorAlert: React.FC<RenderErrorProps> = ({ message = '', page = tru
   }
   if (page) {
     return (
-      <PageAlertWrapper variant="danger">
-        <pre>{errorMessage}</pre>
-      </PageAlertWrapper>
+      <PageWrapper>
+        <AlertBanner>
+          <pre>{errorMessage}</pre>
+        </AlertBanner>
+      </PageWrapper>
     );
   }
   return (
-    <ComponentAlertWrapper variant="danger">
+    <AlertBanner>
       <pre>{errorMessage}</pre>
-    </ComponentAlertWrapper>
+    </AlertBanner>
   );
 };
 

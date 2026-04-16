@@ -4,7 +4,7 @@ import { FaQuestionCircle } from 'react-icons/fa';
 
 // project imports
 import FieldBadge from '@components/shared/badges/FieldBadge';
-import SelectableDictionary from '@components/shared/selectable/SelectableDictionary';
+import SelectableDictionary from '@components/shared/inputs/selectable/SelectableDictionary';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
 const EnvironmentToolTip = `Environment variables that get mapped into the running image.`;

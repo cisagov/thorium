@@ -26,6 +26,24 @@
   "core-js": [
     "core-js"
   ],
+  "codemirror": [
+    "@codemirror/autocomplete",
+    "@codemirror/commands",
+    "@codemirror/lang-json",
+    "@codemirror/lang-yaml",
+    "@codemirror/language",
+    "@codemirror/lint",
+    "@codemirror/state",
+    "@codemirror/view",
+    "@lezer/common",
+    "@lezer/highlight",
+    "@lezer/json",
+    "@lezer/lr",
+    "@lezer/yaml",
+    "crelt",
+    "style-mod",
+    "w3c-keyname"
+  ],
   "vendors-tools": [
     "@babel/runtime",
     "@types/hast",

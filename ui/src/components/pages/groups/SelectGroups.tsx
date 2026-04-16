@@ -2,10 +2,10 @@ import React from 'react';
 import { Button } from 'react-bootstrap';
 
 type SelectGroupsProps = {
-  groups: string[];
-  setGroups: (groups: string[]) => void;
+  groups: Record<string, boolean>;
+  setGroups: (groups: Record<string, boolean>) => void;
   disabled: boolean;
-  clearState: () => void;
+  clearState?: (() => void) | null;
 };
 
 const SelectGroups: React.FC<SelectGroupsProps> = ({ groups, setGroups, disabled, clearState = null }) => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Alert, Card, Table } from 'react-bootstrap';
+import { Card, Table } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import sanitizeHtml from 'sanitize-html';
 
 // project imports
@@ -28,14 +29,12 @@ const SafeHtml: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
       <Card className="scroll-log tool-result">
         <Card.Body>
           {errors.map((err, idx) => (
-            <center key={idx}>
-              <Alert variant="danger">{err}</Alert>
-            </center>
+            <AlertBanner key={idx}>{err}</AlertBanner>
           ))}
           {warnings.map((warn, idx) => (
-            <center key={idx}>
-              <Alert variant="warning">{warn}</Alert>
-            </center>
+            <AlertBanner key={idx} severity={Severity.Warning}>
+              {warn}
+            </AlertBanner>
           ))}
           <SanitizeHTML html={result.result} />
           <ResultsFiles result={result} sha256={sha256} tool={tool} />

@@ -1,12 +1,14 @@
 import { CreateEntity, Entities, Entity } from './entities';
 
 export type FolderMetaFields = {
+  filesystem_id: string;
   names_sha256: string;
   data_sha256: string;
   all_sha256: string;
 };
 
 export type FolderCreateMetaFields = {
+  filesystem_id: string;
   names_sha256: string;
   data_sha256: string;
   all_sha256: string;
@@ -20,13 +22,9 @@ export type FolderCreateMeta = {
   Folder: FolderCreateMetaFields;
 };
 
-export type Folder = Entity & {
-  metadata: FolderMeta;
-};
+export type Folder = Entity<Entities.Folder>;
 
-export type CreateFolder = CreateEntity & {
-  metadata: FolderCreateMeta;
-};
+export type CreateFolder = CreateEntity<Entities.Folder>;
 
 export const BlankFolder: Folder = {
   id: '',
@@ -36,6 +34,7 @@ export const BlankFolder: Folder = {
   kind: Entities.Folder,
   metadata: {
     Folder: {
+      filesystem_id: '',
       names_sha256: '',
       data_sha256: '',
       all_sha256: '',
@@ -54,6 +53,7 @@ export const BlankCreateFolder: CreateFolder = {
   kind: Entities.Folder,
   metadata: {
     Folder: {
+      filesystem_id: '',
       names_sha256: '',
       data_sha256: '',
       all_sha256: '',

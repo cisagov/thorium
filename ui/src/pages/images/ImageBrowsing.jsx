@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Accordion, Alert, Badge, Button, ButtonToolbar, Col, Form, Modal, Row } from 'react-bootstrap';
+import { Accordion, Badge, Button, ButtonToolbar, Col, Form, Modal, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import {
@@ -257,11 +258,7 @@ const ImageInfo = ({ images, image, groups, setImages }) => {
           </Modal.Header>
           <Modal.Body>
             Do you really want to delete the <b>{image.name}</b> image?
-            {deleteError != '' && (
-              <Alert variant="danger" className="mt-4">
-                <center>{deleteError}</center>
-              </Alert>
-            )}
+            {deleteError != '' && <AlertBanner className="mt-4">{deleteError}</AlertBanner>}
           </Modal.Body>
           <Modal.Footer className="d-flex justify-content-center">
             <Button
@@ -366,13 +363,7 @@ const ImageInfo = ({ images, image, groups, setImages }) => {
         disabled={(Object.keys(imageFields).includes('scaler') && imageFields.scaler == 'External') || userInfo.role != 'Admin'}
       />
       <Row className="d-flex justify-content-center">
-        <Col>
-          {updateError && (
-            <Alert variant="danger" className="m-2">
-              <center>{updateError}</center>
-            </Alert>
-          )}
-        </Col>
+        <Col>{updateError && <AlertBanner className="m-2">{updateError}</AlertBanner>}</Col>
       </Row>
       <Row>
         <Col>

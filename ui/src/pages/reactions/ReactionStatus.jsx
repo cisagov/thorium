@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Alert, Button, Card, Col, Modal, Row, Tab, Tabs } from 'react-bootstrap';
+import { Button, Card, Col, Modal, Row, Tab, Tabs } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import { FaTrash } from 'react-icons/fa';
 
 // project imports
@@ -244,7 +245,7 @@ const ReactionStatus = () => {
   return (
     <Page title="Reaction Status" className="full-min-width">
       {deletionStatus == 'Success' ? (
-        <Alert variant="success" className="d-flex justify-content-center">
+        <AlertBanner severity={Severity.Success}>
           Reaction deleted successfully! Return to sample &nbsp;
           {reactionInfo.samples &&
             reactionInfo.samples.map((sample) => (
@@ -252,19 +253,13 @@ const ReactionStatus = () => {
                 {width <= 768 && sample.length > 15 ? sample.substring(0, 15) + '...' : sample}
               </Link>
             ))}
-        </Alert>
+        </AlertBanner>
       ) : reactionInfoError ? (
-        <Alert variant="warning" className="d-flex justify-content-center">
-          {'Error: ' + reactionInfoError}
-        </Alert>
+        <AlertBanner severity={Severity.Warning}>{'Error: ' + reactionInfoError}</AlertBanner>
       ) : (
         reactionInfo.id && (
           <>
-            {deletionStatus && (
-              <Alert variant="danger" className="d-flex justify-content-center">
-                {deletionStatus}
-              </Alert>
-            )}
+            {deletionStatus && <AlertBanner>{deletionStatus}</AlertBanner>}
             <Row>
               <Col>
                 <Card className="panel">

@@ -1,6 +1,6 @@
 // project imports
 import FilterDiv from './FilterDiv';
-import SelectInputArray from '@components/shared/selectable/SelectInputArray';
+import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
 
 interface FilterGroupsProps {
   selected: string[]; // array of selected group names

@@ -91,7 +91,11 @@ function parseRequestError(error: string, errorHandler: (error: string) => void,
       const trace = error.response.data.trace ? `trace: ${error.response.data.trace}` : '';
       const errorStatus = error.response.status == 401 ? 'Permission Denied' : error.response.status;
       const errorMsg = error.response.data.error ? error.response.data.error : errorStatus;
-      errorHandler(`Failed to ${requestType}: ${errorMsg} ${trace}`);
+      if (error.response?.data) {
+        errorHandler(`${requestType}: ${error.response.data} ${trace}`);
+      } else {
+        errorHandler(`Failed to ${requestType}: ${errorMsg} ${trace}`);
+      }
     } else if (error.request) {
       errorHandler(`Failed to receive a ${requestType} request response: "${error.request}`);
     } else {

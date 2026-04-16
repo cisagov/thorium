@@ -1,7 +1,7 @@
 // project imports
 import { DEFAULT_HIDE_TAG_KEYS } from './params';
 import FilterDiv from './FilterDiv';
-import SelectInputArray from '@components/shared/selectable/SelectInputArray';
+import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
 
 interface FilterTagDisplayKeysProps {
   selected: string[];

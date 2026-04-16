@@ -1,6 +1,6 @@
 // project imports
 import FilterDiv from './FilterDiv';
-import TagSelect from '@components/tags/TagSelect/TagSelect';
+import TagSelect from '@components/shared/inputs/tags/TagSelect/TagSelect';
 import { RequestTags } from '@models/tags';
 import { requestTagsToTagEntryList, tagEntriesToRequestTags } from '@utilities/tags';
 

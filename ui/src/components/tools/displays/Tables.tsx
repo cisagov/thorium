@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Alert, Card, Table } from 'react-bootstrap';
+import { Card, Table } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import { getAlerts } from '../alerts';
@@ -33,11 +34,7 @@ const JsonTable = ({ results }) => {
     );
   } else {
     return (
-      <center>
-        <Alert className="mb-2" variant="warning">
-          Cannot display result: result is valid JSON, but is not an array of arrays
-        </Alert>
-      </center>
+      <AlertBanner severity={Severity.Warning}>Cannot display result: result is valid JSON, but is not an array of arrays</AlertBanner>
     );
   }
 };
@@ -172,14 +169,12 @@ const Tables: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
   return (
     <Card className="scroll-log tool-result">
       {errors.map((err, idx) => (
-        <center key={idx}>
-          <Alert variant="danger">{err}</Alert>
-        </center>
+        <AlertBanner key={idx}>{err}</AlertBanner>
       ))}
       {warnings.map((warn, idx) => (
-        <center key={idx}>
-          <Alert variant="warning">{warn}</Alert>
-        </center>
+        <AlertBanner key={idx} severity={Severity.Warning}>
+          {warn}
+        </AlertBanner>
       ))}
       {isJson ? <JsonTable results={parsedResult} /> : <CsvMultiTable results={parsedResult} />}
       <ResultsFiles result={result} sha256={sha256} tool={tool} />

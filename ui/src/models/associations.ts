@@ -1,27 +1,41 @@
+/// The different possible associations
 export enum AssociationKind {
+  /// This file is associated with something else
+  FileFor = 'FileFor',
+  /// This is documentation for something else
+  DocumentationFor = 'documentationFor',
   /// This file or repo is or contains firmware for a device
   FirmwareFor = 'FirmwareFor',
-  // This file or repo is a file related to a device
-  FileFor = 'File For',
-  // Manual or other docs for hardware or software
-  DocumentationFor = 'Documentation For',
-  // Company owns company that makes/sells hardware or software
-  ParenCompanyOf = 'Parent Company Of',
-  /// This was developed by
-  DevelopedBy = 'Developed By',
+  /// This file/repo/entity is associated with something else
+  AssociatedWith = 'AssociatedWith',
+  /// This was developed or created by
+  DevelopedBy = 'DevelopedBy',
   /// This contains a CVE
-  ContainsCVE = 'Contains CVE',
+  ContainsCVE = 'ContainsCVE',
   /// This contains a CWE
-  ContainsCWE = 'Contains CWE',
+  ContainsCWE = 'ContainsCWE',
   /// This is based in specific countries
-  BasedIn = 'Based In',
+  BasedIn = 'BasedIn',
+  /// This person was or is employed by
+  EmployedBy = 'EmployedBy',
+  /// This is the parent company of another company
+  ParentCompanyOf = 'ParentCompanyOf',
   /// This is used by a specific person or group
-  UsedBy = 'Used By',
+  UsedBy = 'UsedBy',
   /// This was used in a specific campaign or engagement
-  UsedIn = 'Used In',
+  UsedIn = 'UsedIn',
   /// This campaign was performed by
-  PerformedBy = 'Performed By',
-  AssociatedWith = 'Associated With',
+  PerformedBy = 'PerformedBy',
+  /// This filesystem was extracted/carved from
+  FileSystemIn = 'FileSystemIn',
+  /// This is a folder within a filesystem or another folder
+  FolderIn = 'FolderIn',
+  /// This is a file in a folder in a filesytem
+  FileIn = 'FileIn',
+  /// A Process tree in or from something
+  ProcessTreeIn = 'ProcessTreeIn',
+  /// A Process in a process tree or a child process
+  ChildProcess = 'ChildProcess',
 }
 
 export type AssociationTarget = {

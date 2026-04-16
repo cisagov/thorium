@@ -601,7 +601,7 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
             )}
             {createErrorStatus && (
               <Row className="d-flex justify-content-center p-2">
-                <AlertBanner prefix={'Add tags'} errorStatus={createErrorStatus} />
+                <AlertBanner>{`Add tags: ${createErrorStatus}`}</AlertBanner>
               </Row>
             )}
             {Object.keys(deletedTags).length > 0 && (
@@ -625,7 +625,7 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth })
             )}
             {deleteErrorStatus && (
               <Row className="d-flex justify-content-center p-2">
-                <AlertBanner prefix={'Delete tags'} errorStatus={deleteErrorStatus} />
+                <AlertBanner>{`Delete tags: ${deleteErrorStatus}`}</AlertBanner>
               </Row>
             )}
             {invalidPendingTags.length > 0 && (

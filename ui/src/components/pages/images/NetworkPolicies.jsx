@@ -4,7 +4,7 @@ import { FaQuestionCircle } from 'react-icons/fa';
 
 // project imports
 import FieldBadge from '@components/shared/badges/FieldBadge';
-import SelectableArray from '@components/shared/selectable/SelectableArray';
+import SelectableArray from '@components/shared/inputs/selectable/SelectableArray';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
 const NetworkPolicyToolTip = `Network policies dictate which entities the image can connect to or receive

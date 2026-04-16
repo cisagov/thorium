@@ -1,5 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
-import { Alert, Col, Form, Row, Table } from 'react-bootstrap';
+import { Col, Form, Row, Table } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import Page from '@components/pages/Page';
@@ -238,7 +239,7 @@ const SystemStats = () => {
     <Page title="Stats · Thorium">
       {getStatsError != '' && (
         <Row>
-          <Alert>{getStatsError}</Alert>
+          <AlertBanner>{getStatsError}</AlertBanner>
         </Row>
       )}
       {systemStats != null && (

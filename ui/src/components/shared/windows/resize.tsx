@@ -1,4 +1,3 @@
-import React from 'react';
 import { clamp, getDocumentDimensions } from './utilities';
 import { ElementPosition, Placement } from './placement';
 import { Bounds, Padding } from './bounds';

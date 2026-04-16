@@ -25,6 +25,7 @@ const OverlayWindow: React.FC<{
   width?: number; // initial width of box
   height?: number; // initial height of box
   positioning?: PositionType;
+  customPosition?: ElementPosition;
   onHide?: () => void; // callback for when box is "exited"
   padding?: Padding; // padding between window and relative placed element
   parentRef?: React.RefObject<HTMLElement | null>; // optional parent ref to override default relative positioning for absolute positioned windows
@@ -39,6 +40,7 @@ const OverlayWindow: React.FC<{
   fixed = false,
   positioning = PositionType.Absolute,
   placement = Placement.Bottom, // initial placement compared to ancestor
+  customPosition,
   onHide,
   padding = DEFAULT_EDGE_PADDING,
   parentRef = undefined,
@@ -48,9 +50,12 @@ const OverlayWindow: React.FC<{
   const [bounds, setBounds] = useState(() => getCanvasBounds(getCanvasType(positioning), managerMargin));
   // position is relative to next ancestor when PositionType is not fixed to viewport or when using Fixed positioning with a passed in valid parentRef
   const isInitialRelative = positioning == PositionType.Fixed && parentRef == undefined ? false : true;
-  const [position, setPosition] = useState<ElementPosition>(() =>
-    getInitialPosition({ width, height }, placement, bounds, padding, isInitialRelative, parentRef, nodeRef),
-  );
+  const [position, setPosition] = useState<ElementPosition>(() => {
+    if (placement == Placement.Custom && customPosition) {
+      return customPosition;
+    }
+    return getInitialPosition({ width, height }, placement, bounds, padding, isInitialRelative, parentRef, nodeRef);
+  });
   const [size, setSize] = useState<ElementSize>(boundElementSize({ width, height }, bounds, padding));
   const [resizing, setResizing] = useState(false);
   const [dragging, setDragging] = useState(false);

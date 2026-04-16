@@ -33,13 +33,9 @@ export type CollectionCreateMeta = {
   Collection: CollectionCreateMetaFields;
 };
 
-export type Collection = Entity & {
-  metadata: CollectionMeta;
-};
+export type Collection = Entity<Entities.Collection>;
 
-export type CreateCollection = CreateEntity & {
-  metadata: CollectionCreateMeta;
-};
+export type CreateCollection = CreateEntity<Entities.Collection>;
 
 export const BlankCollection: Collection = {
   id: '',
@@ -72,7 +68,7 @@ export const BlankCreateCollection: CreateCollection = {
     Collection: {
       collection_kind: CollectionKind.Files,
       collection_tags: {},
-      tags_case_insensitive: false,
+      tags_case_insensitive: true,
       ignore_groups: false,
       start: null,
       end: null,

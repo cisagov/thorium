@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-import { Container } from 'react-bootstrap';
 import styled from 'styled-components';
 
 // project imports
@@ -7,20 +6,17 @@ import { RequireAdmin, RequireAuth, useAuth } from '@utilities/auth';
 import { scaling } from '@styles';
 
 interface PageProps {
-  auth?: boolean; // whether page requires validated user auth
-  admin?: boolean; // whether page required Thorium admin role
-  Contents: React.LazyExoticComponent<React.ComponentType<any>>; // page contents
+  auth?: boolean;
+  admin?: boolean;
+  Contents: React.LazyExoticComponent<React.ComponentType<any>>;
 }
 
-// A basic page content wrapper
 export const PageWrapper: React.FC<PageProps> = ({ auth = true, admin = false, Contents }) => {
   const { refreshUserInfo } = useAuth();
-  // Check to see if user info is stale on first page load
   useEffect(() => {
-    refreshUserInfo();
-  });
+    void refreshUserInfo();
+  }, []);
 
-  // Require an authed user with Admin role
   if (admin) {
     return (
       <RequireAuth>
@@ -29,14 +25,12 @@ export const PageWrapper: React.FC<PageProps> = ({ auth = true, admin = false, C
         </RequireAdmin>
       </RequireAuth>
     );
-    // Require user to be authed
   } else if (auth) {
     return (
       <RequireAuth>
         <Contents />
       </RequireAuth>
     );
-    // No page auth or Admin role required
   } else {
     return (
       <div>
@@ -46,17 +40,18 @@ export const PageWrapper: React.FC<PageProps> = ({ auth = true, admin = false, C
   }
 };
 
-// properties for our Thorium page wrapper
 interface ThoriumPageProps {
-  children: React.ReactNode; // For the children
-  className?: string; // Optional class name for wrapper styles
-  title?: string; // Optional helmet title
-  id?: string; // Optional id for page container
+  children: React.ReactNode;
+  className?: string;
+  title?: string;
+  id?: string;
 }
 
-const PageContainer = styled(Container)`
+const PageContainer = styled.div`
+  width: 100%;
   max-width: 85%;
-  padding: 4rem 0rem 0.5rem 0rem;
+  margin: 0 auto;
+  padding: 4rem 15px 0.5rem 15px;
   @media (min-width: ${scaling.sm}) {
     padding: 4rem 0rem 0.5rem 3.5rem;
   }

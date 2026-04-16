@@ -38,7 +38,7 @@ pub enum AssociationKind {
     DocumentationFor,
     /// This file or repo is or contains firmware for a device
     FirmwareFor,
-    /// This file/repo/entity is associationed with something else
+    /// This file/repo/entity is associated with something else
     AssociatedWith,
     /// This was developed or created by
     DevelopedBy,

@@ -4,8 +4,8 @@ import { FaQuestionCircle } from 'react-icons/fa';
 
 // project imports
 import FieldBadge from '@components/shared/badges/FieldBadge';
-import SelectableArray from '@components/shared/selectable/SelectableArray';
-import SelectableDictionary from '@components/shared/selectable/SelectableDictionary';
+import SelectableArray from '@components/shared/inputs/selectable/SelectableArray';
+import SelectableDictionary from '@components/shared/inputs/selectable/SelectableDictionary';
 import Subtitle from '@components/shared/titles/Subtitle';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 

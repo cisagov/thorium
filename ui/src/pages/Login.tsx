@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Alert, Button, Col, Card, Form, Modal, Row } from 'react-bootstrap';
+import { Button, Col, Card, Form, Modal, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import Page from '@components/pages/Page';
@@ -142,16 +143,12 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
           </Row>
           {regWarning != '' && (
             <Row>
-              <Alert variant="warning">
-                <center>{regWarning}</center>
-              </Alert>
+              <AlertBanner severity={Severity.Warning}>{regWarning}</AlertBanner>
             </Row>
           )}
           {regError != '' && (
             <Row>
-              <Alert variant="danger">
-                <center>{regError}</center>
-              </Alert>
+              <AlertBanner>{regError}</AlertBanner>
             </Row>
           )}
           {registering ? (
@@ -273,13 +270,7 @@ const Login = () => {
                       </SimpleSubtitle>
                     </Col>
                   </Row>
-                  <Row>
-                    {loginErr != '' && (
-                      <center>
-                        <Alert variant="danger">{loginErr}</Alert>
-                      </center>
-                    )}
-                  </Row>
+                  <Row>{loginErr != '' && <AlertBanner>{loginErr}</AlertBanner>}</Row>
                   <Row>
                     <Col className="d-flex justify-content-center">
                       <Button

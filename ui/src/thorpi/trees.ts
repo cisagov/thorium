@@ -51,10 +51,10 @@ export const getInitialTree = async (
  * @param {(error: string) => void} errorHandler - error handler function
  * @returns {Promise<Graph | null>} - Request response
  */
-export const growTree = async (id: string, nodes: string[], errorHandler: (error: string) => void): Promise<Graph | null> => {
+export const growTree = async (id: string, nodes: string[], errorHandler: (error: string) => void, limit = 1): Promise<Graph | null> => {
   const url = `/trees/${id}`;
   const params: any = {};
-  params['limit'] = 1;
+  params['limit'] = limit;
   return client
     .patch(url, { growable: nodes }, { transformResponse: [(data) => data], params: params })
     .then((res) => {

@@ -1,7 +1,7 @@
 // project imports
 import { Association } from './associations';
-import { Entity } from './entities/entities';
-import { Repo } from './repos';
+import { Entities, EntityTypes } from './entities/entities';
+import { Repo } from './entities/repos';
 import { Origin, Sample } from './files';
 import { TreeTags } from './tags';
 
@@ -44,7 +44,7 @@ export type TreeNode = {
   Sample?: Sample;
   Repo?: Repo;
   Tag?: TreeTags;
-  Entity?: Entity;
+  Entity?: EntityTypes;
 };
 
 export interface Graph {
@@ -67,11 +67,8 @@ export const BlankGraph: Graph = {
   branches: {},
 };
 
-export enum NodeType {
-  File = 'File',
-  Repo = 'Repo',
+export enum GraphTag {
   Tag = 'Tag',
-  Device = 'Device',
-  Vendor = 'Vendor',
-  Other = 'Other',
 }
+export type NodeType = Entities | GraphTag;
+export const NodeType = { ...Entities, ...GraphTag };

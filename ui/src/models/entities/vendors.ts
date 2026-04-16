@@ -22,13 +22,9 @@ export type VendorCreateMeta = {
   Vendor: VendorCreateMetaFields;
 };
 
-export type Vendor = Entity & {
-  metadata: VendorMeta;
-};
+export type Vendor = Entity<Entities.Vendor>;
 
-export type CreateVendor = CreateEntity & {
-  metadata: VendorCreateMeta;
-};
+export type CreateVendor = CreateEntity<Entities.Vendor>;
 
 export enum VendorCategory {
   Networking = 'Networking',

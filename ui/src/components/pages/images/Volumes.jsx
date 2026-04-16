@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Alert, Button, Col, Form, Row } from 'react-bootstrap';
+import { Button, Col, Form, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaTrash } from 'react-icons/fa';
 import { FaQuestionCircle } from 'react-icons/fa';
 
@@ -310,11 +311,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
                       onChange={(e) => updateVolume(idx, 'name', '', String(e.target.value))}
                     />
                   </OverlayTipRight>
-                  {volume['errors'] && 'name' in volume['errors'] && (
-                    <Alert variant="danger" className="d-flex justify-content-center m-2">
-                      {volume['errors'].name}
-                    </Alert>
-                  )}
+                  {volume['errors'] && 'name' in volume['errors'] && <AlertBanner className="m-2">{volume['errors'].name}</AlertBanner>}
                 </Col>
               </Row>
               <Row>
@@ -333,9 +330,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
                     </Form.Select>
                   </OverlayTipRight>
                   {volume['errors'] && 'archetype' in volume['errors'] && (
-                    <Alert variant="danger" className="d-flex justify-content-center m-2">
-                      {volume['errors'].archetype}
-                    </Alert>
+                    <AlertBanner className="m-2">{volume['errors'].archetype}</AlertBanner>
                   )}
                 </Col>
               </Row>
@@ -407,9 +402,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
                         />
                       </OverlayTipRight>
                       {volume['errors'] && 'host_path' in volume.errors && 'path' in volume.errors.host_path && (
-                        <Alert variant="danger" className="d-flex justify-content-center m-2">
-                          {volume.errors.host_path.path}
-                        </Alert>
+                        <AlertBanner className="m-2">{volume.errors.host_path.path}</AlertBanner>
                       )}
                     </Col>
                   </Row>
@@ -448,9 +441,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
                         />
                       </OverlayTipRight>
                       {volume['errors'] && 'nfs' in volume.errors && 'server' in volume.errors.nfs && (
-                        <Alert variant="danger" className="d-flex justify-content-center m-2">
-                          {volume.errors.nfs.server}
-                        </Alert>
+                        <AlertBanner className="m-2">{volume.errors.nfs.server}</AlertBanner>
                       )}
                     </Col>
                   </Row>
@@ -468,9 +459,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
                         />
                       </OverlayTipRight>
                       {volume['errors'] && 'nfs' in volume.errors && 'path' in volume.errors.nfs && (
-                        <Alert variant="danger" className="d-flex justify-content-center m-2">
-                          {volume.errors.nfs.path}
-                        </Alert>
+                        <AlertBanner className="m-2">{volume.errors.nfs.path}</AlertBanner>
                       )}
                     </Col>
                   </Row>
@@ -490,9 +479,7 @@ const VolumeInputs = ({ initialVolumes, updateRequestVolumes, setHasErrors, disa
                     />
                   </OverlayTipRight>
                   {volume['errors'] && 'mount_path' in volume.errors && (
-                    <Alert variant="danger" className="d-flex justify-content-center m-2">
-                      {volume.errors.mount_path}
-                    </Alert>
+                    <AlertBanner className="m-2">{volume.errors.mount_path}</AlertBanner>
                   )}
                 </Col>
               </Row>

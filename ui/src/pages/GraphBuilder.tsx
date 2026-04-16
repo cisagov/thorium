@@ -3,24 +3,23 @@ import { Card, Form } from 'react-bootstrap';
 import styled from 'styled-components';
 
 // project imports
-const AssociationTree = React.lazy(() => import('../components/associations/AssociationTree'));
 const AssociationGraph = React.lazy(() => import('../components/associations/graph/AssociationGraph'));
+import { GraphDataProvider } from '../components/associations/data/GraphDataContext';
 import Page from '@components/pages/Page';
 import Subtitle from '@components/shared/titles/Subtitle';
 import { Seed } from '@models/trees';
 
 interface GraphBuilderContextType {
-  updateSeed: (seed: Seed) => void | undefined;
+  updateSeed: (seed: Seed) => void;
 }
 
 // Page context
 const GraphContext = createContext<GraphBuilderContextType | undefined>(undefined);
 
-// custom device create context hook
 const useGraphContext = () => {
   const context = useContext(GraphContext);
   if (context === undefined) {
-    throw new Error('useRepoContext must be used within a RepoContextProvider');
+    throw new Error('useGraphContext must be used within a GraphBuilder');
   }
   return context;
 };
@@ -32,13 +31,21 @@ const InputTitle = styled.div`
   gap: 8px;
 `;
 
-const RepoHeader = () => {
+const GraphHeader = () => {
   const { updateSeed } = useGraphContext();
   return (
     <Card className="panel">
       <Card.Body>
         <InputTitle>Graph Seed</InputTitle>
-        <Form.Control onChange={(e) => updateSeed(JSON.parse(e.target.value) as unknown as Seed)} />
+        <Form.Control
+          onChange={(e) => {
+            try {
+              updateSeed(JSON.parse(e.target.value) as Seed);
+            } catch {
+              // Wait for valid JSON
+            }
+          }}
+        />
       </Card.Body>
     </Card>
   );
@@ -49,19 +56,17 @@ const GraphBuilder = () => {
   return (
     <GraphContext.Provider value={{ updateSeed }}>
       <Page className="full-min-width" title={`Graph Builder`}>
-        <RepoHeader />
-        <Card className="panel">
-          <Card.Body>
-            <Subtitle className="text-center">Association Graph</Subtitle>
-            {seed != null && <AssociationGraph inView initial={seed} />}
-          </Card.Body>
-        </Card>
-        <Card className="panel">
-          <Card.Body>
-            <Subtitle className="text-center">Association Tree</Subtitle>
-            {seed != null && <AssociationTree initial={seed} />}
-          </Card.Body>
-        </Card>
+        <GraphHeader />
+        {seed !== null && (
+          <GraphDataProvider initial={seed}>
+            <Card className="panel">
+              <Card.Body>
+                <Subtitle className="text-center">Associations</Subtitle>
+                <AssociationGraph inView />
+              </Card.Body>
+            </Card>
+          </GraphDataProvider>
+        )}
       </Page>
     </GraphContext.Provider>
   );

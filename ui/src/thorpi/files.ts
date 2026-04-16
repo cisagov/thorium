@@ -2,6 +2,7 @@
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
 import { RequestTags, TagCounts } from '@models/tags';
+import { Sample, SampleSubmissionResponse } from '@models/files';
 import { Filters } from '@models/search';
 
 // Debugging errors randomly inserted.
@@ -21,14 +22,14 @@ const RANDOM_DEBUG_ERRORS = 0;
  * @param {(error: string) => void} errorHandler - error handler function
  * @param {boolean} details - whether to return details for listed submissions
  * @param {string} cursor - the cursor value to continue listing from
- * @returns {Promise<any[]>} - Promise object representing a list of file details.
+ * @returns {Promise<{files: Sample[], cursor: string | null}>} - Promise object representing a list of file details.
  */
 export async function listFiles(
   data: Filters,
   errorHandler: (error: string) => void,
   details?: boolean | null,
   cursor?: string | null,
-): Promise<{ files: any[]; cursor: string | null }> {
+): Promise<{ files: Sample[]; cursor: string | null }> {
   // build url parameters including optional args if specified
   let url = '/files';
   if (details) {
@@ -43,13 +44,13 @@ export async function listFiles(
     .then((res) => {
       if (res?.status == 200 && res.data) {
         const cursor = res.data.cursor ? (res.data.cursor as string) : null;
-        return { files: res.data.data as any[], cursor: cursor };
+        return { files: res.data.data as Sample[], cursor: cursor };
       }
-      return { files: [] as any[], cursor: null };
+      return { files: [] as Sample[], cursor: null };
     })
     .catch((error) => {
       parseRequestError(error, errorHandler, 'List Files');
-      return { files: [] as any[], cursor: null };
+      return { files: [] as Sample[], cursor: null };
     });
 }
 
@@ -59,19 +60,19 @@ export async function listFiles(
  * @function
  * @param {FormData} form - form object containing file and submission info
  * @param {(error: string) => void} errorHandler - error handler function
- * @param {any} progressHandler - progress report handler function
- * @param {any} controller - abort controller
+ * @param {(progress: number) => void} progressHandler - progress report handler function
+ * @param {AbortController} controller - abort controller
  * @returns {object} - promise object representing file post response
  */
 export async function uploadFile(
   form: FormData,
   errorHandler: (error: string) => void,
-  progressHandler: any,
-  controller: any,
-): Promise<any | boolean> {
+  progressHandler: (progress: number) => void,
+  controller: AbortController,
+): Promise<SampleSubmissionResponse | false> {
   const url = '/files/';
   const config = {
-    onUploadProgress: (progressEvent: any) => progressHandler(progressEvent.progress),
+    onUploadProgress: (progressEvent: { progress?: number }) => progressHandler(progressEvent.progress ?? 0),
     signal: controller.signal,
   };
   if (RANDOM_DEBUG_ERRORS) {
@@ -100,10 +101,10 @@ export async function uploadFile(
     .catch((error) => {
       // special handler for file already exists
       if (error?.response?.status == 409 && error?.response?.data?.error) {
-        return { sha256: error.response.data.error };
+        return { sha256: error.response.data.error } as SampleSubmissionResponse;
       }
-      parseRequestError(error, errorHandler, 'List Files');
-      return { files: [] as any[], cursor: null };
+      parseRequestError(error, errorHandler, 'Upload File');
+      return false;
     });
 }
 
@@ -124,7 +125,7 @@ export async function getFile(
   archivePassword = 'infected',
 ): Promise<ArrayBuffer | null> {
   let url = '/files/sample/' + sha256 + '/download';
-  const options: any = { responseType: 'arraybuffer' };
+  const options: { responseType: 'arraybuffer'; params?: { password: string } } = { responseType: 'arraybuffer' };
   // downloading a zip is a url subpath and can take a password
   if (archiveFormat == 'Encrypted ZIP') {
     url = url + '/zip';
@@ -153,9 +154,9 @@ export async function getFile(
  * @function
  * @param {string} sha256 - sha256 hash of sample info to get
  * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<any | null>} - promise of the submission info for a file
+ * @returns {Promise<Sample | null>} - promise of the submission info for a file
  */
-export async function getFileDetails(sha256: string, errorHandler: (error: string) => void): Promise<any | null> {
+export async function getFileDetails(sha256: string, errorHandler: (error: string) => void): Promise<Sample | null> {
   const url = '/files/sample/' + sha256;
   return client
     .get(url)
@@ -262,7 +263,11 @@ export async function deleteSubmission(
  * @param {(error: string) => void} errorHandler - error handler function
  * @returns {Promise<boolean>} - promise of update submission success boolean
  */
-export async function updateFileSubmission(sha256: string, data: any, errorHandler: (error: string) => void): Promise<boolean> {
+export async function updateFileSubmission(
+  sha256: string,
+  data: Record<string, unknown>,
+  errorHandler: (error: string) => void,
+): Promise<boolean> {
   const url = '/files/sample/' + sha256;
   return client
     .patch(url, data)

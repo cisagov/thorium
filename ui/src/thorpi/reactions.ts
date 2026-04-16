@@ -1,6 +1,7 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
+import { Reaction, ReactionIdResponse, ReactionRequest } from '@models/reactions';
 
 // Debugging errors randomly inserted.
 // Valid values 0-100 (percentage chance of error)
@@ -10,12 +11,16 @@ const RANDOM_DEBUG_ERRORS = 0;
  * Submit reactions for a file.
  * @async
  * @function
- * @param {any} reaction - Reactions to submit
+ * @param {ReactionRequest} reaction - Reactions to submit
  * @param {(error: string) => void} errorHandler - error handler function
  * @param {Map} tags - An array of tags to add to each reaction in list
  * @returns {object} - promise object representing reaction submission response
  */
-export async function createReaction(reaction: any, errorHandler: (error: string) => void, tags = null): Promise<any | null> {
+export async function createReaction(
+  reaction: ReactionRequest,
+  errorHandler: (error: string) => void,
+  tags: string[] | null = null,
+): Promise<ReactionIdResponse | null> {
   const url = '/reactions/';
   if (tags != null) {
     reaction['tags'] = tags;
@@ -49,7 +54,7 @@ export async function createReaction(reaction: any, errorHandler: (error: string
  * @param {(error: string) => void} errorHandler - error handler function
  * @returns {object} - groups details
  */
-export async function getReaction(group: string, uuid: string, errorHandler: (error: string) => void): Promise<any | null> {
+export async function getReaction(group: string, uuid: string, errorHandler: (error: string) => void): Promise<Reaction | null> {
   const url = '/reactions/' + group + '/' + uuid;
   return client
     .get(url)
@@ -74,7 +79,7 @@ export async function getReaction(group: string, uuid: string, errorHandler: (er
  * @param {(error: string) => void} errorHandler - error handler function
  * @param {number} cursor - The number of log lines to skip
  * @param {number} limit - The number of log lines to retrieve
- * @returns {Promise<any | null>} - reaction logs
+ * @returns {Promise<{logs: string[], cursor?: string} | null>} - reaction logs
  */
 export async function getReactionLogs(
   group: string,
@@ -82,7 +87,7 @@ export async function getReactionLogs(
   errorHandler: (error: string) => void,
   cursor = null,
   limit = 100,
-): Promise<any | null> {
+): Promise<{ logs: string[]; cursor?: string } | null> {
   const url = '/reactions/logs/' + group + '/' + uuid;
   // pass in limit and cursor value
   const params: { cursor?: string; limit?: number } = {};
@@ -156,7 +161,7 @@ export const getReactionStageLogs = async (
  * @param {boolean} [details] - whether to return details for listed pipelines
  * @param {string} cursor - the cursor value to continue listing from
  * @param {number} limit - number of reactions to return
- * @returns {Promise<any | null>} - reactions list
+ * @returns {Promise<Reaction[] | string[] | null>} - reactions list
  */
 export async function listReactions(
   group: string,
@@ -166,7 +171,7 @@ export async function listReactions(
   details = false,
   cursor = null,
   limit = 1000,
-): Promise<any | null> {
+): Promise<Reaction[] | string[] | null> {
   let url = '/reactions/';
   if (tag == '') {
     url += 'list/' + group + '/' + pipeline + '/';

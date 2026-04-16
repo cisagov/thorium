@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Alert, Col, Form, Row } from 'react-bootstrap';
+import { Col, Form, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaQuestionCircle } from 'react-icons/fa';
 import { default as MarkdownHtml } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -517,11 +518,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
                   onChange={(e) => updateImage('image', String(e.target.value).trim())}
                 />
               </Form.Group>
-              {errors.image && showErrors && (
-                <Alert variant="danger" className="d-flex justify-content-center m-2">
-                  {errors.image}
-                </Alert>
-              )}
+              {errors.image && showErrors && <AlertBanner className="m-2">{errors.image}</AlertBanner>}
             </div>
           </Col>
         </Row>
@@ -545,11 +542,7 @@ const EditImageFields = ({ initialImage, setRequestFields, setHasErrors, showErr
                 }}
               />
             </Form.Group>
-            {errors.timeout && showErrors && (
-              <Alert variant="danger" className="d-flex justify-content-center m-2">
-                {errors.timeout}
-              </Alert>
-            )}
+            {errors.timeout && showErrors && <AlertBanner className="m-2">{errors.timeout}</AlertBanner>}
           </div>
         </Col>
       </Row>
@@ -772,11 +765,7 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
               }}
             />
           </OverlayTipRight>
-          {errors.name && showErrors && (
-            <Alert variant="danger" className="d-flex justify-content-center m-2">
-              {errors.name}
-            </Alert>
-          )}
+          {errors.name && showErrors && <AlertBanner className="m-2">{errors.name}</AlertBanner>}
         </Form.Group>
         <Form.Group>
           <Form.Label>
@@ -797,11 +786,7 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
                   </option>
                 ))}
             </Form.Select>
-            {errors.group && showErrors && (
-              <Alert variant="danger" className="d-flex justify-content-center m-2">
-                {errors.group}
-              </Alert>
-            )}
+            {errors.group && showErrors && <AlertBanner className="m-2">{errors.group}</AlertBanner>}
           </OverlayTipRight>
         </Form.Group>
         <Form.Group>
@@ -863,11 +848,7 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
               }}
             />
           </OverlayTipRight>
-          {errors.image && showErrors && (
-            <Alert variant="danger" className="d-flex justify-content-center m-2">
-              {errors.image}
-            </Alert>
-          )}
+          {errors.image && showErrors && <AlertBanner className="m-2">{errors.image}</AlertBanner>}
         </Form.Group>
         <Form.Group>
           <Form.Label>
@@ -885,11 +866,7 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
               }}
             />
           </OverlayTipRight>
-          {errors.timeout && showErrors && (
-            <Alert variant="danger" className="d-flex justify-content-center m-2">
-              {errors.timeout}
-            </Alert>
-          )}
+          {errors.timeout && showErrors && <AlertBanner className="m-2">{errors.timeout}</AlertBanner>}
         </Form.Group>
         {image.scaler == 'K8s' && (
           <Form.Group>
@@ -943,11 +920,7 @@ const CreateImageFields = ({ initialImage, groups, setRequestFields, setHasError
               ))}
             </Form.Select>
           </OverlayTipRight>
-          {errors.display_type && showErrors && (
-            <Alert variant="danger" className="d-flex justify-content-center m-2">
-              {errors.display_type}
-            </Alert>
-          )}
+          {errors.display_type && showErrors && <AlertBanner className="m-2">{errors.display_type}</AlertBanner>}
         </Form.Group>
         <Form.Group>
           <Form.Label>

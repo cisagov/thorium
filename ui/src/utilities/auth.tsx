@@ -35,6 +35,7 @@ function getCookie(name: string) {
   return undefined;
 }
 
+const REVOKE_TOKEN_COOKIE = 'THORIUM_TOKEN=; max-age=0; path=/; Secure';
 function buildCookie(token: string, expiration: string) {
   return `THORIUM_TOKEN=${token}; Secure; SameSite=Strict; expires=${expiration}; path=/; domain: ${location.hostname}`;
 }
@@ -60,7 +61,7 @@ function useAuthProvider() {
           fetchLocalStorageTags();
         } else {
           clearTagDataFromLocalStorage();
-          document.cookie = 'THORIUM_TOKEN=; max-age=0;';
+          document.cookie = REVOKE_TOKEN_COOKIE;
           setToken('');
         }
       });
@@ -114,7 +115,7 @@ function useAuthProvider() {
               setLastUpdateDate(Date.now());
               resolve(response);
             } else {
-              document.cookie = 'THORIUM_TOKEN=; max-age=0;';
+              document.cookie = REVOKE_TOKEN_COOKIE;
               setUserInfo(null);
               setToken(undefined);
               resolve(null);
@@ -144,7 +145,7 @@ function useAuthProvider() {
       return new Promise((resolve) => {
         setToken(undefined);
         setUserInfo(null);
-        document.cookie = 'THORIUM_TOKEN=; max-age=0;';
+        document.cookie = REVOKE_TOKEN_COOKIE;
         resolve(true);
       });
     },
@@ -182,7 +183,7 @@ function useAuthProvider() {
         handleRevoke().then(() => {
           setToken(undefined);
           setUserInfo(null);
-          document.cookie = 'THORIUM_TOKEN=; max-age=0;';
+          document.cookie = REVOKE_TOKEN_COOKIE;
           resolve(null);
         });
       });

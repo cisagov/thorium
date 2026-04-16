@@ -1,4 +1,5 @@
-import { Alert, Card, Col, Row } from 'react-bootstrap';
+import { Card, Col, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
@@ -23,12 +24,10 @@ const Disassembly: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
       <ResultsFiles result={result} sha256={sha256} tool={tool} />
       {truncated ? (
         <Row>
-          <center>
-            <Alert variant="warning">
-              {`The rendered disassembly has been truncated
+          <AlertBanner severity={Severity.Warning}>
+            {`The rendered disassembly has been truncated
                 due to its large size: ${totalCodeSize} bytes`}
-            </Alert>
-          </center>
+          </AlertBanner>
         </Row>
       ) : null}
       <SyntaxHighlighter style={atomOneDark}>{codeString}</SyntaxHighlighter>

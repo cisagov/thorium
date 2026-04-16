@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Accordion, Alert, Button, Badge, ButtonGroup, ButtonToolbar, Col, Form, Modal, Row } from 'react-bootstrap';
+import { Accordion, Button, Badge, ButtonGroup, ButtonToolbar, Col, Form, Modal, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaQuestionCircle } from 'react-icons/fa';
 import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
@@ -79,13 +80,7 @@ const Groups = () => {
             </Modal.Header>
             <Modal.Body>
               Do you really want to leave the <b>{group.name}</b> group?
-              {leaveError != '' && (
-                <center>
-                  <Alert variant="danger" className="mt-3 mb-2">
-                    {leaveError}
-                  </Alert>
-                </center>
-              )}
+              {leaveError != '' && <AlertBanner className="mt-3 mb-2">{leaveError}</AlertBanner>}
             </Modal.Body>
             <Modal.Footer className="d-flex justify-content-center">
               <Button
@@ -136,11 +131,7 @@ const Groups = () => {
             </Modal.Header>
             <Modal.Body>
               Do you really want to delete the <b>{group.name}</b> group?
-              {deleteError != '' && (
-                <center>
-                  <Alert variant="danger">{deleteError}</Alert>
-                </center>
-              )}
+              {deleteError != '' && <AlertBanner>{deleteError}</AlertBanner>}
             </Modal.Body>
             <Modal.Footer className="d-flex justify-content-center">
               <Button
@@ -330,13 +321,7 @@ const Groups = () => {
                   </Col>
                 </Row>
               )}
-              {updateError && (
-                <center>
-                  <Alert variant="danger" className="word-break-all">
-                    {updateError.replace(replaceExp, ', ')}
-                  </Alert>
-                </center>
-              )}
+              {updateError && <AlertBanner className="word-break-all">{updateError.replace(replaceExp, ', ')}</AlertBanner>}
             </center>
           </Modal.Body>
           <Modal.Footer className="d-flex justify-content-center">
@@ -1024,11 +1009,7 @@ const Groups = () => {
                 placeholder="describe this new group"
                 onChange={(e) => setNewGroupDescription(String(e.target.value))}
               />
-              {createError != '' && (
-                <center>
-                  <Alert variant="danger">{createError}</Alert>
-                </center>
-              )}
+              {createError != '' && <AlertBanner>{createError}</AlertBanner>}
               <Form.Text className="text-muted">
                 {`Group descriptions should explain a group's indended membership and owned
                 resources.`}
