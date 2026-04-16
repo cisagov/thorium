@@ -17,6 +17,7 @@ export enum Placement {
   Right = 'Right',
   Top = 'Top',
   Bottom = 'Bottom',
+  Custom = 'Custom',
 }
 
 // Position of element on screen defined by top/left edge of the element

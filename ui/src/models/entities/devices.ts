@@ -27,13 +27,9 @@ export type DeviceCreateMeta = {
   Device: DeviceCreateMetaFields;
 };
 
-export type Device = Entity & {
-  metadata: DeviceMeta;
-};
+export type Device = Entity<Entities.Device>;
 
-export type CreateDevice = CreateEntity & {
-  metadata: DeviceCreateMeta;
-};
+export type CreateDevice = CreateEntity<Entities.Device>;
 
 export const BlankDevice: Device = {
   id: '',
@@ -64,7 +60,7 @@ export const BlankCreateDevice: CreateDevice = {
   metadata: {
     Device: {
       urls: [],
-      vendor: '',
+      vendors: [],
       critical_system: false,
       sensitive_location: false,
       critical_sectors: [],

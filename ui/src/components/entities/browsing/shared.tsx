@@ -44,7 +44,7 @@ export const EntityName = styled(Col)`
   color: var(--thorium-text);
 `;
 
-export const EntityOrigin = styled(Col)`
+export const EntitySecondary = styled(Col)`
   min-width: 300px;
   text-align: center;
   color: var(--thorium-text);

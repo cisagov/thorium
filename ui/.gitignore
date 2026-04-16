@@ -5,6 +5,10 @@ node_modules/
 
 # testing
 coverage/
+e2e/screenshots/*.png
+e2e/screenshots/*.html
+test-results/
+playwright-report/
 
 # production/preview
 dist/

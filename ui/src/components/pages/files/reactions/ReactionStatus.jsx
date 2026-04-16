@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Alert, Button, ButtonToolbar, Card, Col, FormCheck, Modal, Row } from 'react-bootstrap';
+import { Button, ButtonToolbar, Card, Col, FormCheck, Modal, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import { FaTrash } from 'react-icons/fa';
 
 // project imports
@@ -19,20 +20,14 @@ const DeleteReactionAlerts = ({ responses }) => {
       {responses.length > 0 &&
         responses.map((deleteResponse, idx) => (
           <Row key={idx}>
-            {deleteResponse.error && (
-              <Alert className="full-width" variant="danger">
-                <center>{deleteResponse.error}</center>
-              </Alert>
-            )}
+            {deleteResponse.error && <AlertBanner className="full-width">{deleteResponse.error}</AlertBanner>}
             {deleteResponse.error == '' && (
-              <Alert className="full-width" variant="info">
-                <center>
-                  <span>
-                    {`Successfully deleted reaction ${deleteResponse.id}`}
-                    {` for pipeline ${deleteResponse.pipeline} from group ${deleteResponse.group}!`}
-                  </span>
-                </center>
-              </Alert>
+              <AlertBanner severity={Severity.Info} className="full-width">
+                <span>
+                  {`Successfully deleted reaction ${deleteResponse.id}`}
+                  {` for pipeline ${deleteResponse.pipeline} from group ${deleteResponse.group}!`}
+                </span>
+              </AlertBanner>
             )}
           </Row>
         ))}
@@ -189,16 +184,9 @@ const ReactionStatus = ({ sha256, autoRefresh }) => {
     <div id="reactionstatus-tab" className="mx-4">
       {!loading && reactionsList.length == 0 ? (
         <>
-          <Alert variant="" className="info">
-            <Alert.Heading>
-              <center>
-                <h3>No Reactions Found</h3>
-              </center>
-            </Alert.Heading>
-            <center>
-              <p>Create a reaction and then check the status here</p>
-            </center>
-          </Alert>
+          <AlertBanner severity={Severity.Info}>
+            <h3>No Reactions Found</h3>
+          </AlertBanner>
         </>
       ) : (
         <>

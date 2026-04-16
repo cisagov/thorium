@@ -48,7 +48,7 @@ export const getEntity = async (id: string, errorHandler: (error: string) => voi
       }
     })
     .catch((error) => {
-      parseRequestError(error, errorHandler, 'Update Entity');
+      parseRequestError(error, errorHandler, 'Get Entity');
       return null;
     });
 };
@@ -89,7 +89,7 @@ export const updateEntity = async (id: string, data: FormData, errorHandler: (er
  */
 export const deleteEntity = async (id: string, errorHandler: (error: string) => void): Promise<boolean> => {
   // build url parameters including optional args if specified
-  let url = `/entities${id}`;
+  let url = `/entities/${id}`;
   return client
     .delete(url)
     .then((res) => {
@@ -143,7 +143,7 @@ export const listEntities = async (
       return { entityList: [] as any[], entityCursor: null };
     })
     .catch((error) => {
-      parseRequestError(error, errorHandler, 'Update Entity');
+      parseRequestError(error, errorHandler, 'List Entity');
       return { entityList: [] as any[], entityCursor: null };
     });
 };

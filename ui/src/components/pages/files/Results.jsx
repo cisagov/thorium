@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Alert } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 const ToolResult = React.lazy(() => import('@components/tools/ToolResult'));
@@ -90,16 +90,9 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
             {numResults == 0 && !loading && (
               <>
                 <br />
-                <Alert variant="" className="info">
-                  <Alert.Heading>
-                    <center>
-                      <h3>No Tool Results Available</h3>
-                    </center>
-                  </Alert.Heading>
-                  <center>
-                    <p>Check back later for updated results</p>
-                  </center>
-                </Alert>
+                <AlertBanner severity={Severity.Info}>
+                  <h3>No Tool Results Available</h3>
+                </AlertBanner>
               </>
             )}
             {Object.keys(parsedResults)

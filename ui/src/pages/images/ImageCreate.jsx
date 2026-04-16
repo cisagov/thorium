@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Button, Row, Col, Alert } from 'react-bootstrap';
+import { Button, Row, Col } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaAngleDown, FaAngleUp } from 'react-icons/fa';
 
 // project imports
@@ -257,13 +258,7 @@ const ImageCreate = () => {
         />
       </div>
       <Row className="d-flex justify-content-center">
-        <Col>
-          {createImageErrors && (
-            <Alert variant="danger" className="d-flex justify-content-center m-2">
-              {createImageErrors}
-            </Alert>
-          )}
-        </Col>
+        <Col>{createImageErrors && <AlertBanner className="m-2">{createImageErrors}</AlertBanner>}</Col>
       </Row>
       <Row>
         <LoadingSpinner loading={loading}></LoadingSpinner>

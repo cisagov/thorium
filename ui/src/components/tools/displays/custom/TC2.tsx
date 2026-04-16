@@ -1,4 +1,5 @@
-import { Alert, Card, Col, Row } from 'react-bootstrap';
+import { Card, Col, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import { ResultRenderProps } from '@components/tools/props';
@@ -37,9 +38,7 @@ const TC2: React.FC<ResultRenderProps> = ({ result }) => {
     return (
       <Card className="scroll-log tool-result">
         <Card.Body>
-          <Alert variant="info" className="d-flex justify-content-center">
-            No children unpacked
-          </Alert>
+          <AlertBanner severity={Severity.Info}>No children unpacked</AlertBanner>
         </Card.Body>
       </Card>
     );

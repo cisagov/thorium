@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Accordion, Alert, Badge, Button, ButtonToolbar, ButtonGroup, Col, Form, Modal, Row } from 'react-bootstrap';
+import { Accordion, Badge, Button, ButtonToolbar, ButtonGroup, Col, Form, Modal, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaQuestionCircle } from 'react-icons/fa';
 import { default as MarkdownHtml } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -114,11 +115,7 @@ const Pipelines = () => {
           </Modal.Header>
           <Modal.Body>
             Do you really want to delete the <b>{pipeline.name}</b> pipeline?
-            {deleteError != '' && (
-              <Alert className="mt-4" variant="danger">
-                <center>{deleteError}</center>
-              </Alert>
-            )}
+            {deleteError != '' && <AlertBanner className="mt-4">{deleteError}</AlertBanner>}
           </Modal.Body>
           <Modal.Footer className="d-flex justify-content-center">
             <Button
@@ -377,11 +374,7 @@ const Pipelines = () => {
           ))}
         {userCanDelete && (
           <Row className="mt-2">
-            {updateError != '' && (
-              <Alert variant="danger">
-                <center>{updateError}</center>
-              </Alert>
-            )}
+            {updateError != '' && <AlertBanner>{updateError}</AlertBanner>}
             <Col>
               {userCanModify && (
                 <ButtonToolbar className="d-flex justify-content-center">
@@ -556,11 +549,7 @@ const Pipelines = () => {
               </Form.Select>
               <Form.Text className="text-muted">Existing group that can access pipeline.</Form.Text>
             </Form.Group>
-            {createError != '' && (
-              <Alert variant="danger" className="mt-4">
-                <center>{createError}</center>
-              </Alert>
-            )}
+            {createError != '' && <AlertBanner className="mt-4">{createError}</AlertBanner>}
           </Modal.Body>
           <Modal.Footer className="d-flex justify-content-center">
             <Button className="ok-btn" onClick={() => handlePipelineCreate()}>

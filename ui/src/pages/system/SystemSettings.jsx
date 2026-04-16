@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Table } from 'react-bootstrap';
+import { Table } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import styled from 'styled-components';
 
 // project imports
@@ -36,7 +37,7 @@ const SystemSettings = () => {
   return (
     <Page title="Settings · Thorium" className="settings">
       <Settings>
-        {getSettingsError != '' && <Alert>{getSettingsError}</Alert>}
+        {getSettingsError != '' && <AlertBanner>{getSettingsError}</AlertBanner>}
         <Title>System Settings</Title>
         <Table striped bordered hover>
           <tbody>

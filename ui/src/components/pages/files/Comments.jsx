@@ -1,5 +1,6 @@
 import React, { Fragment, useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Form, Pagination, Row } from 'react-bootstrap';
+import { Button, Card, Col, Form, Pagination, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import UploadDropzone from '@components/shared/UploadDropzone';
@@ -83,19 +84,15 @@ const Comments = ({ sha256 }) => {
     }
   };
 
-  const AlertBanner = () => {
+  const CommentAlertBanner = () => {
     return (
       <Fragment>
         {commentError == 'Success' && (
-          <Alert className="attachment-card" variant="success">
+          <AlertBanner severity={Severity.Success} className="attachment-card">
             Comment has uploaded successfully!
-          </Alert>
+          </AlertBanner>
         )}
-        {commentError != '' && commentError != 'Success' && (
-          <Alert className="attachment-card" variant="danger">
-            {commentError}
-          </Alert>
-        )}
+        {commentError != '' && commentError != 'Success' && <AlertBanner className="attachment-card">{commentError}</AlertBanner>}
       </Fragment>
     );
   };
@@ -140,16 +137,9 @@ const Comments = ({ sha256 }) => {
       </div>
       {comments.length == 0 && (
         <Fragment>
-          <Alert variant="" className="info">
-            <Alert.Heading>
-              <center>
-                <h3>No Comments Available</h3>
-              </center>
-            </Alert.Heading>
-            <center>
-              <p>Be the first to leave a comment</p>
-            </center>
-          </Alert>
+          <AlertBanner severity={Severity.Info}>
+            <h3>No Comments Available</h3>
+          </AlertBanner>
         </Fragment>
       )}
       <Row className="mt-4">
@@ -183,7 +173,7 @@ const Comments = ({ sha256 }) => {
           <Row className="d-flex justify-content-center mt-2">
             <Col>
               <center>
-                <AlertBanner />
+                <CommentAlertBanner />
               </center>
               <Button
                 className="mt-3 primary-btn auto-width"

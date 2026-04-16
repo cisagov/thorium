@@ -154,3 +154,15 @@ export type Sample = {
   /// Any comments for this sample
   comments: Comment[];
 };
+
+/** The response from a file submission (from api/src/models/files.rs) */
+export type SampleSubmissionResponse = {
+  /** The sha256 of this sample */
+  sha256: string;
+  /** The sha1 of this sample */
+  sha1: string;
+  /** The md5 of this sample */
+  md5: string;
+  /** A UUID for this submission */
+  id: string;
+};

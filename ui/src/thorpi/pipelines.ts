@@ -1,13 +1,13 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
-import { Pipeline, PipelineCreate } from '@models/pipelines';
+import { Pipeline, PipelineCreate, PipelineUpdate } from '@models/pipelines';
 import client, { parseRequestError } from './client';
 
 /**
  * Create a new Thorium pipeline.
  * @async
  * @function
- * @param {any} pipeline - Pipeline details to submit when creating new pipeline
+ * @param {PipelineCreate} pipeline - Pipeline details to submit when creating new pipeline
  * @param {(error: string) => void} errorHandler - Error handler function
  * @returns {Promise<boolean>} - Request response
  */
@@ -59,9 +59,9 @@ export async function deletePipeline(group: string, pipeline: string, errorHandl
  * @param {string} group - Group of pipeline
  * @param {string} pipeline - Name of pipeline
  * @param {(error: string) => void} errorHandler - Error handler function
- * @returns {Promise<any | null>} - pipeline details
+ * @returns {Promise<Pipeline | null>} - pipeline details
  */
-export async function getPipeline(group: string, pipeline: string, errorHandler: (error: string) => void): Promise<any | null> {
+export async function getPipeline(group: string, pipeline: string, errorHandler: (error: string) => void): Promise<Pipeline | null> {
   const url = '/pipelines/data/' + group + '/' + pipeline;
   return client
     .get(url)
@@ -100,7 +100,7 @@ export async function listPipelines(
     url += 'details/';
   }
   // pass in limit and cursor value
-  const params: any = { limit: limit };
+  const params: { limit: number; cursor?: string } = { limit: limit };
   if (cursor) {
     params['cursor'] = cursor;
   }
@@ -128,11 +128,16 @@ export async function listPipelines(
  * @function
  * @param {string} group - Group name target pipeline is owned by
  * @param {string} pipeline - Name of pipeline to patch
- * @param {any} data - Json body to patch pipeline with
+ * @param {PipelineUpdate} data - Json body to patch pipeline with
  * @param {(error: string) => void} errorHandler - Error handler function
  * @returns {Promise<boolean>} - request response
  */
-export async function updatePipeline(group: string, pipeline: string, data: any, errorHandler: (error: string) => void): Promise<boolean> {
+export async function updatePipeline(
+  group: string,
+  pipeline: string,
+  data: PipelineUpdate,
+  errorHandler: (error: string) => void,
+): Promise<boolean> {
   const url = '/pipelines/' + group + '/' + pipeline;
   return client
     .patch(url, data)

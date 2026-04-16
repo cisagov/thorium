@@ -17,7 +17,7 @@ export interface OverlayTipProps {
 
 type OverlayTipBaseProps = OverlayTipProps & { placement: Placement };
 
-const OverlayTip: React.FC<OverlayTipBaseProps> = ({ children, tip, wide = false, placement }) => {
+const OverlayTip: React.FC<OverlayTipBaseProps> = ({ children, tip, wide = false, className = '', placement }) => {
   // use trigger="click" for OverlayTrigger for troubleshooting css/style issues
   const [showOverlay, setShowOverlay] = useState(false);
   const [hoveringOverlay, setHoveringOverlay] = useState(false);
@@ -49,7 +49,7 @@ const OverlayTip: React.FC<OverlayTipBaseProps> = ({ children, tip, wide = false
       placement={placement}
       overlay={
         <Tooltip
-          className={wide ? 'tooltip-wide' : ''}
+          className={`${wide ? 'tooltip-wide' : ''} ${className}`.trim()}
           onMouseLeave={() => updateHoveringOverlay(false)}
           onMouseEnter={() => updateHoveringOverlay(true)}
         >

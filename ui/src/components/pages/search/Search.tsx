@@ -1,8 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Alert, Card, Col, Form, Row, Stack } from 'react-bootstrap';
+import { Card, Col, Form, Row, Stack } from 'react-bootstrap';
 import DOMPurify from 'dompurify';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import parse from 'html-react-parser';
 import styled from 'styled-components';
 
@@ -38,12 +38,12 @@ const getGroup = (id: string) => {
 const mapFullIndexName = (fullIndexName: string) => {
   // TODO: matches based on the full name of the elastic index set
   //       in the Thorium config...not sure how to match that dynamically
-  if (fullIndexName == 'thorium_sample_tags') {
+  if (fullIndexName === 'thorium_sample_tags') {
     return 'Tags';
-  } else if (fullIndexName == 'thorium_sample_results') {
+  } else if (fullIndexName === 'thorium_sample_results') {
     return 'Results';
   } else {
-    null;
+    return null;
   }
 };
 
@@ -133,7 +133,7 @@ const SearchResultItem: React.FC<SearchResultItemProps> = ({ result, idx }) => {
       {result.highlight &&
         Object.keys(result.highlight).map(
           (key) =>
-            key != 'group' && (
+            key !== 'group' && (
               <Row key={`${getSha256(result.id)}_${idx}_${key}`}>
                 <Col>
                   <span>
@@ -155,7 +155,7 @@ const getSearchResults = async (
   setSearchError: (error: string) => void,
   cursor: string | null,
 ): Promise<{ entitiesList: any[]; entitiesCursor: string | null }> => {
-  if (query != '') {
+  if (query !== '') {
     // get files list from API
     const { entityList, entityCursor } = await search(
       query.trim(),
@@ -187,8 +187,8 @@ const SearchForm = styled(Form)`
 `;
 
 const SearchInput = styled(Form.Control)`
-  display: flex
-  justify-content-center
+  display: flex;
+  justify-content: center;
   padding-right: 50px;
   white-space: nowrap;
   overflow: hidden;
@@ -265,15 +265,13 @@ const Search = () => {
     setFilters(pendingSearchFilters);
   };
 
-  // Update the search when any search parameter changes, after waiting for 0.5 seconds
-  // this short delay allows the search to seem interactive/response without hammering the
-  // API for every character change of the search query.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce: only re-run when query changes
   useEffect(() => {
     const handleSetQuery = setTimeout(() => {
       setDebouncedQuery(query);
       // update query in url params
       setSearchError('');
-      if (query != '') {
+      if (query !== '') {
         // update query in url params
         searchParams.set('query', query);
       } else {
@@ -287,6 +285,7 @@ const Search = () => {
     return () => clearTimeout(handleSetQuery);
   }, [query]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   useEffect(() => {
     readURLSearchParams();
     setSearching(false);
@@ -318,7 +317,7 @@ const Search = () => {
         groups={userInfo ? userInfo.groups : []}
         disabled={searching}
       />
-      {query != '' && searchError == '' && (
+      {query !== '' && searchError === '' && (
         <Row>
           <EntityList
             type="Results"
@@ -331,11 +330,7 @@ const Search = () => {
           />
         </Row>
       )}
-      {searchError && query != '' && (
-        <Alert variant="danger" className="d-flex justify-content-center mt-1 mb-0">
-          {searchError}
-        </Alert>
-      )}
+      {searchError && query !== '' && <AlertBanner className="mt-1 mb-0">{searchError}</AlertBanner>}
     </Stack>
   );
 };

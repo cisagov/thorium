@@ -36,7 +36,12 @@ export default tseslint.config(
       js, react, reactHooks, reactRefresh, tseslint, prettier,
     },
     rules: {
-      'max-len': ['error', 140, 2, {ignoreUrls: true}],
+      'max-len': ['error', 140, 2, {
+        ignoreUrls: true,
+        ignoreStrings: true,
+        ignoreTemplateLiterals: true,
+        ignoreRegExpLiterals: true,
+      }],
       "@typescript-eslint/no-explicit-any": "off",
     }
   },

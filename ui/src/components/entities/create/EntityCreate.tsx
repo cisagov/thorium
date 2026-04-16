@@ -1,52 +1,53 @@
-import { useState, createContext, useContext, JSX } from 'react';
+import React, { useState, createContext, useContext } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Alert, Button, Card, Row, Form } from 'react-bootstrap';
+import { Button, Card, Row, Form } from 'react-bootstrap';
 import styled from 'styled-components';
 
 // project imports
+import { EntityCreateConfig } from './configs/config';
 import InfoHeader from '../shared/InfoHeader';
 import InfoValue from '../shared/InfoValue';
 import { buildCreateEntityForm, copyEntityFields } from '../utilities';
-import { OverlayTipBottom } from '@components/shared/overlay/tips';
-import SelectInputArray from '@components/shared/selectable/SelectInputArray';
 import Page from '@components/pages/Page';
 import Title from '@components/shared/titles/Title';
-import { useAuth } from '@utilities/auth';
-import { CreateEntity, Entities } from '@models/entities';
+import { OverlayTipBottom } from '@components/shared/overlay/tips';
+import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
 import { createEntity } from '@thorpi/entities';
+import { useAuth } from '@utilities/auth';
+import { EntityCreateTypeMap, EntityTypeMap, UISupportedEntityCreateKind } from '@models/entities/entities';
+import { getDetailsBasePathByEntity } from '../details/EntityDetailsRoutes';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 
-export type CreateMetadataComponent = (
-  entity: CreateEntity,
-  onChange: <K extends keyof CreateEntity>(field: K, value: CreateEntity[K]) => void,
-) => JSX.Element;
-
-type EntityCreateContextType = {
-  kind: Entities;
-  entity: CreateEntity;
-  metadata: CreateMetadataComponent;
-  updatePendingEntity: <K extends keyof CreateEntity>(field: K, value: CreateEntity[K]) => void;
-  error: string; // any error message returned when trying to create a new entity
-  setError: (error: string) => void; // set create error message callback
+export type CreateMetadataProps<K extends UISupportedEntityCreateKind> = {
+  entity: EntityCreateTypeMap[K];
+  onChange: <F extends keyof EntityCreateTypeMap[K]>(field: F, value: EntityCreateTypeMap[K][F]) => void;
 };
 
-// Page context
-const EntityCreateContext = createContext<EntityCreateContextType | undefined>(undefined);
+export type CreateMetadataComponent<K extends UISupportedEntityCreateKind> = React.ComponentType<CreateMetadataProps<K>>;
 
-// custom device create context hook
-const useEntityContext = () => {
-  const context = useContext(EntityCreateContext);
-  if (context === undefined) {
-    throw new Error('useEntityContext must be used within a EntityContextProvider');
-  }
-  return context;
+type EntityCreateContextType<K extends UISupportedEntityCreateKind> = {
+  kind: K;
+  entity: EntityCreateTypeMap[K];
+  Metadata: CreateMetadataComponent<K>;
+  updatePendingEntity: <F extends keyof EntityCreateTypeMap[K]>(field: F, value: EntityCreateTypeMap[K][F]) => void;
+  error: string;
+  setError: (error: string) => void;
 };
 
-// Entity shared fields
-const EntityInfo = () => {
-  const { entity, metadata, updatePendingEntity } = useEntityContext();
-  const { userInfo } = useAuth();
-  return (
-    <>
+export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(config: EntityCreateConfig<K>) {
+  const EntityCreateContext = createContext<EntityCreateContextType<K> | undefined>(undefined);
+  const useEntityContext = () => {
+    const context = useContext(EntityCreateContext);
+    if (context === undefined) {
+      throw new Error('useEntityContext must be used within an EntityCreateContext.Provider');
+    }
+    return context;
+  };
+
+  const EntityInfo = () => {
+    const { entity, Metadata, updatePendingEntity } = useEntityContext();
+    const { userInfo } = useAuth();
+    return (
       <Card className="panel">
         <Card.Body>
           <Row>
@@ -55,10 +56,7 @@ const EntityInfo = () => {
             </InfoHeader>
             <InfoValue>
               <Form.Group>
-                <Form.Control
-                  onChange={(e) => updatePendingEntity('name', String(e.target.value))}
-                  value={entity.name ? entity.name : ''}
-                ></Form.Control>
+                <Form.Control onChange={(e) => updatePendingEntity('name', String(e.target.value))} value={entity.name ?? ''} />
               </Form.Group>
             </InfoValue>
           </Row>
@@ -70,14 +68,14 @@ const EntityInfo = () => {
             <InfoValue>
               <SelectInputArray
                 isCreatable={false}
-                options={userInfo?.groups ? userInfo.groups : []}
+                options={userInfo?.groups ?? []}
                 values={entity.groups}
                 onChange={(groups) => updatePendingEntity('groups', groups)}
               />
             </InfoValue>
           </Row>
           <hr className="my-3" />
-          {metadata(entity, updatePendingEntity)}
+          <Metadata entity={entity} onChange={updatePendingEntity} />
           <hr className="my-3" />
           <Row>
             <InfoHeader>Description</InfoHeader>
@@ -85,9 +83,9 @@ const EntityInfo = () => {
               <Form.Group>
                 <Form.Control
                   onChange={(e) => updatePendingEntity('description', String(e.target.value))}
-                  value={entity.description ? entity.description : ''}
+                  value={entity.description ?? ''}
                   as="textarea"
-                ></Form.Control>
+                />
               </Form.Group>
             </InfoValue>
           </Row>
@@ -97,81 +95,77 @@ const EntityInfo = () => {
           </Row>
         </Card.Body>
       </Card>
-    </>
-  );
-};
-
-const EntityCreateButton = () => {
-  const navigate = useNavigate();
-  const { entity, kind, setError } = useEntityContext();
-  // user must have roles in one of the groups
-  const userCanCreate = true; //TODO grab group membership of selected groups and check roles
-  const CreateEntityMessage = userCanCreate
-    ? `Create a new ${kind}. You must be a user, manager, or owner in a selected group to create this ${kind}.`
-    : `You must be a user, manager, or owner in a selected group to create this ${kind}.`;
-  const handleCreateEntity = (): void => {
-    createEntity(buildCreateEntityForm(entity, kind), setError).then((response) => {
-      if (response != null) {
-        navigate(`/${kind.toLocaleLowerCase()}/${response.id}`);
-      }
-    });
+    );
   };
-  return (
-    <div className="d-flex justify-content-center pt-4">
-      <OverlayTipBottom tip={CreateEntityMessage}>
-        <Button className="secondary-btn" variant="info" disabled={!userCanCreate} onClick={() => handleCreateEntity()}>
-          Create
-        </Button>
-      </OverlayTipBottom>
-    </div>
-  );
-};
 
-const CreateEntityTitle = styled.div`
-  display: grid;
-  place-items: center;
-  padding-bottom: 1rem;
-  padding-top: 0.5rem;
-`;
+  const EntityCreateButton = () => {
+    const navigate = useNavigate();
+    const { entity, kind, setError } = useEntityContext();
+    const userCanCreate = true; // TODO grab group membership of selected groups and check roles
+    const createEntityMessage = userCanCreate
+      ? `Create a new ${kind}. You must be a user, manager, or owner in a selected group to create this ${kind}.`
+      : `You must be a user, manager, or owner in a selected group to create this ${kind}.`;
+    const handleCreateEntity = (): void => {
+      createEntity(buildCreateEntityForm(entity), setError).then((response) => {
+        if (response != null) {
+          navigate(`${getDetailsBasePathByEntity(kind)}/${response.id}`);
+        }
+      });
+    };
+    return (
+      <div className="d-flex justify-content-center pt-4">
+        <OverlayTipBottom tip={createEntityMessage}>
+          <Button className="secondary-btn" variant="info" disabled={!userCanCreate} onClick={handleCreateEntity}>
+            Create
+          </Button>
+        </OverlayTipBottom>
+      </div>
+    );
+  };
 
-type EntityDetailsProps = {
-  blank: CreateEntity;
-  kind: Entities;
-  metadata: CreateMetadataComponent;
-};
+  const CreateEntityTitle = styled.div`
+    display: grid;
+    place-items: center;
+    padding-bottom: 1rem;
+    padding-top: 0.5rem;
+  `;
 
-const EntityCreate: React.FC<EntityDetailsProps> = ({ blank, kind, metadata }) => {
-  const { state } = useLocation();
-  // pull device state if its there
-  const [entity, setEntity] = useState<CreateEntity>(state?.entity ? copyEntityFields(state.entity, blank) : blank);
-  const [error, setError] = useState<string>('');
-  // Update pending device info fields by key
-  function updatePendingEntity<K extends keyof CreateEntity>(field: K, value: CreateEntity[K]): void {
-    const updates = structuredClone(entity);
-    updates[field] = value;
-    setEntity(updates);
-  }
-  return (
-    <EntityCreateContext.Provider
-      value={{
-        entity,
-        metadata,
-        updatePendingEntity,
-        error,
-        setError,
-        kind,
-      }}
-    >
-      <Page className="full-min-width" title={`Create ${kind}`}>
-        <CreateEntityTitle>
-          <Title className="title">New {`${kind}`}</Title>
-        </CreateEntityTitle>
-        <EntityInfo />
-        {error != '' && <Alert variant="danger text-center">{error}</Alert>}
-        <EntityCreateButton />
-      </Page>
-    </EntityCreateContext.Provider>
-  );
-};
+  const BoundEntityCreatePage = () => {
+    const { state } = useLocation();
+    const initialEntity: EntityCreateTypeMap[K] =
+      state?.entity && state.entity.kind === config.kind
+        ? copyEntityFields(state.entity as EntityTypeMap[K], config.BlankCreateEntity)
+        : config.BlankCreateEntity;
+    const [entity, setEntity] = useState<EntityCreateTypeMap[K]>(initialEntity);
+    const [error, setError] = useState<string>('');
+    function updatePendingEntity<F extends keyof EntityCreateTypeMap[K]>(field: F, value: EntityCreateTypeMap[K][F]): void {
+      const updates = structuredClone(entity);
+      updates[field] = value;
+      setEntity(updates);
+    }
+    return (
+      <EntityCreateContext.Provider
+        value={{
+          entity,
+          Metadata: config.EntityMetadata,
+          updatePendingEntity,
+          error,
+          setError,
+          kind: config.kind,
+        }}
+      >
+        <Page className="full-min-width" title={`Create ${config.kind}`}>
+          <CreateEntityTitle>
+            <Title className="title">New {config.kind}</Title>
+          </CreateEntityTitle>
+          <EntityInfo />
+          {error !== '' && <AlertBanner>{error}</AlertBanner>}
+          <EntityCreateButton />
+        </Page>
+      </EntityCreateContext.Provider>
+    );
+  };
+  return BoundEntityCreatePage;
+}
 
-export default EntityCreate;
+export default createEntityCreatePage;

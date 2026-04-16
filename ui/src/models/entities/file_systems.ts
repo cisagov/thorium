@@ -18,13 +18,9 @@ export type FileSystemCreateMeta = {
   FileSystem: FileSystemCreateMetaFields;
 };
 
-export type FileSystem = Entity & {
-  metadata: FileSystemMeta;
-};
+export type FileSystem = Entity<Entities.FileSystem>;
 
-export type CreateFileSystem = CreateEntity & {
-  metadata: FileSystemCreateMeta;
-};
+export type CreateFileSystem = CreateEntity<Entities.FileSystem>;
 
 export const BlankFileSystem: FileSystem = {
   id: '',

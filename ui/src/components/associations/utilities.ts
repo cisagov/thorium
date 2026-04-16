@@ -1,6 +1,7 @@
+// project imports
 import { RequestTags } from '@models/tags';
 import { SubmissionChunk } from '@models/files';
-import { BranchNode, Graph } from '@models/trees';
+import { BranchNode, Graph, TreeNode } from '@models/trees';
 
 // get the file name from full path
 export const stripFilePath = (filePath: string): string => {
@@ -13,12 +14,11 @@ export const stripFilePath = (filePath: string): string => {
 // format file submission names for use as graph node labels
 export const formatSubmissionNames = (submissions: SubmissionChunk[]) => {
   // Samples and Repos will always have submissions, this is an error we are handling
-  if (submissions.length == 0) {
+  if (submissions.length === 0) {
     return 'No Valid Name';
   }
-  // get all submission names, if they don't exist the list will contain undefined
   const submissionNames = submissions.map((submission) => stripFilePath(submission.name ? submission.name : ''));
-  const names = submissionNames.filter((submission) => submission != undefined);
+  const names = submissionNames.filter(Boolean);
   const uniqueNames = Array.from(new Set(names));
   // filter out undefined values and join to a usable string name that is comma/space separated
   return uniqueNames.join(', ');
@@ -27,8 +27,8 @@ export const formatSubmissionNames = (submissions: SubmissionChunk[]) => {
 // format tag label name
 export const formatTagNames = (tags: RequestTags, truncate: boolean) => {
   const tagStrings: string[] = [];
-  Object.keys(tags).map((key: string) => {
-    tags[key].map((value: string) => {
+  Object.keys(tags).forEach((key: string) => {
+    tags[key].forEach((value: string) => {
       tagStrings.push(`"${key}: ${value}"`);
     });
   });
@@ -56,15 +56,14 @@ export const truncateString = (base: string, length: number): string => {
   return base;
 };
 
-// get node name from data_map node data
-export const getNodeName = (nodeData: any, maxLength: number): string => {
-  if ('Sample' in nodeData) {
+export const getNodeName = (nodeData: TreeNode, maxLength: number): string => {
+  if ('Sample' in nodeData && nodeData.Sample) {
     return truncateString(formatSubmissionNames(nodeData.Sample.submissions), maxLength);
-  } else if ('Repo' in nodeData) {
+  } else if ('Repo' in nodeData && nodeData.Repo) {
     return truncateString(nodeData.Repo.url, maxLength);
-  } else if ('Tag' in nodeData) {
+  } else if ('Tag' in nodeData && nodeData.Tag) {
     return truncateString(formatTagNames(nodeData.Tag.tags, true), maxLength);
-  } else if ('Entity' in nodeData) {
+  } else if ('Entity' in nodeData && nodeData.Entity) {
     return truncateString(nodeData.Entity.name, maxLength);
   }
   return '';
@@ -115,8 +114,7 @@ export const getEdgeLabel = (target: string, source: string, node: BranchNode, g
         return `${key}: ${value}`;
       });
     });
-    //const nodeId: string = node.direction == Direction.To ? node.node: branchId;
     return `${pairs}`;
   }
-  return '';
+  return '→';
 };

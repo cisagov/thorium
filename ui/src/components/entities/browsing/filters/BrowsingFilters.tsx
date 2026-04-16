@@ -11,6 +11,7 @@ import { OverlayWindow } from '@components/shared/windows/OverlayWindow';
 import Title from '@components/shared/titles/Title';
 import { Entities } from '@models/entities';
 import { Filters, FilterTypes } from '@models/search';
+import { getCreatePathByEntity } from '@components/entities/create/EntityCreateRoutes';
 
 interface BrowsingFiltersProps {
   onChange: (filters: Filters) => void; // call back to change filters
@@ -39,20 +40,27 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
   const filterRef = useRef(null);
   return (
     <>
-      <Row>
+      <Row className="align-items-center">
         <Col />
-        <Col className="d-flex justify-content-center">
-          {title && <Title>{title}</Title>}
-          <OverlayTipRight tip={`${hideFilters ? 'Expand' : 'Hide'} filters`}>
-            <Button ref={filterRef} variant="" className="mt-3 clear-btn" onClick={() => setHideFilters(!hideFilters)}>
-              <FaFilter size="18" />
-            </Button>
-          </OverlayTipRight>
+        <Col className="text-center">
+          <div className="d-inline-flex align-items-center justify-content-center gap-2">
+            {title && <Title className="m-0">{title}</Title>}
+            <OverlayTipRight tip={`${hideFilters ? 'Expand' : 'Hide'} filters`}>
+              <Button ref={filterRef} variant="" className="clear-btn p-0 border-0" onClick={() => setHideFilters(!hideFilters)}>
+                <FaFilter size="18" />
+              </Button>
+            </OverlayTipRight>
+          </div>
         </Col>
         <Col className="d-flex justify-content-end">
           {creatable && (
             <OverlayTipLeft tip={`Create a new ${kind}.`}>
-              <Button className="ok-btn my-3" variant="" disabled={disabled} onClick={() => navigate(`/create/${kind?.toLowerCase()}`)}>
+              <Button
+                className="ok-btn my-3"
+                variant=""
+                disabled={disabled}
+                onClick={() => navigate(`${getCreatePathByEntity(kind ? kind : Entities.Other)}`)}
+              >
                 <b>+</b>
               </Button>
             </OverlayTipLeft>

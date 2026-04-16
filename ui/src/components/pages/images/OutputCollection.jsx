@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Alert, Badge, Col, Form, Row } from 'react-bootstrap';
+import { Badge, Col, Form, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaQuestionCircle } from 'react-icons/fa';
 
 // project imports
 import FieldBadge from '@components/shared/badges/FieldBadge';
-import SelectableArray from '@components/shared/selectable/SelectableArray';
 import SelectGroups from '@components/pages/groups/SelectGroups';
-import SelectableDictionary from '@components/shared/selectable/SelectableDictionary';
+import SelectableArray from '@components/shared/inputs/selectable/SelectableArray';
+import SelectableDictionary from '@components/shared/inputs/selectable/SelectableDictionary';
 import Subtitle from '@components/shared/titles/Subtitle';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
@@ -436,11 +437,7 @@ const OutputCollectionInputs = ({ initialOutputCollection, updateRequestOutputCo
             valuePlaceholder={'updated key (optional)'}
           />
         </OverlayTipRight>
-        {errors && errors['auto_tag'] && (
-          <center>
-            <Alert variant="danger">{errors.auto_tag}</Alert>
-          </center>
-        )}
+        {errors && errors['auto_tag'] && <AlertBanner>{errors.auto_tag}</AlertBanner>}
       </Row>
       <Row className="mt-2 mb-2">
         <Col>

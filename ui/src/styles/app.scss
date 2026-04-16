@@ -32,6 +32,10 @@ $grid-breakpoints: (
   background-color: var(--thorium-nav-panel-bg);
 }
 
+.navbar-scroll-offset {
+  scroll-margin-top: 60px;
+}
+
 // use this for overriding primary panel color for things like form fields
 // directly on the body color
 .secondary-panel {

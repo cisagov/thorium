@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Col, Form, Row } from 'react-bootstrap';
+import { Col, Form, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import { FaDownload } from 'react-icons/fa';
 
 // project imports
@@ -38,9 +39,7 @@ const Download = ({ sha256 }) => {
       {downloadFileError && (
         <Row>
           <Col>
-            <Alert variant="warning" className="d-flex justify-content-center">
-              {downloadFileError}
-            </Alert>
+            <AlertBanner severity={Severity.Warning}>{downloadFileError}</AlertBanner>
           </Col>
         </Row>
       )}

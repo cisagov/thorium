@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Alert, Col, Form, Row } from 'react-bootstrap';
+import { Col, Form, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { FaQuestionCircle } from 'react-icons/fa';
 
 // project imports
@@ -371,11 +372,7 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
                     </Form.Select>
                   </Col>
                 </Row>
-                {errors && errors['cpu'] && (
-                  <Alert variant="danger" className="d-flex justify-content-center m-2">
-                    {errors.cpu}
-                  </Alert>
-                )}
+                {errors && errors['cpu'] && <AlertBanner className="m-2">{errors.cpu}</AlertBanner>}
               </Form.Group>
             </OverlayTipRight>
           </div>
@@ -409,11 +406,7 @@ const ResourceFields = ({ initialResources, setRequestResources, errors }) => {
                     </Form.Select>
                   </Col>
                 </Row>
-                {errors && errors['memory'] && (
-                  <Alert variant="danger" className="d-flex justify-content-center m-2">
-                    {errors['memory']}
-                  </Alert>
-                )}
+                {errors && errors['memory'] && <AlertBanner className="m-2">{errors['memory']}</AlertBanner>}
               </Form.Group>
             </OverlayTipRight>
           </div>

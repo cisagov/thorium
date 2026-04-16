@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert, Col, Row } from 'react-bootstrap';
+import { Col, Row } from 'react-bootstrap';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import TagBadge from '../TagBadge';
@@ -21,9 +22,9 @@ const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource
     <>
       {tagsCount == 0 && (
         <div className="px-3 py-2">
-          <Alert className="text-center ms-4 me-4" variant="info">
+          <AlertBanner severity={Severity.Info} className="ms-4 me-4">
             No Tags Found
-          </Alert>
+          </AlertBanner>
         </div>
       )}
       <Row>

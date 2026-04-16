@@ -59,25 +59,31 @@
   margin-right: 0.1em;
 
   &:disabled {
-    filter: brightness(60%);
+    filter: var(--thorium-disabled-brightness);
   }
 
   &:active {
-    filter: brightness(80%);
+    filter: var(--thorium-active-brightness);
     box-shadow: 0 0 0 0.1rem var(--thorium-highlight-panel-border);
   }
 
   &.selected {
     background-color: var(--thorium-info-secondary-bg) !important;
     border-color: var(--thorium-info-secondary-bg) !important;
+    filter: var(--thorium-selected-brightness);
+  }
+
+  &.unselected {
+    opacity: 0.65;
   }
 
   &:focus {
-    filter: brightness(80%);
+    filter: var(--thorium-hover-brightness);
   }
 
   &:hover {
-    filter: brightness(80%);
+    filter: var(--thorium-hover-brightness);
+    opacity: 1;
   }
 }
 
@@ -186,27 +192,32 @@
   border-color: colors.$tlp-outline !important;
   margin-left: 0.1em;
   margin-right: 0.1em;
-  filter: var(--thorium-disabled-brightness);
+  opacity: 0.65;
 
   &:disabled {
     filter: var(--thorium-disabled-brightness);
+    opacity: 0.5;
   }
 
   &:active {
     filter: var(--thorium-active-brightness);
+    opacity: 1;
   }
 
   &.selected {
     filter: var(--thorium-selected-brightness);
     box-shadow: 0 0 0 0.2rem var(--thorium-text);
+    opacity: 1;
   }
 
   &:focus {
     filter: var(--thorium-hover-brightness);
+    opacity: 1;
   }
 
   &:hover {
     filter: var(--thorium-hover-brightness);
+    opacity: 1;
   }
 }
 

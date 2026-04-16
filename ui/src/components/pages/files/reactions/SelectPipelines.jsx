@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Row } from 'react-bootstrap';
+import { Button, Card, Col, Row } from 'react-bootstrap';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
 import { default as MarkdownHtml } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -67,11 +68,7 @@ const SelectPipelines = ({ userInfo, setReactionsList, setError, currentSelectio
       <Card.Body className="py-0">
         <center>
           {pipelinesListErrors &&
-            pipelinesListErrors.map((error, idx) => (
-              <Alert key={`pipeline-list-error-${idx}`} variant="" className="d-flex justify-content-center danger">
-                {error}
-              </Alert>
-            ))}
+            pipelinesListErrors.map((error, idx) => <AlertBanner key={`pipeline-list-error-${idx}`}>{error}</AlertBanner>)}
           {pipelines &&
             userInfo &&
             userInfo['groups'] &&
@@ -108,9 +105,7 @@ const SelectPipelines = ({ userInfo, setReactionsList, setError, currentSelectio
                                     if (setError) setError([]);
                                   }}
                                 >
-                                  <font size="3">
-                                    <b>{pipeline.name}</b>
-                                  </font>
+                                  <b>{pipeline.name}</b>
                                 </Button>
                               </OverlayTipTop>
                             ) : (
@@ -128,9 +123,7 @@ const SelectPipelines = ({ userInfo, setReactionsList, setError, currentSelectio
                                   if (setError) setError([]);
                                 }}
                               >
-                                <font size="3">
-                                  <b>{pipeline.name}</b>
-                                </font>
+                                <b>{pipeline.name}</b>
                               </Button>
                             ),
                           )}
