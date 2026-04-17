@@ -187,7 +187,7 @@ async fn update(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Update an entity
+/// Delete an entity by id
 ///
 /// # Arguments
 ///

@@ -1,4 +1,4 @@
-//! A process extracted from a memory dump, VM, or other running systemi
+//! A process extracted from a memory dump, VM, or other running system
 //!
 //! Processes have different metadata depending on what operating system they
 //! originated from:

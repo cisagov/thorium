@@ -44,12 +44,17 @@ impl std::fmt::Display for S3Objects {
 
 impl FromStr for S3Objects {
     type Err = InvalidEnum;
-    /// Cast a str to an `ImageScaler`
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+
+    /// Cast a str to an `S3Objects`
+    ///
+    /// # Arguments
+    ///
+    /// * `val` - The str to cast
+    fn from_str(val: &str) -> Result<Self, Self::Err> {
+        match val {
             "File" => Ok(S3Objects::File),
             "Repo" => Ok(S3Objects::Repo),
-            _ => Err(InvalidEnum(format!("Unknown enum variant: {s}"))),
+            _ => Err(InvalidEnum(format!("Unknown enum variant: {val}"))),
         }
     }
 }

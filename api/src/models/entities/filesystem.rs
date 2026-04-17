@@ -66,7 +66,7 @@ impl FileSystemEntity {
         let form = form.text("kind", super::EntityKinds::FileSystem.as_str());
         // set the sha256 for this entity
         let mut form = form.text("metadata[sha256]", self.sha256);
-        // add our device metadata
+        // add the tools that created/found this file system
         for tool in self.tools {
             form = form.text("metadata[tools][]", tool);
         }

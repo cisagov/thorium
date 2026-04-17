@@ -18,6 +18,7 @@ use super::db;
 use crate::models::backends::GraphicSupport;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
 use crate::models::entities::EntityMetadataForm;
+use crate::models::entities::network_activity::{NetConState, NetworkConnection};
 use crate::models::{
     ApiCursor, AssociationKind, AssociationListOpts, AssociationRequest, AssociationTarget,
     AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
@@ -155,23 +156,43 @@ impl Entity {
             }
             EntityMetadata::WindowsProcess(win_proc) => {
                 tag!(tags, "PID", win_proc.pid.to_string());
-                opt_tag!(
-                    tags,
-                    "ParentPID",
-                    win_proc.parent_pid.map(|ppid| ppid.to_string())
-                );
+                opt_tag_to_string!(tags, "ParentPID", win_proc.parent_pid);
                 opt_tag!(tags, "ProcessName", win_proc.name.clone());
                 opt_tag!(tags, "ProcessImagePath", win_proc.image_path.clone());
                 opt_tag!(tags, "ProcessCommand", win_proc.command.clone());
-                opt_tag!(
-                    tags,
-                    "ProcessOffset",
-                    win_proc.offset.map(|offset| offset.to_string())
-                );
+                opt_tag_to_string!(tags, "ProcessOffset", win_proc.offset);
                 opt_tag_to_string!(tags, "ProcessThreads", win_proc.threads);
                 opt_tag_to_string!(tags, "ProcessHandles", win_proc.handles);
                 opt_tag_to_string!(tags, "ProcessIsWow64", win_proc.is_wow64);
                 opt_tag_to_string!(tags, "ProcessSessionID", win_proc.session_id);
+            }
+            EntityMetadata::NetworkConnection(conn) => {
+                tag!(tags, "NetConnSource", conn.source.to_string());
+                // add our source port info if we have it
+                if let Some(port) = &conn.source_port {
+                    tag!(tags, "NetConnSourcePort", port.to_string());
+                    // also add a addr/port combo
+                    tag!(
+                        tags,
+                        "NetConnSourceAddrAndPort",
+                        format!("{}:{port}", conn.source)
+                    );
+                }
+                tag!(tags, "NetConnDest", conn.destination.to_string());
+                // add our destination port info
+                tag!(tags, "NetConnDestPort", conn.destination_port.to_string());
+                // also add a addr/port combo
+                tag!(
+                    tags,
+                    "NetConnDestAddrAndPort",
+                    format!("{}:{}", conn.destination, conn.destination_port)
+                );
+                // add the state of this connection
+                opt_tag_to_string!(tags, "NetConnState", conn.state);
+                // add this network connections pid
+                opt_tag_to_string!(tags, "NetConPID", conn.pid);
+                // add this network connections owner process
+                opt_tag!(tags, "NetConProcess", conn.process.clone());
             }
             // other and windows process trees have no taggable data
             EntityMetadata::Other
@@ -227,14 +248,15 @@ impl Entity {
                     // get all of the entities we found
                     metadata.vendors = db::entities::get_many(&user.groups, &ids, shared).await?;
                 }
-                // vendor/collection/other has no data that we need to retrieve
+                // vendor/collection/... has no data that we need to retrieve
                 EntityMetadata::Vendor(_)
                 | EntityMetadata::Collection(_)
                 | EntityMetadata::Other
                 | EntityMetadata::FileSystem(_)
                 | EntityMetadata::Folder(_)
                 | EntityMetadata::WindowsProcessTree(_)
-                | EntityMetadata::WindowsProcess(_) => (),
+                | EntityMetadata::WindowsProcess(_)
+                | EntityMetadata::NetworkConnection(_) => (),
             }
         }
         Ok(self)
@@ -384,6 +406,16 @@ impl Entity {
                 update_opt!(win_proc.session_id, form.session_id);
                 update_opt!(win_proc.create_time, form.create_time);
                 update_opt!(win_proc.exit_time, form.exit_time);
+            }
+            EntityMetadata::NetworkConnection(conn) => {
+                update_opt!(conn.protocol, form.protocol);
+                update!(conn.source, form.source);
+                update_opt!(conn.source_port, form.source_port);
+                update!(conn.destination, form.destination);
+                update_opt!(conn.state, form.state);
+                update_opt!(conn.pid, form.pid);
+                update_opt!(conn.process, form.process);
+                update_opt!(conn.create_time, form.create_time);
             }
             // other kinds have no metadata to update
             EntityMetadata::Other | EntityMetadata::Folder(_) => (),
@@ -681,6 +713,7 @@ impl Entity {
             | EntityMetadata::Folder(_)
             | EntityMetadata::WindowsProcessTree(_)
             | EntityMetadata::WindowsProcess(_)
+            | EntityMetadata::NetworkConnection(_)
             | EntityMetadata::Other => (),
         }
     }
@@ -716,6 +749,7 @@ impl EntityMetadata {
             EntityMetadata::Folder(folder) => Some(serialize!(folder)),
             EntityMetadata::WindowsProcessTree(win_proc_tree) => Some(serialize!(win_proc_tree)),
             EntityMetadata::WindowsProcess(win_proc) => Some(serialize!(win_proc)),
+            EntityMetadata::NetworkConnection(conn) => Some(serialize!(conn)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -990,6 +1024,14 @@ impl EntityMetadataForm {
             "session_id" => self.session_id = Some(field.text().await?.parse()?),
             "create_time" => self.create_time = Some(field.text().await?.parse()?),
             "exit_time" => self.exit_time = Some(field.text().await?.parse()?),
+            // the network connection form fields
+            "protocol" => self.protocol = Some(field.text().await?.parse()?),
+            "source" => self.source = Some(field.text().await?.parse()?),
+            "source_port" => self.source_port = Some(field.text().await?.parse()?),
+            "destination" => self.destination = Some(field.text().await?.parse()?),
+            "destination_port" => self.destination_port = Some(field.text().await?.parse()?),
+            "state" => self.state = Some(field.text().await?.parse::<NetConState>()?),
+            "process" => self.process = Some(field.text().await?),
             maybe_list => {
                 match maybe_list {
                     "urls" => {
@@ -1071,6 +1113,9 @@ impl EntityMetadataForm {
             )),
             EntityKinds::WindowsProcess => Ok(EntityMetadata::WindowsProcess(
                 WindowsProcessEntity::from_form(self)?,
+            )),
+            EntityKinds::NetworkConnection => Ok(EntityMetadata::NetworkConnection(
+                NetworkConnection::from_form(self)?,
             )),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }

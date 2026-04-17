@@ -68,6 +68,8 @@ pub enum AssociationKind {
     ProcessTreeIn,
     /// A Process in a process tree or a child process
     ChildProcess,
+    /// Opens or receives data from a network connection
+    HasNetworkConnection,
 }
 
 impl std::fmt::Display for AssociationKind {
@@ -92,6 +94,7 @@ impl std::fmt::Display for AssociationKind {
             AssociationKind::FileIn => write!(f, "FileIn"),
             AssociationKind::ProcessTreeIn => write!(f, "ProcessTreeIn"),
             AssociationKind::ChildProcess => write!(f, "ChildProcess"),
+            AssociationKind::HasNetworkConnection => write!(f, "HasNetworkConnection"),
         }
     }
 }
@@ -118,6 +121,7 @@ impl AssociationKind {
             AssociationKind::FileIn => "FileIn",
             AssociationKind::ProcessTreeIn => "ProcessTreeIn",
             AssociationKind::ChildProcess => "ChildProcess",
+            AssociationKind::HasNetworkConnection => "HasNetworkConnection",
         }
     }
 }
@@ -146,6 +150,7 @@ impl FromStr for AssociationKind {
             "FileIn" => Ok(AssociationKind::FileIn),
             "ProcessTreeIn" => Ok(AssociationKind::ProcessTreeIn),
             "ChildProcess" => Ok(AssociationKind::ChildProcess),
+            "HasNetworkConnection" => Ok(AssociationKind::HasNetworkConnection),
             _ => Err(InvalidEnum(format!("Unknown AssociationKind: {raw}"))),
         }
     }

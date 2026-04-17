@@ -5,6 +5,7 @@ use futures::stream::{self, StreamExt};
 use gxhash::GxHasher;
 use std::collections::HashSet;
 use std::hash::Hasher;
+use std::net::IpAddr;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
 use uuid::Uuid;
 
@@ -26,6 +27,7 @@ pub mod vendors;
 
 use devices::DeviceEntity;
 use filesystem::{FileSystemEntity, FileSystemFolderEntity};
+use network_activity::{NetConState, NetworkConnection, TransportLayerProtocol};
 use processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 use shared::CriticalSector;
 
@@ -87,6 +89,13 @@ cfg_if::cfg_if! {
             pub session_id: Option<u32>,
             pub create_time: Option<DateTime<Utc>>,
             pub exit_time: Option<DateTime<Utc>>,
+            pub protocol: Option<TransportLayerProtocol>,
+            pub source: Option<IpAddr>,
+            pub source_port: Option<u16>,
+            pub destination: Option<IpAddr>,
+            pub destination_port: Option<u16>,
+            pub state: Option<NetConState>,
+            pub process: Option<String>,
         }
 
         impl EntityMetadataForm {
@@ -184,6 +193,14 @@ cfg_if::cfg_if! {
             pub session_id: Option<u32>,
             pub create_time: Option<DateTime<Utc>>,
             pub exit_time: Option<DateTime<Utc>>,
+            pub protocol: Option<TransportLayerProtocol>,
+            pub source: Option<IpAddr>,
+            pub source_port: Option<u16>,
+            pub destination: Option<IpAddr>,
+            pub destination_port: Option<u16>,
+            pub state: Option<NetConState>,
+            pub pid: Option<u64>,
+            pub process: Option<String>,
         }
     }
 }
@@ -510,6 +527,8 @@ pub enum EntityMetadata {
     WindowsProcessTree(WindowsProcessTreeEntity),
     /// A Windows process
     WindowsProcess(WindowsProcessEntity),
+    /// A Network connection
+    NetworkConnection(NetworkConnection),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
