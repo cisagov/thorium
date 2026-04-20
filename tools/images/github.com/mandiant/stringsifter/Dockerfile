@@ -1,17 +1,19 @@
-ARG IMAGE="ubuntu:22.04"
+ARG IMAGE="python:3.11-slim"
 FROM $IMAGE
 
 WORKDIR /app
 
-# install python > version 3.9
-RUN apt update && \
-    apt install -y software-properties-common build-essential gcc \
-                   python3 python3-pip python3-dev python3-distutils -y && \
-    apt clean && \
+# lightgbm (a stringsifter dependency) ships a native library that links against
+# the GNU OpenMP runtime; libgomp1 is not present in the -slim base image
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --upgrade pip && \
-    python3 -m pip install stringsifter
+# stringsifter pins numpy==1.24.4, which only has wheels up through Python 3.11;
+# on 3.11 the whole dependency tree resolves to prebuilt wheels (no toolchain)
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install stringsifter
 
 COPY wrapper.sh /app/.
 

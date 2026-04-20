@@ -1,39 +1,39 @@
 {
-  "group": "static",
   "name": "pdf-analyze",
+  "group": "static",
   "order": [
     [
       "pdf2text"
     ]
   ],
+  "description": "Analyze PDF files",
   "sla": 640800,
   "triggers": {
-    "RunOnRFC822": {
-      "Tag": {
-        "tag_types": [
-          "Files"
-        ],
-        "required": {
-          "MIMEType": [
-            "message/rfc822"
-          ]
-        },
-        "not": {}
-      }
-    },
     "RunOnPDF": {
       "Tag": {
-        "tag_types": [
-          "Files"
-        ],
+        "not": {},
         "required": {
           "FileType": [
             "PDF"
           ]
         },
-        "not": {}
+        "tag_types": [
+          "Files"
+        ]
+      }
+    },
+    "RunOnRFC822": {
+      "Tag": {
+        "not": {},
+        "required": {
+          "MIMEType": [
+            "message/rfc822"
+          ]
+        },
+        "tag_types": [
+          "Files"
+        ]
       }
     }
-  },
-  "description": "Analyze PDF files"
+  }
 }

@@ -2,7 +2,7 @@ name: Analysis Tool Builds
 
 on:
   schedule:
-  - cron: '0 0 * * *'
+    - cron: '0 0 * * *'
   push:
     branches:
       - main
@@ -20,15 +20,16 @@ jobs:
     outputs:
       matrix: ${{ steps.generate-tool-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
-      - name: list images to build
+      - uses: actions/checkout@v7
+
+      - name: Generate tool build matrix
         id: generate-tool-matrix
         run: |
           MATRIX=$(python3 tools/scripts/build-actions-matrix.py tools/toolbox.json)
-          echo "matrix=$(echo $MATRIX | jq -c .)" >> $GITHUB_OUTPUT
-        
+          echo "matrix=$(echo "$MATRIX" | jq -c .)" >> "$GITHUB_OUTPUT"
+
   build-tools:
-    name: Build Thorium Tool Image - #${{ matrix.tool.image_name }}
+    name: Build Thorium Tool Image - ${{ matrix.tool.name }}:${{ matrix.tool.version }}
     needs: generate-tool-builds
     runs-on: ubuntu-latest
     permissions:
@@ -39,13 +40,34 @@ jobs:
       max-parallel: 4
       matrix:
         tool: ${{ fromJson(needs.generate-tool-builds.outputs.matrix) }}
+
     steps:
       - uses: actions/checkout@v4
-      - name: Login to Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Build Tool Container Image
+
+      - name: Build, tag, and push tool container image
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # Compatibility for toolbox.json entries that use:
+          #   "user": "$USER"
+          USER: ${{ github.actor }}
+
+          # Used when toolbox.json base_image.token references:
+          #   "token": "$BASE_IMAGE_TOKEN"
+          # or:
+          #   "token": "BASE_IMAGE_TOKEN"
+          BASE_IMAGE_TOKEN: ${{ secrets.BASE_IMAGE_TOKEN }}
+
+          # Used when toolbox.json base_image.user references:
+          #   "user": "$BASE_IMAGE_USER"
+          # or:
+          #   "user": "BASE_IMAG_USER"
+          BASE_IMAGE_USER: ${{ secrets.BASE_IMAGE_USER }}
         run: |
-          IMAGE=${{ matrix.tool.image_name}}
-          BUILD_PATH=tools/${{ matrix.tool.build_path}}
-          docker build --file ${BUILD_PATH}/Dockerfile --tag $IMAGE --label "runnumber=${GITHUB_RUN_ID}" ${BUILD_PATH}
-          docker push $IMAGE
+          python3 tools/scripts/build-tool-image.py \
+            --build-path "tools/${{ matrix.tool.build_path }}" \
+            --image-tags '${{ toJson(matrix.tool.image_tags) }}' \
+            --base-image '${{ toJson(matrix.tool.base_image) }}' \
+            --label "runnumber=${GITHUB_RUN_ID}" \
+            --registry-login "ghcr.io=GITHUB_ACTOR=GITHUB_TOKEN"

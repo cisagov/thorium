@@ -8,7 +8,6 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-
 ADD https://bootstrap.pypa.io/pip/2.7/get-pip.py get-pip.py
 RUN python2 get-pip.py
 RUN pip2 install balbuzard

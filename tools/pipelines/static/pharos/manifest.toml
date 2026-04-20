@@ -1,7 +1,5 @@
-
 name = "pharos"
 type = "pipeline"
-description = "https://github.com/cmu-sei/pharos"
 version = "latest"
 config_from = "pharos.json"
 

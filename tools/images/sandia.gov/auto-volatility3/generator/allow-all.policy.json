@@ -1,0 +1,32 @@
+{
+  "name": "allow-all",
+  "groups": [
+    "static"
+  ],
+  "ingress": [
+    {
+      "allowed_ips": [],
+      "allowed_groups": [],
+      "allowed_tools": [],
+      "allowed_local": false,
+      "allowed_internet": false,
+      "allowed_all": true,
+      "ports": [],
+      "allowed_custom": []
+    }
+  ],
+  "egress": [
+    {
+      "allowed_ips": [],
+      "allowed_groups": [],
+      "allowed_tools": [],
+      "allowed_local": false,
+      "allowed_internet": false,
+      "allowed_all": true,
+      "ports": [],
+      "allowed_custom": []
+    }
+  ],
+  "forced_policy": false,
+  "default_policy": false
+}

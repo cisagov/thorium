@@ -1,0 +1,1 @@
+Dump metadata from an Sqlite database

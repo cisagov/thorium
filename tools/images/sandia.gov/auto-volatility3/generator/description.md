@@ -1,0 +1,1 @@
+Automatically determines the correct OS type for a memory dump and then fans out analyzing it with different modules.

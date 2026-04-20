@@ -1,7 +1,5 @@
-
 name = "antivirus"
 type = "pipeline"
-description = "Antivirus scanners"
 version = "latest"
 config_from = "antivirus.json"
 

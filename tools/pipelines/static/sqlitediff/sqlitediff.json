@@ -1,12 +1,12 @@
 {
+  "name": "sqlitediff",
   "group": "static",
-  "name": "sqldiff",
   "order": [
     [
-      "sqldiff"
+      "sqlitediff"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

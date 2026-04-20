@@ -11,7 +11,7 @@ jobs:
   build-mdbook-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cargo install mdbook
         run: cargo install mdbook
       - name: Build mdbook docs
@@ -32,7 +32,7 @@ jobs:
   build-ui-bundle:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build UI Bundle
         run: |
           cd ui
@@ -51,7 +51,7 @@ jobs:
     env:
         RUSTFLAGS: "-C target-feature=+aes,+sse2"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build binaries
         run: |
           rustup default nightly
@@ -107,7 +107,7 @@ jobs:
             flags: ""
     runs-on: ${{ matrix.platform.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install bindgen-cli
         run: |
           grep -q "Ubuntu" /etc/os-release && sudo apt update && sudo apt install gcc build-essential libssl-dev pkg-config libclang-dev clang-15 musl-tools cmake libvirt-dev jq memstat sysstat -y
@@ -145,7 +145,7 @@ jobs:
     env:
       RUSTFLAGS: "-C target-feature=+aes,+sse2"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install bindgen-cli
         run: |
           sudo apt update && sudo apt install gcc gcc-mingw-w64-x86-64 build-essential libssl-dev pkg-config libclang-dev clang-15 musl-tools cmake libvirt-dev jq memstat sysstat -y
@@ -177,7 +177,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Download UI Bundle Artifacts

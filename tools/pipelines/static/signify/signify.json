@@ -1,39 +1,39 @@
 {
-  "group": "static",
   "name": "signify",
+  "group": "static",
   "order": [
     [
       "signify"
     ]
   ],
+  "description": null,
   "sla": 640800,
   "triggers": {
     "RunOnDll": {
       "Tag": {
-        "tag_types": [
-          "Files"
-        ],
+        "not": {},
         "required": {
           "FileTypeExtension": [
             "dll"
           ]
         },
-        "not": {}
+        "tag_types": [
+          "Files"
+        ]
       }
     },
     "RunOnExe": {
       "Tag": {
-        "tag_types": [
-          "Files"
-        ],
+        "not": {},
         "required": {
           "FileTypeExtension": [
             "exe"
           ]
         },
-        "not": {}
+        "tag_types": [
+          "Files"
+        ]
       }
     }
-  },
-  "description": null
+  }
 }

@@ -1,7 +1,5 @@
-
 name = "sqlitediff"
 type = "pipeline"
-description = ""
 version = "latest"
 config_from = "sqlitediff.json"
 
