@@ -6,11 +6,11 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use thorium::Thorium;
 use thorium::models::{
     CommitListOpts, Commitish, CommitishKinds, GenericJobArgs, ReactionRequest, Repo,
     RepoDependencyRequest, TagRequest,
 };
-use thorium::Thorium;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_stream::wrappers::LinesStream;
@@ -20,7 +20,7 @@ mod ingest;
 
 use self::ingest::{IngestJob, IngestWorker};
 
-use super::{progress, update, Controller};
+use super::{Controller, progress, update};
 use crate::args::repos::{
     CompileRepos, ContributorsRepos, DescribeRepos, DownloadRepos, GetRepos, IngestRepos,
     ListCommits, RepoTarget, Repos, UpdateRepos,

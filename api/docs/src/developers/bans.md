@@ -56,10 +56,12 @@ and inform a Thorium admin, the bans will be lifted and we can again use our pip
 
 A ban's notification should contain all the relevant info regarding a ban, but you can also see the ban
 itself in the affected entity's metadata. You can view an entity's bans together with its metadata by
-using the entity's respective `describe` command in Thorctl. For images, you would run:
+using the entity's respective `describe` command in Thorctl. By default `describe` prints a
+human-readable summary that lists any bans. To get the full raw data, including the complete ban
+records, pass `--format json`. For images, you would run:
 
 ```Bash
-thorctl images describe <IMAGE>
+thorctl images describe <IMAGE> --format json
 ```
 
 This will output the image's data in JSON format, including the image's bans:

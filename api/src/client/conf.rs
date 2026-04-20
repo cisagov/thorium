@@ -124,6 +124,43 @@ pub struct AISettings {
     pub model: String,
 }
 
+/// The container CLI tool thorctl shells out to for image operations
+///
+/// podman is CLI-compatible with docker for the verbs thorctl uses (pull, save,
+/// load, tag, push, build), so the runtime only changes which binary is invoked.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum ContainerRuntime {
+    /// The docker CLI (`docker`)
+    #[default]
+    Docker,
+    /// The podman CLI (`podman`)
+    Podman,
+}
+
+impl ContainerRuntime {
+    /// The executable name to invoke for this runtime
+    #[must_use]
+    pub fn binary(self) -> &'static str {
+        // map each runtime to the CLI binary thorctl spawns
+        match self {
+            ContainerRuntime::Docker => "docker",
+            ContainerRuntime::Podman => "podman",
+        }
+    }
+}
+
+impl std::fmt::Display for ContainerRuntime {
+    /// Format the runtime as its binary name (used in user-facing messages)
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - The formatter to write the binary name into
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.binary())
+    }
+}
+
 /// A config for running Thorctl in user mode
 ///
 /// This will not give the user the ability to deploy clusters/agents
@@ -146,6 +183,9 @@ pub struct CtlConf {
     /// The default editor Thorctl will use
     #[serde(default = "default_default_editor")]
     pub default_editor: String,
+    /// The container CLI thorctl uses for image operations (auto-detected when unset)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_runtime: Option<ContainerRuntime>,
     /// The settings to use when using AI
     pub ai: Option<AISettings>,
 }
@@ -165,6 +205,7 @@ impl CtlConf {
             client: ClientSettings::default(),
             skip_insecure_warning: None,
             default_editor: default_default_editor(),
+            container_runtime: None,
             ai: None,
         }
     }

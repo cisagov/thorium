@@ -21,11 +21,12 @@ Before doing anything else, determine the Thorium instance URL. Follow these ste
 
 2. **If not reachable, check if minithor is available and try to expose:**
    ```sh
-   test -x /usr/bin/minithor
+   command -v minithor || test -x /usr/bin/minithor
    ```
-   If minithor exists, run:
+   `minithor` is normally on your `PATH`; some environments instead place it at
+   `/usr/bin/minithor`, so fall back to that path if it isn't found. If minithor exists, run:
    ```sh
-   /usr/bin/minithor expose
+   minithor expose
    ```
    Wait a few seconds, then re-check health:
    ```sh
@@ -38,6 +39,16 @@ Before doing anything else, determine the Thorium instance URL. Follow these ste
    Set `THORIUM_URL` to the user-provided URL.
 
 Use `THORIUM_URL` as the base for all URLs below.
+
+> **Sandboxed agents (e.g. Claude Code):** If you are a coding agent running commands in a network
+> sandbox, connections to the Thorium API — including a local minithor at `http://localhost:8080`
+> and any `minithor expose` port-forward — may be blocked by default. If health checks, `thorctl`,
+> `curl`, or API calls fail with connection-refused/permission/"operation not permitted" errors that
+> don't match a real outage, the request likely needs to reach Thorium **outside the sandbox**:
+> allowlist the Thorium host/port (e.g. `localhost:8080`, the backing-service ports from
+> `minithor expose --dev`, and any remote `THORIUM_URL`) or run that command with the sandbox
+> disabled. Use your agent's sandbox controls to permit the connection before assuming the instance
+> is down.
 
 ## Step 2: Resource Directory
 
@@ -52,6 +63,11 @@ These are the key resources available on a Thorium instance:
 | MCP Server | `{THORIUM_URL}/api/mcp` | Model Context Protocol endpoint for AI tool use (requires Authorization header) |
 
 ## Step 3: API Authentication
+
+The Thorium API is a REST API served under `{THORIUM_URL}/api/`. Connecting to it is the same for
+a **local** instance (e.g. minithor at `http://localhost:8080`, see Step 1) and a **remote** one —
+only the base URL differs. To explore every endpoint and its request/response schema interactively,
+open the Swagger UI at `{THORIUM_URL}/api/docs/swagger-ui/`.
 
 All API routes (except `/api/health`, `/api/banner`, and `/api/`) require authentication via the `Authorization` header. Two methods are supported:
 
@@ -170,36 +186,49 @@ The MCP server at `/api/mcp` exposes these tools (requires `Authorization` heade
 
 ## Step 5: thorctl CLI (User/Developer Tool)
 
-`thorctl` is the command-line tool for large-scale Thorium operations.
+`thorctl` is the command-line tool for large-scale Thorium operations (file/repo upload and
+download, image/pipeline/toolbox management, running reactions, tagging, search, and more). It
+talks to the same REST API as the Web UI and works against any reachable instance — local
+(minithor) or remote.
 
-### Installation
+### Setup (get started)
 
-`thorctl` comes pre-installed with `minithor deploy`. Check if it is already available:
+1. **Obtain the binary.** `minithor deploy` installs `thorctl` automatically. Otherwise check for
+   it and install from the instance if missing:
 
-```sh
-which thorctl
-```
+   ```sh
+   which thorctl  # already installed?
+   # install (or update) directly from the target instance:
+   curl {THORIUM_URL}/api/binaries/install-thorctl.sh | bash -s -- {THORIUM_URL}
+   ```
 
-If not found, install it manually:
+   The script downloads the build matching the instance; `thorctl update` updates it later.
 
-```sh
-curl {THORIUM_URL}/api/binaries/install-thorctl.sh | bash -s -- {THORIUM_URL}
-```
+2. **Authenticate / choose a cluster.** `login` points thorctl at an instance and stores a token:
 
-### Authentication
+   ```sh
+   thorctl login {THORIUM_URL}                 # prompts for username + password interactively
+   thorctl login {THORIUM_URL} --user <name>   # non-interactive: add --password <pass> for CI
+   thorctl login {THORIUM_URL} --clear-settings # reset config and start fresh for this instance
+   ```
 
-```sh
-thorctl login {THORIUM_URL}
-```
+   For self-signed/dev certs, `login` accepts `--invalid-certs`, `--invalid-hostnames`, and
+   `--certificate-authorites <path>`.
 
-Config is stored at `~/.thorium/config.yml`.
+3. **Config file.** Credentials and settings are written to `~/.thorium/config.yml`. Point any
+   command at a different config (e.g. a second cluster) with the global `--config <path>` flag, or
+   supply a standalone keys file with `--keys <path>`. `thorctl config` edits these settings.
+
+See `{THORIUM_URL}/api/docs/user/getting_started/thorctl.html` for per-OS install detail, and
+`{THORIUM_URL}/api/docs/user/getting_started/login.html` /
+`{THORIUM_URL}/api/docs/user/getting_started/registration.html` for account/login detail.
 
 ### Key Subcommands
 
 | Command | Description |
 |---------|-------------|
-| `thorctl login <url>` | Authenticate with a Thorium instance |
-| `thorctl clusters` | View cluster node status and worker info |
+| `thorctl login <url>` | Authenticate with a Thorium instance (see Setup above) |
+| `thorctl clusters status` / `workers` | View cluster node resource status and per-worker info |
 | `thorctl groups` | List and describe groups you belong to |
 | `thorctl files` | Upload, download, get, count, describe, and delete files |
 | `thorctl images` | Get, describe, edit, import/export images; manage image bans and notifications |
@@ -213,11 +242,14 @@ Config is stored at `~/.thorium/config.yml`.
 | `thorctl cart` | Cart (encrypt/neuter) files locally |
 | `thorctl uncart` | Uncart files locally |
 | `thorctl run` | Create a reaction, monitor it, and download results in one step |
-| `thorctl toolbox` | Import and update toolboxes (pre-configured tool/pipeline collections) |
+| `thorctl toolbox` | Scaffold (`init`), `build`, `build-images`, `import`, `export`, `diff`, and `remove` toolboxes — portable tool/pipeline collections (see Step 10 and `{THORIUM_URL}/api/docs/user/developers/toolbox.html`) |
 | `thorctl config` | Modify thorctl configuration settings |
 | `thorctl update` | Update thorctl binary |
 
 Use `thorctl -h` or `thorctl <subcommand> -h` for detailed help on any command.
+
+> Building, integrating, or distributing your own tools? See **Step 10** for the developer
+> workflow (image/pipeline `import`/`export` vs the `toolbox` subcommands, with tradeoffs).
 
 ## Step 6: thoradm CLI (Admin Tool)
 
@@ -284,19 +316,56 @@ For full thoradm documentation, see the User Docs at `{THORIUM_URL}/api/docs/use
 
 ## Step 7: minithor (Local Development)
 
-Not all Thorium deployments use minithor — it is specific to local development environments running on Minikube. Check if it is available before using any of the commands below:
+`minithor` stands up a **single-node Thorium stack on Minikube** — a self-contained local instance
+for developing features against, and for building/testing/curating tools. It is not highly available
+and is for development/testing only (or small offline fly-away kits), not production. A deploy brings
+up all backing services (Redis, Elasticsearch, ScyllaDB, MinIO/S3, Postgres, Quickwit, Jaeger), the
+Thorium operator and `ThoriumCluster`, a default admin user, a `static` group, an `allow-all` network
+policy, and (optionally) an in-cluster container registry; it also installs `thorctl` and imports the
+default toolbox. Backing-service passwords are randomly generated per deploy.
+
+Requirements: a container runtime (podman or docker; `kvm2` also works on Linux) and a beefy host
+(16+ GiB RAM, 8+ CPUs, 100+ GiB disk). It picks the best available driver (podman > docker > kvm2).
+
+Not all Thorium deployments use minithor. Check if it is available before using any of the commands below:
 
 ```sh
-which minithor
+command -v minithor || test -x /usr/bin/minithor
 ```
 
-If `minithor` is not found, this environment may be using a different deployment method and these commands will not apply.
+`minithor` is normally on your `PATH`; some environments instead place it at `/usr/bin/minithor`,
+so check that path if it isn't found. If neither resolves, this environment uses a different
+deployment method and these commands do not apply.
+
+### Stand it up
+
+```sh
+minithor minikube install   # first time only: install minikube + start the k8s cluster
+minithor deploy             # deploy all services + create admin user (default: test / INSECURE_DEV_PASSWORD)
+minithor expose             # port-forward the API to http://localhost:8080
+```
+
+`deploy` accepts `--user`/`--password`/`--rand-password` to set the admin credentials,
+`--registry`/`--registry-user <name>` to deploy the container registry, and `--config <path>` for a
+custom `thorium-cluster.yml`. After `minithor stop` or a reboot, resume with `minithor start` then
+`minithor expose` again.
+
+### Reach the running instance
+
+Once exposed, `THORIUM_URL=http://localhost:8080` (Step 1). Log in via the UI or
+`thorctl login http://localhost:8080` with the deploy credentials, or hit the API directly (Step 3).
+The instance serves its own docs at the same paths under `{THORIUM_URL}/api/docs/...` (Step 2) —
+the user docs, Swagger UI, and rustdoc are all reachable locally at `http://localhost:8080/api/docs/...`,
+so every doc link in this guide resolves against the running minithor instance, not just a remote one.
+`minithor expose --dev` also forwards the backing-service ports (Elastic, Kibana, Redis, MinIO,
+Scylla), and `minithor get-config` writes the cluster config (DB credentials) to `~/thorium.yml` —
+needed by `thoradm` (Step 6).
 
 | Command | Description |
 |---------|-------------|
 | `minithor minikube install` | Install minikube and start a Kubernetes cluster |
-| `minithor deploy` | Deploy all Thorium services and backing infrastructure (includes a container registry) |
-| `minithor expose` | Port-forward Thorium API to localhost:8080 (and the registry to localhost:5000) |
+| `minithor deploy` | Deploy all Thorium services and backing infrastructure (add `--registry` for an in-cluster registry) |
+| `minithor expose` | Port-forward the Thorium API to localhost:8080 (and the registry to localhost:5000 when one was deployed) |
 | `minithor expose --port <port>` | Port-forward the API to a custom local port |
 | `minithor expose --dev` | Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla). See "Testing locally" below — Scylla requires special handling |
 | `minithor expose --status` | Show which port-forwards are running |
@@ -320,7 +389,8 @@ host, and a config whose connection fields point at those local ports.
 minithor expose --dev
 ```
 
-This forwards, in addition to the API (`localhost:8080`) and registry (`localhost:5000`):
+This forwards, in addition to the API (`localhost:8080`) and the registry (`localhost:5000`,
+when one was deployed):
 
 | Service | Local address | Notes |
 |---------|---------------|-------|
@@ -414,7 +484,8 @@ on macOS and falls back from `ss` to `lsof` for stale-port detection.
 
 ### Container Registry
 
-`minithor deploy` deploys a container registry in the `thorium` namespace. Use `--registry` to enable it, or `--registry-user <name>` to enable it with basic auth.
+`minithor deploy --registry` deploys a container registry in the `thorium` namespace; use
+`--registry-user <name>` to enable it with basic auth (password auto-generated and printed).
 
 | Context | Registry Address |
 |---------|-----------------|
@@ -482,10 +553,179 @@ Entities support tags, images, and group-based access control.
 
 **Trees** build relationship graphs across samples, repos, and entities to visualize how data is connected.
 
+## Step 10: Building, Integrating & Testing Tools (Developer Workflow)
+
+This section is for developers **building, integrating, and testing their own tools (images) and pipelines** in Thorium — packaging them as Thorium images, wiring them into pipelines, and distributing them as reusable toolboxes. It builds on the container registry (Step 7) and the images-vs-pipelines model (Step 9); see those rather than re-reading them here.
+
+> **Full toolbox reference (deep links).** The authoritative toolbox docs are the *Toolboxes*
+> page of the User Docs. Jump straight to a section (anchors follow the headings):
+> - Overview & command table — `{THORIUM_URL}/api/docs/user/developers/toolbox.html#what-is-a-toolbox`
+> - Which command/flag for which task — `…/toolbox.html#which-commandflag-for-which-task`
+> - Toolbox layout — `…/toolbox.html#toolbox-layout`
+> - Tool docs (`description.md`) — `…/toolbox.html#tool-docs-descriptionmd`
+> - Toolbox config (`config.toml`) — `…/toolbox.html#toolbox-config-configtoml`
+> - Image manifest (`manifest.toml`) — `…/toolbox.html#image-manifest-manifesttoml`
+> - Reusing another image's container (`image_from`) — `…/toolbox.html#reusing-another-images-container-image_from`
+> - Pipeline manifest (`manifest.toml`) — `…/toolbox.html#pipeline-manifest-manifesttoml`
+> - How container image tags are built — `…/toolbox.html#how-container-image-tags-are-built`
+> - Creating a toolbox from scratch — `…/toolbox.html#creating-a-toolbox-from-scratch`
+> - Building images locally — `…/toolbox.html#building-images-locally`
+> - Base images (`[base_image]`) — `…/toolbox.html#base-images-base_image`
+> - Exporting from a running instance — `…/toolbox.html#exporting-from-a-running-instance`
+> - Importing into an instance — `…/toolbox.html#importing-into-an-instance`
+> - Diffing a toolbox against an instance — `…/toolbox.html#diffing-a-toolbox-against-an-instance`
+> - Network policies — `…/toolbox.html#network-policies`
+> - Removing a toolbox — `…/toolbox.html#removing-a-toolbox`
+> - Offline transfer with bundled images — `…/toolbox.html#offline-transfer-with-bundled-images`
+>
+> (If the API is offline, the same page is mirrored under `https://cisagov.github.io/thorium/`.)
+
+### When to use which
+
+- **`thorctl images` / `thorctl pipelines` `import`/`export`** — round-trip a **single** image or pipeline that is **already integrated** into Thorium. Pull one existing tool's config (and its container image) out to disk, move it, and push it back. These operate on what already exists; they do **not** scaffold a new tool's config.
+- **`thorctl toolbox` (`init` + `build` + `build-images` + `import`/`export`)** — **integrate brand-new tools** (toolbox `init` is the only command that *scaffolds* image/pipeline config files from scratch) and **curate, version, and distribute larger collections** of tools as a single unit (`toolbox.json`).
+- **Both support offline bundling** for moving tools between segmented/air-gapped networks (via different mechanisms — see Tradeoffs).
+
+### Working inside a toolbox — the build/test loop
+
+A toolbox is a directory of tool folders rolled into one `toolbox.json`. It is **anchored on its
+`config.toml`**: that file defines the toolbox identity (name, registry) and is what `build`,
+`export`, and `init` resolve against.
+
+```
+my-toolbox/
+├── config.toml              # toolbox-wide: name, registry, registries, image_path_prefix,
+│                            #   export_image_path, export_pipeline_path, bundled_images, [base_image]
+├── toolbox.json             # generated by `build` (and `export`)
+├── images/<tool>/           # per image: manifest.toml + <name>.json + description.md + Dockerfile
+│                            #   (+ <name>.tar.gz only in --with-images bundles)
+└── pipelines/<tool>/        # per pipeline: manifest.toml + <name>.json + description.md
+```
+
+`build` discovers `manifest.toml` files at **any depth**, so the layout is flexible;
+`export_image_path` / `export_pipeline_path` only control where `export` *places* dirs (default
+`images`/`pipelines`).
+
+**End-to-end loop to build out and test a new tool:**
+
+```sh
+# 1. Scaffold a toolbox: one or more image build dirs + a pipeline binding images.
+#    config.toml lands in --toolbox-dir (default: cwd). Add -n for non-interactive defaults.
+thorctl toolbox init toolbox -i images/clamav,images/yara -p pipelines/av:clamav,yara -g <group> \
+    [--registry <reg>] [--image-path images --pipeline-path pipelines]
+
+# 2. Edit the tool: write its Dockerfile and tune images/<tool>/<name>.json + manifest.toml
+#    (description.md becomes the tool's description on build).
+
+# 3. Build the manifest. --path (crawl root) and --output (toolbox.json) both DEFAULT to the
+#    config.toml's directory; override independently. -c points at a non-cwd config.toml.
+thorctl toolbox build                       # reads ./config.toml, writes ./toolbox.json
+thorctl toolbox build -c sub/config.toml    # builds the toolbox in sub/, writes sub/toolbox.json
+
+# 4. Build & push the container images straight from toolbox.json (forks without CI).
+thorctl toolbox build-images ./toolbox.json --push      # everything buildable
+thorctl toolbox build-images ./toolbox.json -i clamav   # just one image
+#   useful: --no-cache, --pull, --tag-suffix -mybranch, --base-image ARG=IMAGE
+
+# 5. Import into an instance to test (local path, directory, or URL).
+thorctl toolbox import ./toolbox.json [--group-override <group>]
+
+# 6. Run it (Step 9), inspect results, iterate, then re-build + re-import.
+thorctl run ...   # or thorctl reactions create
+```
+
+**Appending into an existing toolbox** (add more tools in later runs — fully interoperable
+because `build` re-walks the whole tree):
+
+```sh
+# add one image stub; --image-name overrides the registry tag leaf (default: dir name)
+thorctl toolbox init image images/peid -g <group> [--image-name path/peid] [-c config.toml]
+# add one pipeline stub; --order references images that must be in --images
+thorctl toolbox init pipeline pipelines/triage -i clamav,yara -g <group> [-c config.toml]
+thorctl toolbox build   # re-roll toolbox.json with the new tools
+```
+
+`init image`/`init pipeline` take an optional **`-c <config.toml>`** as a *resolution/validation*
+source (NOT placement — the positional path is always the destination). With `-c`, `init pipeline`
+requires every referenced image to already exist in that toolbox (it never creates image stubs) and
+version-pins each from the toolbox; `init image -c` errors on a duplicate name+version unless
+`--overwrite`. `init pipeline` also errors if `--order` names an image absent from `--images`, and
+requires `--images` in `-n` mode.
+
+**Tag derivation:** buildable images derive `<registry>/[<image_path_prefix>/]<name>:<version>`.
+`thorctl toolbox build --use-image-path` swaps the tool `name` leaf for the manifest's path-style
+`image_name`. (There is no `--flatten-image-paths` flag.)
+
+### Distribute, diff, and apply a toolbox
+
+```sh
+thorctl toolbox export -g <group> -o ./tb [--with-images]    # pull a collection from an instance
+thorctl toolbox export -p <grp>/<pipe> -i <grp>/<img> -o ./tb # specific pipelines + images
+thorctl toolbox import ./tb/toolbox.json \                    # or a directory / URL
+    [--group-override <group>] [--image-path-prefix <reg/base>] [--overwrite|--skip-conflicts] \
+    [--rollback-on-failure] [--update-network-policy]
+thorctl toolbox diff ./tb [--group-override <g>] [--exit-code]  # preview an import (CI drift gate)
+thorctl toolbox remove ./tb [--group-override <g>]             # delete a toolbox's pipelines/images
+```
+
+**`export` is append-safe.** Exporting into a directory that already has a `config.toml` **reuses
+and preserves it** (no `--config` needed); `--overwrite-config` replaces it. Settings-source
+priority: `--config` (seed a *new* toolbox from another's settings) > existing `<output>/config.toml`
+> `--name`/`--registry`. A `-p`/`-i` entry can carry a **`=dest`** suffix
+(`-i group/name=tools/clamav`) to place that resource's files in a chosen subdir — placement only,
+never affecting selection/membership/order; auto-pulled pipeline images use the default layout unless
+named with their own `=dest`.
+
+**Overwrite scopes are distinct flags:** `--overwrite` = per-tool files (and, in `import`, the
+resource conflict mode — apply incoming); `--overwrite-config` = `config.toml` (export + init
+toolbox); `--update-network-policy` = cluster network policies (import). `import`'s conflict modes
+are interactive editor (default), `--overwrite`, or `--skip-conflicts` (skip differing resources,
+the CI/agent-safe choice); `--rollback-on-failure` undoes a partial apply in non-interactive runs.
+
+**Offline / air-gapped transfer:** `export --with-images` bundles each image's tarball into its
+tool dir (recorded in `toolbox.json` so import finds it); `import --image-path-prefix <reg>`
+loads, retags, and pushes them into the offline registry. You don't need to know the offline
+registry at export time.
+
+For registry addresses (e.g. `localhost:5000` vs `registry.thorium.svc.cluster.local:5000`), see Step 7.
+
+### Single tools as code — `images`/`pipelines import`/`export`
+
+For a one-off (a single already-integrated tool, no toolbox overhead):
+
+```sh
+thorctl images export -g <group> -o ./exports                 # all images in the group
+thorctl images export -g <group> -o ./exports --config-only   # configs only, no docker images
+thorctl pipelines export -g <group> -o ./exports
+thorctl images import -g <group> -i ./exports \
+    --registry localhost:5000 [--registry-override <url>] [--skip-push]
+thorctl pipelines import -g <group> -i ./exports
+```
+
+`import` opens an interactive editor to resolve differences by default; use `--overwrite` (apply
+incoming) or `--skip-conflicts` (skip differing resources, CI-safe), and `--rollback-on-failure` to
+undo a partial apply. `--migrate-registry` only updates the registry path.
+
+### Tradeoffs
+
+- **Scaffolding:** only `toolbox init` creates a *new* tool's config; `images`/`pipelines export` can only extract something already in Thorium (and `import` needs a hand-written config). New tool → toolbox; existing tool → image/pipeline.
+- **Scope & structure:** image/pipeline import/export is a flat, low-overhead per-resource round-trip; toolbox adds `config.toml`/`manifest.toml` and a build step — more setup, but you get shared registry config, collection-level versioning, `build-images`, `diff`, `--group-override`, and a single distributable `toolbox.json`.
+- **Offline bundling (both, opposite defaults):** `images export` bundles the container image **by default** (opt out with `--config-only`), and `import` repoints it via `--registry`/`--registry-override`. `toolbox export` is **config-only by default** and bundles image tarballs only with `--with-images`, which `toolbox import` then pushes using `--image-path-prefix`. Mind this default-polarity difference when moving tools across networks.
+
+### Typical dev loop
+
+1. Write your tool and its Dockerfile.
+2. Scaffold its Thorium config — `toolbox init image` (or `init pipeline`) for a new tool.
+3. `toolbox build` → `toolbox.json`, then `toolbox build-images --push` to build/push its container (or build/push manually per Step 7).
+4. Apply it — `toolbox import`, or `images`/`pipelines import` for a one-off.
+5. Run it — `thorctl run` or `thorctl reactions create` against a sample/repo.
+6. Iterate — edit configs, re-`build`, re-`import` (or `thorctl images edit` for a quick tweak).
+
 ## Where to Go Next
 
 - For **full API details**: open the Swagger UI at `{THORIUM_URL}/api/docs/swagger-ui/`
 - For **user workflows** (uploading, searching, reactions): read the User Docs at `{THORIUM_URL}/api/docs/user/index.html`
 - For **developing tools/pipelines**: see the Developer Docs at `{THORIUM_URL}/api/docs/dev/thorium/index.html` and the Workflow Skills section
+- For **packaging/distributing tools as toolboxes**: see Step 10 and the *Toolboxes* page at `{THORIUM_URL}/api/docs/user/developers/toolbox.html`
 - For **admin operations** (backup, settings, provisioning): see `thoradm -h` and the docs at `{THORIUM_URL}/api/docs/user/admins/thoradm/thoradm.html`
 - For **source code and internals**: browse `github.com/cisagov/thorium` and the Developer Docs at `{THORIUM_URL}/api/docs/dev/thorium/index.html`

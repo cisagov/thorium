@@ -5,11 +5,12 @@
 use clap::Parser;
 use clap::builder::NonEmptyStringValueParser;
 use std::path::PathBuf;
+use thorium::client::conf;
 use uuid::Uuid;
 
 use crate::utils;
 
-use super::traits::describe::{DescribeCommand, DescribeSealed};
+use super::traits::describe::{DescribeCommand, DescribeFormat, DescribeSealed};
 use super::traits::search::{SearchParameterized, SearchParams, SearchSealed};
 use super::{CreateNotification, GetNotificationOpts};
 
@@ -19,15 +20,24 @@ pub enum Pipelines {
     /// Get available pipelines and their details
     #[clap(version, author)]
     Get(GetPipelines),
-    /// Describe specific pipelines, displaying/saving details in JSON format
+    /// Describe specific pipelines in a human-readable format (use `--format json`
+    /// for the full raw config)
     #[clap(version, author)]
     Describe(DescribePipelines),
+    /// Edit/update a pipeline
+    ///
+    /// Group, name, and bans are not editable here
+    #[clap(version, author, verbatim_doc_comment)]
+    Edit(EditPipeline),
     /// Manage/list pipeline notifications
     #[clap(subcommand)]
     Notifications(PipelineNotifications),
     /// Manage/list pipeline bans
     #[clap(subcommand)]
     Bans(PipelineBans),
+    /// Delete pipelines
+    #[clap(version, author)]
+    Delete(DeletePipelines),
     /// Import pipelines
     #[clap(version, author)]
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -47,10 +57,15 @@ pub struct GetPipelines {
     pub groups: Vec<String>,
     /// The max number of pipelines to list per group
     #[clap(short, long, default_value = "50")]
-    pub limit: u64,
+    pub limit: usize,
+    /// Refrain from setting a limit when retrieving pipelines
+    ///     Note: This can lead to retrieving info for many thousands of pipelines
+    ///           inadvertently. Be careful!
+    #[clap(long, verbatim_doc_comment)]
+    pub no_limit: bool,
     /// The page size to use in retrieving the pipelines
     #[clap(short, long, default_value = "50")]
-    pub page_size: u64,
+    pub page_size: usize,
     /// Print the pipelines in alphabetical order rather than by group, then creation date
     #[clap(short, long)]
     pub alpha: bool,
@@ -67,20 +82,23 @@ pub struct DescribePipelines {
     /// optionally, each pipeline can have a specific group delimited with a colon in case
     /// other groups have a pipeline with the same name
     /// (e.g. '<PIPELINE>:<OPTIONAL-GROUP>')
-    #[clap(short, long)]
-    pub pipeline_list_path: Option<PathBuf>,
+    #[clap(short = 'L', long = "list")]
+    pub list: Option<PathBuf>,
     /// The path to the file to write output to; if not provided, details will be output to stdout
     #[clap(short, long)]
     pub output: Option<PathBuf>,
-    /// Output details in a condensed format (no formatting/whitespace)
+    /// The output format for the description (human-readable by default)
+    #[clap(long, value_enum, default_value_t, ignore_case = true)]
+    pub format: DescribeFormat,
+    /// Output details as condensed JSON (no formatting/whitespace); implies `--format json`
     #[clap(long)]
     pub condensed: bool,
     /// Any specific groups to filter by when describing pipelines
-    #[clap(short, long)]
+    #[clap(short, long, value_delimiter = ',')]
     pub groups: Vec<String>,
     /// Describe all pipelines to which you have access (still within the limit given in `--limit`)
     #[clap(long)]
-    pub describe_all: bool,
+    pub all: bool,
     /// The maximum number of pipelines to retrieve per group
     #[clap(short, long, default_value_t = 50)]
     pub limit: usize,
@@ -88,7 +106,7 @@ pub struct DescribePipelines {
     #[clap(long)]
     pub no_limit: bool,
     /// The number of pipelines to retrieve per request
-    #[clap(long, default_value_t = 50)]
+    #[clap(short, long, default_value_t = 50)]
     pub page_size: usize,
 }
 
@@ -112,16 +130,16 @@ impl SearchSealed for DescribePipelines {
 
 impl SearchParameterized for DescribePipelines {
     fn has_targets(&self) -> bool {
-        !self.pipelines.is_empty() || self.pipeline_list_path.is_some()
+        !self.pipelines.is_empty() || self.list.is_some()
     }
 
     fn apply_to_all(&self) -> bool {
-        self.describe_all
+        self.all
     }
 }
 
 /// A specific pipeline target containing an optional group in case
-/// more than one group has an image with the same name
+/// more than one group has a pipeline with the same name
 pub struct PipelineTarget {
     /// The name of the pipeline
     pub pipeline: String,
@@ -165,12 +183,37 @@ impl DescribeSealed for DescribePipelines {
         self.condensed
     }
 
+    fn format(&self) -> Result<DescribeFormat, thorium::Error> {
+        // `--condensed` is a JSON modifier, so it forces JSON
+        if self.condensed {
+            return Ok(DescribeFormat::Json);
+        }
+        // pipelines can only be rendered as JSON or human-readable text; reject any
+        // other format the shared DescribeFormat enum may offer
+        if matches!(self.format, DescribeFormat::Json | DescribeFormat::Human) {
+            Ok(self.format)
+        } else {
+            Err(thorium::Error::new(
+                "describe pipelines only supports the 'json' or 'human' output format",
+            ))
+        }
+    }
+
+    fn render_human(
+        &self,
+        datum: &Self::Data,
+        out: &mut dyn std::io::Write,
+        ansi: bool,
+    ) -> Result<(), thorium::Error> {
+        utils::pipelines::print_pipeline_details(datum, out, ansi)
+    }
+
     fn out_path(&self) -> Option<&std::path::PathBuf> {
         self.output.as_ref()
     }
 
     fn target_list(&self) -> Option<&std::path::PathBuf> {
-        self.pipeline_list_path.as_ref()
+        self.list.as_ref()
     }
 
     fn parse_target<'a>(&self, raw: &'a str) -> Result<Self::Target<'a>, thorium::Error> {
@@ -221,20 +264,42 @@ impl DescribeSealed for DescribePipelines {
 
 impl DescribeCommand for DescribePipelines {}
 
+/// Provide the help message for the editor arg
+fn editor_help() -> String {
+    format!(
+        "The editor to use when editing the pipeline ('{}' by default); the default can be modified \
+    using 'thorctl config --default-editor', but this flag overrides any set defaults",
+        conf::default_default_editor()
+    )
+}
+
+/// Args for editing a pipeline
+#[derive(Parser, Debug)]
+pub struct EditPipeline {
+    /// The name of the pipeline to edit
+    pub pipeline: String,
+    /// The group the pipeline is in; required if other pipelines have
+    /// the same name
+    pub group: Option<String>,
+    /// The editor to use when editing the pipeline
+    #[clap(short, long, help = editor_help())]
+    pub editor: Option<String>,
+}
+
 /// The pipeline ban specific subcommands
 #[derive(Parser, Debug, Clone)]
 pub enum PipelineBans {
     /// Add a ban to a pipeline, preventing it from being run
     #[clap(version, author)]
-    Add(AddPipelineBan),
+    Create(CreatePipelineBan),
     /// Remove a ban from an pipeline
     #[clap(version, author)]
-    Remove(RemovePipelineBan),
+    Delete(DeletePipelineBan),
 }
 
 /// The args related to adding pipeline bans
 #[derive(Parser, Debug, Clone)]
-pub struct AddPipelineBan {
+pub struct CreatePipelineBan {
     /// The pipeline's group
     pub group: String,
     /// The name of the pipeline
@@ -245,7 +310,7 @@ pub struct AddPipelineBan {
 
 /// The args related to removing pipeline bans
 #[derive(Parser, Debug, Clone)]
-pub struct RemovePipelineBan {
+pub struct DeletePipelineBan {
     /// The pipeline's group
     pub group: String,
     /// The name of the pipeline
@@ -303,46 +368,90 @@ pub struct DeletePipelineNotification {
     pub id: Uuid,
 }
 
-/// A command to export pipeliness
+/// A command to delete pipelines
+#[derive(Parser, Debug, Clone)]
+pub struct DeletePipelines {
+    /// The pipelines to delete
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
+    pub pipelines: Vec<String>,
+    /// The group to delete pipelines from
+    #[clap(short, long, required = true)]
+    pub group: String,
+    /// Skip the confirmation dialog
+    #[clap(long)]
+    pub skip_confirm: bool,
+}
+
+/// A command to export pipelines
 #[derive(Parser, Debug, Clone)]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub struct ExportPipelines {
-    /// The pipelines to export
-    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
+    /// The pipelines to export, by name (default: every pipeline in the group)
+    #[clap(value_name = "PIPELINE", value_parser = NonEmptyStringValueParser::new())]
     pub pipelines: Vec<String>,
     /// The group to export pipelines from
-    #[clap(short, long, required = true)]
+    #[clap(short, long, value_name = "GROUP", required = true)]
     pub group: String,
-    /// The directory to export our pipelines too
-    #[clap(short, long, default_value = "exports")]
+    /// The directory to export pipelines to (default: exports)
+    #[clap(short, long, value_name = "DIR", default_value = "exports")]
     pub output: PathBuf,
     /// Export pipeline/image configs only with no docker images
     #[clap(long)]
     pub config_only: bool,
+    /// Overwrite existing on-disk configs that differ without prompting
+    #[clap(long, conflicts_with = "skip_conflicts")]
+    pub overwrite: bool,
+    /// Skip on-disk conflicts: write new configs and leave differing existing ones
+    /// untouched with a warning (use --overwrite to overwrite instead)
+    #[clap(long)]
+    pub skip_conflicts: bool,
+    /// Open each config in an editor to review/tweak it before writing
+    #[clap(long)]
+    pub review: bool,
 }
 
-/// A command to import pipeliness
+/// A command to import pipelines
 #[derive(Parser, Debug, Clone)]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub struct ImportPipelines {
-    /// The pipelines to import
+    /// The pipelines to import, by name (default: every pipeline config in the import directory)
+    #[clap(value_name = "PIPELINE", value_parser = NonEmptyStringValueParser::new())]
     pub pipelines: Vec<String>,
     /// The group to import pipelines to
-    #[clap(short, long, required = true)]
+    #[clap(short, long, value_name = "GROUP", required = true)]
     pub group: String,
-    /// The directory to import our pipelines from
-    #[clap(short, long, required = true)]
+    /// The directory to import pipelines from
+    #[clap(short, long, value_name = "DIR", required = true)]
     pub import: PathBuf,
-    /// The registry to upload these images too
-    #[clap(short, long)]
+    /// The registry to upload these pipelines' images to
+    #[clap(short, long, value_name = "REGISTRY")]
     pub registry: Option<String>,
-    /// The registry url to override our domain in thorium with
-    #[clap(short, long)]
+    /// The registry url to override the domain stored in Thorium with
+    #[clap(long, value_name = "URL")]
     pub registry_override: Option<String>,
     /// Skip pushing images to docker
     #[clap(long)]
     pub skip_push: bool,
     /// Just update the registry
-    #[clap(long)]
+    #[clap(long, conflicts_with_all = ["overwrite", "skip_conflicts"])]
     pub migrate_registry: bool,
+    /// Overwrite existing pipelines/images without opening the editor
+    #[clap(long, conflicts_with = "skip_conflicts")]
+    pub overwrite: bool,
+    /// Skip existing pipelines/images that differ instead of updating them
+    ///
+    /// Each skipped resource logs a warning listing the fields that differ,
+    /// making this safe for non-interactive imports that must never
+    /// overwrite local changes.
+    #[clap(long)]
+    pub skip_conflicts: bool,
+    /// Automatically roll back applied changes if the import stops early
+    ///
+    /// Only applies when the session can't prompt; interactive sessions are
+    /// asked instead. Registry pushes are not undone, only Thorium state.
+    #[clap(long)]
+    pub rollback_on_failure: bool,
+    /// Override the default editor for reviewing merge conflicts
+    #[clap(long, value_name = "EDITOR")]
+    pub editor: Option<String>,
 }

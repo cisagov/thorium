@@ -9,20 +9,22 @@ use crate::args::{Args, DescribeCommand};
 use crate::utils;
 
 mod bans;
+mod edit;
 mod notifications;
 
 cfg_if::cfg_if! {
     if #[cfg(any(target_os = "linux", target_os = "macos"))] {
+        use std::io::IsTerminal;
+
+        use futures::stream::{self, StreamExt};
         use crate::args::pipelines::{ExportPipelines, ImportPipelines};
-        use crate::args::images::{ExportImages, ImportImages};
-        use super::Controller;
+        use crate::args::images::ExportImages;
+        use crate::handlers::imports::{self, ConflictMode};
+        use crate::handlers::images::import::{ImageImportOpts, categorize_from_disk};
+        use crate::handlers::exports::{DiskConflictResolver, WriteOutcome};
+        use crate::handlers::progress::{Bar, BarKind};
 
-        mod export;
-        mod import;
-
-        use export::PipelineExportWorker;
-        use import::PipelineImportWorker;
-
+        pub(crate) mod import;
     }
 }
 
@@ -44,27 +46,8 @@ impl GetPipelinesLine {
     ///
     /// * `pipeline` - The pipeline to print
     pub fn print_pipeline(pipeline: &Pipeline) {
-        // limit our description preview to at most 40 characters
-        let description = pipeline.description.as_ref().map_or_else(
-            // we have no description so replace it with a '-'
-            || "-".to_string(),
-            // we have a description so truncate it if needed
-            |descr| {
-                // if we have more then 37 chars in our description then just get the first 40
-                if descr.len() > 37 {
-                    // get the first 40 chars
-                    let truncated = descr.chars().take(37);
-                    // add a ... onto our string to signify its truncated
-                    let ending = "...".chars();
-                    // chain our iters together and make them into a string
-                    let combined = truncated.chain(ending).collect::<String>();
-                    // replace any newlines with spaces
-                    combined.replace('\n', " ")
-                } else {
-                    descr.replace('\n', " ")
-                }
-            },
-        );
+        // limit our description preview to at most 40 characters so the column stays aligned
+        let description = utils::render::truncate_description(pipeline.description.as_deref(), 40);
         // print our pipeline info
         println!(
             "{:<30} | {:<20} | {}",
@@ -89,12 +72,17 @@ async fn get(thorium: Thorium, cmd: &GetPipelines) -> Result<(), Error> {
     };
     // get pipeline cursors for all groups specified
     let pipeline_cursors = groups.iter().map(|group| {
-        thorium
+        let cursor = thorium
             .pipelines
             .list(group)
-            .limit(cmd.limit)
-            .page_size(cmd.page_size)
-            .details()
+            .page_size(cmd.page_size as u64)
+            .details();
+        // only apply a limit if the user didn't request no limit
+        if cmd.no_limit {
+            cursor
+        } else {
+            cursor.limit(cmd.limit as u64)
+        }
     });
     // retrieve the pipelines in each cursor until we've reached our limit
     // or all cursors are exhausted
@@ -134,93 +122,136 @@ async fn describe(thorium: Thorium, cmd: &DescribePipelines) -> Result<(), Error
     cmd.describe(&thorium).await
 }
 
-/// Crawl all of the pipeline requests we want to import to build a list of images to import
+/// Delete pipelines from Thorium
 ///
 /// # Arguments
 ///
-/// * `cmd` - The import pipeline command for the pipelines we are importing
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-async fn get_import_images(cmd: &ImportPipelines) -> Result<Vec<String>, Error> {
-    // assume we have at least one image for each pipeline
-    let mut images = HashSet::with_capacity(cmd.pipelines.len());
-    // step over and get the images for each pipeline we want to import
-    for name in &cmd.pipelines {
-        // build the path to this pipelines request data
-        let file_path = cmd.import.join(format!("{name}.json"));
-        // read this pipelines request to a string
-        let pipeline_str = tokio::fs::read_to_string(&file_path).await?;
-        // parse our pipeline data
-        let pipeline: PipelineRequest = serde_json::from_str(&pipeline_str)?;
-        // parse this pipelines order
-        for stage in pipeline.order.as_array().unwrap() {
-            // if this is just a string then add our single stage
-            if let Some(stage) = stage.as_str() {
-                // add this single image stage
-                images.insert(stage.to_owned());
+/// * `thorium` - The Thorium client
+/// * `cmd` - The delete pipelines command to execute
+async fn delete(
+    thorium: Thorium,
+    cmd: &crate::args::pipelines::DeletePipelines,
+) -> Result<(), Error> {
+    use colored::Colorize;
+    // deleting is irreversible, so confirm exactly what will be removed
+    if !cmd.skip_confirm {
+        // fail clearly (not with a raw dialoguer error) when we can't prompt
+        utils::require_confirm_terminal("--skip-confirm (-y)")?;
+        println!("{}", "Pipelines to delete:".bright_red());
+        for pipeline in &cmd.pipelines {
+            println!("  {}:{}", cmd.group, pipeline);
+        }
+        let confirmed = dialoguer::Confirm::new()
+            .with_prompt("Delete the pipelines listed above?")
+            .default(false)
+            .interact()?;
+        if !confirmed {
+            return Ok(());
+        }
+    }
+    for pipeline in &cmd.pipelines {
+        match thorium.pipelines.delete(&cmd.group, pipeline).await {
+            Ok(_) => println!("Deleted pipeline '{}:{}'", cmd.group, pipeline),
+            // a missing pipeline isn't fatal to the rest of the batch
+            Err(err) if err.status() == Some(http::StatusCode::NOT_FOUND) => {
+                eprintln!(
+                    "{}: pipeline '{}:{}' not found; skipping",
+                    "Warning".bright_yellow(),
+                    cmd.group,
+                    pipeline
+                );
             }
-            if let Some(stages) = stage.as_array() {
-                // convert our images to strings
-                let stage_iter = stages
-                    .iter()
-                    .filter_map(|val| val.as_str())
-                    .map(ToOwned::to_owned);
-                images.extend(stage_iter);
+            Err(err) => {
+                return Err(Error::new(format!(
+                    "Failed to delete pipeline '{}:{}': {err}",
+                    cmd.group, pipeline
+                )));
             }
         }
     }
-    // convert our hashset to a vec
-    let image_vec = images.into_iter().collect::<Vec<String>>();
-    Ok(image_vec)
+    Ok(())
 }
 
-/// Import pipelines to Thorium
+/// Import pipelines and the images they reference to Thorium
+///
+/// The whole import — images first, then pipelines — shares one confirmation
+/// screen and one rollback journal, so stopping partway (editor Quit or an
+/// error) can offer to undo everything applied so far.
+///
+/// # Arguments
+///
+/// * `thorium` - The Thorium client
+/// * `cmd` - The import pipelines command to execute
+/// * `conf` - The Thorctl config
+/// * `workers` - The maximum number of concurrent workers to use
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn import(
     thorium: &Thorium,
     cmd: &ImportPipelines,
-    args: &Args,
     conf: &CtlConf,
+    workers: usize,
 ) -> Result<(), Error> {
-    // get the images we need to import
-    let images = get_import_images(cmd).await?;
-    // build the correct image import command
-    let image_cmd = ImportImages {
-        images,
-        group: cmd.group.clone(),
-        import: cmd.import.join("images"),
-        registry: cmd.registry.clone(),
-        registry_override: cmd.registry_override.clone(),
+    let progress = Bar::new("", "Importing pipelines", BarKind::Timer);
+    let mode = ConflictMode::from_flags(cmd.overwrite, cmd.skip_conflicts);
+    // no explicit list imports every pipeline config in the export directory
+    let pipeline_names = if cmd.pipelines.is_empty() {
+        imports::list_export_configs(&cmd.import, "pipelines").await?
+    } else {
+        imports::dedup_names(cmd.pipelines.clone(), &progress)
+    };
+    // load each pipeline request once, collecting the images it references as we go
+    let mut pipeline_items = Vec::with_capacity(pipeline_names.len());
+    let mut image_set: HashSet<String> = HashSet::new();
+    for name in &pipeline_names {
+        let request = import::load_request(&cmd.import, &cmd.group, name).await?;
+        // collect every image across all stages, validating the order rather than
+        // panicking on bad JSON
+        let order = request.deserialize_image_order().map_err(|err| {
+            Error::new(format!("Malformed image order in pipeline '{name}': {err}"))
+        })?;
+        image_set.extend(order.into_iter().flatten().map(ToOwned::to_owned));
+        pipeline_items.push((name.clone(), "latest".to_string(), request));
+    }
+    let image_names: Vec<String> = image_set.into_iter().collect();
+    let opts = ImageImportOpts {
+        import_dir: &cmd.import,
+        group: &cmd.group,
+        registry: cmd.registry.as_deref(),
+        registry_override: cmd.registry_override.as_deref(),
         skip_push: cmd.skip_push,
         migrate_registry: cmd.migrate_registry,
-    };
-    // import all of the required images
-    super::images::import(thorium, &image_cmd, args, conf).await?;
-    // limit our workers by the number of pipelines we are going to export
-    let workers = std::cmp::min(args.workers, cmd.pipelines.len());
-    // create a new worker controller
-    let mut controller = Controller::<PipelineImportWorker>::spawn(
-        "Importing Pipelines",
-        thorium,
+        mode,
+        editor: cmd.editor.as_deref(),
+        // raw TTY check; the driver derives interactive-mode + TTY from this
+        is_terminal: std::io::stdin().is_terminal(),
         workers,
+    };
+    // categorize both halves before changing anything
+    let images = categorize_from_disk(thorium, &opts, &image_names, &progress).await?;
+    let pipelines =
+        imports::categorize::categorize_pipelines(thorium, pipeline_items, &progress).await?;
+    // images are applied before the pipelines that reference them; the shared driver
+    // owns the confirmation, journal, and settle
+    imports::disk::run_disk_import(
+        thorium,
         conf,
-        args,
-        cmd,
+        &progress,
+        &opts,
+        images,
+        pipelines,
+        cmd.rollback_on_failure,
     )
-    .await;
-    // add the pipelines to export
-    for pipeline in &cmd.pipelines {
-        // try to add this download job
-        if let Err(error) = controller.add_job(pipeline.clone()).await {
-            // log this error
-            controller.error(&error.to_string());
-        }
-    }
-    // wait for all our workers to complete
-    controller.finish().await?;
-    Ok(())
+    .await
 }
 
 /// Export pipelines from Thorium
+///
+/// # Arguments
+///
+/// * `thorium` - The Thorium client
+/// * `cmd` - The export pipelines command to execute
+/// * `args` - The shared Thorctl args (for the worker count)
+/// * `conf` - The Thorctl config
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn export(
     thorium: &Thorium,
@@ -228,50 +259,111 @@ async fn export(
     args: &Args,
     conf: &CtlConf,
 ) -> Result<(), Error> {
-    // limit our workers by the number of pipelines we are going to export
-    let workers = std::cmp::min(args.workers, cmd.pipelines.len());
-    // create a new worker controller
-    let mut controller = Controller::<PipelineExportWorker>::spawn(
-        "Exporting Pipelines",
-        thorium,
-        workers,
-        conf,
-        args,
-        cmd,
-    )
-    .await;
-    // add the pipelines to export
-    for pipeline in &cmd.pipelines {
-        // try to add this download job
-        if let Err(error) = controller.add_job(pipeline.clone()).await {
-            // log this error
-            controller.error(&error.to_string());
+    // no explicit list exports every pipeline in the group
+    let names: Vec<String> = if cmd.pipelines.is_empty() {
+        utils::pipelines::list_all_pipelines(thorium, &cmd.group)
+            .await?
+            .into_iter()
+            .map(|pipeline| pipeline.name)
+            .collect()
+    } else {
+        cmd.pipelines.clone()
+    };
+    // pre-flight: write each config sequentially so on-disk conflicts resolve
+    // interactively (pipeline configs are tiny, so there's no worker pool)
+    let can_prompt = !cmd.skip_conflicts && std::io::stdin().is_terminal();
+    let editor = crate::handlers::imports::editor::resolve_editor(None, conf).to_string();
+    let mut resolver = DiskConflictResolver::new(cmd.overwrite, can_prompt, editor);
+    let progress = Bar::new("pipelines export", "Exporting configs", BarKind::Timer);
+    let pipelines_dir = cmd.output.join("pipelines");
+    // fetch the pipelines concurrently (bounded by --workers); writes below stay
+    // sequential so the conflict resolver can prompt without racing
+    let fetch_workers = std::cmp::min(args.workers, names.len()).max(1);
+    let fetched: Vec<(String, Result<Pipeline, Error>)> = stream::iter(names)
+        .map(|name| async move {
+            let result = thorium.pipelines.get(&cmd.group, &name).await;
+            (name, result)
+        })
+        .buffer_unordered(fetch_workers)
+        .collect()
+        .await;
+    // collect the images referenced by these pipelines to export alongside them
+    let mut images: HashSet<String> = HashSet::new();
+    // names we couldn't fetch; collected so the export exits non-zero rather than
+    // silently reporting success after skipping resources
+    let mut failed: Vec<String> = Vec::new();
+    for (name, result) in fetched {
+        let pipeline = match result {
+            Ok(pipeline) => pipeline,
+            Err(err) => {
+                progress.error(format!("Failed to get pipeline '{name}': {err}"));
+                failed.push(name);
+                continue;
+            }
+        };
+        images.extend(pipeline.order.iter().flatten().cloned());
+        let request = PipelineRequest::from(pipeline);
+        // curated (prioritized) field order so an exported pipeline config matches the layout `init`
+        // and toolbox export produce — one consistent, edit-friendly format everywhere (still
+        // deterministic: curated keys first, remaining keys sorted)
+        let config_json = crate::utils::curated_json(
+            &request,
+            crate::handlers::imports::merge::PIPELINE_FIELD_ORDER,
+        )
+        .map_err(|e| Error::new(format!("Failed to serialize pipeline '{name}': {e}")))?;
+        // optionally open the config in an editor for review before writing
+        let config_json = if cmd.review {
+            progress
+                .suspend_async(crate::handlers::imports::editor::review_config_in_editor::<
+                    thorium::models::PipelineRequest,
+                >(
+                    &config_json,
+                    &format!("export-pipeline-{name}"),
+                    &conf.default_editor,
+                    crate::handlers::imports::merge::PIPELINE_FIELD_ORDER,
+                ))
+                .await?
+        } else {
+            config_json
+        };
+        let outcome = resolver
+            .write_yaml::<PipelineRequest>(
+                &pipelines_dir.join(format!("{name}.json")),
+                &config_json,
+                &progress,
+            )
+            .await?;
+        if outcome == WriteOutcome::Quit {
+            progress.refresh("Export stopped early", BarKind::Timer);
+            progress.finish();
+            return Ok(());
         }
     }
-    // get all of the images in this pipeline
-    let mut images = HashSet::with_capacity(cmd.pipelines.len());
-    // crawl over all pipelines and get their info
-    for pipeline in &cmd.pipelines {
-        // get this pipelines info
-        let info = thorium.pipelines.get(&cmd.group, pipeline).await?;
-        // add this pipelines images to our image set
-        images.extend(info.order.into_iter().flatten());
+    progress.finish();
+    // export the images these pipelines reference (this applies the same on-disk
+    // conflict handling for image configs). Guard against an empty set: with
+    // empty-implies-all semantics, an empty list would export the entire group.
+    let referenced_images: Vec<String> = images.into_iter().collect();
+    if !referenced_images.is_empty() {
+        let image_cmd = ExportImages {
+            images: referenced_images,
+            group: cmd.group.clone(),
+            output: cmd.output.clone(),
+            config_only: cmd.config_only,
+            overwrite: cmd.overwrite,
+            skip_conflicts: cmd.skip_conflicts,
+            review: cmd.review,
+        };
+        super::images::export(thorium, &image_cmd, args, conf).await?;
     }
-    // wait for all our workers to complete
-    controller.finish().await?;
-    // build the output path for our images
-    let mut image_output = cmd.output.clone();
-    // nest our images in a directory called images
-    image_output.push("images");
-    // build the correct image export command
-    let image_cmd = ExportImages {
-        images: images.into_iter().collect(),
-        group: cmd.group.clone(),
-        output: image_output,
-        config_only: cmd.config_only,
-    };
-    // export all of the required images
-    super::images::export(thorium, &image_cmd, args, conf).await?;
+    // surface skipped pipelines as a non-zero exit so a partial export isn't read as success
+    if !failed.is_empty() {
+        return Err(Error::new(format!(
+            "Failed to export {} pipeline(s): {}",
+            failed.len(),
+            failed.join(", ")
+        )));
+    }
     Ok(())
 }
 
@@ -296,10 +388,12 @@ pub async fn handle(args: &Args, cmd: &Pipelines) -> Result<(), Error> {
     match cmd {
         Pipelines::Get(cmd) => get(thorium, cmd).await,
         Pipelines::Describe(cmd) => describe(thorium, cmd).await,
+        Pipelines::Edit(cmd) => edit::edit(thorium, &conf, cmd).await,
         Pipelines::Notifications(cmd) => notifications::handle(thorium, cmd).await,
         Pipelines::Bans(cmd) => bans::handle(thorium, cmd).await,
+        Pipelines::Delete(cmd) => delete(thorium, cmd).await,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        Pipelines::Import(cmd) => import(&thorium, cmd, args, &conf).await,
+        Pipelines::Import(cmd) => import(&thorium, cmd, &conf, args.workers).await,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         Pipelines::Export(cmd) => export(&thorium, cmd, args, &conf).await,
     }

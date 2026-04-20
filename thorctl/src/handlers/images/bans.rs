@@ -1,12 +1,12 @@
 //! Handle image ban related commands
 
 use thorium::{
-    models::{ImageBan, ImageBanKind, ImageBanUpdate, ImageUpdate},
     Thorium,
+    models::{ImageBan, ImageBanKind, ImageBanUpdate, ImageUpdate},
 };
 
 use crate::args::images::{CreateImageBan, DeleteImageBan, ImageBans};
-use crate::{err_not_admin, Error};
+use crate::{Error, err_not_admin};
 
 /// Add a ban to an image in Thorium
 ///

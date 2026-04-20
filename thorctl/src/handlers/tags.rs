@@ -5,15 +5,15 @@ use futures::stream::{self, StreamExt};
 use http::StatusCode;
 use owo_colors::OwoColorize;
 use thorium::{
-    models::{Repo, Sample, TagDeleteRequest, TagRequest},
     Error, Thorium,
+    models::{Repo, Sample, TagDeleteRequest, TagRequest},
 };
 
-use crate::args::{
-    tags::{AddTags, DeleteTags, GetTags, Tags},
-    Mode,
-};
 use crate::args::{Args, SearchParameterized};
+use crate::args::{
+    Mode,
+    tags::{AddTags, DeleteTags, GetTags, Tags},
+};
 use crate::utils;
 
 /// Get a list of tags for a file or repo

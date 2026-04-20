@@ -94,7 +94,7 @@ pub struct AddTags {
     ///     Note: This, combined with "--no-limit", will add the given tag(s) to ALL files/repos
     ///           to which you have access. Be careful!
     #[clap(long, default_value = "false", verbatim_doc_comment)]
-    pub add_to_all: bool,
+    pub all: bool,
     /// The maximum number of objects to tag
     #[clap(short, long, default_value = "50")]
     pub limit: usize,
@@ -113,7 +113,7 @@ impl SearchParameterized for AddTags {
         !self.files.is_empty() || !self.repos.is_empty()
     }
     fn apply_to_all(&self) -> bool {
-        self.add_to_all
+        self.all
     }
 }
 impl SearchSealed for AddTags {
@@ -192,7 +192,7 @@ pub struct DeleteTags {
     ///     Note: This, combined with "--no-limit", will delete the given tag(s) from ALL files/repos
     ///           to which you have access. Be careful!
     #[clap(long, default_value = "false", verbatim_doc_comment)]
-    pub delete_from_all: bool,
+    pub all: bool,
     /// The maximum number of objects to delete tags from
     #[clap(short, long, default_value = "50")]
     pub limit: usize,
@@ -211,7 +211,7 @@ impl SearchParameterized for DeleteTags {
         !self.files.is_empty() || !self.repos.is_empty()
     }
     fn apply_to_all(&self) -> bool {
-        self.delete_from_all
+        self.all
     }
 }
 impl SearchSealed for DeleteTags {

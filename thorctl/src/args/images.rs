@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::utils;
 
-use super::traits::describe::{DescribeCommand, DescribeSealed};
+use super::traits::describe::{DescribeCommand, DescribeFormat, DescribeSealed};
 use super::traits::search::{SearchParameterized, SearchParams, SearchSealed};
 use super::{CreateNotification, GetNotificationOpts};
 
@@ -21,7 +21,8 @@ pub enum Images {
     /// Get available images and their details
     #[clap(version, author)]
     Get(GetImages),
-    /// Describe specific images, displaying/saving details in JSON format
+    /// Describe specific images in a human-readable format (use `--format json`
+    /// for the full raw config)
     #[clap(version, author)]
     Describe(DescribeImages),
     /// Edit/update an image
@@ -35,6 +36,9 @@ pub enum Images {
     /// Manage/list image bans
     #[clap(subcommand)]
     Bans(ImageBans),
+    /// Delete images
+    #[clap(version, author)]
+    Delete(DeleteImages),
     /// Import images
     #[clap(version, author)]
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -57,12 +61,17 @@ pub struct GetImages {
     pub scaler: Option<ImageScaler>,
     /// The max number of images to list
     #[clap(short, long, default_value = "50")]
-    pub limit: u64,
+    pub limit: usize,
+    /// Refrain from setting a limit when retrieving images
+    ///     Note: This can lead to retrieving info for many thousands of images
+    ///           inadvertently. Be careful!
+    #[clap(long, verbatim_doc_comment)]
+    pub no_limit: bool,
     /// The page size to use in retrieving the images
     #[clap(short, long, default_value = "50")]
-    pub page_size: u64,
+    pub page_size: usize,
     /// Print the images in alphabetical order rather than by group, then creation date
-    ///     Note: Sorting can require many system resources for large amounts of pipielines
+    ///     Note: Sorting can require many system resources for large amounts of images
     #[clap(short, long, verbatim_doc_comment)]
     pub alpha: bool,
 }
@@ -78,20 +87,23 @@ pub struct DescribeImages {
     /// optionally, each image can have a specific group delimited with a colon in case
     /// other groups have an image with the same name
     /// (e.g. '<IMAGE>:<OPTIONAL-GROUP>')
-    #[clap(short, long)]
-    pub image_list_path: Option<PathBuf>,
+    #[clap(short = 'L', long = "list")]
+    pub list: Option<PathBuf>,
     /// The path to the file to write output to; if not provided, details will be output to stdout
     #[clap(short, long)]
     pub output: Option<PathBuf>,
-    /// Output details in a condensed format (no formatting/whitespace)
+    /// The output format for the description (human-readable by default)
+    #[clap(long, value_enum, default_value_t, ignore_case = true)]
+    pub format: DescribeFormat,
+    /// Output details as condensed JSON (no formatting/whitespace); implies `--format json`
     #[clap(long)]
     pub condensed: bool,
     /// Any specific groups to filter by when describing images
-    #[clap(short, long)]
+    #[clap(short, long, value_delimiter = ',')]
     pub groups: Vec<String>,
     /// Describe all images to which you have access (still within the limit given in `--limit`)
     #[clap(long)]
-    pub describe_all: bool,
+    pub all: bool,
     /// The maximum number of images to retrieve per group
     #[clap(short, long, default_value_t = 50)]
     pub limit: usize,
@@ -99,7 +111,7 @@ pub struct DescribeImages {
     #[clap(long)]
     pub no_limit: bool,
     /// The number of images to retrieve per request
-    #[clap(long, default_value_t = 50)]
+    #[clap(short, long, default_value_t = 50)]
     pub page_size: usize,
 }
 
@@ -123,20 +135,20 @@ impl SearchSealed for DescribeImages {
 
 impl SearchParameterized for DescribeImages {
     fn has_targets(&self) -> bool {
-        !self.images.is_empty() || self.image_list_path.is_some()
+        !self.images.is_empty() || self.list.is_some()
     }
 
     fn apply_to_all(&self) -> bool {
-        self.describe_all
+        self.all
     }
 }
 
 /// A specific image target containing an optional group in case
 /// more than one group has an image with the same name
 pub struct ImageTarget {
-    /// The name of the pipeline
+    /// The name of the image
     image: String,
-    /// The optional group that the pipeline belongs to
+    /// The optional group that the image belongs to
     group: Option<String>,
 }
 
@@ -155,12 +167,37 @@ impl DescribeSealed for DescribeImages {
         self.condensed
     }
 
+    fn format(&self) -> Result<DescribeFormat, thorium::Error> {
+        // `--condensed` is a JSON modifier, so it forces JSON
+        if self.condensed {
+            return Ok(DescribeFormat::Json);
+        }
+        // images can only be rendered as JSON or human-readable text; reject any
+        // other format the shared DescribeFormat enum may offer
+        if matches!(self.format, DescribeFormat::Json | DescribeFormat::Human) {
+            Ok(self.format)
+        } else {
+            Err(thorium::Error::new(
+                "describe images only supports the 'json' or 'human' output format",
+            ))
+        }
+    }
+
+    fn render_human(
+        &self,
+        datum: &Self::Data,
+        out: &mut dyn std::io::Write,
+        ansi: bool,
+    ) -> Result<(), thorium::Error> {
+        utils::images::print_image_details(datum, out, ansi)
+    }
+
     fn out_path(&self) -> Option<&std::path::PathBuf> {
         self.output.as_ref()
     }
 
     fn target_list(&self) -> Option<&std::path::PathBuf> {
-        self.image_list_path.as_ref()
+        self.list.as_ref()
     }
 
     fn parse_target<'a>(&self, raw: &'a str) -> Result<Self::Target<'a>, thorium::Error> {
@@ -334,46 +371,90 @@ pub struct DeleteImageNotification {
     pub id: Uuid,
 }
 
+/// A command to delete images
+#[derive(Parser, Debug, Clone)]
+pub struct DeleteImages {
+    /// The images to delete
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
+    pub images: Vec<String>,
+    /// The group to delete images from
+    #[clap(short, long, required = true)]
+    pub group: String,
+    /// Skip the confirmation dialog
+    #[clap(long)]
+    pub skip_confirm: bool,
+}
+
 /// A command to import images
 #[derive(Parser, Debug, Clone)]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub struct ImportImages {
-    /// The images to import
+    /// The images to import, by name (default: every image config in the import directory)
+    #[clap(value_name = "IMAGE", value_parser = NonEmptyStringValueParser::new())]
     pub images: Vec<String>,
-    /// The group to import images too
-    #[clap(short, long, required = true)]
+    /// The group to import images to
+    #[clap(short, long, value_name = "GROUP", required = true)]
     pub group: String,
-    /// The directory to import our images from
-    #[clap(short, long, required = true)]
+    /// The directory to import images from
+    #[clap(short, long, value_name = "DIR", required = true)]
     pub import: PathBuf,
-    /// The registry to upload these images too
-    #[clap(short, long)]
+    /// The registry to upload these images to
+    #[clap(short, long, value_name = "REGISTRY")]
     pub registry: Option<String>,
-    /// The registry url to override our domain in thorium with
-    #[clap(long)]
+    /// The registry url to override the domain stored in Thorium with
+    #[clap(long, value_name = "URL")]
     pub registry_override: Option<String>,
     /// Skip pushing images to docker
     #[clap(long)]
     pub skip_push: bool,
     /// Just update the registry
-    #[clap(long)]
+    #[clap(long, conflicts_with_all = ["overwrite", "skip_conflicts"])]
     pub migrate_registry: bool,
+    /// Overwrite existing images without opening the editor
+    #[clap(long, conflicts_with = "skip_conflicts")]
+    pub overwrite: bool,
+    /// Skip existing images that differ instead of updating them
+    ///
+    /// Each skipped image logs a warning listing the fields that differ,
+    /// making this safe for non-interactive imports that must never
+    /// overwrite local changes.
+    #[clap(long)]
+    pub skip_conflicts: bool,
+    /// Automatically roll back applied changes if the import stops early
+    ///
+    /// Only applies when the session can't prompt; interactive sessions are
+    /// asked instead. Registry pushes are not undone, only Thorium state.
+    #[clap(long)]
+    pub rollback_on_failure: bool,
+    /// Override the default editor for reviewing merge conflicts
+    #[clap(long, value_name = "EDITOR")]
+    pub editor: Option<String>,
 }
 
 /// A command to export images
 #[derive(Parser, Debug, Clone)]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub struct ExportImages {
-    /// The images to export
-    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
+    /// The images to export, by name (default: every image in the group)
+    #[clap(value_name = "IMAGE", value_parser = NonEmptyStringValueParser::new())]
     pub images: Vec<String>,
     /// The group to export images from
-    #[clap(short, long, required = true)]
+    #[clap(short, long, value_name = "GROUP", required = true)]
     pub group: String,
-    /// The directory to export our images too
-    #[clap(short, long, default_value = "exports")]
+    /// The directory to export images to (default: exports)
+    #[clap(short, long, value_name = "DIR", default_value = "exports")]
     pub output: PathBuf,
     /// Only export image configs with no docker images
     #[clap(long)]
     pub config_only: bool,
+    /// Overwrite existing on-disk configs that differ without prompting
+    #[clap(long, conflicts_with = "skip_conflicts")]
+    pub overwrite: bool,
+    /// Skip on-disk conflicts: write new configs and leave differing existing ones
+    /// untouched with a warning (use --overwrite to overwrite instead)
+    #[clap(long)]
+    pub skip_conflicts: bool,
+    /// Open each config in an editor to review/tweak it before writing
+    #[clap(long)]
+    pub review: bool,
 }

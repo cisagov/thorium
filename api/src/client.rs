@@ -34,7 +34,7 @@ mod utils;
 
 pub use associations::Associations;
 pub use basic::Basic;
-pub use conf::{ClientSettings, CtlConf};
+pub use conf::{ClientSettings, ContainerRuntime, CtlConf};
 pub use cursors::{Cursor, LogsCursor, SearchDate};
 pub use entities::Entities;
 pub use error::Error;

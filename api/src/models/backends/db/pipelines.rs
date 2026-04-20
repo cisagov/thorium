@@ -234,11 +234,12 @@ pub async fn update(pipeline: &Pipeline, add: &[String], remove: &[String], shar
             pipe.cmd("srem").arg(ImageKeys::used_by(&pipeline.group, image, shared))
                 .arg(&pipeline.name)
         });
-    // if any triggers are set then update them
+    // always persist the trigger map so removing the last trigger clears the stored
+    // value instead of leaving the stale one in place
+    pipe.cmd("hset").arg(&keys.data).arg("triggers").arg(serialize!(&pipeline.triggers));
+    // only flag the event cache dirty when there are triggers to evaluate
     if !pipeline.triggers.is_empty() {
-        // save our updated triggers
-        pipe.cmd("hset").arg(&keys.data).arg("triggers").arg(serialize!(&pipeline.triggers))
-            .cmd("hset").arg(cache_status).arg("status").arg(true);
+        pipe.cmd("hset").arg(cache_status).arg("status").arg(true);
     }
     // update optional values if set
     hset_del_opt_serialize!(pipe, &keys.data, "description", &pipeline.description);

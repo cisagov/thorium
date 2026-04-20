@@ -176,6 +176,7 @@ pub trait SearchParameterized: SearchSealed {
         Ok(search)
     }
 
+    /// Builds the network policy list options from these search params
     fn build_network_policy_opts(&self) -> NetworkPolicyListOpts {
         // get our search params
         let params = self.get_search_params();

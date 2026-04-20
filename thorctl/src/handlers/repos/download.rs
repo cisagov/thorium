@@ -10,28 +10,10 @@ use std::sync::Arc;
 use thorium::models::{RepoDownloadOpts, UntarredRepo};
 use thorium::{CtlConf, Error, Thorium};
 
-use super::progress::{Bar, BarKind, MultiBar};
+use super::progress::{Bar, BarKind};
 use crate::Args;
 use crate::args::repos::{DownloadRepos, RepoDownloadOrganization, RepoTarget};
-use crate::handlers::{Monitor, MonitorMsg, Worker};
-
-/// The repo ingest monitor
-pub struct RepoDownloadMonitor;
-
-impl Monitor for RepoDownloadMonitor {
-    /// The update type to use
-    type Update = ();
-
-    /// build this monitors progress bar
-    fn build_bar(multi: &MultiBar, msg: &str) -> Bar {
-        multi.add(msg, BarKind::Bound(0))
-    }
-
-    /// Apply an update to our global progress bar
-    fn apply(bar: &Bar, _: Self::Update) {
-        bar.inc(1);
-    }
-}
+use crate::handlers::{MonitorMsg, SimpleMonitor, Worker};
 
 /// Delete a file if it exists
 ///
@@ -83,7 +65,7 @@ pub struct DownloadWorker {
     /// The base output path to download repos too
     pub base: PathBuf,
     /// The channel to send monitor updates on
-    pub monitor_tx: AsyncSender<MonitorMsg<RepoDownloadMonitor>>,
+    pub monitor_tx: AsyncSender<MonitorMsg<SimpleMonitor>>,
 }
 
 impl DownloadWorker {
@@ -348,7 +330,7 @@ impl Worker for DownloadWorker {
     type Job = RepoTarget;
 
     /// The global monitor to use
-    type Monitor = RepoDownloadMonitor;
+    type Monitor = SimpleMonitor;
 
     /// Initialize our worker
     async fn init(
