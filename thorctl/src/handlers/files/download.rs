@@ -12,37 +12,9 @@ use thorium::{CtlConf, Error, Thorium};
 
 use crate::Args;
 use crate::args::files::{DownloadFiles, FileDownloadOrganization};
-use crate::handlers::progress::{Bar, BarKind, MultiBar};
-use crate::handlers::{Monitor, MonitorMsg, Worker};
+use crate::handlers::progress::{Bar, BarKind};
+use crate::handlers::{MonitorMsg, SimpleRateMonitor, Worker};
 use crate::utils;
-
-/// The files download monitor
-pub struct FilesDownloadMonitor;
-
-impl Monitor for FilesDownloadMonitor {
-    /// The update type to use
-    type Update = ();
-
-    /// build this monitors progress bar
-    ///
-    /// # Arguments
-    ///
-    /// * `multi` - The multibar to add a bar too
-    /// * `msg`- The message to set for our monitor bar
-    fn build_bar(multi: &MultiBar, msg: &str) -> Bar {
-        multi.add(msg, BarKind::Bound(0))
-    }
-
-    /// Apply an update to our global progress bar
-    ///
-    /// # Arguments
-    ///
-    /// * `bar` - The bar to apply updates too
-    /// * `update` - The update to apply
-    fn apply(bar: &Bar, _: Self::Update) {
-        bar.inc(1);
-    }
-}
 
 macro_rules! check {
     ($bar:expr, $func:expr) => {
@@ -68,7 +40,7 @@ pub struct FilesDownloadWorker {
     /// The base output path to download repos too
     pub base: PathBuf,
     /// The channel to send monitor updates on
-    pub monitor_tx: AsyncSender<MonitorMsg<FilesDownloadMonitor>>,
+    pub monitor_tx: AsyncSender<MonitorMsg<SimpleRateMonitor>>,
 }
 
 impl FilesDownloadWorker {
@@ -386,7 +358,7 @@ impl Worker for FilesDownloadWorker {
     type Job = String;
 
     /// The global monitor to use
-    type Monitor = FilesDownloadMonitor;
+    type Monitor = SimpleRateMonitor;
 
     /// Initialize our worker
     async fn init(

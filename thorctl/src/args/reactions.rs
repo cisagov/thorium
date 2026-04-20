@@ -132,7 +132,7 @@ pub struct DescribeReactions {
     /// Any groups to filter by when searching for reactions to describe using `--pipelines` and `--tags`
     ///     Note: If no groups are given, the search will include all groups the user is apart of
     // TODO: Update this once listing reactions by group/tag/pipeline (like ReactionListOpts) is implemented
-    #[clap(short, long)]
+    #[clap(short, long, value_delimiter = ',')]
     pub groups: Vec<String>,
     /// Any reaction tags to describe reactions for
     ///     Note: Unlike other thorctl commands, `--pipelines` and `--tags` use OR logic rather than AND, meaning
@@ -361,7 +361,7 @@ pub struct LogsReactions {
     ///
     /// Note: If no groups are given, the search will include all groups the user is apart of
     // TODO: Update this once listing reactions by group/tag/pipeline (like ReactionListOpts) is implemented
-    #[clap(short, long)]
+    #[clap(short, long, value_delimiter = ',')]
     pub groups: Vec<String>,
     /// Any reaction tags to get reaction logs for
     ///
@@ -563,7 +563,7 @@ pub struct CreateReactions {
     /// Any groups to filter by when searching for files/repos to execute on
     ///
     /// Note: If no groups are given, the search will include all groups the user is apart of
-    #[clap(short, long)]
+    #[clap(short, long, value_delimiter = ',')]
     pub groups: Vec<String>,
     /// Any tags to filter by when searching for samples/repos to execute on
     #[clap(short, long)]

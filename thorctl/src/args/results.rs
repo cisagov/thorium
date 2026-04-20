@@ -173,7 +173,7 @@ pub struct GetResults {
     /// Note: This, combined with "--no-limit", will get results for ALL files to
     ///       which you have access. Be careful!
     #[clap(long, default_value = "false")]
-    pub get_all: bool,
+    pub all: bool,
     /// The cursor to continue a search with
     #[clap(long)]
     pub cursor: Option<Uuid>,
@@ -205,7 +205,7 @@ impl SearchParameterized for GetResults {
             || self.repo_list.is_some()
     }
     fn apply_to_all(&self) -> bool {
-        self.get_all
+        self.all
     }
 }
 impl SearchSealed for GetResults {

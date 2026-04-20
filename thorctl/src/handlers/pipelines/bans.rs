@@ -1,13 +1,13 @@
 //! Handle pipeline ban related commands
 
 use thorium::{
-    models::{PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineUpdate},
     Thorium,
+    models::{PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineUpdate},
 };
 
 use crate::Error;
 use crate::{
-    args::pipelines::{AddPipelineBan, PipelineBans, RemovePipelineBan},
+    args::pipelines::{CreatePipelineBan, DeletePipelineBan, PipelineBans},
     err_not_admin,
 };
 
@@ -17,7 +17,7 @@ use crate::{
 ///
 /// * `thorium` - The Thorium client
 /// * `cmd` - The add pipeline ban command that was run
-async fn add_ban(thorium: Thorium, cmd: &AddPipelineBan) -> Result<(), Error> {
+async fn add_ban(thorium: Thorium, cmd: &CreatePipelineBan) -> Result<(), Error> {
     // create a new ban
     let ban = PipelineBan::new(PipelineBanKind::generic(&cmd.msg));
     // add the ban to a pipeline update
@@ -39,7 +39,7 @@ async fn add_ban(thorium: Thorium, cmd: &AddPipelineBan) -> Result<(), Error> {
 ///
 /// * `thorium` - The Thorium client
 /// * `cmd` - The remove pipeline ban command that was run
-async fn remove_ban(thorium: Thorium, cmd: &RemovePipelineBan) -> Result<(), Error> {
+async fn remove_ban(thorium: Thorium, cmd: &DeletePipelineBan) -> Result<(), Error> {
     // add the ban to remove to a pipeline update
     let update = PipelineUpdate::default().bans(PipelineBanUpdate::default().remove_ban(cmd.id));
     // send the update
@@ -61,7 +61,7 @@ async fn remove_ban(thorium: Thorium, cmd: &RemovePipelineBan) -> Result<(), Err
 /// * `cmd` - The pipeline bans sub command that was run
 pub async fn handle(thorium: Thorium, cmd: &PipelineBans) -> Result<(), Error> {
     match cmd {
-        PipelineBans::Add(cmd) => add_ban(thorium, cmd).await,
-        PipelineBans::Remove(cmd) => remove_ban(thorium, cmd).await,
+        PipelineBans::Create(cmd) => add_ban(thorium, cmd).await,
+        PipelineBans::Delete(cmd) => remove_ban(thorium, cmd).await,
     }
 }

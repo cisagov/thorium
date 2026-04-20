@@ -123,8 +123,8 @@ pub struct DescribeRepos {
     /// Any specific repos to describe
     pub repos: Vec<String>,
     /// The path to a file containing a list of repo URL's to describe separated by newlines
-    #[clap(short, long)]
-    pub repo_list: Option<PathBuf>,
+    #[clap(short = 'L', long = "list")]
+    pub list: Option<PathBuf>,
     /// The path to the file to write output to; if not provided, details will be output to stdout
     #[clap(short, long)]
     pub output: Option<PathBuf>,
@@ -173,7 +173,7 @@ pub struct DescribeRepos {
     ///           When combined with `--no-limit`, this will describe all files to which the current user
     ///           has access.
     #[clap(long, verbatim_doc_comment)]
-    pub describe_all: bool,
+    pub all: bool,
 }
 
 impl SearchSealed for DescribeRepos {
@@ -196,11 +196,11 @@ impl SearchSealed for DescribeRepos {
 
 impl SearchParameterized for DescribeRepos {
     fn has_targets(&self) -> bool {
-        !self.repos.is_empty() || self.repo_list.is_some()
+        !self.repos.is_empty() || self.list.is_some()
     }
 
     fn apply_to_all(&self) -> bool {
-        self.describe_all
+        self.all
     }
 }
 
@@ -224,7 +224,7 @@ impl DescribeSealed for DescribeRepos {
     }
 
     fn target_list(&self) -> Option<&PathBuf> {
-        self.repo_list.as_ref()
+        self.list.as_ref()
     }
 
     fn parse_target<'a>(&self, raw: &'a str) -> Result<Self::Target<'a>, thorium::Error> {
@@ -269,7 +269,7 @@ pub struct IngestRepos {
     #[clap(short, long)]
     pub local: Vec<PathBuf>,
     /// The groups to add these repos to
-    #[clap(short = 'G', long, value_delimiter = ',', required = true, value_parser = NonEmptyStringValueParser::new())]
+    #[clap(short = 'g', long = "groups", value_delimiter = ',', required = true, value_parser = NonEmptyStringValueParser::new())]
     pub add_groups: Vec<String>,
     /// The tags to add to any repos ingested where key/value is separated by a delimiter
     #[clap(short = 'T', long)]

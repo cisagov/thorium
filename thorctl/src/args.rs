@@ -90,6 +90,11 @@ pub struct Args {
     /// Disable progress tracking and only print errors to stderr
     #[clap(short, long)]
     pub quiet: bool,
+    /// Container CLI to use for image pull/save/load/tag/push/build
+    ///
+    /// Overrides the `container_runtime` config value; auto-detected when neither is set.
+    #[clap(long, value_enum, ignore_case = true)]
+    pub container_runtime: Option<thorium::ContainerRuntime>,
 }
 
 /// The commands to send to handlers for Thorium

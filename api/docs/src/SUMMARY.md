@@ -23,6 +23,7 @@
         - [Configuring Images](./developers/configuring_images.md)
         - [More on Children (Samples)](./developers/children.md)
     - [Building Pipelines](./developers/build_pipelines.md)
+    - [Toolboxes](./developers/toolbox.md)
     - [Reaction Status](./developers/reaction_status.md)
     - [Viewing Reaction Logs](./developers/viewing_reaction_logs.md)
     - [Generators](./developers/generators.md)

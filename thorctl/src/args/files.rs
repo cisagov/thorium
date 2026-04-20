@@ -124,7 +124,7 @@ pub struct UploadFiles {
     #[clap(flatten)]
     pub targets: UploadFilesTargets,
     /// The groups to upload these files to
-    #[clap(short = 'G', long, value_delimiter = ',', required = true)]
+    #[clap(short = 'g', long = "groups", value_delimiter = ',', required = true)]
     pub file_groups: Vec<String>,
     /// The tags to add to any files uploaded where key/value is separated by a delimiter
     #[clap(short = 'T', long)]
@@ -351,7 +351,7 @@ pub struct DownloadFiles {
     ///     Note: This, combined with `--no-limit`, will download ALL files from Thorium
     ///           to which you have access. Be careful!
     #[clap(long, default_value = "false", verbatim_doc_comment)]
-    pub download_all: bool,
+    pub all: bool,
     /// The cursor to continue a search with
     #[clap(long)]
     pub cursor: Option<Uuid>,
@@ -384,7 +384,7 @@ impl SearchParameterized for DownloadFiles {
         !self.sha256s.is_empty()
     }
     fn apply_to_all(&self) -> bool {
-        self.download_all
+        self.all
     }
 }
 impl SearchSealed for DownloadFiles {
@@ -652,8 +652,8 @@ pub struct DescribeFiles {
     /// Any specific file SHA256's to describe
     pub files: Vec<String>,
     /// The path to the file containing a list of SHA256's to describe separated by newlines
-    #[clap(short, long)]
-    pub file_list: Option<PathBuf>,
+    #[clap(short = 'L', long = "list")]
+    pub list: Option<PathBuf>,
     /// The path to the file to write output to; if not provided, details will be output to stdout
     #[clap(short, long)]
     pub output: Option<PathBuf>,
@@ -703,7 +703,7 @@ pub struct DescribeFiles {
     /// When combined with `--no-limit`, this will describe all files to which the current user
     /// has access.
     #[clap(long)]
-    pub describe_all: bool,
+    pub all: bool,
 }
 
 impl SearchSealed for DescribeFiles {
@@ -726,11 +726,11 @@ impl SearchSealed for DescribeFiles {
 
 impl SearchParameterized for DescribeFiles {
     fn has_targets(&self) -> bool {
-        !self.files.is_empty() || self.file_list.is_some()
+        !self.files.is_empty() || self.list.is_some()
     }
 
     fn apply_to_all(&self) -> bool {
-        self.describe_all
+        self.all
     }
 }
 
@@ -754,7 +754,7 @@ impl DescribeSealed for DescribeFiles {
     }
 
     fn target_list(&self) -> Option<&PathBuf> {
-        self.file_list.as_ref()
+        self.list.as_ref()
     }
 
     fn parse_target<'a>(&self, raw: &'a str) -> Result<Self::Target<'a>, thorium::Error> {

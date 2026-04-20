@@ -1,16 +1,106 @@
 //! Utility functions relating to pipelines
 
+use std::io::Write;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 
 use futures::stream::{self, TryStreamExt};
+use owo_colors::OwoColorize;
 use thorium::{
-    client::{Cursor, Thorium},
-    models::Pipeline,
     Error,
+    client::{Cursor, Thorium},
+    models::{Pipeline, PipelineBanKind},
 };
+
+use super::render::{field, header, label, render_markdown};
+
+/// Write a single line to the output, mapping any IO error
+///
+/// # Arguments
+///
+/// * `out` - The writer to write to
+/// * `line` - The line to write
+fn write_line(out: &mut dyn Write, line: &str) -> Result<(), Error> {
+    writeln!(out, "{line}").map_err(|err| Error::new(format!("Error writing output: {err}")))
+}
+
+/// Print a pipeline's details in a human-readable format
+///
+/// # Arguments
+///
+/// * `pipeline` - The pipeline to print
+/// * `out` - The writer to print to
+/// * `ansi` - Whether to style the output with ANSI escape codes
+pub fn print_pipeline_details(
+    pipeline: &Pipeline,
+    out: &mut dyn Write,
+    ansi: bool,
+) -> Result<(), Error> {
+    // header and scalar fields
+    write_line(out, &header(&pipeline.name, &pipeline.group, ansi))?;
+    write_line(out, &field("Creator", &pipeline.creator, ansi))?;
+    write_line(out, &field("SLA", &format!("{}s", pipeline.sla), ansi))?;
+    // render the order as a sequence of stages
+    if !pipeline.order.is_empty() {
+        write_line(out, &label("Order", ansi))?;
+        for (index, stage) in pipeline.order.iter().enumerate() {
+            write_line(out, &format!("  stage {}: {}", index + 1, stage.join(", ")))?;
+        }
+    }
+    // list the trigger names (full trigger config is available via --format json)
+    if !pipeline.triggers.is_empty() {
+        let names = pipeline.triggers.keys().cloned().collect::<Vec<_>>().join(", ");
+        write_line(out, &field("Triggers", &names, ansi))?;
+    }
+    // bans are important, so call them out in red
+    if !pipeline.bans.is_empty() {
+        write_line(out, &field("Bans", &pipeline.bans.len().to_string(), ansi))?;
+        for ban in pipeline.bans.values() {
+            // build a message from the ban kind (the `Ban` trait is api-private)
+            let message = match &ban.ban_kind {
+                PipelineBanKind::Generic(ban) => ban.msg.clone(),
+                PipelineBanKind::BannedImage(ban) => {
+                    format!("contains banned image '{}'", ban.image)
+                }
+            };
+            let line = format!("  - {message}");
+            write_line(out, &if ansi { line.bright_red().to_string() } else { line })?;
+        }
+    }
+    // render the full description markdown
+    if let Some(description) = &pipeline.description {
+        write_line(out, "")?;
+        write_line(out, &label("Description", ansi))?;
+        write_line(out, &render_markdown(description, ansi))?;
+    }
+    Ok(())
+}
+
+/// List every pipeline in a group with full details, draining the list cursor
+///
+/// # Arguments
+///
+/// * `thorium` - The Thorium client
+/// * `group` - The group to list pipelines from
+pub async fn list_all_pipelines(thorium: &Thorium, group: &str) -> Result<Vec<Pipeline>, Error> {
+    let mut pipelines = Vec::new();
+    // a single group can't realistically exceed this limit; the cursor still
+    // pages underneath it
+    let mut cursor = thorium.pipelines.list(group).limit(super::LIST_ALL_LIMIT).details();
+    loop {
+        cursor
+            .next()
+            .await
+            .map_err(|e| Error::new(format!("Failed to list pipelines in group '{group}': {e}")))?;
+        pipelines.append(&mut cursor.details);
+        if cursor.exhausted {
+            break;
+        }
+    }
+    Ok(pipelines)
+}
 
 /// Search the pipeline cursor for a given pipeline
 ///
@@ -19,7 +109,7 @@ use thorium::{
 /// * `cursor` - The pipeline cursor to search
 /// * `group` - The group the pipeline cursor is crawling
 /// * `matching_groups` - A map of the pipelines we're searching for
-///                       and the groups they've been found in
+///   and the groups they've been found in
 async fn search_pipeline_cursor(
     mut cursor: Cursor<Pipeline>,
     group: String,
@@ -30,8 +120,12 @@ async fn search_pipeline_cursor(
         cursor.next().await?;
         for name in &cursor.names {
             if let Some(groups) = matching_groups.get(name) {
-                // TODO: maybe handle error correctly here?
-                groups.lock().unwrap().push(group.clone());
+                // recover from a poisoned lock so one task's panic doesn't abort
+                // the concurrent search across the other groups
+                groups
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(group.clone());
                 // mark that we've seen this pipeline already
                 all_pipelines.remove(name);
             }
@@ -71,8 +165,7 @@ where
     stream::iter(
         groups
             .into_iter()
-            // TODO: maybe do something better than setting a limit of 1,000,000
-            .map(|group| Ok((thorium.pipelines.list(&group).limit(1_000_000), group))),
+            .map(|group| Ok((thorium.pipelines.list(&group).limit(super::LIST_ALL_LIMIT), group))),
     )
     // concurrently search for the pipeline in each group and add matching groups to the list
     .try_for_each_concurrent(None, |(cursor, group)| {

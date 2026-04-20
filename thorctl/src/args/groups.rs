@@ -33,8 +33,8 @@ pub struct DescribeGroups {
     /// Any specific groups to describe
     pub groups: Vec<String>,
     /// The path to a file containing a list of groups to describe separated by newlines
-    #[clap(short, long)]
-    pub group_list_path: Option<PathBuf>,
+    #[clap(short = 'L', long = "list")]
+    pub list: Option<PathBuf>,
     /// The path to the file to write output to; if not provided, details will be output to stdout
     #[clap(short, long)]
     pub output: Option<PathBuf>,
@@ -43,7 +43,7 @@ pub struct DescribeGroups {
     pub condensed: bool,
     /// Describe all groups to which you have access (still within the limit given in `--limit`)
     #[clap(long)]
-    pub describe_all: bool,
+    pub all: bool,
     /// The maximum number of groups to retrieve
     #[clap(short, long, default_value_t = 50)]
     pub limit: usize,
@@ -51,7 +51,7 @@ pub struct DescribeGroups {
     #[clap(long)]
     pub no_limit: bool,
     /// The number of groups to retrieve per request
-    #[clap(long, default_value_t = 50)]
+    #[clap(short, long, default_value_t = 50)]
     pub page_size: usize,
 }
 
@@ -75,11 +75,11 @@ impl SearchSealed for DescribeGroups {
 
 impl SearchParameterized for DescribeGroups {
     fn has_targets(&self) -> bool {
-        !self.groups.is_empty() || self.group_list_path.is_some()
+        !self.groups.is_empty() || self.list.is_some()
     }
 
     fn apply_to_all(&self) -> bool {
-        self.describe_all
+        self.all
     }
 }
 
@@ -103,7 +103,7 @@ impl DescribeSealed for DescribeGroups {
     }
 
     fn target_list(&self) -> Option<&std::path::PathBuf> {
-        self.group_list_path.as_ref()
+        self.list.as_ref()
     }
 
     fn parse_target<'a>(&self, raw: &'a str) -> Result<Self::Target<'a>, thorium::Error> {
@@ -120,7 +120,7 @@ impl DescribeSealed for DescribeGroups {
     }
 
     /// List all groups out in a cursor; this shouldn't be called unless
-    /// `describe_all` is set
+    /// `all` is set
     async fn retrieve_data_search(
         &self,
         thorium: &thorium::Thorium,

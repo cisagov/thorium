@@ -1,12 +1,12 @@
 //! Handles image notification related commands
 
 use thorium::{
-    models::{NotificationParams, NotificationRequest},
     Thorium,
+    models::{NotificationParams, NotificationRequest},
 };
 
-use crate::utils;
 use crate::Error;
+use crate::utils;
 use crate::{
     args::images::{
         CreateImageNotification, DeleteImageNotification, GetImageNotifications, ImageNotifications,

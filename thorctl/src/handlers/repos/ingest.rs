@@ -3,27 +3,27 @@ use chrono::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use git2::build::RepoBuilder;
 use git2::{Cred, FetchOptions, ProxyOptions, RemoteCallbacks};
+use gix::Id;
 use gix::bstr::ByteSlice;
 use gix::remote::Direction;
-use gix::Id;
 use kanal::{AsyncSender, Receiver, Sender};
 use owo_colors::OwoColorize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use thorium::Thorium;
 use thorium::client::conf::GitSettings;
 use thorium::models::{
     CommitRequest, CommitishMapRequest, CommitishRequest, RepoDownloadOpts, UntarredRepo,
 };
-use thorium::Thorium;
 use tokio::task::JoinHandle;
 use url::Url;
 use uuid::Uuid;
 
-use super::progress::{Bar, BarKind, MultiBar};
-use crate::args::{repos::IngestRepos, Args};
+use super::progress::{Bar, BarKind};
+use crate::args::{Args, repos::IngestRepos};
 use crate::check;
-use crate::handlers::{Monitor, MonitorMsg, Worker};
+use crate::handlers::{MonitorMsg, Worker};
 use crate::{CtlConf, Error};
 
 /// Fix a remote to not be an ssh clone or contain an ending "/" or ".git"
@@ -527,23 +527,7 @@ impl CommitishIngestor {
     }
 }
 
-/// The repo ingest monitor
-pub struct RepoIngestMonitor;
-
-impl Monitor for RepoIngestMonitor {
-    /// The update type to use
-    type Update = ();
-
-    /// build this monitors progress bar
-    fn build_bar(multi: &MultiBar, msg: &str) -> Bar {
-        multi.add(msg, BarKind::Bound(0))
-    }
-
-    /// Apply an update to our global progress bar
-    fn apply(bar: &Bar, _: Self::Update) {
-        bar.inc(1);
-    }
-}
+use crate::handlers::SimpleMonitor;
 
 // A worker that ingests repos into Thorium
 pub struct IngestWorker {
@@ -558,7 +542,7 @@ pub struct IngestWorker {
     /// The commit ingestor if we have one
     pub ingestor: Option<CommitishIngestor>,
     /// The channel to send monitor updates on
-    pub monitor_tx: AsyncSender<MonitorMsg<RepoIngestMonitor>>,
+    pub monitor_tx: AsyncSender<MonitorMsg<SimpleMonitor>>,
     /// Whether to use existing thorium data as a cache
     pub no_cache: bool,
 }
@@ -768,7 +752,7 @@ impl Worker for IngestWorker {
     type Job = IngestJob;
 
     /// An update for the repo ingest monitor
-    type Monitor = RepoIngestMonitor;
+    type Monitor = SimpleMonitor;
 
     /// Initialize our worker
     async fn init(

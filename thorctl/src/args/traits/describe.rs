@@ -1,5 +1,6 @@
 //! Traits and logic to allow for handlers to describe entities based on a user command
 
+use std::io::{IsTerminal, Write};
 use std::{io::BufRead, path::PathBuf};
 
 use futures::StreamExt;
@@ -17,6 +18,20 @@ use crate::{
     handlers::progress::{Bar, BarKind},
     utils,
 };
+
+/// The output format to use when describing entities
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, clap::ValueEnum)]
+pub enum DescribeFormat {
+    /// A styled, human-readable summary that renders the description markdown
+    #[default]
+    Human,
+    /// The full entity details as JSON
+    Json,
+    // Yaml is intentionally reserved for a future addition
+}
+
+/// A sink that consumes each described datum (serialize it, print it, etc.)
+type DatumSink<'a, D> = dyn FnMut(&D) -> Result<(), Error> + 'a;
 
 /// A makeshift adapter trait providing a consistent interface to both
 /// [`thorium::models::Cursor`] and [`thorium::client::Cursor`]
@@ -145,6 +160,37 @@ pub trait DescribeSealed: SearchParameterized {
         thorium: &Thorium,
     ) -> Result<Vec<Self::Cursor>, thorium::Error>;
 
+    /// The output format to use when describing this command's entities
+    ///
+    /// Defaults to JSON; commands that support human-readable output override
+    /// this (and [`DescribeSealed::render_human`]). Implementors return an error
+    /// when the user requests a format the command can't produce.
+    fn format(&self) -> Result<DescribeFormat, Error> {
+        Ok(DescribeFormat::Json)
+    }
+
+    /// Render a single datum as human-readable text into `out`
+    ///
+    /// Styling is emitted only when `ansi` is set. Commands that return
+    /// [`DescribeFormat::Human`] from [`DescribeSealed::format`] must override
+    /// this; the default errors.
+    ///
+    /// # Arguments
+    ///
+    /// * `datum` - The datum to render
+    /// * `out` - The writer to render into
+    /// * `ansi` - Whether to style the output with ANSI escape codes
+    fn render_human(
+        &self,
+        _datum: &Self::Data,
+        _out: &mut dyn Write,
+        _ansi: bool,
+    ) -> Result<(), Error> {
+        Err(Error::new(
+            "human-readable output is not supported for this command",
+        ))
+    }
+
     /// Calculate a bound on how much data will be retrieved if possible
     fn calculate_bound(&self) -> Result<Option<usize>, Error> {
         let mut count = 0;
@@ -170,17 +216,14 @@ pub trait DescribeSealed: SearchParameterized {
     /// # Arguments
     ///
     /// * `thorium` - The Thorium client
-    /// * `seq` - The serializing sequence to write describe data to
+    /// * `on_datum` - The sink to hand each retrieved datum to
     /// * `progress` - An optional progress bar to show description progress
-    async fn describe_targets<S>(
+    async fn describe_targets(
         &self,
         thorium: &Thorium,
-        seq: &mut S,
+        on_datum: &mut DatumSink<'_, Self::Data>,
         progress: Option<&Bar>,
-    ) -> Result<usize, Error>
-    where
-        S: serde::ser::SerializeSeq,
-    {
+    ) -> Result<usize, Error> {
         let mut num_described = 0;
         // map each target to a future that retrieves the data from Thorium
         let futures = self.raw_targets().iter().map(|raw_target| async {
@@ -191,11 +234,10 @@ pub trait DescribeSealed: SearchParameterized {
         });
         // buffer the data to prevent storing too much at once
         let mut buffered_data = futures::stream::iter(futures).buffered(10000);
-        // serialize each datum we retrieve
+        // hand each datum we retrieve to the sink
         while let Some(datum) = buffered_data.next().await {
             let datum = unwrap_datum_or_continue!(datum, progress);
-            seq.serialize_element(&datum)
-                .map_err(|err| Error::new(format!("Error serializing data: {err}")))?;
+            on_datum(&datum)?;
             num_described += 1;
             if let Some(progress) = progress {
                 progress.inc(1);
@@ -210,18 +252,15 @@ pub trait DescribeSealed: SearchParameterized {
     ///
     /// * `list_path` - The path to the file containing the list of targets to describe
     /// * `thorium` - The Thorium client
-    /// * `seq` - The serialize sequence to write data to
+    /// * `on_datum` - The sink to hand each retrieved datum to
     /// * `progress` - An optional progress bar
-    async fn describe_list<S>(
+    async fn describe_list(
         &self,
         list_path: &PathBuf,
         thorium: &Thorium,
-        seq: &mut S,
+        on_datum: &mut DatumSink<'_, Self::Data>,
         progress: Option<&Bar>,
-    ) -> Result<usize, Error>
-    where
-        S: serde::ser::SerializeSeq,
-    {
+    ) -> Result<usize, Error> {
         let mut num_described = 0;
         // open the list file and create a stream of the file's lines
         let list_file = tokio::fs::File::open(list_path).await.map_err(|err| {
@@ -243,8 +282,7 @@ pub trait DescribeSealed: SearchParameterized {
             .buffered(10000);
         while let Some(datum) = data_stream.next().await {
             let datum = unwrap_datum_or_continue!(datum, progress);
-            seq.serialize_element(&datum)
-                .map_err(|err| Error::new(format!("Error serializing data: {err}")))?;
+            on_datum(&datum)?;
             num_described += 1;
             if let Some(progress) = progress {
                 progress.inc(1);
@@ -258,17 +296,14 @@ pub trait DescribeSealed: SearchParameterized {
     /// # Arguments
     ///
     /// * `thorium` - The Thorium client
-    /// * `seq` - The serialize sequence to write data to
+    /// * `on_datum` - The sink to hand each retrieved datum to
     /// * `progress` - An optional progress bar
-    async fn describe_search<S>(
+    async fn describe_search(
         &self,
         thorium: &Thorium,
-        seq: &mut S,
+        on_datum: &mut DatumSink<'_, Self::Data>,
         progress: Option<&Bar>,
-    ) -> Result<usize, Error>
-    where
-        S: serde::ser::SerializeSeq,
-    {
+    ) -> Result<usize, Error> {
         // track the number described
         let mut num_described = 0;
         // get the data cursor
@@ -277,9 +312,8 @@ pub trait DescribeSealed: SearchParameterized {
             loop {
                 let data: Vec<Self::Data> = cursor.drain_data();
                 for datum in &data {
-                    // serialize the retrieved data
-                    seq.serialize_element(datum)
-                        .map_err(|err| Error::new(format!("Error serializing data: {err}")))?;
+                    // hand the retrieved data to the sink
+                    on_datum(datum)?;
                 }
                 num_described += data.len();
                 if let Some(progress) = progress {
@@ -299,31 +333,28 @@ pub trait DescribeSealed: SearchParameterized {
     /// # Arguments
     ///
     /// * `thorium` - The Thorium client
-    /// * `seq` - The serialize sequence to write data to
+    /// * `on_datum` - The sink to hand each retrieved datum to
     /// * `progress` - An optional progress bar
-    async fn describe_sealed<S>(
+    async fn describe_sealed(
         &self,
         thorium: &Thorium,
-        seq: &mut S,
+        on_datum: &mut DatumSink<'_, Self::Data>,
         progress: Option<&Bar>,
-    ) -> Result<usize, Error>
-    where
-        S: serde::ser::SerializeSeq,
-    {
+    ) -> Result<usize, Error> {
         let mut num_described = 0;
         if self.has_targets() {
             // describe any specific targets
-            num_described += self.describe_targets(thorium, seq, progress).await?;
+            num_described += self.describe_targets(thorium, on_datum, progress).await?;
         }
         if let Some(target_list_path) = &self.target_list() {
             // describe targets given in a list file
             num_described += self
-                .describe_list(target_list_path, thorium, seq, progress)
+                .describe_list(target_list_path, thorium, on_datum, progress)
                 .await?;
         }
         if self.has_parameters() || self.apply_to_all() {
             // describe targets using a search
-            num_described += self.describe_search(thorium, seq, progress).await?;
+            num_described += self.describe_search(thorium, on_datum, progress).await?;
         }
         Ok(num_described)
     }
@@ -392,47 +423,77 @@ pub trait DescribeCommand: DescribeSealed {
             }
             None => None,
         };
+        // `--condensed` is a JSON modifier, so it forces JSON regardless of format
+        let format = if self.condensed() {
+            DescribeFormat::Json
+        } else {
+            self.format()?
+        };
+        // unify the stdout and file destinations into a single writer
+        let to_stdout = out_file.is_none();
+        let mut writer: Box<dyn Write> = match out_file {
+            Some(file) => Box::new(file),
+            None => Box::new(std::io::stdout()),
+        };
         // describe the data, saving the actual number described in case it doesn't match the bound
-        let num_described = match (self.condensed(), out_file) {
-            (false, None) => {
-                let mut stdout_ser_pretty = serde_json::Serializer::pretty(std::io::stdout());
-                let mut seq = stdout_ser_pretty.serialize_seq(None)?;
-                let num_described = self
-                    .describe_sealed(thorium, &mut seq, progress.as_ref())
-                    .await?;
-                seq.end()?;
-                // add a newline because serde doesn't
-                println!();
+        let num_described = match format {
+            DescribeFormat::Json => {
+                // serialize each datum into the JSON sequence as it arrives
+                let num_described = if self.condensed() {
+                    let mut ser = serde_json::Serializer::new(&mut *writer);
+                    let mut seq = ser.serialize_seq(None)?;
+                    // scope the sink so its borrow on `seq` ends before `seq.end`
+                    let num = {
+                        let mut sink = |datum: &Self::Data| {
+                            seq.serialize_element(datum)
+                                .map_err(|err| Error::new(format!("Error serializing data: {err}")))
+                        };
+                        self.describe_sealed(thorium, &mut sink, progress.as_ref())
+                            .await?
+                    };
+                    seq.end()?;
+                    num
+                } else {
+                    let mut ser = serde_json::Serializer::pretty(&mut *writer);
+                    let mut seq = ser.serialize_seq(None)?;
+                    // scope the sink so its borrow on `seq` ends before `seq.end`
+                    let num = {
+                        let mut sink = |datum: &Self::Data| {
+                            seq.serialize_element(datum)
+                                .map_err(|err| Error::new(format!("Error serializing data: {err}")))
+                        };
+                        self.describe_sealed(thorium, &mut sink, progress.as_ref())
+                            .await?
+                    };
+                    seq.end()?;
+                    num
+                };
+                // serde doesn't add a trailing newline, so add one for the terminal
+                if to_stdout {
+                    writeln!(writer)
+                        .map_err(|err| Error::new(format!("Error writing output: {err}")))?;
+                }
                 num_described
             }
-            (false, Some(file)) => {
-                let mut file_ser_pretty = serde_json::Serializer::pretty(file);
-                let mut seq = file_ser_pretty.serialize_seq(None)?;
-                let num_described = self
-                    .describe_sealed(thorium, &mut seq, progress.as_ref())
-                    .await?;
-                seq.end()?;
-                num_described
-            }
-            (true, None) => {
-                let mut stdout_ser = serde_json::Serializer::new(std::io::stdout());
-                let mut seq = stdout_ser.serialize_seq(None)?;
-                let num_described = self
-                    .describe_sealed(thorium, &mut seq, progress.as_ref())
-                    .await?;
-                seq.end()?;
-                // add a newline because serde doesn't
-                println!();
-                num_described
-            }
-            (true, Some(file)) => {
-                let mut file_ser = serde_json::Serializer::new(file);
-                let mut seq = file_ser.serialize_seq(None)?;
-                let num_described = self
-                    .describe_sealed(thorium, &mut seq, progress.as_ref())
-                    .await?;
-                seq.end()?;
-                num_described
+            DescribeFormat::Human => {
+                // only emit ANSI styling for an interactive terminal
+                let ansi = to_stdout && std::io::stdout().is_terminal();
+                let mut first = true;
+                let mut sink = |datum: &Self::Data| -> Result<(), Error> {
+                    if first {
+                        first = false;
+                    } else {
+                        // separate consecutive entities with a rule
+                        writeln!(writer, "\n{}\n", utils::render::separator(ansi))
+                            .map_err(|err| Error::new(format!("Error writing output: {err}")))?;
+                    }
+                    self.render_human(datum, &mut *writer, ansi)?;
+                    writeln!(writer)
+                        .map_err(|err| Error::new(format!("Error writing output: {err}")))?;
+                    Ok(())
+                };
+                self.describe_sealed(thorium, &mut sink, progress.as_ref())
+                    .await?
             }
         };
         // finish the progress bar if we have one

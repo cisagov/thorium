@@ -50,7 +50,7 @@ pub struct GetNetworkPolicies {
     /// Any groups to filter by when listing network policies
     ///
     /// If no groups are given, the search will include all groups the user is apart of
-    #[clap(short, long)]
+    #[clap(short, long, value_delimiter = ',')]
     pub groups: Vec<String>,
     /// The cursor to continue a search with
     #[clap(long)]
@@ -121,8 +121,8 @@ pub struct DescribeNetworkPolicies {
     /// The path to the file containing a list of network policies to describe separated by newlines
     /// optionally each with the policy's ID separated with a ':' in case more than one distinct network
     /// policies share the same name (i.e. <NAME:ID>)
-    #[clap(long)]
-    pub network_policy_list: Option<PathBuf>,
+    #[clap(short = 'L', long = "list")]
+    pub list: Option<PathBuf>,
     /// The path to the file to write output to; if not provided, details will be output to stdout
     #[clap(short, long)]
     pub output: Option<PathBuf>,
@@ -153,16 +153,16 @@ pub struct DescribeNetworkPolicies {
     /// When combined with `--no-limit`, this will describe all network policies to which the current user
     /// has access.
     #[clap(long)]
-    pub describe_all: bool,
+    pub all: bool,
 }
 
 impl SearchParameterized for DescribeNetworkPolicies {
     fn has_targets(&self) -> bool {
-        !self.network_policies.is_empty() || self.network_policy_list.is_some()
+        !self.network_policies.is_empty() || self.list.is_some()
     }
 
     fn apply_to_all(&self) -> bool {
-        self.describe_all
+        self.all
     }
 }
 
@@ -204,7 +204,7 @@ impl DescribeSealed for DescribeNetworkPolicies {
     }
 
     fn target_list(&self) -> Option<&PathBuf> {
-        self.network_policy_list.as_ref()
+        self.list.as_ref()
     }
 
     fn parse_target<'a>(&self, raw: &'a str) -> Result<Self::Target<'a>, thorium::Error> {

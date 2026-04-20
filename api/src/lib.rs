@@ -31,7 +31,7 @@ pub mod test_utilities;
 #[cfg(feature = "client")]
 pub mod client;
 #[cfg(feature = "client")]
-pub use client::{CtlConf, Cursor, Error, Keys, SearchDate, Thorium};
+pub use client::{ContainerRuntime, CtlConf, Cursor, Error, Keys, SearchDate, Thorium};
 
 // expose the clients if that feature is enabled
 #[cfg(feature = "ai")]

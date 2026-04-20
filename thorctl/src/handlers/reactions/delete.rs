@@ -6,36 +6,8 @@ use thorium::{CtlConf, Thorium};
 
 use crate::Args;
 use crate::args::reactions::DeleteReactions;
-use crate::handlers::progress::{Bar, BarKind, MultiBar};
-use crate::handlers::{Monitor, MonitorMsg, Worker};
-
-/// The files download monitor
-pub struct ReactionsDeleteMonitor;
-
-impl Monitor for ReactionsDeleteMonitor {
-    /// The update type to use
-    type Update = ();
-
-    /// build this monitors progress bar
-    ///
-    /// # Arguments
-    ///
-    /// * `multi` - The multibar to add a bar too
-    /// * `msg`- The message to set for our monitor bar
-    fn build_bar(multi: &MultiBar, msg: &str) -> Bar {
-        multi.add(msg, BarKind::Bound(0))
-    }
-
-    /// Apply an update to our global progress bar
-    ///
-    /// # Arguments
-    ///
-    /// * `bar` - The bar to apply updates too
-    /// * `update` - The update to apply
-    fn apply(bar: &Bar, _: Self::Update) {
-        bar.inc(1);
-    }
-}
+use crate::handlers::progress::{Bar, BarKind};
+use crate::handlers::{MonitorMsg, SimpleMonitor, Worker};
 
 macro_rules! check {
     ($bar:expr, $func:expr) => {
@@ -59,7 +31,7 @@ pub struct ReactionsDeleteWorker {
     /// The arguments for downloading repos
     pub cmd: DeleteReactions,
     /// The channel to send monitor updates on
-    pub monitor_tx: AsyncSender<MonitorMsg<ReactionsDeleteMonitor>>,
+    pub monitor_tx: AsyncSender<MonitorMsg<SimpleMonitor>>,
 }
 
 #[async_trait::async_trait]
@@ -71,7 +43,7 @@ impl Worker for ReactionsDeleteWorker {
     type Job = Reaction;
 
     /// The global monitor to use
-    type Monitor = ReactionsDeleteMonitor;
+    type Monitor = SimpleMonitor;
 
     /// Initialize our worker
     async fn init(

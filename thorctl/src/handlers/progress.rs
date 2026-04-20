@@ -14,6 +14,8 @@ pub enum BarKind {
     Unbound,
     /// A bounded bar
     Bound(u64),
+    /// A bounded bar that also displays the rate of progress per second
+    BoundRate(u64),
     /// An unbounded IO bar
     UnboundIO,
     /// An IO bar
@@ -49,6 +51,18 @@ impl BarKind {
                 // build our style string
                 let style = format!(
                     "[{{elapsed_precise}}] {name} {{msg}} {{bar:40.cyan/blue}} {{pos:>7}}/{{len:7}} {{eta}} remaining"
+                );
+                // set the style for our bar
+                bar.set_style(ProgressStyle::with_template(&style).unwrap());
+                // set this bars length
+                bar.set_length(bound);
+                // start this bars progress at 0
+                bar.set_position(0);
+            }
+            BarKind::BoundRate(bound) => {
+                // build our style string, including the per-second rate of progress
+                let style = format!(
+                    "[{{elapsed_precise}}] {name} {{msg}} {{bar:40.cyan/blue}} {{pos:>7}}/{{len:7}} ({{per_sec}}) {{eta}} remaining"
                 );
                 // set the style for our bar
                 bar.set_style(ProgressStyle::with_template(&style).unwrap());
@@ -323,45 +337,45 @@ impl Bar {
 
     /// Print a warning message
     ///
+    /// Warnings must reach the user even in quiet mode or when output is not a
+    /// tty (where a hidden progress bar would otherwise swallow the line), so
+    /// this falls back to stderr whenever the bar can't actually display it.
+    ///
     /// # Arguments
     ///
     /// * `msg` - The warning message to print
     pub fn warning<T: AsRef<str>>(&self, msg: T) {
-        // check if we are in quiet mode or not
-        if let Some(bar) = &self.bar {
-            bar.println(format!(
-                "{}: {} - {}",
-                "Warning".bright_yellow(),
-                &self.name,
-                msg.as_ref(),
-            ));
+        let line = format!(
+            "{}: {} - {}",
+            "Warning".bright_yellow(),
+            &self.name,
+            msg.as_ref(),
+        );
+        match &self.bar {
+            Some(bar) if !bar.is_hidden() => bar.println(line),
+            _ => eprintln!("{line}"),
         }
     }
 
     /// Print an error message
     ///
+    /// Errors must reach the user even when output is not a tty (where a
+    /// hidden progress bar would swallow the line), so this falls back to
+    /// stderr whenever the bar can't actually display it.
+    ///
     /// # Arguments
     ///
     /// * `msg` - The error message to print
     pub fn error<T: AsRef<str>>(&self, msg: T) {
-        // print our error if we are in quiet mode or not
+        let line = format!(
+            "{}: {} - {}",
+            "Error".bright_red(),
+            &self.name,
+            msg.as_ref(),
+        );
         match &self.bar {
-            Some(bar) => {
-                bar.println(format!(
-                    "{}: {} - {}",
-                    "Error".bright_red(),
-                    &self.name,
-                    msg.as_ref(),
-                ));
-            }
-            None => {
-                eprintln!(
-                    "{}: {} - {}",
-                    "Error".bright_red(),
-                    &self.name,
-                    msg.as_ref(),
-                )
-            }
+            Some(bar) if !bar.is_hidden() => bar.println(line),
+            _ => eprintln!("{line}"),
         }
     }
 
@@ -433,4 +447,46 @@ impl Bar {
             None => f(),
         }
     }
+
+    /// Suspend the progress bar while the future `f` is executing.
+    /// Uses [`tokio::task::block_in_place`] to bridge indicatif's sync
+    /// `suspend` with an async future.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - The future to execute while the progress bar is suspended
+    pub async fn suspend_async<F, R>(&self, f: F) -> R
+    where
+        F: std::future::Future<Output = R>,
+    {
+        match &self.bar {
+            Some(bar) => tokio::task::block_in_place(|| {
+                bar.suspend(|| tokio::runtime::Handle::current().block_on(f))
+            }),
+            None => f.await,
+        }
+    }
+}
+
+/// Print a warning to stderr with the same colorized prefix [`Bar::warning`] uses
+///
+/// For contexts that have no [`Bar`] (a synchronous routine, or a direct print) but should still
+/// match the canonical warning style. Goes to stderr so it isn't swallowed in quiet/non-tty runs.
+///
+/// # Arguments
+///
+/// * `msg` - The warning message to print
+pub fn warn<T: AsRef<str>>(msg: T) {
+    eprintln!("{}: {}", "Warning".bright_yellow(), msg.as_ref());
+}
+
+/// Print a note to stderr with a colorized prefix, for advisory one-off messages
+///
+/// The no-[`Bar`] companion to [`warn`], for informational notices that aren't warnings or errors.
+///
+/// # Arguments
+///
+/// * `msg` - The note message to print
+pub fn note<T: AsRef<str>>(msg: T) {
+    eprintln!("{}: {}", "Note".bright_yellow(), msg.as_ref());
 }

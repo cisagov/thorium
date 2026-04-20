@@ -3,7 +3,7 @@
 use kanal::AsyncReceiver;
 use tokio::task::JoinHandle;
 
-use super::progress::{Bar, MultiBar};
+use super::progress::{Bar, BarKind, MultiBar};
 
 /// The messages to send new jobs to workers with
 pub enum MonitorMsg<M: Monitor> {
@@ -15,6 +15,53 @@ pub enum MonitorMsg<M: Monitor> {
     Finished,
 }
 
+/// A simple monitor that increments a bounded progress bar on each update.
+///
+/// Use as `type MyMonitor = SimpleMonitor;` instead of writing a custom impl
+/// when the only behavior needed is `bar.inc(1)` per update.
+///
+/// The `RATE` const parameter controls whether the global bar also displays the
+/// per-second rate of progress. Use `SimpleMonitor<true>` for workloads like
+/// parallel file downloads where the completion rate is useful; the default
+/// `SimpleMonitor` (i.e. `SimpleMonitor<false>`) shows a plain count bar.
+pub struct SimpleMonitor<const RATE: bool = false>;
+
+/// A [`SimpleMonitor`] whose global bar also displays the per-second rate of
+/// progress, for workloads like parallel file downloads where the completion
+/// rate is useful to see
+pub type SimpleRateMonitor = SimpleMonitor<true>;
+
+impl<const RATE: bool> Monitor for SimpleMonitor<RATE> {
+    type Update = ();
+
+    /// Build a bounded progress bar, with a per-second rate when `RATE` is set
+    ///
+    /// # Arguments
+    ///
+    /// * `multi` - The multibar to add the bar to
+    /// * `msg` - The message to set for the bar
+    fn build_bar(multi: &MultiBar, msg: &str) -> Bar {
+        // pick a rate-displaying bar when requested, otherwise a plain count bar
+        let kind = if RATE {
+            BarKind::BoundRate(0)
+        } else {
+            BarKind::Bound(0)
+        };
+        multi.add(msg, kind)
+    }
+
+    /// Advance the bar by one for each completed update
+    ///
+    /// # Arguments
+    ///
+    /// * `bar` - The bar to advance
+    /// * `_` - The (empty) update payload
+    fn apply(bar: &Bar, _: Self::Update) {
+        bar.inc(1);
+    }
+}
+
+/// A global progress monitor driving a single bar from worker updates
 pub trait Monitor: Send + 'static {
     /// The update type to use
     type Update: Send;

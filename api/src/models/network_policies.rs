@@ -664,6 +664,76 @@ pub struct NetworkPolicyRequest {
     pub default_policy: bool,
 }
 
+impl From<&IpBlock> for IpBlockRaw {
+    /// Convert a stored IP block back to its raw string form
+    ///
+    /// Uses full CIDR strings (network length always included) so a
+    /// round-tripped block stays valid for K8's
+    fn from(block: &IpBlock) -> Self {
+        match block {
+            IpBlock::V4(block) => IpBlockRaw {
+                cidr: block.cidr.to_full_cidr_string(),
+                except: block.except.as_ref().map(|except| {
+                    except
+                        .iter()
+                        .map(FullCidrString::to_full_cidr_string)
+                        .collect()
+                }),
+            },
+            IpBlock::V6(block) => IpBlockRaw {
+                cidr: block.cidr.to_full_cidr_string(),
+                except: block.except.as_ref().map(|except| {
+                    except
+                        .iter()
+                        .map(FullCidrString::to_full_cidr_string)
+                        .collect()
+                }),
+            },
+        }
+    }
+}
+
+impl From<&NetworkPolicyRule> for NetworkPolicyRuleRaw {
+    /// Convert a stored rule back to its raw request form, dropping the
+    /// server-assigned rule ID
+    fn from(rule: &NetworkPolicyRule) -> Self {
+        NetworkPolicyRuleRaw {
+            allowed_ips: rule.allowed_ips.iter().map(IpBlockRaw::from).collect(),
+            allowed_groups: rule.allowed_groups.clone(),
+            allowed_tools: rule.allowed_tools.clone(),
+            allowed_local: rule.allowed_local,
+            allowed_internet: rule.allowed_internet,
+            allowed_all: rule.allowed_all,
+            ports: rule.ports.clone(),
+            allowed_custom: rule.allowed_custom.clone(),
+        }
+    }
+}
+
+impl From<&NetworkPolicy> for NetworkPolicyRequest {
+    /// Convert a stored network policy back to the request that would create
+    /// it, dropping server-assigned fields (id, k8s name, timestamps, usage)
+    ///
+    /// Used to export policies out of one Thorium instance for import into
+    /// another
+    fn from(policy: &NetworkPolicy) -> Self {
+        NetworkPolicyRequest {
+            name: policy.name.clone(),
+            groups: policy.groups.clone(),
+            ingress: policy
+                .ingress
+                .as_ref()
+                .map(|rules| rules.iter().map(NetworkPolicyRuleRaw::from).collect()),
+            egress: policy
+                .egress
+                .as_ref()
+                .map(|rules| rules.iter().map(NetworkPolicyRuleRaw::from).collect()),
+            forced_policy: policy.forced_policy,
+            default_policy: policy.default_policy,
+        }
+    }
+}
+
 impl NetworkPolicyRequest {
     /// Create a request to create a new [`NetworkPolicy`]
     ///
