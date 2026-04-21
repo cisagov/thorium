@@ -9,6 +9,32 @@ import { updateURLSection } from '@utilities/url';
 import { scrollToSection } from '@utilities/interactions';
 import { getResults } from '@thorpi/results';
 
+// floating table of contents object
+const ResultsTableOfContents = ({ parsedResults, inViewElements }) => {
+  return (
+    <nav className="results-toc">
+      <ul className="ul no-bullets">
+        {parsedResults &&
+          typeof parsedResults === 'object' &&
+          Object.keys(parsedResults)
+            .sort()
+            .map((image) => (
+              <li key={`results-${image}-toc`} className="results-toc-item">
+                <a
+                  href={`#results-${image}`}
+                  onClick={() => scrollToSection(`results-tab-${image}`)}
+                  className={`${inViewElements.includes(image) ? 'selected' : 'unselected'}`}
+                >
+                  {image}
+                </a>
+                <hr className="m-1" />
+              </li>
+            ))}
+      </ul>
+    </nav>
+  );
+};
+
 const Results = ({ sha256, results, setResults, numResults, setNumResults }) => {
   const parsedResults = structuredClone(results);
   // whether content is currently loading
@@ -56,32 +82,6 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
       }
     });
 
-  // floating table of contents object
-  const ResultsTableOfContents = ({ parsedResults }) => {
-    return (
-      <nav className="results-toc">
-        <ul className="ul no-bullets">
-          {parsedResults &&
-            typeof parsedResults === 'object' &&
-            Object.keys(parsedResults)
-              .sort()
-              .map((image) => (
-                <li key={`results-${image}-toc`} className="results-toc-item">
-                  <a
-                    href={`#results-${image}`}
-                    onClick={() => scrollToSection(`results-tab-${image}`)}
-                    className={`${inViewElements.includes(image) ? 'selected' : 'unselected'}`}
-                  >
-                    {image}
-                  </a>
-                  <hr className="m-1" />
-                </li>
-              ))}
-        </ul>
-      </nav>
-    );
-  };
-
   return (
     <div id="results-tab" className="navbar-scroll-offset results-container">
       <LoadingSpinner loading={loading}></LoadingSpinner>
@@ -120,7 +120,7 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
           </div>
           {Object.keys(parsedResults).length > 0 && (
             <div className="results-toc-col">
-              <ResultsTableOfContents results={parsedResults} />
+              <ResultsTableOfContents parsedResults={parsedResults} inViewElements={inViewElements} />
             </div>
           )}
         </>
