@@ -599,7 +599,7 @@ impl<T: TagSupport + 'static + Send> super::CensusSupport for TagCensusCaseInsen
 /// The counts for a specific tag key and its value
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct TagKeyCounts {
     /// The total number of items with this tag key
     pub total: u64,
@@ -610,7 +610,7 @@ pub struct TagKeyCounts {
 /// A count of tags across some chunk of time
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct TagCounts {
     /// The id for this cursor if it can be continued
     #[serde(skip_serializing_if = "Option::is_none")]

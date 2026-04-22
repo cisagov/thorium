@@ -22,6 +22,9 @@ use crate::{multipart_file, multipart_list, multipart_text};
 #[cfg(feature = "client")]
 use crate::client::Error;
 
+#[cfg(feature = "python")]
+use pyo3::pyclass;
+
 /// The kind of results we are saving to the db
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
@@ -356,6 +359,7 @@ impl<O: OutputSupport> OutputRequest<O> {
 /// Optional arameters for getting results
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub struct ResultGetParams {
     /// Also show hidden results
     #[serde(default)]
@@ -512,6 +516,10 @@ pub struct OutputResponse {
 /// A single result for a single run of a tool with a specific command
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(
+    feature = "python",
+    thorium_derive::pyclass(get_except(tool_version, result))
+)]
 pub struct Output {
     /// The id for this result
     pub id: Uuid,
@@ -575,6 +583,7 @@ impl<O: OutputSupport> PartialEq<OutputRequest<O>> for Output {
 /// A map of results for tools
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct OutputMap {
     /// a map of results by tool
     pub results: HashMap<String, Vec<Output>>,
@@ -636,6 +645,7 @@ pub struct OutputChunk {
 )]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub enum OutputDisplayType {
     /// Render this output as json
     #[serde(rename = "JSON", alias = "Json")]

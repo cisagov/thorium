@@ -1127,7 +1127,7 @@ impl RepoDependencyRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get, set))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all, set_all))]
 pub struct RepoDependency {
     /// The url to the repo to download
     pub url: String,

@@ -3,8 +3,10 @@
 //! themselves
 
 mod cursors;
+mod files;
 mod jobs;
 mod reactions;
 mod repos;
+mod results;
 
 pub use cursors::{SampleCursor, SampleListLineCursor, TagCountsCursor};

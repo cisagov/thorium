@@ -1,13 +1,13 @@
 //! Proc-macros for pyclasses
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use darling::FromMeta;
+use darling::{FromMeta, util::PathList};
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{ToTokens, quote};
 use syn::{
-    Attribute, Error, Fields, FieldsNamed, FieldsUnnamed, Ident, ItemStruct, LitStr, Type,
+    Attribute, Error, Field, Fields, FieldsNamed, FieldsUnnamed, Ident, ItemStruct, LitStr, Type,
     Visibility, parse_quote, spanned::Spanned,
 };
 
@@ -15,17 +15,33 @@ use crate::utils;
 
 /// Arguments to the blocking subclient attribute
 #[derive(Debug, Clone, Default, FromMeta)]
-#[darling(derive_syn_parse, default)]
+#[darling(derive_syn_parse, default, and_then = PyClassArgs::validate)]
 struct PyClassArgs {
     /// Whether to clone the struct into a separate one with the 'Py'
     /// suffix, leaving the original struct unchanged
     clone: Option<PyClassClone>,
-    /// Whether the proc macro should automatically set the `#[pyo3(get)]`
-    /// attribute for public fields
-    get: bool,
-    /// Whether the proc macro should automatically set the `#[pyo3(set)]`
-    /// attribute for public fields
-    set: bool,
+    /// Set `#[pyo3(get)]` for *all* public fields
+    get_all: bool,
+    /// Set `#[pyo3(set)]` for *all* public fields
+    set_all: bool,
+    /// Which fields the proc macro should automatically set `#[pyo3(get)]` for
+    ///
+    /// Cannot be used with `get_except`
+    get: Option<PathList>,
+    /// Which fields the proc macro should automatically set `#[pyo3(set)]` for
+    ///
+    /// Cannot be used with `set_except`
+    set: Option<PathList>,
+    /// Which fields the proc macro should *not* automatically set `#[pyo3(get)]` for,
+    /// setting for all other fields
+    ///
+    /// Cannot be used with `get`
+    get_except: Option<PathList>,
+    /// Which fields the proc macro should *not* automatically set `#[pyo3(set)]` for,
+    /// setting for all other fields
+    ///
+    /// Cannot be used with `set`
+    set_except: Option<PathList>,
     /// The types within the struct to map to 'Py' types (with 'Py' suffix
     /// appended); requires those 'Py' types to have been created already using
     /// `pyclass(clone)` or `pyenum(clone)`; only applies when cloning the
@@ -45,14 +61,167 @@ struct PyClassClone {
     derive: Vec<LitStr>,
 }
 
-impl PyClassArgs {
-    fn field_attr(&self) -> Option<Attribute> {
-        match (self.get, self.set) {
-            (true, true) => Some(parse_quote!(#[pyo3(get, set)])),
-            (true, false) => Some(parse_quote!(#[pyo3(get)])),
-            (false, true) => Some(parse_quote!(#[pyo3(set)])),
-            (false, false) => None,
+/// Returns whether the field should have the get/set attribute based on the args.
+///
+/// Precedence:
+///   1. `*_all = true` = include every public field
+///   2. `Some(list)` in allowlist = include only listed fields (must be public)
+///   3. `Some(list)` in exceptlist = include every public field except listed
+///   4. none of the above = don't include
+macro_rules! is_get_or_set {
+    (
+        $all:expr,
+        $allowlist:expr,
+        $exceptlist:expr,
+        $get_or_set_lit:literal,
+        $field:expr $(,)?
+    ) => {{
+        // check if the field is public
+        let is_public = matches!($field.vis, Visibility::Public(_));
+        if $all {
+            // get_all / set_all: every public field
+            is_public
+        } else if let Some(list) = &$allowlist {
+            // explicit allowlist
+            match &$field.ident {
+                None => is_public,
+                Some(ident) => {
+                    if list.iter().any(|p| p.is_ident(ident)) {
+                        if !is_public {
+                            return Err(Error::new(
+                                $field.span(),
+                                format!(
+                                    "#[{}] can only be applied to public fields! field '{}' is not public",
+                                    $get_or_set_lit, ident
+                                ),
+                            ));
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        } else if let Some(list) = &$exceptlist {
+            // explicit denylist: all public fields except these
+            match &$field.ident {
+                None => is_public,
+                Some(ident) => is_public && !list.iter().any(|p| p.is_ident(ident)),
+            }
+        } else {
+            // nothing specified
+            false
         }
+    }};
+}
+
+/// Check whether all the `get/set/no_get/no_set` fields iterator are in the set of
+/// all fields and return an error on the first field that isn't
+macro_rules! check_field_in_get_set {
+    ($args_iter:expr, $get_or_set_raw:literal, $all_idents:expr) => {
+        for path in $args_iter {
+            let Some(ident) = path.get_ident() else {
+                return Err(Error::new(
+                    path.span(),
+                    format!(
+                        "Invalid '{}' field: not a valid field name",
+                        $get_or_set_raw
+                    ),
+                ));
+            };
+            if !$all_idents.contains(ident) {
+                return Err(Error::new(
+                    ident.span(),
+                    format!(
+                        "Invalid '{}' field: struct does not have field '{}'",
+                        $get_or_set_raw, ident
+                    ),
+                ));
+            }
+        }
+    };
+}
+
+impl PyClassArgs {
+    /// Validate the args after parsing
+    fn validate(self) -> darling::Result<Self> {
+        if self.get.is_some() && self.get_except.is_some() {
+            return Err(darling::Error::custom(
+                "`get` and `get_except` are mutually exclusive",
+            ));
+        }
+        if self.get_all && self.get_except.is_some() {
+            return Err(darling::Error::custom(
+                "`get_all` and `get_except` are mutually exclusive",
+            ));
+        }
+        if self.get_all && self.get.is_some() {
+            return Err(darling::Error::custom(
+                "`get_all` and `get` are mutually exclusive",
+            ));
+        }
+        if self.set_all && self.set_except.is_some() {
+            return Err(darling::Error::custom(
+                "`set_all` and `set_except` are mutually exclusive",
+            ));
+        }
+        if self.set_all && self.set.is_some() {
+            return Err(darling::Error::custom(
+                "`set_all` and `set` are mutually exclusive",
+            ));
+        }
+        if self.set.is_some() && self.set_except.is_some() {
+            return Err(darling::Error::custom(
+                "`set` and `set_except` are mutually exclusive",
+            ));
+        }
+        Ok(self)
+    }
+
+    /// Returns a get and/or set pyo3 attribute for the given field based on the proc macro args
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The field to build the attribute for
+    fn pyo3_field_attr(&self, field: &Field) -> Result<Option<Attribute>, Error> {
+        let get = is_get_or_set!(self.get_all, self.get, self.get_except, "get", field);
+        let set = is_get_or_set!(self.set_all, self.set, self.set_except, "set", field);
+        match (get, set) {
+            (true, true) => Ok(Some(parse_quote!(#[pyo3(get, set)]))),
+            (true, false) => Ok(Some(parse_quote!(#[pyo3(get)]))),
+            (false, true) => Ok(Some(parse_quote!(#[pyo3(set)]))),
+            (false, false) => Ok(None),
+        }
+    }
+
+    /// With the full set of field names in the struct, check to make sure the
+    /// `get/set/no_get/no_set` args are valid
+    ///
+    /// # Arguments
+    ///
+    /// * `all_field_names` - All field names in the struct
+    fn verify_get_set(&self, all_field_idents: &HashSet<&Ident>) -> Result<(), Error> {
+        check_field_in_get_set!(
+            self.get.as_deref().into_iter().flatten(),
+            "get",
+            all_field_idents
+        );
+        check_field_in_get_set!(
+            self.set.as_deref().into_iter().flatten(),
+            "set",
+            all_field_idents
+        );
+        check_field_in_get_set!(
+            self.get_except.as_deref().into_iter().flatten(),
+            "get_except",
+            all_field_idents
+        );
+        check_field_in_get_set!(
+            self.set_except.as_deref().into_iter().flatten(),
+            "set_except",
+            all_field_idents
+        );
+        Ok(())
     }
 
     /// Returns a map of the type to map to the py type it should
@@ -92,25 +261,37 @@ pub fn pyclass(args_raw: TokenStream, input: TokenStream) -> TokenStream {
     let pyclass_attr: Attribute = parse_quote!(#[pyclass(from_py_object)]);
     // try to add a `Clone` derive if one doesn't already exist
     py_struct.attrs.push(pyclass_attr);
-    // add pyo3 attributes to each public field depending on what we have set
-    if let Some(pyo3_field_attr) = args.field_attr() {
-        match &mut py_struct.fields {
-            syn::Fields::Named(named) => {
-                for field in &mut named.named {
-                    if matches!(field.vis, Visibility::Public(_)) {
-                        field.attrs.push(pyo3_field_attr.clone());
-                    }
+    // add pyo3 attributes to each field depending on what we have set
+    let mut all_field_names = HashSet::new();
+    match &mut py_struct.fields {
+        syn::Fields::Named(named) => {
+            for field in &mut named.named {
+                if let Some(ident) = &field.ident {
+                    all_field_names.insert(ident);
+                }
+                // add a pyo3 field attribute for this field if needed
+                match args.pyo3_field_attr(field) {
+                    Ok(Some(attr)) => field.attrs.push(attr),
+                    Ok(None) => (),
+                    Err(err) => return err.into_compile_error().into(),
                 }
             }
-            syn::Fields::Unnamed(unnamed) => {
-                for field in &mut unnamed.unnamed {
-                    if matches!(field.vis, Visibility::Public(_)) {
-                        field.attrs.push(pyo3_field_attr.clone());
-                    }
-                }
-            }
-            syn::Fields::Unit => {}
         }
+        syn::Fields::Unnamed(unnamed) => {
+            for field in &mut unnamed.unnamed {
+                // add a pyo3 field attribute for this field if needed
+                match args.pyo3_field_attr(field) {
+                    Ok(Some(attr)) => field.attrs.push(attr),
+                    Ok(None) => (),
+                    Err(err) => return err.into_compile_error().into(),
+                }
+            }
+        }
+        syn::Fields::Unit => {}
+    }
+    // ensure that all get, set, get_except, and set_except are fields that this struct actually has
+    if let Err(err) = args.verify_get_set(&all_field_names) {
+        return err.into_compile_error().into();
     }
     let expanded = if let Some(clone_args) = &args.clone {
         let py_clone = pyclass_clone(&orig_struct, py_struct, &args, clone_args);

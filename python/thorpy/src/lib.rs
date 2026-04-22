@@ -26,10 +26,10 @@ pub mod thorium {
     pub use thorium::models::python::{SampleCursor, SampleListLineCursor, TagCountsCursor};
     #[pymodule_export]
     pub use thorium::models::{
-        BulkReactionResponse, CarvedOriginPy, Comment, CommitishKinds, FileListOpts, GenericJob,
-        GenericJobArgs, GenericJobOpts, HandleJobResponse, JobHandleStatus, OriginPy, Reaction,
-        ReactionCache, ReactionCreation, ReactionRequest, ReactionStatus, RepoDependency,
-        RepoDependencyRequest, SampleListLine, SamplePy, SubmissionChunkPy, TagCounts,
-        TagKeyCounts,
+        Attachment, BulkReactionResponse, CarvedOriginPy, Comment, CommitishKinds, FileListOpts,
+        GenericJob, GenericJobArgs, GenericJobOpts, HandleJobResponse, JobHandleStatus, OriginPy,
+        Output, OutputMap, Reaction, ReactionCache, ReactionCreation, ReactionRequest,
+        ReactionStatus, RepoDependency, RepoDependencyRequest, ResultGetParams, SampleListLine,
+        SamplePy, SubmissionChunkPy, TagCounts, TagKeyCounts,
     };
 }

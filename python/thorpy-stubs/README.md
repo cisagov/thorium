@@ -34,12 +34,23 @@ the latest `thorpy` client using `maturin develop` before generating the stubs f
 Automatic stub generation through type introspection is still experiemental. The following
 are the major limitations in the stubs we generate:
 
-- Enum variants are missing
-- Class properties generated with `#[pyo3(get)]` and `#[pyo3(set)]` don't have typing
-info
 - Correct typing in function signatures oftentimes requires explicitly writing out
 the function signature using `#[pyo3(signature = ... )]` which may lead to mismatches
-as functions are updated
+as functions are updated. Some of this typing will be improved in future version of PyO3
+(see [PyO3 PR #5770](https://github.com/PyO3/pyo3/pull/5770)), but default values will
+probably still require manually writing out the signature.
+
+## Future Improvements
+
+The release of [maturin 1.13.0](https://github.com/PyO3/maturin/releases/tag/v1.13.0) includes
+built-in support for generating stubs using the build flag `--generate-stubs`. `PyO3` 0.28.4 (or
+0.29.0) will include better third-party type support and a whole host of improvements for
+stub generation (see [PyO3 PR #5770](https://github.com/PyO3/pyo3/pull/5770)). The only reason
+we haven't retired this helper crate for now is because those improvements  have not landed,
+and 'UUID' is not automatically imported in the generated stubs file, leading to type errors.
+
+Once the next release hits, we will retire this crate and replace it with maturin's built-in
+functionality.
 
 ## Resources
 

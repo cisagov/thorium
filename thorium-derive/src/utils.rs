@@ -1,7 +1,6 @@
 //! Helpful functions to share between modules
 
 use std::collections::HashMap;
-
 use syn::{GenericArgument, Ident, PathArguments, Type, TypePath};
 
 /// Recursively walk a mutable `Type`, replacing the first identifier that

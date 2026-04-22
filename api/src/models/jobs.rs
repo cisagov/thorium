@@ -265,7 +265,7 @@ fn default_false() -> bool {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct GenericJobOpts {
     /// Whether to always override all positional args in the original image
     #[serde(default = "default_false")]
@@ -335,7 +335,7 @@ impl GenericJobOpts {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "trace", derive(valuable::Valuable))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct GenericJobArgs {
     /// The positional arguments to overlay onto the original cmd
     #[serde(default)]

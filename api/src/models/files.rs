@@ -2097,7 +2097,7 @@ impl PartialEq<SubmissionUpdate> for Sample {
 )))]
 #[cfg_attr(
     feature = "python",
-    thorium_derive::pyclass(clone(derive("Serialize", "Deserialize")), get, pytypes("Origin"))
+    thorium_derive::pyclass(clone(derive("Serialize", "Deserialize")), get_all, pytypes("Origin"))
 )]
 pub struct SubmissionChunk {
     /// A UUID for this submission
@@ -2140,7 +2140,7 @@ pub type TagMap = HashMap<String, HashMap<String, HashSet<String>>>;
 		"attachments": {}
 	}
 )))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct Comment {
     /// The groups to share this comment with
     pub groups: Vec<String>,
@@ -2255,7 +2255,7 @@ pub struct CommentResponse {
     feature = "python",
     thorium_derive::pyclass(
         clone(derive("Serialize", "Deserialize")),
-        get,
+        get_all,
         pytypes("SubmissionChunk")
     )
 )]
@@ -2921,6 +2921,7 @@ impl DownloadedFile {
 
 /// An attachment to a result or comment
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 pub struct Attachment {
     /// The attachment in bytes
     pub data: Bytes,
@@ -3008,7 +3009,7 @@ impl FileListParams {
 // A single sample submission line
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct SampleListLine {
     /// The group this submission was apart of (used only for cursor generation)
     #[serde(skip_serializing, skip_deserializing)]

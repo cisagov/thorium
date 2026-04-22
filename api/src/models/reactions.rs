@@ -162,7 +162,7 @@ pub struct ReactionIdResponse {
 /// The response from creating reactions in bulk
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct BulkReactionResponse {
     /// Any errors that occured while creating reactions
     pub errors: HashMap<usize, String>,
@@ -863,7 +863,7 @@ impl From<JobHandleStatus> for ReactionStatus {
 /// This is used to track jobs across a single run of a pipeline
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct Reaction {
     /// The uuidv4 that identifies this reaction
     pub id: Uuid,
@@ -938,7 +938,7 @@ impl PartialEq<ReactionRequest> for Reaction {
 
 /// The response given when creating a reaction
 #[derive(Clone, Serialize, Deserialize, Debug)]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct ReactionCreation {
     /// The uuidv4 of the created reaction
     pub id: Uuid,

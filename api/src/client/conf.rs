@@ -34,7 +34,7 @@ pub fn default_client_timeout() -> u64 {
 
 /// The config options for our [`reqwest::Client`]
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python", thorium_derive::pyclass(get))]
+#[cfg_attr(feature = "python", thorium_derive::pyclass(get_all))]
 pub struct ClientSettings {
     /// Ignore invalid certificates
     #[serde(default)]

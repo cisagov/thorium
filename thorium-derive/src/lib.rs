@@ -10,6 +10,9 @@ mod sync;
 #[cfg(feature = "python")]
 mod python;
 
+// sync and python are the only users of utils right now;
+// should that change, remove this feature gate
+#[cfg(any(feature = "sync", feature = "python"))]
 mod utils;
 
 /// Add the json based serialzie impl
