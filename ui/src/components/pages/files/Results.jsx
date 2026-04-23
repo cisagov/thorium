@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Alert } from 'react-bootstrap';
 
 // project imports
@@ -36,7 +36,6 @@ const ResultsTableOfContents = ({ parsedResults, inViewElements }) => {
 };
 
 const Results = ({ sha256, results, setResults, numResults, setNumResults }) => {
-  const parsedResults = structuredClone(results);
   // whether content is currently loading
   const [loading, setLoading] = useState(false);
   const [inViewElements, setInViewElements] = useState([]);
@@ -73,14 +72,14 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
     }
   };
 
-  // remove hidden display typed results from results object
-  Object.keys(parsedResults)
-    .sort()
-    .map((image) => {
-      if (parsedResults[image][0]['display_type'] && results[image][0]['display_type'] == 'Hidden') {
-        delete parsedResults[image];
-      }
-    });
+  const parsedResults = useMemo(() => {
+    if (!results || typeof results !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(results).filter(([_, image]) => {
+        return (!(image[0].display_type && image[0].display_type == 'Hidden'))
+      })
+    )
+  }, [results])
 
   return (
     <div id="results-tab" className="navbar-scroll-offset results-container">
