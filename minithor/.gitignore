@@ -1,4 +1,7 @@
 *.secret
 .dockerconfigjson
+toolbox.json
+thorctl
 .certs/*
 .s3cfg
+*.crt

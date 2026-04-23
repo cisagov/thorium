@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --force|-f) FORCE=true ;;
+        -h|--help) echo "Usage: $0 [--force|-f]"; echo "  --force, -f  Continue past failures instead of aborting"; exit 0 ;;
+        *) echo "Unknown option: $arg"; echo "Usage: $0 [--force|-f]"; exit 1 ;;
+    esac
+done
+
+CURRENT_SECTION="startup"
+FAILURES=0
+trap 'echo "FATAL: Failed in \"$CURRENT_SECTION\" at line $LINENO (command: $BASH_COMMAND)" >&2' ERR
+
+log() { echo -e "\n====== $1 ======\n"; }
+
+run_step() {
+    if ! "$@"; then
+        FAILURES=$((FAILURES + 1))
+        echo "ERROR: Command failed: $*" >&2
+        if [ "$FORCE" = true ]; then
+            echo "  Continuing due to --force flag" >&2
+        else
+            exit 1
+        fi
+    fi
+}
+
+helm_uninstall() {
+    local release=$1 namespace=$2
+    if helm status "$release" -n "$namespace" &>/dev/null; then
+        run_step helm uninstall "$release" -n "$namespace" --timeout=120s
+    else
+        echo "Helm release '$release' not found in namespace '$namespace', skipping"
+    fi
+}
+
+force_delete_ns() {
+    local ns=$1
+    echo "Force-clearing finalizers on stuck namespace '$ns'..."
+    minikube kubectl -- get ns "$ns" -o json \
+        | sed 's/"finalizers":[^]]*]/"finalizers":[]/' \
+        | minikube kubectl -- replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+}
+
+wait_for_ns_termination() {
+    local timeout=${1:-300}
+    local elapsed=0
+    while minikube kubectl -- get ns 2>&1 | grep -q Terminating; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo "WARNING: Namespaces still terminating after ${timeout}s, force-clearing..." >&2
+            local stuck_ns
+            stuck_ns=$(minikube kubectl -- get ns -o jsonpath='{range .items[?(@.status.phase=="Terminating")]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+            for ns in $stuck_ns; do
+                force_delete_ns "$ns" || true
+            done
+            sleep 5
+            if minikube kubectl -- get ns 2>&1 | grep -q Terminating; then
+                echo "ERROR: Namespaces still stuck after force-clear:" >&2
+                minikube kubectl -- get ns 2>&1 | grep Terminating >&2 || true
+                return 1
+            fi
+            return 0
+        fi
+    done
+}
+
+########################################
+# Thorium
+########################################
+CURRENT_SECTION="Removing Thorium"
+log "Removing Thorium"
+# Delete the operator first so it can't re-add finalizers during cleanup.
+run_step minikube kubectl -- delete deployment operator -n thorium --ignore-not-found --timeout=60s
+# Remove finalizers from ThoriumCluster CRs so the namespace can terminate.
+if minikube kubectl -- get crd thoriumclusters.sandia.gov &>/dev/null; then
+    for tc in $(minikube kubectl -- get thoriumclusters.sandia.gov -n thorium -o name 2>/dev/null); do
+        run_step minikube kubectl -- patch "$tc" -n thorium --type merge -p '{"metadata":{"finalizers":[]}}'
+    done
+    run_step minikube kubectl -- delete thoriumclusters.sandia.gov --all -n thorium --ignore-not-found --timeout=60s
+fi
+run_step minikube kubectl -- delete ns thorium --ignore-not-found --timeout=300s
+run_step minikube kubectl -- delete clusterrole thorium-operator --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete clusterrolebinding thorium-operator-binding --ignore-not-found --timeout=60s
+
+########################################
+# Quickwit
+########################################
+CURRENT_SECTION="Removing Quickwit"
+log "Removing Quickwit"
+helm_uninstall quickwit quickwit
+
+########################################
+# Kubegres + Postgres
+########################################
+CURRENT_SECTION="Removing Kubegres + Postgres"
+log "Removing Kubegres + Postgres"
+# Delete the operator first so it can't re-add finalizers during cleanup.
+run_step minikube kubectl -- delete deployment kubegres-controller-manager -n kubegres-system --ignore-not-found --timeout=60s
+# Remove finalizers from Kubegres CRs so the namespace can terminate.
+if minikube kubectl -- get crd kubegres.reactive-tech.io &>/dev/null; then
+    for kb in $(minikube kubectl -- get kubegres.reactive-tech.io -n quickwit -o name 2>/dev/null); do
+        run_step minikube kubectl -- patch "$kb" -n quickwit --type merge -p '{"metadata":{"finalizers":[]}}'
+    done
+    run_step minikube kubectl -- delete kubegres.reactive-tech.io --all -n quickwit --ignore-not-found --timeout=60s
+fi
+run_step minikube kubectl -- delete statefulsets,deployments,services,pods --all -n quickwit --force --grace-period=0 --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete ns quickwit --ignore-not-found --timeout=300s
+run_step minikube kubectl -- delete ns kubegres-system --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete clusterrole kubegres-kubegres-editor-role kubegres-kubegres-viewer-role kubegres-manager-role kubegres-metrics-auth-role kubegres-metrics-reader --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete clusterrolebinding kubegres-manager-rolebinding kubegres-metrics-auth-rolebinding --ignore-not-found --timeout=60s
+
+########################################
+# Jaeger
+########################################
+CURRENT_SECTION="Removing Jaeger"
+log "Removing Jaeger"
+run_step minikube kubectl -- delete ns jaeger --ignore-not-found --timeout=300s
+
+########################################
+# MinIO
+########################################
+CURRENT_SECTION="Removing MinIO"
+log "Removing MinIO"
+run_step minikube kubectl -- delete ns minio --ignore-not-found --timeout=300s
+
+########################################
+# Scylla
+########################################
+CURRENT_SECTION="Removing Scylla"
+log "Removing Scylla"
+# Delete the operator first so it can't re-add finalizers during cleanup.
+run_step minikube kubectl -- delete deployment scylla-operator -n scylla-operator --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete deployment webhook-server -n scylla-operator --ignore-not-found --timeout=60s
+# Remove finalizers from ScyllaCluster CRs so the namespace can terminate.
+if minikube kubectl -- get crd scyllaclusters.scylla.scylladb.com &>/dev/null; then
+    for sc in $(minikube kubectl -- get scyllaclusters.scylla.scylladb.com -n scylla -o name 2>/dev/null); do
+        run_step minikube kubectl -- patch "$sc" -n scylla --type merge -p '{"metadata":{"finalizers":[]}}'
+    done
+    run_step minikube kubectl -- delete scyllaclusters.scylla.scylladb.com --all -n scylla --ignore-not-found --timeout=60s
+fi
+run_step minikube kubectl -- delete statefulsets,deployments,services,pods --all -n scylla --force --grace-period=0 --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete ns scylla --ignore-not-found --timeout=300s
+helm_uninstall scylla-operator scylla-operator
+run_step minikube kubectl -- delete ns scylla-operator --ignore-not-found --timeout=300s
+
+########################################
+# cert-manager
+########################################
+CURRENT_SECTION="Removing cert-manager"
+log "Removing cert-manager"
+helm_uninstall cert-manager cert-manager
+run_step minikube kubectl -- delete ns cert-manager --ignore-not-found --timeout=300s
+
+########################################
+# Elasticsearch
+########################################
+CURRENT_SECTION="Removing Elasticsearch"
+log "Removing Elasticsearch"
+helm_uninstall elastic-operator elastic-system
+# Remove finalizers from Elasticsearch/Kibana CRs so the namespace can terminate.
+if minikube kubectl -- get crd elasticsearches.elasticsearch.k8s.elastic.co &>/dev/null; then
+    for es in $(minikube kubectl -- get elasticsearches.elasticsearch.k8s.elastic.co -n elastic-system -o name 2>/dev/null); do
+        run_step minikube kubectl -- patch "$es" -n elastic-system --type merge -p '{"metadata":{"finalizers":[]}}'
+    done
+    run_step minikube kubectl -- delete elasticsearches.elasticsearch.k8s.elastic.co --all -n elastic-system --ignore-not-found --timeout=60s
+fi
+if minikube kubectl -- get crd kibanas.kibana.k8s.elastic.co &>/dev/null; then
+    for kb in $(minikube kubectl -- get kibanas.kibana.k8s.elastic.co -n elastic-system -o name 2>/dev/null); do
+        run_step minikube kubectl -- patch "$kb" -n elastic-system --type merge -p '{"metadata":{"finalizers":[]}}'
+    done
+    run_step minikube kubectl -- delete kibanas.kibana.k8s.elastic.co --all -n elastic-system --ignore-not-found --timeout=60s
+fi
+run_step minikube kubectl -- delete statefulsets,deployments,services,pods --all -n elastic-system --force --grace-period=0 --ignore-not-found --timeout=60s
+run_step minikube kubectl -- delete ns elastic-system --ignore-not-found --timeout=300s
+
+########################################
+# Redis
+########################################
+CURRENT_SECTION="Removing Redis"
+log "Removing Redis"
+run_step minikube kubectl -- delete ns redis --ignore-not-found --timeout=300s
+
+########################################
+# Leftover CRDs
+########################################
+CURRENT_SECTION="Cleaning up CRDs"
+log "Cleaning up leftover CRDs"
+CRDS=$(minikube kubectl -- get crds -o name 2>/dev/null | grep -E 'cert-manager|elastic|scylla|kubegres|sandia' || true)
+if [ -n "$CRDS" ]; then
+    run_step minikube kubectl -- delete $CRDS --timeout=300s
+fi
+
+########################################
+# Wait for namespace termination
+########################################
+CURRENT_SECTION="Waiting for namespace termination"
+log "Waiting for namespaces to terminate"
+run_step wait_for_ns_termination 300
+
+########################################
+# Summary
+########################################
+if [ "$FAILURES" -gt 0 ]; then
+    log "Cleanup finished with $FAILURES failure(s)"
+    minikube kubectl -- get ns
+    exit 1
+else
+    log "Cleanup complete"
+    minikube kubectl -- get ns
+fi

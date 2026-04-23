@@ -1,6 +1,73 @@
-minikube delete --all --purge
+#!/usr/bin/env bash
+set -euo pipefail
+
+OS="$(uname -s)"
+DRIVER=""
+CONTAINER_CMD=""
+
+has_podman() {
+    command -v podman >/dev/null 2>&1 &&
+    podman info >/dev/null 2>&1
+}
+
+has_docker() {
+    command -v docker >/dev/null 2>&1 &&
+    env -u DOCKER_HOST docker info >/dev/null 2>&1
+}
+
+has_kvm2() {
+    [ "$OS" = "Linux" ] || return 1
+
+    command -v virsh >/dev/null 2>&1 &&
+    [ -e /dev/kvm ] &&
+    (
+        systemctl is-active --quiet libvirtd 2>/dev/null ||
+        systemctl is-active --quiet virtqemud 2>/dev/null
+    )
+}
+
+select_driver() {
+    if has_podman; then
+        DRIVER="podman"
+        CONTAINER_CMD="podman"
+    elif has_docker; then
+        DRIVER="docker"
+        CONTAINER_CMD="docker"
+    elif has_kvm2; then
+        DRIVER="kvm2"
+        CONTAINER_CMD=""
+    else
+        DRIVER=""
+        CONTAINER_CMD=""
+    fi
+}
+
+select_driver
+
+if [ -n "$DRIVER" ]; then
+    echo "Detected available driver: $DRIVER"
+else
+    echo "No working podman/docker/kvm2 driver detected."
+fi
+
+if command -v minikube >/dev/null 2>&1; then
+    minikube delete --all --purge || true
+else
+    echo "minikube not found; skipping minikube delete."
+fi
+
 rm -rf ~/.minikube ~/.kube
 sudo rm -f /usr/local/bin/minikube
 sudo rm -f /usr/local/bin/kubectl
-docker system prune --force
-docker image prune -a --force
+
+if [ "$CONTAINER_CMD" = "podman" ]; then
+    echo "Using podman for container cleanup..."
+    podman system prune --force
+    podman image prune -a --force
+elif [ "$CONTAINER_CMD" = "docker" ]; then
+    echo "Using docker for container cleanup..."
+    env -u DOCKER_HOST docker system prune --force
+    env -u DOCKER_HOST docker image prune -a --force
+else
+    echo "No working container runtime found; skipping container cleanup."
+fi

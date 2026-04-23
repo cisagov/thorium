@@ -1,6 +1,65 @@
-#!/bin/bash
-minikube start --cni calico
-# wait a bit for things to come online
+#!/usr/bin/env bash
+set -euo pipefail
+
+OS="$(uname -s)"
+
+has_podman() {
+    command -v podman >/dev/null 2>&1 &&
+    podman info >/dev/null 2>&1
+}
+
+has_docker() {
+    command -v docker >/dev/null 2>&1 &&
+    env -u DOCKER_HOST docker info >/dev/null 2>&1
+}
+
+has_kvm2() {
+    [ "$OS" = "Linux" ] || return 1
+    command -v virsh >/dev/null 2>&1 &&
+    [ -e /dev/kvm ] &&
+    (
+        systemctl is-active --quiet libvirtd 2>/dev/null ||
+        systemctl is-active --quiet virtqemud 2>/dev/null
+    )
+}
+
+if has_podman; then
+    DRIVER="podman"
+elif has_docker; then
+    DRIVER="docker"
+elif has_kvm2; then
+    DRIVER="kvm2"
+else
+    echo "No supported minikube driver found."
+    exit 1
+fi
+
+echo "Detected driver: $DRIVER"
+
+if [ "$DRIVER" = "docker" ]; then
+    CONTAINER_CMD="docker"
+    env -u DOCKER_HOST minikube start --cni calico --driver="$DRIVER"
+elif [ "$DRIVER" = "podman" ]; then
+    CONTAINER_CMD="podman"
+    minikube start --cni calico --container-runtime=containerd --driver="$DRIVER"
+else
+    CONTAINER_CMD=""
+    minikube start --cni calico --driver="$DRIVER"
+fi
+
+# correct minikube config which is sometimes broken on linux with container drivers
+if [ -n "$CONTAINER_CMD" ]; then
+    API_PORT="$($CONTAINER_CMD port minikube 8443/tcp | awk -F: '{print $2}')"
+    CLUSTER="$(minikube kubectl -- config view --minify -o jsonpath='{.contexts[0].context.cluster}')"
+    minikube kubectl -- config set-cluster "$CLUSTER" --server="https://127.0.0.1:${API_PORT}"
+fi
+
 sleep 30
-# try force cleanup of non-running pods if they don't come back automatically
-kubectl -- get pods -A | grep -v Running | grep -v NAMESPACE | awk '{print $1" "$2}' | xargs -L 1 minikube kubectl -- delete pods -n
+
+# Delete pods stuck in terminal failure states (not pods still starting up)
+minikube kubectl -- get pods -A --no-headers 2>/dev/null \
+    | grep -E 'CrashLoopBackOff|Error|ImagePullBackOff|ErrImagePull|InvalidImageName' \
+    | awk '{print $2 " -n " $1}' \
+    | while read -r line; do
+        minikube kubectl -- delete pod $line --ignore-not-found 2>/dev/null || true
+    done

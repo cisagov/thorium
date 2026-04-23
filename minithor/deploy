@@ -1,97 +1,728 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Needed for non-interactive environments
-shopt -s expand_aliases
-alias kubectl="minikube kubectl --"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_SECTION="startup"
+trap 'echo "FATAL: Failed in \"$CURRENT_SECTION\" at line $LINENO (command: $BASH_COMMAND)" >&2' ERR
 
-##### Helm
-curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-chmod 700 get_helm.sh
-./get_helm.sh
-rm ./get_helm.sh
+log() { echo -e "\n====== $1 ======\n"; }
 
-###### Redis
-kubectl apply -k ./infrastructure/redis
+wait_for_rollout() {
+    local resource=$1 namespace=$2 timeout=${3:-300}
+    minikube kubectl -- rollout status --watch --timeout="${timeout}s" "$resource" -n "$namespace"
+}
 
-###### Elastic
-kubectl create -f https://download.elastic.co/downloads/eck/2.16.0/crds.yaml
-kubectl create -f https://download.elastic.co/downloads/eck/2.16.0/operator.yaml
-kubectl rollout status --watch --timeout=600s statefulset/elastic-operator -n elastic-system
-kubectl apply -k infrastructure/elastic
+wait_for_resource() {
+    local resource_type=$1 resource_name=$2 namespace=$3 timeout=${4:-300}
+    local elapsed=0
+    echo "Waiting for $resource_type/$resource_name in $namespace (timeout: ${timeout}s)..."
+    until minikube kubectl -- get "$resource_type" "$resource_name" -n "$namespace" &>/dev/null; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo "ERROR: Timed out waiting for $resource_type/$resource_name in $namespace" >&2
+            return 1
+        fi
+    done
+}
 
-####### Scylla
-kubectl create -f https://github.com/cert-manager/cert-manager/releases/download/v1.18.2/cert-manager.yaml
-kubectl wait --for condition=established crd/certificates.cert-manager.io crd/issuers.cert-manager.io
-sleep 30
-kubectl -n cert-manager rollout status deployment.apps/cert-manager-webhook -w
-sleep 30
-kubectl create -f infrastructure/scylla/operator.yaml
-kubectl wait --for condition=established crd/scyllaclusters.scylla.scylladb.com
-kubectl -n scylla-operator rollout status deployment.apps/scylla-operator -w
-sleep 30
-kubectl create -f infrastructure/scylla/cluster.yaml
-sleep 30
-kubectl rollout status --watch --timeout=600s statefulset/scylla-us-east-1-us-east-1a -n scylla
-kubectl create cm scylla-config --from-file infrastructure/scylla/scylla.yaml -n scylla
-sleep 10
-kubectl rollout restart -n scylla statefulset.apps/scylla-us-east-1-us-east-1a
-sleep 10
-kubectl rollout status --watch --timeout=600s statefulset/scylla-us-east-1-us-east-1a -n scylla
-sleep 30
-# configure scylla, this will eventually be done by the operator
-kubectl -n scylla exec -i --tty=false pod/scylla-us-east-1-us-east-1a-0 -- /bin/bash << EOF
-cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e "CREATE ROLE admin with SUPERUSER = true"
-cqlsh "scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local" -u cassandra -p cassandra -e "CREATE ROLE thorium WITH PASSWORD = 'INSECURE_DEV_PASSWORD' AND LOGIN = true"
-cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e "GRANT admin to thorium"
-cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e "CREATE KEYSPACE IF NOT EXISTS thorium WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1}"
-cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e "GRANT ALL ON KEYSPACE thorium TO thorium"
-cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u cassandra -p cassandra -e "GRANT CREATE ON ALL KEYSPACES TO thorium"
-cqlsh 'scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local' -u thorium -p INSECURE_DEV_PASSWORD -e "DROP ROLE cassandra"
+wait_for_port_forward() {
+    local port=$1 max_attempts=${2:-20}
+    for attempt in $(seq 1 "$max_attempts"); do
+        if curl -sf -o /dev/null "http://localhost:$port" 2>/dev/null; then return 0; fi
+        sleep 1
+    done
+    echo "ERROR: Port-forward on port $port not ready after ${max_attempts}s" >&2
+    return 1
+}
+
+########################################
+# Section 0: Wait for healthy cluster
+########################################
+CURRENT_SECTION="Wait for healthy cluster"
+wait_for_healthy_cluster() {
+    minikube kubectl -- wait --for=condition=Ready node/minikube --timeout=120s
+
+    # Core kube-system components
+    minikube kubectl -- wait --for=condition=Ready pod -l k8s-app=calico-node -n kube-system --timeout=120s
+    minikube kubectl -- wait --for=condition=Ready pod -l k8s-app=calico-kube-controllers -n kube-system --timeout=120s
+    minikube kubectl -- wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=120s
+    minikube kubectl -- rollout status deployment.apps/coredns -n kube-system --timeout=120s
+
+    # CSI hostpath driver (required for PVC provisioning)
+    minikube kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/name=csi-hostpath-attacher -n kube-system --timeout=120s
+    minikube kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/name=csi-hostpath-resizer -n kube-system --timeout=120s
+    minikube kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/name=csi-hostpathplugin -n kube-system --timeout=120s
+
+    # Ingress controller
+    minikube kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/component=controller -n ingress-nginx --timeout=120s
+}
+
+log "Waiting for cluster to be healthy"
+max_retries=30
+retry_delay=10
+for attempt in $(seq 1 $max_retries); do
+    output=$(wait_for_healthy_cluster 2>&1) && break
+    if echo "$output" | grep -q 'cluster .* does not exist'; then
+        echo "Cluster not ready yet (attempt $attempt/$max_retries), retrying in ${retry_delay}s..."
+        sleep "$retry_delay"
+        if [ "$attempt" -eq "$max_retries" ]; then
+            echo "Cluster did not become ready after $max_retries attempts"
+            exit 1
+        fi
+    else
+        echo "$output" >&2
+        exit 1
+    fi
+done
+
+########################################
+# Section 1: Helm setup
+########################################
+CURRENT_SECTION="Helm setup"
+
+if ! command -v helm &>/dev/null; then
+    log "Installing Helm"
+    curl -fsSL -o "$SCRIPT_DIR/get_helm.sh" https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    chmod 700 "$SCRIPT_DIR/get_helm.sh"
+    "$SCRIPT_DIR/get_helm.sh"
+    rm -f "$SCRIPT_DIR/get_helm.sh"
+else
+    log "Helm already installed, skipping download"
+fi
+
+log "Adding Helm repos"
+helm repo add --force-update jetstack https://charts.jetstack.io
+helm repo add --force-update scylla https://scylla-operator-charts.storage.googleapis.com/stable
+helm repo add --force-update elastic https://helm.elastic.co
+helm repo add --force-update quickwit https://helm.quickwit.io
+helm repo update
+
+########################################
+# Section 2: Redis (inline)
+########################################
+CURRENT_SECTION="Redis"
+log "Deploying Redis"
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-conf
+  namespace: redis
+type: Opaque
+stringData:
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    daemonize no
+    supervised no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+    databases 16
+    always-show-logo yes
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump2.rdb
+    dir /data
+    requirepass INSECURE_DEV_PASSWORD
+    appendonly no
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    lua-time-limit 5000
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    latency-monitor-threshold 0
+    notify-keyspace-events ""
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    hz 10
+    dynamic-hz yes
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+    jemalloc-bg-thread yes
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-persistent-storage-claim
+  namespace: redis
+spec:
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 16Gi
+  accessModes:
+  - ReadWriteOnce
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: redis
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: docker.io/redis:7
+          imagePullPolicy: Always
+          command: ["redis-server", "/var/lib/redis/redis.conf"]
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - mountPath: "/data"
+              name: redis-data
+            - mountPath: "/var/lib/redis/"
+              name: redis-conf
+      volumes:
+        - name: redis-conf
+          secret:
+            secretName: redis-conf
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-persistent-storage-claim
 EOF
 
-###### Minio
-kubectl apply -k infrastructure/minio
+########################################
+# Section 3: Elasticsearch (helm + inline CRs)
+########################################
+CURRENT_SECTION="Elasticsearch"
 
-####### Jaeger
-# create our namespace
-kubectl create namespace jaeger
-# deploy jaeger
-kubectl create -f infrastructure/jaeger/service.yml -n jaeger
-kubectl create -f infrastructure/jaeger/deployment.yml -n jaeger
+log "Deploying ECK Operator"
+helm upgrade --install elastic-operator elastic/eck-operator \
+    --namespace elastic-system --create-namespace
+wait_for_rollout statefulset/elastic-operator elastic-system 300
 
-####### Kubegres
-kubectl create -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml
-kubectl rollout status --watch --timeout=600s deployment.apps/kubegres-controller-manager -n kubegres-system
+log "Deploying Elasticsearch and Kibana"
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elastic
+  namespace: elastic-system
+spec:
+  version: 8.19.2
+  volumeClaimDeletePolicy: DeleteOnScaledownOnly
+  nodeSets:
+  - name: default
+    count: 1
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          env:
+          - name: ES_JAVA_OPTS
+            value: -Xms1g -Xmx1g
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 1
+              memory: 2Gi
+    volumeClaimTemplates:
+      - metadata:
+          name: elasticsearch-data
+        spec:
+          storageClassName: csi-hostpath-sc
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 32Gi
+    config:
+      node.store.allow_mmap: true
+      http.max_content_length: 1024mb
+---
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: elastic
+  namespace: elastic-system
+spec:
+  version: 8.19.2
+  count: 1
+  elasticsearchRef:
+    name: elastic
+  podTemplate:
+    spec:
+      containers:
+      - name: kibana
+        resources:
+          requests:
+            cpu: 0
+            memory: 0
+          limits:
+            cpu: 1
+            memory: "1Gi"
+EOF
 
-####### Quickwit
-kubectl create ns quickwit
-kubectl create -f infrastructure/quickwit/postgres-secret.yml
-kubectl create -f infrastructure/quickwit/postgres-cluster.yml
-sleep 30
-kubectl rollout status --watch --timeout=600s statefulset/postgres-1 -n quickwit
-sleep 30
-kubectl -n quickwit exec -it pod/postgres-1-0 -- /bin/bash -c "PGPASSWORD=INSECURE_DEV_PASSWORD su postgres -c \"createdb quickwit-metastore\""
-helm repo add quickwit https://helm.quickwit.io
+########################################
+# Section 4: Scylla (helm operators + inline CRs)
+########################################
+CURRENT_SECTION="Scylla"
+
+log "Deploying cert-manager"
+helm upgrade --install cert-manager jetstack/cert-manager \
+    --namespace cert-manager --create-namespace \
+    --set crds.enabled=true
+minikube kubectl -- wait --for condition=established \
+    crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s
+minikube kubectl -- -n cert-manager rollout status deployment.apps/cert-manager-webhook -w --timeout=120s
+
+log "Deploying Scylla Operator"
+helm upgrade --install scylla-operator scylla/scylla-operator \
+    --namespace scylla-operator --create-namespace
+minikube kubectl -- wait --for condition=established \
+    crd/scyllaclusters.scylla.scylladb.com --timeout=120s
+minikube kubectl -- -n scylla-operator rollout status deployment.apps/scylla-operator -w --timeout=120s
+minikube kubectl -- -n scylla-operator rollout status deployment.apps/webhook-server -w --timeout=120s
 sleep 10
-helm repo update quickwit
-helm install quickwit quickwit/quickwit -n quickwit -f infrastructure/quickwit/values.yml
 
-###### Make sure we are all deployed
-#kubectl rollout status --watch --timeout=600s statefulset.apps/elastic-es-default -n elastic-system
-kubectl rollout status --watch --timeout=600s statefulset/scylla-us-east-1-us-east-1a -n scylla
-kubectl rollout status --watch --timeout=600s statefulset.apps/minio -n minio
-kubectl rollout status --watch --timeout=600s statefulset.apps/redis -n redis
-kubectl rollout status --watch --timeout=600s statefulset/postgres-1 -n quickwit
-kubectl rollout status --watch --timeout=600s statefulset.apps/quickwit-searcher -n quickwit
-kubectl rollout status --watch --timeout=600s statefulset.apps/quickwit-indexer -n quickwit
+log "Deploying Scylla Cluster"
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scylla
+EOF
+minikube kubectl -- create secret generic scylla-auth-token -n scylla \
+    --from-literal=auth-token.yaml='auth_token: dummy-minithor-token' \
+    --dry-run=client -o yaml | minikube kubectl -- apply -f -
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: scylla
+  namespace: scylla
+spec:
+  version: 6.2.3
+  agentVersion: 3.4.2
+  developerMode: true
+  datacenter:
+    name: us-east-1
+    racks:
+      - name: us-east-1a
+        scyllaConfig: "scylla-config"
+        scyllaAgentConfig: "scylla-agent-config"
+        members: 1
+        storage:
+          capacity: 32Gi
+          storageClassName: csi-hostpath-sc
+        resources:
+          requests:
+            cpu: 0
+            memory: 0
+          limits:
+            cpu: 2
+            memory: 4Gi
+        volumes:
+          - name: coredumpfs
+            hostPath:
+              path: /tmp/coredumps
+        volumeMounts:
+          - mountPath: /tmp/coredumps
+            name: coredumpfs
+EOF
+wait_for_resource statefulset scylla-us-east-1-us-east-1a scylla 300
+wait_for_rollout statefulset/scylla-us-east-1-us-east-1a scylla 600
 
+minikube kubectl -- apply -f - <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scylla-config
+  namespace: scylla
+data:
+  scylla.yaml: |
+    num_tokens: 256
+    commitlog_sync: periodic
+    commitlog_sync_period_in_ms: 10000
+    commitlog_segment_size_in_mb: 32
+    seed_provider:
+        - class_name: org.apache.cassandra.locator.SimpleSeedProvider
+          parameters:
+              - seeds: "127.0.0.1"
+    listen_address: 0.0.0.0
+    broadcast_address: 10.233.13.110
+    native_transport_port: 9042
+    native_shard_aware_transport_port: 19042
+    read_request_timeout_in_ms: 5000
+    write_request_timeout_in_ms: 2000
+    cas_contention_timeout_in_ms: 1000
+    endpoint_snitch: SimpleSnitch
+    rpc_address: localhost
+    rpc_port: 9160
+    api_port: 10000
+    api_address: 127.0.0.1
+    batch_size_warn_threshold_in_kb: 128
+    batch_size_fail_threshold_in_kb: 1024
+    authenticator: PasswordAuthenticator
+    authorizer: CassandraAuthorizer
+    partitioner: org.apache.cassandra.dht.Murmur3Partitioner
+    commitlog_total_space_in_mb: -1
+    developer_mode: true
+    murmur3_partitioner_ignore_msb_bits: 12
+    force_schema_commit_log: true
+EOF
+minikube kubectl -- rollout restart -n scylla statefulset.apps/scylla-us-east-1-us-east-1a
+wait_for_rollout statefulset/scylla-us-east-1-us-east-1a scylla 600
 
-### Configure Elastic Index/Role/User
-export ESPASS=$(kubectl get secret -n elastic-system elastic-es-elastic-user -o=jsonpath='{.data.elastic}' | base64 --decode; echo)
-kubectl -n elastic-system exec -i --tty=false pod/elastic-es-default-0 -- /bin/bash << EOF
-# Create index
-curl -k -X PUT -u elastic:$ESPASS "https://localhost:9200/thorium?pretty"
-# Create Thorium role
+########################################
+# Section 5: MinIO (inline)
+########################################
+CURRENT_SECTION="MinIO"
+log "Deploying MinIO"
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: minio
+  labels:
+    app: minio
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          resources:
+            requests:
+              cpu: 256m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - minio server /data
+          volumeMounts:
+            - mountPath: /data
+              name: minio-data
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: "INSECURE_DEV_MINIO_ACCESS_KEY"
+            - name: MINIO_SECRET_KEY
+              value: "INSECURE_DEV_MINIO_SECRET_KEY"
+  volumeClaimTemplates:
+    - metadata:
+        name: minio-data
+      spec:
+        storageClassName: csi-hostpath-sc
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  selector:
+    app: minio
+  ports:
+  - port: 9000
+    targetPort: 9000
+    name: minio-web
+    protocol: TCP
+  type: ClusterIP
+EOF
+
+########################################
+# Section 6: Jaeger (inline)
+########################################
+CURRENT_SECTION="Jaeger"
+log "Deploying Jaeger"
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jaeger
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: jaeger
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+  - name: jaeger
+    port: 16686
+    targetPort: 16686
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jaeger
+  namespace: jaeger
+  labels:
+    app: jaeger
+spec:
+  serviceName: jaeger
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/jaeger-query:latest
+          imagePullPolicy: Always
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: "grpc"
+            - name: GRPC_STORAGE_SERVER
+              value: "quickwit-searcher.quickwit.svc.cluster.local:7281"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 1
+              memory: 1Gi
+EOF
+
+########################################
+# Section 7: Kubegres + Quickwit
+########################################
+CURRENT_SECTION="Kubegres + Quickwit"
+
+log "Deploying Kubegres"
+minikube kubectl -- apply -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml
+wait_for_rollout deployment.apps/kubegres-controller-manager kubegres-system 300
+
+log "Deploying Quickwit Postgres"
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quickwit
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-cluster-auth
+  namespace: quickwit
+type: Opaque
+stringData:
+  superUserPassword: INSECURE_DEV_PASSWORD
+  replicationUserPassword: INSECURE_DEV_PASSWORD
+---
+apiVersion: kubegres.reactive-tech.io/v1
+kind: Kubegres
+metadata:
+  name: postgres
+  namespace: quickwit
+spec:
+  replicas: 1
+  image: docker.io/postgres:17
+  database:
+    storageClassName: csi-hostpath-sc
+    size: 32Gi
+  resources:
+    requests:
+      memory: "0"
+      cpu: "0"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  env:
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-cluster-auth
+          key: superUserPassword
+    - name: POSTGRES_REPLICATION_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-cluster-auth
+          key: replicationUserPassword
+EOF
+wait_for_resource statefulset postgres-1 quickwit 120
+wait_for_rollout statefulset/postgres-1 quickwit 120
+
+log "Creating Quickwit metastore database"
+minikube kubectl -- -n quickwit exec pod/postgres-1-0 -- \
+    /bin/bash -c "PGPASSWORD=INSECURE_DEV_PASSWORD psql -U postgres -c \"SELECT 1 FROM pg_database WHERE datname='quickwit-metastore'\" | grep -q 1 || PGPASSWORD=INSECURE_DEV_PASSWORD createdb -U postgres quickwit-metastore"
+
+log "Deploying Quickwit"
+QUICKWIT_VALUES=$(mktemp)
+cat > "$QUICKWIT_VALUES" <<'EOF'
+image:
+  repository: docker.io/quickwit/quickwit
+  pullPolicy: IfNotPresent
+
+config:
+  default_index_root_uri: s3://quickwit/quickwit-indexes
+  metastore_uri: postgres://postgres:INSECURE_DEV_PASSWORD@postgres.quickwit.svc.cluster.local:5432/quickwit-metastore
+  storage:
+    s3:
+      flavor: minio
+      region: default
+      endpoint: http://minio.minio.svc.cluster.local:9000
+      force_path_style_access: true
+      access_key_id: "INSECURE_DEV_MINIO_ACCESS_KEY"
+      secret_access_key: "INSECURE_DEV_MINIO_SECRET_KEY"
+
+metastore:
+  replicaCount: 1
+
+searcher:
+  replicaCount: 1
+EOF
+helm upgrade --install quickwit quickwit/quickwit -n quickwit -f "$QUICKWIT_VALUES"
+rm -f "$QUICKWIT_VALUES"
+
+########################################
+# Section 8: Wait for all rollouts
+########################################
+CURRENT_SECTION="Wait for all rollouts"
+log "Waiting for all services"
+wait_for_rollout statefulset/scylla-us-east-1-us-east-1a scylla 600
+wait_for_rollout statefulset/minio minio 300
+wait_for_rollout statefulset/redis redis 300
+wait_for_rollout statefulset/postgres-1 quickwit 300
+wait_for_rollout statefulset/quickwit-searcher quickwit 300
+wait_for_rollout statefulset/quickwit-indexer quickwit 300
+
+########################################
+# Section 9: Post-deploy configuration
+########################################
+CURRENT_SECTION="Post-deploy configuration"
+
+### Scylla DB init
+log "Configuring Scylla"
+minikube kubectl -- -n scylla exec -i --tty=false pod/scylla-us-east-1-us-east-1a-0 -c scylla -- /bin/bash <<'EOF'
+HOST='scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local'
+
+# Determine which credentials work: cassandra (first run) or thorium (redeploy)
+if cqlsh "$HOST" -u cassandra -p cassandra -e "DESCRIBE CLUSTER" &>/dev/null; then
+    AUTH_USER=cassandra
+    AUTH_PASS=cassandra
+else
+    AUTH_USER=thorium
+    AUTH_PASS=INSECURE_DEV_PASSWORD
+fi
+
+cqlsh "$HOST" -u "$AUTH_USER" -p "$AUTH_PASS" -e "CREATE ROLE IF NOT EXISTS admin WITH SUPERUSER = true"
+cqlsh "$HOST" -u "$AUTH_USER" -p "$AUTH_PASS" -e "CREATE ROLE IF NOT EXISTS thorium WITH PASSWORD = 'INSECURE_DEV_PASSWORD' AND LOGIN = true AND SUPERUSER = true"
+cqlsh "$HOST" -u "$AUTH_USER" -p "$AUTH_PASS" -e "GRANT admin TO thorium" 2>/dev/null || true
+cqlsh "$HOST" -u "$AUTH_USER" -p "$AUTH_PASS" -e "CREATE KEYSPACE IF NOT EXISTS thorium WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1}"
+cqlsh "$HOST" -u "$AUTH_USER" -p "$AUTH_PASS" -e "GRANT ALL ON KEYSPACE thorium TO thorium" 2>/dev/null || true
+cqlsh "$HOST" -u "$AUTH_USER" -p "$AUTH_PASS" -e "GRANT CREATE ON ALL KEYSPACES TO thorium" 2>/dev/null || true
+
+# Drop default cassandra role on first run only
+if [ "$AUTH_USER" = "cassandra" ]; then
+    cqlsh "$HOST" -u thorium -p INSECURE_DEV_PASSWORD -e "DROP ROLE IF EXISTS cassandra"
+fi
+EOF
+
+### Elastic index/role/user
+log "Configuring Elasticsearch"
+ESPASS=$(minikube kubectl -- get secret -n elastic-system elastic-es-elastic-user -o go-template='{{index .data "elastic" | base64decode}}')
+minikube kubectl -- -n elastic-system exec -i --tty=false pod/elastic-es-default-0 -- /bin/bash <<ESEOF
+# Create index (ignore 400 = already exists)
+HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -k -X PUT -u elastic:$ESPASS "https://localhost:9200/thorium")
+if [ "\$HTTP_CODE" = "200" ]; then
+    echo "Elasticsearch index 'thorium' created"
+elif [ "\$HTTP_CODE" = "400" ]; then
+    echo "Elasticsearch index 'thorium' already exists, skipping"
+else
+    echo "WARNING: Unexpected HTTP \$HTTP_CODE creating Elasticsearch index"
+fi
+
 curl -k -X POST -u elastic:$ESPASS "https://localhost:9200/_security/role/thorium?pretty" -H 'Content-Type: application/json' -d'
 {
   "indices": [
@@ -107,43 +738,328 @@ curl -k -X POST -u elastic:$ESPASS "https://localhost:9200/_security/user/thoriu
   "password" : "INSECURE_DEV_PASSWORD",
   "roles" : ["thorium"],
   "full_name" : "Thorium",
+<<<<<<< HEAD
   "email" : "<Thorium Entity account or dummy email>"
+=======
+  "email" : "thorium@localhost"
+>>>>>>> bf811126 (feat(minithor): Improved deploy script automation)
 }
 '
+ESEOF
+
+### MinIO quickwit bucket
+log "Creating Quickwit S3 bucket"
+minikube kubectl -- delete job create-quickwit-bucket -n minio --ignore-not-found
+minikube kubectl -- apply -f - <<'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-quickwit-bucket
+  namespace: minio
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mc
+        image: minio/mc:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mc alias set myminio http://minio.minio.svc.cluster.local:9000 INSECURE_DEV_MINIO_ACCESS_KEY INSECURE_DEV_MINIO_SECRET_KEY
+          mc mb --ignore-existing myminio/quickwit
+EOF
+minikube kubectl -- wait --for=condition=complete job/create-quickwit-bucket -n minio --timeout=120s
+
+########################################
+# Section 10: Thorium (inline)
+########################################
+CURRENT_SECTION="Thorium deployment"
+
+log "Deploying Thorium"
+minikube kubectl -- create ns thorium --dry-run=client -o yaml | minikube kubectl -- apply -f -
+echo "Welcome to Thorium. <Please place you banner here>" > "$SCRIPT_DIR/banner.txt"
+minikube kubectl -- create cm banner --from-file="$SCRIPT_DIR/banner.txt" -n thorium \
+    --dry-run=client -o yaml | minikube kubectl -- apply -f -
+minikube kubectl -- apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: thorium
+  namespace: thorium
+imagePullSecrets:
+  - name: registry-token
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thorium-account-token
+  namespace: thorium
+  annotations:
+    kubernetes.io/service-account.name: thorium
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: thorium-operator
+rules:
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["sandia.gov"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["events.k8s.io"]
+  resources: ["events"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services", "secrets", "configmaps", "nodes", "namespaces", "events"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: thorium-operator-binding
+subjects:
+- kind: ServiceAccount
+  name: thorium
+  namespace: thorium
+roleRef:
+  kind: ClusterRole
+  name: thorium-operator
+  apiGroup: "rbac.authorization.k8s.io"
 EOF
 
-##### Create Quickwit Bucket for tracing
-if command -v s3cmd &> /dev/null; then
+if [ -f "$SCRIPT_DIR/.dockerconfigjson" ]; then
+    minikube kubectl -- create secret docker-registry registry-token -n thorium \
+        --from-file=".dockerconfigjson=$SCRIPT_DIR/.dockerconfigjson" \
+        --dry-run=client -o yaml | minikube kubectl -- apply -f -
+    minikube kubectl -- apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: thorium
+  labels:
+    app: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+        app: operator
+    spec:
+      serviceAccountName: thorium
+      automountServiceAccountToken: true
+      containers:
+        - name: operator
+          image: ghcr.io/cisagov/thorium/infrastructure/thorium:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: 0
+              cpu: 0
+            limits:
+              memory: 1Gi
+              cpu: 256m
+          env:
+            - name: "http_proxy"
+            - name: "https_proxy"
+            - name: "HTTP_PROXY"
+            - name: "HTTPS_PROXY"
+      imagePullSecrets:
+      - name: registry-token
+EOF
+else
+    minikube kubectl -- apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: thorium
+  labels:
+    app: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+        app: operator
+    spec:
+      serviceAccountName: thorium
+      automountServiceAccountToken: true
+      containers:
+        - name: operator
+          image: ghcr.io/cisagov/thorium/infrastructure/thorium:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: 0
+              cpu: 0
+            limits:
+              memory: 1Gi
+              cpu: 256m
+          env:
+            - name: "http_proxy"
+            - name: "https_proxy"
+            - name: "HTTP_PROXY"
+            - name: "HTTPS_PROXY"
+EOF
+fi
 
-    cat <<EOF > .s3cfg
-[default]
-access_key = INSECURE_DEV_MINIO_ACCESS_KEY
-secret_key = INSECURE_DEV_MINIO_SECRET_KEY
-host_base = http://localhost:9000
-host_bucket = http://localhost:9000/%(bucket)
-bucket_location = us-east-1
-use_https = False
+minikube kubectl -- apply -f - <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: thorium-default-ingress
+  namespace: thorium
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: localhost
+      http:
+        paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: thorium-api
+                port:
+                  number: 80
 EOF
 
-    kubectl.docker port-forward svc/minio -n minio 9000 &
-    PORT_FORWARD_PID=$!
-    sleep 4
-    s3cmd -c .s3cfg mb s3://quickwit
-    kill $PORT_FORWARD_PID
+wait_for_rollout deployment.apps/operator thorium 300
+
+########################################
+# Section 11: ThoriumCluster CRD
+########################################
+CURRENT_SECTION="ThoriumCluster CRD"
+log "Creating ThoriumCluster resource"
+if [ -f "$SCRIPT_DIR/thorium-cluster.yml" ]; then
+    minikube kubectl -- apply -f "$SCRIPT_DIR/thorium-cluster.yml" -n thorium
 else
-    echo "WARNING: s3cmd not installed, cannot create 'quickwit' bucket."
-    echo "         Traces will not be stored and Thorium components will log errors"
+    minikube kubectl -- apply -f "$SCRIPT_DIR/thorium-cluster.yml.example" -n thorium
 fi
 
-###### Thorium
-kubectl create ns thorium
-kubectl create cm banner --from-file=../ui/src/assets/banner.txt -n thorium
-kubectl apply -f infrastructure/thorium/rbac.yml
-if [ -f ".dockerconfigjson" ]; then
-   kubectl create secret docker-registry registry-token -n thorium --from-file=".dockerconfigjson=.dockerconfigjson"
-   kubectl apply -f infrastructure/thorium/operator-reg-auth.yml -n thorium
+########################################
+# Section 12: Wait for Thorium components
+########################################
+CURRENT_SECTION="Wait for Thorium components"
+
+log "Waiting for Thorium components to start"
+
+echo "Waiting for API deployment..."
+wait_for_resource deployment api thorium 300
+wait_for_rollout deployment.apps/api thorium 300
+
+echo "Waiting for scaler deployment..."
+wait_for_resource deployment scaler thorium 300
+wait_for_rollout deployment.apps/scaler thorium 300
+
+echo "Waiting for event-handler deployment..."
+wait_for_resource deployment event-handler thorium 300
+wait_for_rollout deployment.apps/event-handler thorium 300
+
+echo "Waiting for search-streamer deployment..."
+wait_for_resource deployment search-streamer thorium 300
+wait_for_rollout deployment.apps/search-streamer thorium 300
+
+log "All Thorium components are running"
+
+########################################
+# Section 13: Create test user
+########################################
+CURRENT_SECTION="Create test user"
+log "Creating test admin user"
+API_POD=$(minikube kubectl -- get pod -n thorium -l app=api -o jsonpath='{.items[0].metadata.name}')
+CREATE_RESP=$(minikube kubectl -- -n thorium exec -i "pod/$API_POD" -- \
+    curl -s -w '\n%{http_code}' -X POST http://localhost/api/users/ \
+    -H 'Content-Type: application/json' \
+    -H 'secret-key: INSECURE_DEV_PASSWORD' \
+    -d '{"username":"test","password":"INSECURE_DEV_PASSWORD","email":"test@localhost","role":"Admin","local":true,"skip_verification":true}')
+HTTP_CODE=$(echo "$CREATE_RESP" | tail -1)
+BODY=$(echo "$CREATE_RESP" | sed '$d')
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "Test admin user created successfully"
+    echo "  Username: test"
+    echo "  Password: INSECURE_DEV_PASSWORD"
+elif echo "$BODY" | grep -q "already exists"; then
+    echo "Test admin user already exists, skipping"
 else
-   kubectl apply -f infrastructure/thorium/operator.yml -n thorium
+    echo "WARNING: Failed to create test user (HTTP $HTTP_CODE): $BODY"
 fi
-kubectl apply -f infrastructure/thorium/ingress.yml -n thorium
-kubectl rollout status --watch --timeout=600s deployment.apps/operator -n thorium
+
+########################################
+# Section 14: Install thorctl & import toolbox
+########################################
+CURRENT_SECTION="Install thorctl & import toolbox"
+
+log "Installing thorctl"
+
+# Kill any stale thorium port-forwards from previous runs
+pkill -f 'port-forward svc/thorium-api' 2>/dev/null || true
+
+# Port-forward the API so we can reach it from the host
+PF_PORT=$((RANDOM % 55000 + 10000))
+minikube kubectl -- -n thorium port-forward svc/thorium-api "$PF_PORT":80 &
+PF_PID=$!
+trap 'kill $PF_PID 2>/dev/null; kill -9 $PF_PID 2>/dev/null; pkill -9 -f "port-forward svc/thorium-api" 2>/dev/null' EXIT
+wait_for_port_forward "$PF_PORT" 20
+
+THORCTL_URL="http://localhost:$PF_PORT"
+
+OS=$(uname -s | awk '{print tolower($0)}')
+HARDWARE=$(uname -m | tr '_' '-')
+
+THORCTL_BIN="$SCRIPT_DIR/thorctl"
+echo "Downloading thorctl for $OS/$HARDWARE..."
+curl -sf "$THORCTL_URL/api/binaries/$OS/$HARDWARE/thorctl" -o "$THORCTL_BIN"
+chmod +x "$THORCTL_BIN"
+
+log "Logging into Thorium via thorctl"
+"$THORCTL_BIN" login "$THORCTL_URL" --user test --password INSECURE_DEV_PASSWORD
+
+log "Creating 'static' group and 'allow-all' network policy"
+BASIC_AUTH=$(echo -n 'test:INSECURE_DEV_PASSWORD' | base64)
+minikube kubectl -- -n thorium exec -i "pod/$API_POD" -- \
+    curl -sf -X POST http://localhost/api/groups/ \
+    -H "Authorization: Basic $BASIC_AUTH" \
+    -H 'Content-Type: application/json' \
+    -d '{"name":"static"}' || true
+minikube kubectl -- -n thorium exec -i "pod/$API_POD" -- \
+    curl -sf -X POST http://localhost/api/network-policies \
+    -H "Authorization: Basic $BASIC_AUTH" \
+    -H 'Content-Type: application/json' \
+    -d '{"name":"allow-all","groups":["static"],"ingress":[],"egress":null,"forced_policy":false,"default_policy":false}' || true
+
+log "Importing toolbox"
+curl -o "$SCRIPT_DIR/toolbox.json"  https://raw.githubusercontent.com/cisagov/thorium/refs/heads/main/tools/toolbox.json
+"$THORCTL_BIN" toolbox import "$SCRIPT_DIR/toolbox.json" -y
+
+log "Deployment complete!"
+echo ""
+echo "Access Thorium:"
+echo "  1. Run 'minikube tunnel' in a separate terminal"
+echo "  2. Open http://localhost in your browser"
+echo "  3. Login with username 'test' and password 'INSECURE_DEV_PASSWORD'"

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUTPUT="${HOME}/thorium.yml"
+
+echo "Extracting Thorium config from cluster secret..."
+minikube kubectl -- get secret thorium -n thorium \
+    -o go-template='{{index .data "thorium.yml" | base64decode}}' \
+    > "$OUTPUT"
+
+echo "Config written to $OUTPUT"

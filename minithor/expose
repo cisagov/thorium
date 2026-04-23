@@ -1,9 +1,170 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Needed for non-interactive environments
-shopt -s expand_aliases
-alias kubectl="minikube kubectl --"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PID_DIR="$SCRIPT_DIR/.expose-pids"
+DEV_MODE=false
+STOP_MODE=false
+STATUS_MODE=false
 
-#sudo minikube kubectl -- port-forward svc/ingress-nginx-controller --address 0.0.0.0 -n ingress-nginx 80:80
-sudo minikube kubectl -- port-forward svc/thorium-api --address 0.0.0.0 -n thorium 80:80
-#minikube tunnel
+usage() {
+    echo "Usage: $0 [--dev] [--stop] [--status]"
+    echo "  --dev     Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla)"
+    echo "  --stop    Stop all running port-forwards"
+    echo "  --status  Show which port-forwards are running"
+    exit 0
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --dev)    DEV_MODE=true ;;
+        --stop)   STOP_MODE=true ;;
+        --status) STATUS_MODE=true ;;
+        -h|--help) usage ;;
+        *) echo "Unknown option: $arg"; usage ;;
+    esac
+done
+
+mkdir -p "$PID_DIR"
+
+is_forward_alive() {
+    local name=$1
+    local pid_file="$PID_DIR/$name.pid"
+    if [ -f "$pid_file" ]; then
+        local pid
+        pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "$pid_file"
+    fi
+    return 1
+}
+
+stop_forward() {
+    local name=$1
+    local pid_file="$PID_DIR/$name.pid"
+    if [ -f "$pid_file" ]; then
+        local pid
+        pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+            pkill -P "$pid" 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
+            echo "Stopped $name (PID $pid)"
+        fi
+        rm -f "$pid_file" "$PID_DIR/$name.ports"
+    fi
+}
+
+stop_all() {
+    local found=false
+    for pid_file in "$PID_DIR"/*.pid; do
+        [ -f "$pid_file" ] || continue
+        found=true
+        local name
+        name=$(basename "$pid_file" .pid)
+        stop_forward "$name"
+    done
+    if [ "$found" = false ]; then
+        echo "No port-forwards running"
+    fi
+}
+
+show_status() {
+    local found=false
+    for pid_file in "$PID_DIR"/*.pid; do
+        [ -f "$pid_file" ] || continue
+        local name pid
+        name=$(basename "$pid_file" .pid)
+        pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+            local ports
+            ports=$(cat "$PID_DIR/$name.ports" 2>/dev/null || echo "unknown")
+            echo "  $name: running (PID $pid) -> $ports"
+            found=true
+        else
+            rm -f "$pid_file" "$PID_DIR/$name.ports"
+        fi
+    done
+    if [ "$found" = false ]; then
+        echo "  No port-forwards running"
+    fi
+}
+
+start_forward() {
+    local name=$1 namespace=$2 service=$3
+    shift 3
+    local ports=("$@")
+
+    if is_forward_alive "$name"; then
+        echo "  $name: already running (PID $(cat "$PID_DIR/$name.pid")), skipping"
+        return
+    fi
+
+    # Kill any stale process holding the local port (e.g. orphaned kubectl child)
+    local local_port="${ports[0]%%:*}"
+    local stale_pid
+    if command -v ss &>/dev/null; then
+        stale_pid=$(ss -tlnp "sport = :$local_port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1 || true)
+    else
+        stale_pid=$(lsof -nP -ti "TCP:$local_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
+    fi
+    if [ -n "$stale_pid" ]; then
+        echo "  $name: killing stale process on port $local_port (PID $stale_pid)"
+        kill "$stale_pid" 2>/dev/null || true
+        sleep 1
+    fi
+
+    minikube kubectl -- port-forward "svc/$service" -n "$namespace" "${ports[@]}" &>/dev/null &
+    local pid=$!
+    echo "$pid" > "$PID_DIR/$name.pid"
+    echo "${ports[*]}" > "$PID_DIR/$name.ports"
+
+    sleep 1
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "  $name: forwarding ${ports[*]} (PID $pid)"
+    else
+        echo "  $name: FAILED to start (port-forward exited immediately)"
+        rm -f "$PID_DIR/$name.pid" "$PID_DIR/$name.ports"
+        return 1
+    fi
+}
+
+if [ "$STOP_MODE" = true ]; then
+    echo "Stopping all port-forwards..."
+    stop_all
+    exit 0
+fi
+
+if [ "$STATUS_MODE" = true ]; then
+    echo "Port-forward status:"
+    show_status
+    exit 0
+fi
+
+echo "Starting port-forwards..."
+
+start_forward thorium-api thorium thorium-api 8080:80
+
+if [ "$DEV_MODE" = true ]; then
+    start_forward elastic elastic-system elastic-es-http 9200
+    start_forward kibana elastic-system elastic-kb-http 5601
+    start_forward redis redis redis 6379
+    start_forward minio minio minio 9000
+    start_forward scylla scylla scylla-client 9042
+fi
+
+echo ""
+echo "Port-forward status:"
+show_status
+echo ""
+echo "Thorium API available at http://localhost:8080"
+if [ "$DEV_MODE" = true ]; then
+    echo "Elasticsearch at https://localhost:9200"
+    echo "Kibana at https://localhost:5601"
+    echo "Redis at localhost:6379"
+    echo "MinIO at http://localhost:9000"
+    echo "Scylla CQL at localhost:9042"
+fi
+echo ""
+echo "Run '$0 --status' to check, '$0 --stop' to stop all"

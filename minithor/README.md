@@ -3,135 +3,103 @@
 
 Minithor utilizes Minikube to provide a local Kubernetes instance with minimal custom configuration required. Such an instance is useful for development and testing of Thorium as well as small stand alone analyst fly-away kits where external network access may not be available. Minithor deployments are not highly available distributed systems like our production instances and provides minimal redundancy. The Thorium deployment produced by following these instructions should be considered Beta. We will work to improve its stability over time. While a Minithor deployment is accessible only from your localhost, it has not been configured to be secure. Please change DB passwords if working with sensitive data on a multi-user system using a Minithor deployment.
 
-### Requirements and "Disclosures"
+### Requirements
 
-To deploy Minithor, you will need a container runtime such as that provided by the docker engine. Minithor also requires a relatively beefy machine, with > 12 GiB of memory, 8+ CPUs, and 100GiB of local storage. You will also need to install s3cmd if it is not already installed on the host system, this enables deployment of a s3 bucket for storing traces pushed to Quickwit.
+To deploy Minithor, you will need a container runtime such as that provided by the docker engine or podman. Minithor also requires a relatively beefy machine, with > 12 GiB of memory, 8+ CPUs, and 100GiB of local storage.
 
-On a Mac using brew:
-
-```bash
-brew install s3cmd
-```
-
-On Linux:
-
-```bash
-apt install s3cmd
-```
-
-### Deploy Minikube
+### Install Minikube
 
 Install and start minikube and any necessary plugins.
 
 ```bash
-./install-linux
-# or ./install-mac-m1
+./install
 ```
 
-Add this to your environment settings after installation:
+### Create registry auth file (optional)
 
-```bash
-alias kubectl="minikube kubectl --"
-```
-
-### Create registry auth file
-
-In the project directory you will need to create a file called `.dockerconfigjson` containing the authentication credentials for the user account/registry containing the thorium container image.
-
-Create the `.dockerconfigjson` via the `docker login` command. The registry url must match that used by the images Thorium will run:
+If the Thorium container image is hosted in a private registry, create a `.dockerconfigjson` file in this directory containing the registry credentials. The deploy script will detect this file and create a Kubernetes image pull secret automatically.
 
 ```bash
 docker login registry.domain:port
+cp ~/.docker/config.json .dockerconfigjson
 ```
 
-The registry auth information will be structured like this:
+If omitted, the operator will pull images without authentication (works for public registries like `ghcr.io`).
+
+### Proxy configuration (optional)
+
+If your organization maintains a proxy for all traffic going to the internet, export proxy settings before running the deploy script:
 
 ```bash
-cat .dockerconfigjson
-{
-	"auths": {
-		"registry.domain:port": {
-			"auth": "<base64 of username:token/password>"
-		}
-    }
-}
-```
-
-Once this registry auth file has been created, copy the file (default path is `~/.docker/config.json` for most linux systems, must be manually created on mac) to the project directory and rename it to `.dockerconfigjson`.
-
-### Deploy Dependencies
-
-Thorium requires persistent storage interfaces a tracing API and an operator. Lets deploy these dependencies.
-
-If your organization maintains a proxy for all traffic going to the internet, you will need to export proxy settings such as the following:
-```bash
-cat proxy
-
-#!/bin/bash
 export HTTP_PROXY=<HTTP_PROXY_URL:PORT>
 export HTTPS_PROXY=<HTTPS_PROXY_URL:PORT>
 export NO_PROXY=localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16
 ```
 
-Once you have built that proxy file it can be reused in different terminal windows with:
+Or use the provided proxy file: `source proxy`
 
-```bash
-source proxy
-```
+### Deploy
 
-Alternatively, those proxy settings can be added into your shell's settings file.
-
-Now deploy the dependencies:
+The `deploy` script handles the full deployment in a single step: all backing services (Redis, Elasticsearch, ScyllaDB, MinIO, Quickwit, Jaeger), the Thorium operator, the ThoriumCluster resource, and a default test user.
 
 ```bash
 ./deploy
 ```
 
-### Deploy Thorium
+This will:
+
+1. Wait for the minikube cluster to be healthy
+2. Install Helm and add required chart repos
+3. Deploy Redis, Elasticsearch (ECK), cert-manager, ScyllaDB, MinIO, Jaeger, Kubegres, and Quickwit
+4. Configure databases (Scylla roles/keyspace, Elasticsearch index/user, MinIO buckets)
+5. Deploy the Thorium operator and create the ThoriumCluster CRD
+6. Wait for all Thorium components (API, scaler, event-handler, search-streamer) to be running
+7. Create a test admin user (`test` / `INSECURE_DEV_PASSWORD`)
+8. Install `thorctl` from the API and import the default toolbox (analysis tools and pipelines)
+
+To customize the ThoriumCluster configuration, copy the example and edit it before running the deploy script:
 
 ```bash
-kubectl create -n thorium -f thorium-cluster.yml
+cp thorium-cluster.yml.example thorium-cluster.yml
+# edit thorium-cluster.yml as needed
+./deploy.sh
 ```
 
-### Set Password For Node's Docker User
+If no `thorium-cluster.yml` exists, the script falls back to `thorium-cluster.yml.example`.
 
-You only have to do this once and only when using priveleged ports for your local host port mapping. Kkeep track of the docker-in-docker password you set so you can tunnel to the Thorium UI/API later.
+### Access Thorium
+
+Start the minikube tunnel in a separate terminal (this is a blocking command):
 
 ```bash
-minikube ssh
-sudo su -
-passwd docker
-# New password: 
-# Retype new password: 
-# passwd: password updated successfully
-exit
-exit
+./expose --help
+Usage: ./expose [--dev] [--stop] [--status]
+  --dev     Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla)
+  --stop    Stop all running port-forwards
+  --status  Show which port-forwards are running
 ```
 
-### Setup Tunnel (when using Thorium)
+Then open http://localhost in your browser and log in:
+- **Username:** `test`
+- **Password:** `INSECURE_DEV_PASSWORD`
 
-This is a blocking command that can must be run in a dedicated terminal window or put in the background.
+### Dev tunnels (Elastic/Kibana, Scylla, Redis)
+
+To access backing services directly from your host (useful for debugging):
 
 ```bash
-minikube tunnel
-# or ./expose
+./expose --dev
 ```
 
-### Setup Dev Tunnels (Elastic/Kibana, Scylla, Redis)
+### Cleanup
 
-This is a blocking command that can must be run in a dedicated terminal window or put in the background.
+Remove all deployed resources (without deleting the minikube cluster itself):
 
 ```bash
-./expose-dev
+./cleanup
 ```
 
-### Get Thorium admin password
-
-```bash
-kubectl get secret -n thorium thorium-pass --template={{.data.thorium}} | base64 --decode; echo
-```
-
-### Cleanup of Minithor
+To fully remove minikube:
 
 ```bash
 ./stop

@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OS="$(uname -s)"
+DRIVER=""
+CONTAINER_CMD=""
+
+has_podman() {
+    command -v podman >/dev/null 2>&1 &&
+    podman info >/dev/null 2>&1
+}
+
+has_docker() {
+    command -v docker >/dev/null 2>&1 &&
+    env -u DOCKER_HOST docker info >/dev/null 2>&1
+}
+
+has_kvm2() {
+    [ "$OS" = "Linux" ] || return 1
+
+    command -v virsh >/dev/null 2>&1 &&
+    [ -e /dev/kvm ] &&
+    (
+        systemctl is-active --quiet libvirtd 2>/dev/null ||
+        systemctl is-active --quiet virtqemud 2>/dev/null
+    )
+}
+
+select_driver() {
+    # Preference order: podman -> docker -> kvm2
+    if has_podman; then
+        if [ "$OS" = "Darwin" ]; then
+            podman machine ssh "sudo mkdir -p /etc/pki/ca-trust/source/anchors/"
+            cat .certs/*.crt | podman machine ssh "sudo tee /etc/pki/ca-trust/source/anchors/thorium-org-cert.crt > /dev/null"
+            podman machine ssh "sudo update-ca-trust"
+        fi
+        DRIVER="podman"
+        CONTAINER_CMD="podman"
+    elif has_docker; then
+        DRIVER="docker"
+        CONTAINER_CMD="docker"
+    elif has_kvm2; then
+        DRIVER="kvm2"
+        CONTAINER_CMD=""
+    else
+        echo "No supported and working minikube driver found."
+        return 1
+    fi
+}
+
+select_driver
+echo "Selected driver: $DRIVER"
+
+case "$OS" in
+    Darwin)
+        ARCH="$(uname -m)"
+        if [ "$ARCH" = "arm64" ]; then
+            curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-darwin-arm64
+            sudo install minikube-darwin-arm64 /usr/local/bin/minikube
+            rm -f minikube-darwin-arm64
+        else
+            curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-darwin-amd64
+            sudo install minikube-darwin-amd64 /usr/local/bin/minikube
+            rm -f minikube-darwin-amd64
+        fi
+        ;;
+    Linux)
+        ARCH="$(uname -m)"
+        if [ "$ARCH" = "x86_64" ]; then
+            curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+            sudo install minikube-linux-amd64 /usr/local/bin/minikube
+            rm -f minikube-linux-amd64
+        elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-arm64
+            sudo install minikube-linux-arm64 /usr/local/bin/minikube
+            rm -f minikube-linux-arm64
+        else
+            echo "Unsupported Linux architecture: $ARCH"
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Unsupported OS: $OS"
+        exit 1
+        ;;
+esac
+
+minikube config set cpus 8
+minikube config set memory 15976
+
+touch ~/.bashrc
+if ! grep -q 'alias kubectl="minikube kubectl --"' ~/.bashrc 2>/dev/null; then
+    echo 'alias kubectl="minikube kubectl --"' >> ~/.bashrc
+fi
+
+touch ~/.zshrc
+if ! grep -q 'alias kubectl="minikube kubectl --"' ~/.zshrc 2>/dev/null; then
+    echo 'alias kubectl="minikube kubectl --"' >> ~/.zshrc
+fi
+
+mkdir -p ~/.minikube/certs/
+cp ./.certs/*.crt ~/.minikube/certs/ 2>/dev/null || true
+
+if [ "$DRIVER" = "docker" ]; then
+    env -u DOCKER_HOST minikube start --cni calico --driver="$DRIVER"
+elif [ "$DRIVER" = "podman" ]; then
+    minikube start --cni calico --container-runtime=containerd --driver="$DRIVER"
+else
+    minikube start --cni calico --driver="$DRIVER"
+fi
+
+# correct minikube config which is sometimes broken on linux with container drivers
+if [ -n "$CONTAINER_CMD" ]; then
+    export API_PORT="$($CONTAINER_CMD port minikube 8443/tcp | awk -F: '{print $2}')"
+    export CLUSTER="$(minikube kubectl -- config view --minify -o jsonpath='{.contexts[0].context.cluster}')"
+    minikube kubectl -- config set-cluster "$CLUSTER" --server="https://127.0.0.1:${API_PORT}"
+    minikube kubectl -- config view --minify
+fi
+
+# install add on modules: volumes and ingress routes
+minikube addons enable csi-hostpath-driver
+minikube addons enable ingress
+minikube addons enable ingress-dns
