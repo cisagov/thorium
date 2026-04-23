@@ -2,9 +2,9 @@
 
 use std::path::Path;
 use thorium::{
+    CtlConf, Error, Thorium,
     conf::BaseNetworkPolicy,
     models::{NetworkPolicyListLine, NetworkPolicyRequest, NetworkPolicyUpdate},
-    CtlConf, Error, Thorium,
 };
 
 use crate::args::{Args, DescribeCommand, SearchParameterized};
@@ -165,7 +165,7 @@ fn parse_rules_file(
                     api_url
                 ))
             })?,
-            NetworkPolicyFileFormat::Yaml => serde_yaml::from_reader(&file).map_err(|err| {
+            NetworkPolicyFileFormat::Yaml => serde_norway::from_reader(&file).map_err(|err| {
                 Error::new(format!(
                     "Failed to deserialize YAML rules file at '{}': {}\n\n\
                     For formatting guidance on rules files, view the docs at '{}/docs/user/admins/network_policies.html#the-rules-file'",
@@ -262,13 +262,15 @@ fn verify(cmd: &VerifyNetworkPolicies) -> Result<(), Error> {
             })?;
             // parse the rules file depending on the format
             let rules: NetworkPolicyRules = match cmd.format {
-                NetworkPolicyFileFormat::Yaml => serde_yaml::from_reader(&file).map_err(|err| {
-                    Error::new(format!(
-                        "Invalid rules file '{}': {}",
-                        cmd.rules_file.to_string_lossy(),
-                        err,
-                    ))
-                })?,
+                NetworkPolicyFileFormat::Yaml => {
+                    serde_norway::from_reader(&file).map_err(|err| {
+                        Error::new(format!(
+                            "Invalid rules file '{}': {}",
+                            cmd.rules_file.to_string_lossy(),
+                            err,
+                        ))
+                    })?
+                }
                 NetworkPolicyFileFormat::Json => serde_json::from_reader(&file).map_err(|err| {
                     Error::new(format!(
                         "Invalid rules file '{}': {}",
@@ -291,7 +293,7 @@ fn verify(cmd: &VerifyNetworkPolicies) -> Result<(), Error> {
             })?;
             // parse the base network policies from YAML
             let base_policies: Vec<BaseNetworkPolicy> =
-                serde_yaml::from_reader(&file).map_err(|err| {
+                serde_norway::from_reader(&file).map_err(|err| {
                     Error::new(format!(
                         "Invalid base network policies file '{}': {}",
                         cmd.policies_file.to_string_lossy(),

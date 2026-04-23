@@ -22,6 +22,7 @@ pub mod filesystem;
 pub mod flags;
 pub mod network_activity;
 pub mod processes;
+pub mod rules;
 pub mod shared;
 pub mod vendors;
 
@@ -29,6 +30,7 @@ use devices::DeviceEntity;
 use filesystem::{FileSystemEntity, FileSystemFolderEntity};
 use network_activity::{NetConState, NetworkConnection, TransportLayerProtocol};
 use processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
+use rules::{SigmaActionToTake, SigmaRule, SigmaRuleAppliesTo};
 use shared::CriticalSector;
 
 cfg_if::cfg_if! {
@@ -96,6 +98,14 @@ cfg_if::cfg_if! {
             pub destination_port: Option<u16>,
             pub state: Option<NetConState>,
             pub process: Option<String>,
+            /// A sigma rule in yaml format
+            pub sigma_rule: Option<String>,
+            /// What this sigma rule applies too
+            pub sigma_applies_to: Vec<SigmaRuleAppliesTo>,
+            /// The action to take when a sigma rule hits
+            pub sigma_actions: Vec<SigmaActionToTake>,
+            /// The score that a rule applies
+            pub score: Option<i64>,
         }
 
         impl EntityMetadataForm {
@@ -201,6 +211,18 @@ cfg_if::cfg_if! {
             pub state: Option<NetConState>,
             pub pid: Option<u64>,
             pub process: Option<String>,
+            /// A sigma rule in yaml format
+            pub sigma_rule: Option<String>,
+            /// The new things this sigma rule should apply too
+            pub add_sigma_applies_to: Vec<SigmaRuleAppliesTo>,
+            /// The things things sigma rule should no longer apply too
+            pub remove_sigma_applies_to: Vec<SigmaRuleAppliesTo>,
+            /// The new actions to take when a sigma rule hits
+            pub add_sigma_actions: Vec<SigmaActionToTake>,
+            /// The actions to remove by their index in this vec
+            pub remove_sigma_actions: BTreeSet<usize>,
+            /// The score that a rule applies
+            pub score: Option<i64>,
         }
     }
 }
@@ -529,6 +551,8 @@ pub enum EntityMetadata {
     WindowsProcess(WindowsProcessEntity),
     /// A Network connection
     NetworkConnection(NetworkConnection),
+    /// A sigma rule to apply to data
+    SigmaRule(SigmaRule),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
@@ -552,6 +576,8 @@ pub enum EntityMetadataRequest {
     WindowsProcessTree,
     /// A windows process
     WindowsProcess(WindowsProcessEntity),
+    /// A sigma rule to apply to data
+    SigmaRule(SigmaRule),
     /// An entity that can't be described by any of the other variants
     Other,
 }
@@ -575,6 +601,7 @@ impl EntityMetadataRequest {
                 Ok(form.text("kind", EntityKinds::WindowsProcessTree.as_str()))
             }
             EntityMetadataRequest::WindowsProcess(process) => process.add_to_form(form),
+            EntityMetadataRequest::SigmaRule(rule) => rule.add_to_form(form),
             // just set our kind to other
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }

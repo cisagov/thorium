@@ -88,7 +88,7 @@ impl EventController {
         for handle in self.handles.iter_mut() {
             // check if this handle has finished
             if handle.is_finished() {
-                // this handle has finish check what happenedi
+                // this handle has finished so check what happened
                 // in the future we should respawn just the failed task
                 // but we only have one task so lets just catch fire
                 handle.await??;

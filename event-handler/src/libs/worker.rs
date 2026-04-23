@@ -260,12 +260,12 @@ impl EventWorker {
         let mut filtered = self.filter(event_cache, cache, events);
         // gather any required data in our data cache
         data_cache
-            .gather(&self.thorium, &filtered, &event_cache, &mut self.retry_ts)
+            .gather(&self.thorium, &filtered, event_cache, &mut self.retry_ts)
             .await?;
         // perform a final evaluation of all events with the new cached data
         self.final_eval(cache, event_cache, data_cache, &mut filtered);
         // create the reactions for this page of events
-        self.create(&event_cache, &mut filtered).await?;
+        self.create(event_cache, &mut filtered).await?;
         // clear any events that did not trigger anything
         self.clear(filtered).await?;
         // drop the lock on our the trigger cache

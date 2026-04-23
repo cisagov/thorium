@@ -1,8 +1,8 @@
-use k8s_openapi::{api::core::v1::Secret, ByteString};
-use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
+use k8s_openapi::{ByteString, api::core::v1::Secret};
 use kube::Api;
-use rand::distr::Alphanumeric;
+use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
 use rand::Rng;
+use rand::distr::Alphanumeric;
 use std::collections::BTreeMap;
 use thorium::Error;
 
@@ -109,7 +109,7 @@ pub fn build_secret(secret: &str, name: &str, key: &str, namespace: &str) -> Sec
 /// * `meta` - Thorium cluster client and metadata
 pub async fn create_thorium_config(meta: &ClusterMeta) -> Result<(), Error> {
     // Create Thorium config secret from ThoriumCluster resource
-    let secret_yaml = serde_yaml::to_string(&serde_json::json!(&meta.cluster.spec.config))?;
+    let secret_yaml = serde_norway::to_string(&serde_json::json!(&meta.cluster.spec.config))?;
     // build thorium config secret template
     let thorium_secret = build_secret(
         secret_yaml.as_ref(),
@@ -355,7 +355,7 @@ pub async fn delete(meta: &ClusterMeta) -> Result<(), Error> {
                 return Err(Error::new(format!(
                     "Failed to delete {} secret: {}",
                     secret_name, error
-                )))
+                )));
             }
         }
     }

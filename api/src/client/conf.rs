@@ -138,7 +138,7 @@ impl CtlConf {
             self.keys.api = trimmed.to_owned();
             // write the new configuration file
             let conf_file = std::fs::File::create(path)?;
-            serde_yaml::to_writer(conf_file, &self)?;
+            serde_norway::to_writer(conf_file, &self)?;
         }
         Ok(())
     }

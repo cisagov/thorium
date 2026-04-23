@@ -391,7 +391,7 @@ pub async fn edit(thorium: Thorium, conf: &CtlConf, cmd: &EditImage) -> Result<(
             err
         ))
     })?;
-    err_del_temp!(serde_yaml::to_writer(&mut temp_file, &image), &temp_path)?;
+    err_del_temp!(serde_norway::to_writer(&mut temp_file, &image), &temp_path)?;
     // drop the file descriptor
     drop(temp_file);
     // open the file to edit it
@@ -424,7 +424,7 @@ pub async fn edit(thorium: Thorium, conf: &CtlConf, cmd: &EditImage) -> Result<(
     // deserialize the file to the now edited image
     let edited_image_file = err_del_temp!(std::fs::File::open(&temp_path), &temp_path)?;
     let edited_image: EditableImage =
-        err_del_temp!(serde_yaml::from_reader(&edited_image_file), &temp_path)?;
+        err_del_temp!(serde_norway::from_reader(&edited_image_file), &temp_path)?;
     // check if there were no changes
     if edited_image == image {
         // if no changes were found, delete the file and exit early

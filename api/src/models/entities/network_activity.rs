@@ -10,7 +10,7 @@ use crate::models::InvalidEnum;
 use crate::{multipart_text, multipart_text_to_string};
 
 /// The different states for a network connection
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display, strum::EnumString)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum NetConState {
@@ -47,30 +47,6 @@ impl NetConState {
             NetConState::LastAck => "LastAck",
             NetConState::TimeWait => "TimeWait",
             NetConState::Closed => "Closed",
-        }
-    }
-}
-
-impl FromStr for NetConState {
-    type Err = InvalidEnum;
-
-    /// Cast a str to an [`NetConState`]
-    ///
-    /// # Arguments
-    ///
-    /// * `val` - The str to cast
-    fn from_str(val: &str) -> Result<Self, Self::Err> {
-        match val {
-            "Listen" => Ok(NetConState::Listen),
-            "Syn" => Ok(NetConState::Syn),
-            "SynAck" => Ok(NetConState::SynAck),
-            "Established" => Ok(NetConState::Established),
-            "Fin" => Ok(NetConState::Fin),
-            "CloseWait" => Ok(NetConState::CloseWait),
-            "LastAck" => Ok(NetConState::LastAck),
-            "TimeWait" => Ok(NetConState::TimeWait),
-            "Closed" => Ok(NetConState::Closed),
-            _ => Err(InvalidEnum(format!("Unknown enum variant: {val}"))),
         }
     }
 }
@@ -210,9 +186,9 @@ impl NetworkConnection {
             .text("kind", super::EntityKinds::NetworkConnection.as_str())
             // always set our required fields
             .text("metadata[source]", self.source.to_string())
-            .text("metadata[destination_port]", self.destination.to_string())
+            .text("metadata[destination]", self.destination.to_string())
             .text(
-                "metadta[destination_port]",
+                "metadata[destination_port]",
                 self.destination_port.to_string(),
             );
         // set the metadata fields for this entity if htey exist

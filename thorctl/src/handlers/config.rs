@@ -2,11 +2,11 @@
 
 use std::{collections::HashSet, path::PathBuf};
 
-use thorium::{client::conf::GitSettings, CtlConf, Error};
+use thorium::{CtlConf, Error, client::conf::GitSettings};
 
 use crate::args::{
-    config::{Config, ConfigOpts},
     Args,
+    config::{Config, ConfigOpts},
 };
 
 /// Update the Thorctl configuration, returning the modified [`CtlConf`]
@@ -73,6 +73,6 @@ pub fn config(args: &Args, cmd: &Config) -> Result<(), Error> {
     let new_conf = update_config(thorctl_conf, &cmd.config_opts);
     // write the new configuration file
     let conf_file = std::fs::File::create(&args.config)?;
-    serde_yaml::to_writer(conf_file, &new_conf)?;
+    serde_norway::to_writer(conf_file, &new_conf)?;
     Ok(())
 }

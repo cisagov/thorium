@@ -2,7 +2,7 @@
 
 use bytecheck::{SliceCheckError, StructCheckError};
 use rkyv::validation::{
-    owned::OwnedPointerError, validators::DefaultValidatorError, CheckArchiveError,
+    CheckArchiveError, owned::OwnedPointerError, validators::DefaultValidatorError,
 };
 use std::convert::Infallible;
 
@@ -40,8 +40,8 @@ pub enum Error {
     Uuid(uuid::Error),
     /// An error from converting a value with `serde_json`
     SerdeJson(serde_json::Error),
-    /// An error from converting a value with `serde_yaml`
-    SerdeYaml(serde_yaml::Error),
+    /// An error from converting a value with `serde_norway`
+    SerdeYaml(serde_norway::Error),
     /// An s3 error
     S3 {
         code: Option<String>,
@@ -197,8 +197,8 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<serde_yaml::Error> for Error {
-    fn from(error: serde_yaml::Error) -> Self {
+impl From<serde_norway::Error> for Error {
+    fn from(error: serde_norway::Error) -> Self {
         Error::SerdeYaml(error)
     }
 }

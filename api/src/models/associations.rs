@@ -20,7 +20,7 @@ pub enum AssociationTarget {
 }
 
 /// The different possible associations
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, strum::EnumString)]
 #[cfg_attr(
     feature = "rkyv-support",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
@@ -70,32 +70,17 @@ pub enum AssociationKind {
     ChildProcess,
     /// Opens or receives data from a network connection
     HasNetworkConnection,
+    /// A Sigma rule hit
+    SigmaRuleHit,
 }
 
 impl std::fmt::Display for AssociationKind {
     /// Cleanly print an association kind
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            AssociationKind::FileFor => write!(f, "FileFor"),
-            AssociationKind::DocumentationFor => write!(f, "DocumentationFor"),
-            AssociationKind::FirmwareFor => write!(f, "FirmwareFor"),
-            AssociationKind::AssociatedWith => write!(f, "AssociatedWith"),
-            AssociationKind::DevelopedBy => write!(f, "DevelopedBy"),
-            AssociationKind::ContainsCVE => write!(f, "ContainsCVE"),
-            AssociationKind::ContainsCWE => write!(f, "ContainsCWE"),
-            AssociationKind::BasedIn => write!(f, "BasedIn"),
-            AssociationKind::ParentCompanyOf => write!(f, "ParentCompanyOf"),
-            AssociationKind::EmployedBy => write!(f, "EmployedBy"),
-            AssociationKind::UsedBy => write!(f, "UsedBy"),
-            AssociationKind::UsedIn => write!(f, "UsedIn"),
-            AssociationKind::PerformedBy => write!(f, "PerformedBy"),
-            AssociationKind::FileSystemIn => write!(f, "FileSystemIn"),
-            AssociationKind::FolderIn => write!(f, "FolderIn"),
-            AssociationKind::FileIn => write!(f, "FileIn"),
-            AssociationKind::ProcessTreeIn => write!(f, "ProcessTreeIn"),
-            AssociationKind::ChildProcess => write!(f, "ChildProcess"),
-            AssociationKind::HasNetworkConnection => write!(f, "HasNetworkConnection"),
-        }
+        // get the str for our enum variant
+        let variant_str = self.as_str();
+        // write this variant to our formatter
+        write!(f, "{variant_str}")
     }
 }
 
@@ -122,36 +107,7 @@ impl AssociationKind {
             AssociationKind::ProcessTreeIn => "ProcessTreeIn",
             AssociationKind::ChildProcess => "ChildProcess",
             AssociationKind::HasNetworkConnection => "HasNetworkConnection",
-        }
-    }
-}
-
-impl FromStr for AssociationKind {
-    type Err = InvalidEnum;
-
-    /// Conver this str to an [`AssociationKind`]
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        match raw {
-            "FileFor" => Ok(AssociationKind::FileFor),
-            "DocumentationFor" => Ok(AssociationKind::DocumentationFor),
-            "FirmwareFor" => Ok(AssociationKind::FirmwareFor),
-            "AssociatedWith" => Ok(AssociationKind::AssociatedWith),
-            "DevelopedBy" => Ok(AssociationKind::DevelopedBy),
-            "ContainsCVE" => Ok(AssociationKind::ContainsCVE),
-            "ContainsCWE" => Ok(AssociationKind::ContainsCWE),
-            "BasedIn" => Ok(AssociationKind::BasedIn),
-            "ParentCompanyOf" => Ok(AssociationKind::ParentCompanyOf),
-            "EmployedBy" => Ok(AssociationKind::EmployedBy),
-            "UsedBy" => Ok(AssociationKind::UsedBy),
-            "UsedIn" => Ok(AssociationKind::UsedIn),
-            "PerformedBy" => Ok(AssociationKind::PerformedBy),
-            "FileSystemIn" => Ok(AssociationKind::FileSystemIn),
-            "FolderIn" => Ok(AssociationKind::FolderIn),
-            "FileIn" => Ok(AssociationKind::FileIn),
-            "ProcessTreeIn" => Ok(AssociationKind::ProcessTreeIn),
-            "ChildProcess" => Ok(AssociationKind::ChildProcess),
-            "HasNetworkConnection" => Ok(AssociationKind::HasNetworkConnection),
-            _ => Err(InvalidEnum(format!("Unknown AssociationKind: {raw}"))),
+            AssociationKind::SigmaRuleHit => "SigmaRuleHit",
         }
     }
 }

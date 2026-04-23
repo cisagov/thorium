@@ -350,6 +350,7 @@ impl TreeRelatedQuery {
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct TreeBounds {
     /// The filesystems to stay within
+    #[serde(default)]
     pub filesystem: Vec<Uuid>,
 }
 

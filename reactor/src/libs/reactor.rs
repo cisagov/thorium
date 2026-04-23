@@ -230,7 +230,7 @@ impl Reactor {
                 // build the keys object for this user
                 let keys = Keys::new_token(&self.thorium.host, &user.token);
                 // serialize our keys
-                let serialized = try_ban!(serde_yaml::to_string(&keys), name, bans, span);
+                let serialized = try_ban!(serde_norway::to_string(&keys), name, bans, span);
                 // write our serialized keys to disk
                 let mut file = try_ban!(File::create(&path).await, name, bans, span);
                 let write = file.write_all(serialized.as_bytes());

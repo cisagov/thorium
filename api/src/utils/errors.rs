@@ -347,6 +347,12 @@ impl From<serde_qs::Error> for ApiError {
     }
 }
 
+impl From<serde_norway::Error> for ApiError {
+    fn from(error: serde_norway::Error) -> Self {
+        bad_internal!(format!("Failed to deserialize yaml {:#?}", error))
+    }
+}
+
 impl From<semver::Error> for ApiError {
     fn from(error: semver::Error) -> Self {
         bad_internal!(format!("Invalid semver version: {:#?}", error))

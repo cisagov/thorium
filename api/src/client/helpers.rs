@@ -324,6 +324,17 @@ macro_rules! multipart_list_conv {
     };
 }
 
+/// adds a list of non strings to a multipart form by serializing them to json
+#[doc(hidden)]
+#[macro_export]
+macro_rules! multipart_list_serialize {
+    ($form:expr, $key:expr, $value:expr) => {
+        for value in &$value {
+            $form = $form.text($key.to_owned(), serde_json::to_string(value)?);
+        }
+    };
+}
+
 /// converts a date to a string and adds it to a multipart form
 #[doc(hidden)]
 #[macro_export]

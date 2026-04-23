@@ -56,6 +56,8 @@ pub enum GroupAllowAction {
     Comments,
     /// Entities actions
     Entities,
+    /// Associations actions
+    Associations,
 }
 
 impl std::fmt::Display for GroupAllowAction {
@@ -71,6 +73,7 @@ impl std::fmt::Display for GroupAllowAction {
             Self::Results => write!(f, "Results"),
             Self::Comments => write!(f, "Comments"),
             Self::Entities => write!(f, "Entities"),
+            Self::Associations => write!(f, "Associations"),
         }
     }
 }
@@ -114,6 +117,9 @@ pub struct GroupAllowed {
     /// Whether entities are allowed to be added to this group
     #[serde(default = "default_true")]
     pub entities: bool,
+    /// Whether entities are allowed to be added to this group
+    #[serde(default = "default_true")]
+    pub associations: bool,
 }
 
 impl Default for GroupAllowed {
@@ -130,6 +136,7 @@ impl Default for GroupAllowed {
             results: true,
             comments: true,
             entities: true,
+            associations: true,
         }
     }
 }
@@ -243,6 +250,18 @@ impl GroupAllowed {
         self
     }
 
+    /// Disable associations being added to a group
+    pub fn disable_associations(mut self) -> Self {
+        self.associations = false;
+        self
+    }
+
+    /// Enable associations being added to a group
+    pub fn enable_associations(mut self) -> Self {
+        self.associations = true;
+        self
+    }
+
     /// Determine if this action is allowed
     pub fn is_allowed(&self, action: GroupAllowAction) -> bool {
         match action {
@@ -255,6 +274,7 @@ impl GroupAllowed {
             GroupAllowAction::Results => self.results,
             GroupAllowAction::Comments => self.comments,
             GroupAllowAction::Entities => self.entities,
+            GroupAllowAction::Associations => self.associations,
         }
     }
 }

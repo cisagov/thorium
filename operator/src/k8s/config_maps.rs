@@ -1,7 +1,7 @@
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
 use std::collections::BTreeMap;
-use thorium::{conf::Tracing, Error};
+use thorium::{Error, conf::Tracing};
 
 use super::clusters::ClusterMeta;
 
@@ -78,7 +78,7 @@ pub async fn create_or_update(meta: &ClusterMeta, cm: &ConfigMap) -> Result<(), 
 async fn create_tracing_cm(meta: &ClusterMeta, tracing: &Tracing) -> Result<(), Error> {
     // Create tracing config from ThoriumCluster resource
     let tracing_cm_name = "tracing-conf".to_string();
-    let tracing_yaml = serde_yaml::to_string(&serde_json::json!(&tracing))
+    let tracing_yaml = serde_norway::to_string(&serde_json::json!(&tracing))
         .expect("thorium config could not be converted to yaml string");
     let mut data = BTreeMap::new();
     data.insert("tracing.yml".to_string(), tracing_yaml);
@@ -148,7 +148,7 @@ pub async fn delete(meta: &ClusterMeta) -> Result<(), Error> {
             return Err(Error::new(format!(
                 "Could not delete {} ConfigMap: {}",
                 &tracing_conf_name, error
-            )))
+            )));
         }
     }
     Ok(())

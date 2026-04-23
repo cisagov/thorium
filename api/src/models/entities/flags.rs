@@ -23,7 +23,7 @@ pub struct Flag {
     /// How confident/reliable this flag is
     confidence: Confidence,
     /// The interesting, odd, or suspicious characteristic
-    content: String,
+    content: Option<String>,
     /// The reason for this Flag
     reasoning: String,
 }

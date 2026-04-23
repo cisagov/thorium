@@ -433,7 +433,7 @@ pub async fn get_stub_resource() -> Result<ThoriumCluster, Error> {
     // print the ThoriumCluster as yaml
     println!(
         "{}",
-        serde_yaml::to_string(&thorium_cluster)
+        serde_norway::to_string(&thorium_cluster)
             .expect("could not turn ThoriumCluster to YAML string")
     );
     Ok(thorium_cluster)

@@ -14,8 +14,8 @@ use super::db;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
 use crate::models::{
     ApiCursor, Association, AssociationListParams, AssociationListRow, AssociationRequest,
-    AssociationTarget, AssociationTargetColumn, Directionality, Entity, ListableAssociation, Repo,
-    Sample, TreeNode, User,
+    AssociationTarget, AssociationTargetColumn, Directionality, Entity, Group, GroupAllowAction,
+    ListableAssociation, Repo, Sample, TreeNode, User,
 };
 use crate::utils::{ApiError, Shared};
 
@@ -65,6 +65,16 @@ impl AssociationRequest {
             // we didn't have any groups explicitly set
             (groups, false)
         } else {
+            // make sure all of these groups are valid and we can access them
+            let _ = Group::authorize_check_allow_all(
+                user,
+                &self.groups,
+                Group::editable,
+                "edit",
+                Some(GroupAllowAction::Associations),
+                shared,
+            )
+            .await?;
             (self.groups, true)
         };
         // build a list of targets and the groups to apply their associations too

@@ -24,8 +24,9 @@ use crate::models::{
     AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
     EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow, EntityMetadata,
     EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, FileSystemEntity,
-    FileSystemFolderEntity, Group, GroupAllowAction, ListableAssociation, TagListRow, TagMap,
-    TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity, WindowsProcessTreeEntity,
+    FileSystemFolderEntity, Group, GroupAllowAction, ListableAssociation, SigmaRule, TagListRow,
+    TagMap, TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity,
+    WindowsProcessTreeEntity,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
@@ -132,7 +133,10 @@ impl Entity {
         }
     }
 
-    pub fn populate_intrinsic_tags(&self, tags: &mut HashMap<String, HashSet<String>>) {
+    pub fn populate_intrinsic_tags(
+        &self,
+        tags: &mut HashMap<String, HashSet<String>>,
+    ) -> Result<(), ApiError> {
         match &self.metadata {
             EntityMetadata::Device(device) => {
                 // add all of the vendors for this device to tags
@@ -167,6 +171,7 @@ impl Entity {
                 opt_tag_to_string!(tags, "ProcessSessionID", win_proc.session_id);
             }
             EntityMetadata::NetworkConnection(conn) => {
+                // tag the source ip this network connection comes from
                 tag!(tags, "NetConnSource", conn.source.to_string());
                 // add our source port info if we have it
                 if let Some(port) = &conn.source_port {
@@ -194,11 +199,24 @@ impl Entity {
                 // add this network connections owner process
                 opt_tag!(tags, "NetConProcess", conn.process.clone());
             }
+            EntityMetadata::SigmaRule(rule) => {
+                // parse this sigma rule
+                let parsed: sigma_rust::Rule = serde_norway::from_str(&rule.rule)?;
+                // tag this rules id
+                opt_tag!(tags, "SigmaRuleId", parsed.id);
+                // tag this rules author
+                opt_tag!(tags, "SigmaRuleAuthor", parsed.author);
+                // tag this rules status
+                opt_tag_to_string!(tags, "SigmaRuleStatus", parsed.status);
+                // tag this rules level
+                opt_tag_to_string!(tags, "SigmaRuleLevel", parsed.level);
+            }
             // other and windows process trees have no taggable data
             EntityMetadata::Other
             | EntityMetadata::Collection(_)
             | EntityMetadata::WindowsProcessTree(_) => (),
         }
+        Ok(())
     }
 
     /// Populate some entities associations
@@ -256,6 +274,7 @@ impl Entity {
                 | EntityMetadata::Folder(_)
                 | EntityMetadata::WindowsProcessTree(_)
                 | EntityMetadata::WindowsProcess(_)
+                | EntityMetadata::SigmaRule(_)
                 | EntityMetadata::NetworkConnection(_) => (),
             }
         }
@@ -416,6 +435,29 @@ impl Entity {
                 update_opt!(conn.pid, form.pid);
                 update_opt!(conn.process, form.process);
                 update_opt!(conn.create_time, form.create_time);
+            }
+            EntityMetadata::SigmaRule(rule) => {
+                // update our rule and score if needed
+                update!(rule.rule, form.sigma_rule.take());
+                update!(rule.score, form.score);
+                // add new things this rule should apply too
+                rule.applies_to.append(&mut form.add_sigma_applies_to);
+                // remove any entities that this sigma rule no longer applies too
+                rule.applies_to
+                    .retain(|thing| !form.remove_sigma_applies_to.contains(thing));
+                // add a new action to perform when this sigma rule hits
+                rule.actions.append(&mut form.add_sigma_actions);
+                // remove the requested indices in reverse order to ensure the indices remain valid
+                // we could use swap_remove here and not have to do this but that would change the
+                // order of things on update which could be annoying. Its also going to be rare that
+                // we ever have multiple actions to remove anyways.
+                for index in form.remove_sigma_actions.iter().rev() {
+                    // make sure this index is in bounds
+                    if *index < rule.actions.len() {
+                        // remove this index if it exists
+                        rule.actions.remove(*index);
+                    }
+                }
             }
             // other kinds have no metadata to update
             EntityMetadata::Other | EntityMetadata::Folder(_) => (),
@@ -714,6 +756,7 @@ impl Entity {
             | EntityMetadata::WindowsProcessTree(_)
             | EntityMetadata::WindowsProcess(_)
             | EntityMetadata::NetworkConnection(_)
+            | EntityMetadata::SigmaRule(_)
             | EntityMetadata::Other => (),
         }
     }
@@ -750,6 +793,7 @@ impl EntityMetadata {
             EntityMetadata::WindowsProcessTree(win_proc_tree) => Some(serialize!(win_proc_tree)),
             EntityMetadata::WindowsProcess(win_proc) => Some(serialize!(win_proc)),
             EntityMetadata::NetworkConnection(conn) => Some(serialize!(conn)),
+            EntityMetadata::SigmaRule(rule) => Some(serialize!(rule)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -1032,6 +1076,9 @@ impl EntityMetadataForm {
             "destination_port" => self.destination_port = Some(field.text().await?.parse()?),
             "state" => self.state = Some(field.text().await?.parse::<NetConState>()?),
             "process" => self.process = Some(field.text().await?),
+            // the sigma rule specific fields
+            "sigma_rule" => self.sigma_rule = Some(field.text().await?),
+            "score" => self.score = Some(field.text().await?.parse()?),
             maybe_list => {
                 match maybe_list {
                     "urls" => {
@@ -1069,6 +1116,8 @@ impl EntityMetadataForm {
                         entry.insert(field.text().await?);
                     }
                     "tools" => self.tools.push(field.text().await?),
+                    "sigma_applies_to" => self.sigma_applies_to.push(field.text().await?.parse()?),
+                    "sigma_actions" => self.sigma_actions.push(deserialize!(&field.text().await?)),
                     bad_name => {
                         return bad!(format!("'{bad_name}' is not a valid metadata form name"));
                     }
@@ -1117,6 +1166,7 @@ impl EntityMetadataForm {
             EntityKinds::NetworkConnection => Ok(EntityMetadata::NetworkConnection(
                 NetworkConnection::from_form(self)?,
             )),
+            EntityKinds::SigmaRule => Ok(EntityMetadata::SigmaRule(SigmaRule::from_form(self)?)),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }
     }
@@ -1290,6 +1340,29 @@ impl EntityMetadataUpdateForm {
                     ))
                 })?);
             }
+            // the process specific form fields
+            "name" => self.name = Some(field.text().await?),
+            "image_path" => self.image_path = Some(field.text().await?),
+            "command" => self.command = Some(field.text().await?),
+            "offset" => self.offset = Some(field.text().await?.parse()?),
+            "threads" => self.threads = Some(field.text().await?.parse()?),
+            "handles" => self.handles = Some(field.text().await?.parse()?),
+            "is_wow64" => self.is_wow64 = Some(field.text().await?.parse()?),
+            "session_id" => self.session_id = Some(field.text().await?.parse()?),
+            "create_time" => self.create_time = Some(field.text().await?.parse()?),
+            "exit_time" => self.exit_time = Some(field.text().await?.parse()?),
+            // the network connection form fields
+            "protocol" => self.protocol = Some(field.text().await?.parse()?),
+            "source" => self.source = Some(field.text().await?.parse()?),
+            "source_port" => self.source_port = Some(field.text().await?.parse()?),
+            "destination" => self.destination = Some(field.text().await?.parse()?),
+            "destination_port" => self.destination_port = Some(field.text().await?.parse()?),
+            "state" => self.state = Some(field.text().await?.parse::<NetConState>()?),
+            "pid" => self.pid = Some(field.text().await?.parse()?),
+            "process" => self.process = Some(field.text().await?),
+            // the sigma rule specific fields
+            "sigma_rule" => self.sigma_rule = Some(field.text().await?),
+            "score" => self.score = Some(field.text().await?.parse()?),
             // this could be a list field
             maybe_list => {
                 match maybe_list {
@@ -1345,6 +1418,19 @@ impl EntityMetadataUpdateForm {
                     }
                     "add_tools" => self.add_tools.push(field.text().await?),
                     "remove_tools" => self.remove_tools.push(field.text().await?),
+                    "add_sigma_applies_to" => {
+                        self.add_sigma_applies_to.push(field.text().await?.parse()?)
+                    }
+                    "remove_sigma_applies_to" => self
+                        .remove_sigma_applies_to
+                        .push(field.text().await?.parse()?),
+                    "add_sigma_actions" => self
+                        .add_sigma_actions
+                        .push(deserialize!(&field.text().await?)),
+                    "remove_sigma_actions" => {
+                        self.remove_sigma_actions
+                            .insert(field.text().await?.parse()?);
+                    }
                     // this is an invalid key so return an error
                     bad_name => {
                         return bad!(format!(

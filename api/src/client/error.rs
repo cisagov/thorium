@@ -54,7 +54,7 @@ pub enum Error {
     /// An error from converting a value with serde
     Serde(serde_json::Error),
     /// An error from converting a value with serde to YAML
-    SerdeYaml(serde_yaml::Error),
+    SerdeYaml(serde_norway::Error),
     /// An error from expanding values in a shell
     ShellExpand(String),
     /// An error from using a regex
@@ -402,8 +402,8 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<serde_yaml::Error> for Error {
-    fn from(error: serde_yaml::Error) -> Self {
+impl From<serde_norway::Error> for Error {
+    fn from(error: serde_norway::Error) -> Self {
         Error::SerdeYaml(error)
     }
 }

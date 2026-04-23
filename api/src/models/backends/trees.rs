@@ -697,10 +697,10 @@ impl Tree {
                 // check if we already have this associations other node
                 let is_hint = if !ring.contains(self, other_hash) {
                     // add this node to our ring
-                    ring.add_associated_node(&self, source_hash, &association, node)?
+                    ring.add_associated_node(self, source_hash, &association, node)?
                 } else {
                     // check if this association should be rendered or returned as a hint
-                    ring.is_hint_association(&self, source_hash, &association, &node)?
+                    ring.is_hint_association(self, source_hash, &association, &node)?
                 };
                 // get this associationals direction
                 let direction = association.direction;

@@ -85,7 +85,7 @@ rmcp-err = ["rmcp"]
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = "0.9"
+serde_norway = { workspace = true }
 serde_with = { version = "3.16", features = ["schemars_1"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { workspace = true }
@@ -154,6 +154,7 @@ percent-encoding = { version = "2.3.1", optional = true }
 dashmap = { version = "6.1", optional = true }
 mime = { version = "0.3", optional = true }
 bytesize = { version = "2.1.0", features = ["serde"] }
+sigma-rust = { workspace = true }
 
 # rkyv dependencies
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"], optional = true }

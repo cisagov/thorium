@@ -16,7 +16,7 @@ thorium-api = { workspace = true , default-features=false, features = ["client",
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = "0.9"
+serde_norway = { workspace = true }
 kanal = "0.1.1"
 async-trait = "0.1"
 url = "2"

@@ -47,7 +47,7 @@ impl WindowsProcessTreeEntity {
         Ok(WindowsProcessTreeEntity { tools: form.tools })
     }
 
-    /// Add this filesystem entity metadata to a form
+    /// Add this windows process tree entity metadata to a form
     ///
     /// # Arguments
     ///
@@ -255,7 +255,7 @@ impl WindowsProcessEntity {
     pub fn from_form(form: super::EntityMetadataForm) -> Result<Self, crate::utils::ApiError> {
         // if we don't have the pid field then return an error
         let pid = match form.pid {
-            Some(names_sha256) => names_sha256,
+            Some(pid) => pid,
             None => {
                 return crate::bad!("Windows process entities must have a pid!".to_owned());
             }
@@ -354,13 +354,19 @@ async fn create_windows_process_helper(
     Ok((pid, process.parent_pid, name, resp.id))
 }
 
+/// A single entry into a windows process trees pid_map context
+///
+/// The format for this is (<parent_pid>, <entity_name>, <entity_id>)
+#[cfg(feature = "client")]
+type PidMapEntry = (Option<u64>, String, uuid::Uuid);
+
 /// The context needed to properly build a windows process tree
 #[cfg(feature = "client")]
 struct WindowsProcTreeContext {
     /// The id for our root windows process tree
     id: uuid::Uuid,
     /// A map of pids and their parent, entity names/ids
-    pid_map: HashMap<u64, (Option<u64>, String, uuid::Uuid)>,
+    pid_map: HashMap<u64, PidMapEntry>,
 }
 
 /// Constructs a windows process tree that a user wants to submit to Thorium
@@ -449,7 +455,6 @@ impl WindowsProcessTreeBuilder {
         // process our process create stream
         for result in creates {
             // get this pids info
-            // TODO not fail on error?
             let (pid, parent_pid, name, entity_id) = result?;
             // add this pid to our pid map
             context.pid_map.insert(pid, (parent_pid, name, entity_id));
@@ -517,7 +522,6 @@ impl WindowsProcessTreeBuilder {
             .collect::<Vec<Result<_, crate::Error>>>()
             .await
             .into_iter()
-            // TODO don't fail on a single error?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(())
     }

@@ -7,8 +7,8 @@ use thorium::{CtlConf, Error, Keys, Thorium};
 use tokio::fs::create_dir_all;
 
 use super::update;
-use crate::args::clusters::{ClusterStatus, ClusterWorkers, Clusters, Login};
 use crate::args::Args;
+use crate::args::clusters::{ClusterStatus, ClusterWorkers, Clusters, Login};
 use crate::utils;
 
 /// Get a users credentials
@@ -105,7 +105,7 @@ pub async fn login(args: &Args, cmd: &Login) -> Result<(), Error> {
     // open the file to write this config off to disk
     let config_file = std::fs::File::create(&args.config)?;
     // write this config file off to disk
-    serde_yaml::to_writer(config_file, &config)?;
+    serde_norway::to_writer(config_file, &config)?;
     println!("🦀🎉 Login Suceeded! 🎉🦀");
     // check if we need to update
     if !args.skip_update {

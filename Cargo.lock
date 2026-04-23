@@ -7459,8 +7459,6 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "sigma-rust"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71ebe751e024f40cf07fb69e2311c31003ac6db3aa65ff0b5b3377681f1ba7d3"
 dependencies = [
  "base64 0.22.1",
  "cidr",
@@ -7470,6 +7468,7 @@ dependencies = [
  "serde_norway",
  "strum 0.26.3",
  "thiserror 1.0.69",
+ "utoipa",
 ]
 
 [[package]]
@@ -7935,7 +7934,7 @@ dependencies = [
  "scylla",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "sha2 0.10.9",
  "strum 0.27.2",
  "thorium-api",
@@ -7983,7 +7982,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "sha2 0.10.9",
  "sigma-rust",
  "thorium-api",
@@ -8026,7 +8025,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "sysinfo",
  "thorium-api",
  "tokio",
@@ -8113,13 +8112,14 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_norway",
  "serde_qs",
  "serde_with",
- "serde_yaml",
  "serial_test",
  "sha-1",
  "sha2 0.10.9",
  "shellexpand",
+ "sigma-rust",
  "strum 0.27.2",
  "thorium-derive",
  "tokio",
@@ -8190,7 +8190,7 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thorium-api",
  "tokio",
  "tokio-stream",
@@ -8212,7 +8212,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "sysinfo",
  "thorium-api",
  "tokio",
@@ -8273,7 +8273,7 @@ dependencies = [
  "scylla",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_norway",
  "thorium-api",
  "tokio",
  "tracing",
