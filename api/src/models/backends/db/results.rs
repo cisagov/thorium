@@ -396,7 +396,7 @@ pub async fn get(
         // skip any results that aren't in our result map
         if let Some(output) = temp.remove(&id.id) {
             // add this result to our output map
-            outputs.add(output, id.groups);
+            outputs.add(output, id.groups)?;
         } else {
             // we are missing this result so log the error
             event!(

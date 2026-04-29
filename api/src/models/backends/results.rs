@@ -8,7 +8,7 @@ use axum::http::request::Parts;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
-use tracing::instrument;
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::db::{self};
@@ -20,6 +20,9 @@ use crate::models::{
 };
 use crate::utils::{ApiError, Shared, bounder};
 use crate::{bad, bad_internal, deserialize, update, update_clear, update_opt};
+
+/// A protected prefix for system organized files
+const THORIUM_PREFIX: &str = "__thorium_";
 
 /// The different kinds of files to upload for results
 enum ResultFileUpload<'a> {
@@ -34,7 +37,6 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
     ///
     /// # Arguments
     ///
-    /// * `result_id` - The id of the result we are uploading an entities file for
     /// * `kind` - The kind of entity we are uploading
     /// * `field` - The field to upload an entity file from
     /// * `shared` - Shared Thorium objects
@@ -50,10 +52,11 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         }
         // we don't need to validate this path because we completely control it
         // build the path to save this attachment at in s3
-        let s3_path = format!("{}/__thorium_entities/{}.json", self.id, kind);
+        let s3_path = format!("{id}/{THORIUM_PREFIX}entities/{kind}.json", id = self.id);
         // cart and stream this file into s3
         shared.s3.results.stream(&s3_path, field).await?;
-        // add this entity kind to our form
+        // add this entity kind to our form and set its count to 0 if it doesn't
+        // yet have a count
         self.entities.entry(kind).or_default();
         Ok(())
     }
@@ -78,10 +81,10 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         // if we don't then just use a random uuid
         let file_name = bounder::multipart_path(&field, "Result File")?;
         // result files cannot start with __thorium_ as those are protected names
-        if file_name.starts_with("__thorium_") {
+        if file_name.starts_with(THORIUM_PREFIX) {
             // raise an error since this result file uses a protected prefix
             return bad!(format!(
-                "Result files cannot start with __thorium_: '{file_name}'"
+                "Result files cannot start with {THORIUM_PREFIX}: '{file_name}'"
             ));
         }
         // build the path to save this attachment at in s3
@@ -106,7 +109,7 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         if let Some(name) = field.name() {
             // add this fields value to our form
             // iterate over the segments ('<NAME>[<KEY1>][<KEY2>]') in the field name
-            let name_segments = super::helpers::parse_bracket_segments(&name)?;
+            let name_segments = super::helpers::parse_bracket_segments(name)?;
             let mut name_segments_iter = name_segments.into_iter();
             // add this fields value to our form
             match name_segments_iter
@@ -139,6 +142,12 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
                     };
                     // get the number of entities for this kind
                     let count: i64 = field.text().await?.parse()?;
+                    // error if any count is negative
+                    // we do this check instead of requiring a u64 because scylla doesn't
+                    // support unsigned ints
+                    if count < 0 {
+                        return bad!(format!("Entity counts cannot be negative: {count}"));
+                    }
                     // update our count for this entity kind
                     self.entities.insert(kind, count);
                 }
@@ -284,19 +293,39 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         {
             Ok(()) => Ok(self.id),
             Err(err) => {
-                // delete all our dangling result files
+                // delete all our dangling result filesi
+                // deletes are best effort to prevent as many dangling files as possible
                 for name in self.files {
                     // build the path to delete this attachment at in s3
                     let s3_path = format!("{}/{}", self.id, name);
                     // delete this result file from s3
-                    shared.s3.results.delete(&s3_path).await?;
+                    if let Err(error) = shared.s3.results.delete(&s3_path).await {
+                        // log that we failed to delete this result file but continue on
+                        event!(
+                            Level::ERROR,
+                            error = error.to_string(),
+                            clean_up_error = true,
+                            kind = "ResultFile",
+                            s3_path
+                        );
+                    }
                 }
                 // delete all of our dangling entity files
                 for kind in self.entities.keys() {
                     // build the path to save this attachment at in s3
-                    let s3_path = format!("{}/__thorium_entities/{}.json", self.id, kind);
+                    let s3_path =
+                        format!("{id}/{THORIUM_PREFIX}entities/{kind}.json", id = self.id);
                     // delete this result file from s3
-                    shared.s3.results.delete(&s3_path).await?;
+                    if let Err(error) = shared.s3.results.delete(&s3_path).await {
+                        // log that we failed to delete this entities file but continue on
+                        event!(
+                            Level::ERROR,
+                            error = error.to_string(),
+                            clean_up_error = true,
+                            kind = "Entities",
+                            s3_path
+                        );
+                    }
                 }
                 Err(err)
             }
@@ -345,7 +374,7 @@ impl OutputMap {
     ///
     /// * `row` - The output to add to this map
     /// * `groups` - The groups this result is from
-    pub(super) fn add(&mut self, row: OutputRow, groups: Vec<String>) {
+    pub(super) fn add(&mut self, row: OutputRow, groups: Vec<String>) -> Result<(), ApiError> {
         // get an entry to this tools command map
         let results = self.results.entry(row.tool.clone()).or_default();
         // try to deserialize our string as a json Value
@@ -355,10 +384,18 @@ impl OutputMap {
         };
         // convert our entity counts into unsigned ints
         let entities = match row.entities {
-            Some(entities) => entities
-                .into_iter()
-                .map(|(kind, count)| (kind, count as usize))
-                .collect(),
+            Some(entities) => {
+                // build a map of counts
+                let mut counts = HashMap::with_capacity(entities.len());
+                // convert our kinds and counts
+                for (kind, i64_count) in entities {
+                    // try to convert this count
+                    let count = usize::try_from(i64_count)?;
+                    // add out converted count
+                    counts.insert(kind, count);
+                }
+                counts
+            }
             None => HashMap::default(),
         };
         // build our output object for this row
@@ -377,6 +414,7 @@ impl OutputMap {
         };
         // push our results
         results.push(output);
+        Ok(())
     }
 
     /// limit our output map to at most N results for each tool
@@ -397,11 +435,12 @@ impl Output {
     ///
     /// # Arguments
     ///
+    /// * `kind` - The kind of object we are getting results from
     /// * `user` - The user submitting these results
-    /// * `sha256` - The sha256 we are trying to download results from
+    /// * `key` - The sha256 we are trying to download results from
     /// * `tool` - The name of the tool these results are from
     /// * `result_id` - The ID for the result to download files from
-    /// * `name` - The name of the file to download
+    /// * `file_path` - The path to the result file to download
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "Output::download", skip(kind, user, shared), err(Debug))]
     pub async fn download(
@@ -413,7 +452,7 @@ impl Output {
         file_path: PathBuf,
         shared: &Shared,
     ) -> Result<ByteStream, ApiError> {
-        // make sure that this user has access to this repo or sample
+        // make sure that this user has access to this repo, sample, or entity
         kind.authorize(user, key, shared).await?;
         // authorize this user has access to this result id if we are not an admin
         if !user.is_admin() {
@@ -421,9 +460,43 @@ impl Output {
             db::results::authorize(kind, &user.groups, key, tool, result_id, shared).await?;
         }
         // build the path to this file in s3
-        let path = format!("{}/{}", result_id, file_path.to_string_lossy());
+        let s3_path = format!("{}/{}", result_id, file_path.to_string_lossy());
         // download this result file
-        shared.s3.results.download(&path).await
+        shared.s3.results.download(&s3_path).await
+    }
+
+    /// Downloads a specific kind of entities from results
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The kind of object we are getting results from
+    /// * `user` - The user submitting these results
+    /// * `key` - The sha256 we are trying to download result entities from
+    /// * `tool` - The name of the tool these results are from
+    /// * `result_id` - The ID for the result to download files from
+    /// * `entity_kind` - The kind of entity to download
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "Output::download_entity", skip(kind, user, shared), err(Debug))]
+    pub async fn download_entity(
+        kind: OutputKind,
+        user: &User,
+        key: &str,
+        tool: &str,
+        result_id: &Uuid,
+        entity_kind: EntityKinds,
+        shared: &Shared,
+    ) -> Result<ByteStream, ApiError> {
+        // make sure that this user has access to this repo, sample, or entity
+        kind.authorize(user, key, shared).await?;
+        // authorize this user has access to this result id if we are not an admin
+        if !user.is_admin() {
+            // we are not an admin so make sure we can see this result
+            db::results::authorize(kind, &user.groups, key, tool, result_id, shared).await?;
+        }
+        // build the path to save this attachment at in s3
+        let s3_path = format!("{result_id}/{THORIUM_PREFIX}entities/{entity_kind}.json");
+        // download this result file
+        shared.s3.results.download(&s3_path).await
     }
 }
 
@@ -556,8 +629,10 @@ impl OutputKind {
 
 /// The query params for downloading result files
 #[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ResultFileDownloadParams {
     /// The path to the result file to download
+    #[cfg_attr(feature = "api", schema(value_type = String))]
     pub result_file: PathBuf,
 }
 

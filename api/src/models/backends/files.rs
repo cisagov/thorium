@@ -548,7 +548,7 @@ impl Sample {
                 return unauthorized!(format!("{} is not in all specified groups", self.sha256));
             }
             // make sure we actually have access to all requested groups
-            let info = Group::authorize_all(user, &groups, shared).await?;
+            let info = Group::authorize_all(user, groups, shared).await?;
             // make sure we have modification privleges in these groups if we are editing data
             if editable {
                 can_create_all!(info, user, shared);
@@ -615,7 +615,7 @@ impl Sample {
             // make sure we actually have edit access in all requested groups
             let _ = Group::authorize_check_allow_all(
                 user,
-                &groups,
+                groups,
                 Group::editable,
                 "edit",
                 Some(action),
@@ -684,39 +684,6 @@ impl Sample {
     ///
     /// # Arguments
     ///
-    /// * `groups` - The groups this user can see
-    /// * `sub` - The submission to add to this sample
-    /// * `shared` - Shared Thorium objects
-    pub(super) async fn add(
-        &mut self,
-        groups: &[String],
-        sub: Submission,
-        shared: &Shared,
-    ) -> Result<(), ApiError> {
-        // deserialize our origin if one was set
-        let origin = match &sub.origin {
-            Some(raw) => Origin::deserialize(groups, raw, shared).await?,
-            None => Origin::None,
-        };
-        // downselect ot just the fields for a subission chunk
-        let chunk = SubmissionChunk {
-            id: sub.id,
-            name: sub.name,
-            description: sub.description,
-            groups: sub.groups,
-            submitter: sub.submitter,
-            uploaded: sub.uploaded,
-            origin,
-        };
-        // add it to our sample object
-        self.submissions.push(chunk);
-        Ok(())
-    }
-
-    /// Adds a submission onto a sample object
-    ///
-    /// # Arguments
-    ///
     /// * `sub` - The submission to add to this sample
     pub(super) fn add_row(&mut self, row: SubmissionRow) -> Result<(), ApiError> {
         // check if we already have a submission object for this submission
@@ -751,6 +718,7 @@ impl Sample {
     /// # Arguments
     ///
     /// * `submission` - The submission to convert
+    #[instrument(name = "Sample::try_from_submission", skip_all, err(Debug))]
     pub(crate) async fn try_from_submission(
         groups: &[String],
         sub: Submission,
@@ -765,8 +733,10 @@ impl Sample {
             submissions: Vec::with_capacity(1),
             comments: Vec::default(),
         };
+        // convert this submission to a submission chunk
+        let sub = SubmissionChunk::get(groups, sub, shared).await?;
         // add current submission as submission chunk
-        sample.add(groups, sub, shared).await?;
+        sample.submissions.push(sub);
         Ok(sample)
     }
 
@@ -776,10 +746,10 @@ impl Sample {
     ///
     /// * `parents` - The parents to check against
     /// * `relationship` - A map of relationships to add new branches too
-    pub fn check_origins(
+    pub async fn check_origins(
         &self,
         parents: &HashMap<&String, u64>,
-        relationships: &dashmap::DashMap<u64, dashmap::DashSet<UnhashedTreeBranch>>,
+        relationships: &scc::HashMap<u64, scc::HashMap<u64, UnhashedTreeBranch>>,
     ) {
         // get our current nodes hash
         let hash = self.tree_hash();
@@ -797,9 +767,11 @@ impl Sample {
                 // build our to_from relationships
                 let unhashed = UnhashedTreeBranch::new(hash, relationship, Directionality::To);
                 // get an entry to this parent nodes relationships
-                let entry = relationships.entry(parent_hash).or_default();
+                let entry = relationships.entry_async(parent_hash).await.or_default();
+                // get our branches hash (this is the hash of the unhashed tree branch not our tree hash)
+                let hash = unhashed.full_hash();
                 // insert our relationship
-                entry.insert(unhashed);
+                entry.upsert_async(hash, unhashed).await;
             }
         }
     }
@@ -922,6 +894,37 @@ impl CommentSupport for Sample {
 }
 
 impl SubmissionChunk {
+    /// Get a submission chunk from this submission
+    ///
+    /// # Arguments
+    ///
+    /// * `groups` - The groups this user can see
+    /// * `sub` - The submission to add to this sample
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "SubmissionChunk::get", skip_all, err(Debug))]
+    pub(super) async fn get(
+        groups: &[String],
+        sub: Submission,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
+        // deserialize our origin if one was set
+        let origin = match &sub.origin {
+            Some(raw) => Origin::deserialize(groups, raw, shared).await?,
+            None => Origin::None,
+        };
+        // downselect ot just the fields for a subission chunk
+        let chunk = SubmissionChunk {
+            id: sub.id,
+            name: sub.name,
+            description: sub.description,
+            groups: sub.groups,
+            submitter: sub.submitter,
+            uploaded: sub.uploaded,
+            origin,
+        };
+        Ok(chunk)
+    }
+
     /// Check if a user can modify this submission
     #[instrument(name = "SubmissionChunk::can_modify", skip(user, shared), err(Debug))]
     pub async fn can_modify(
@@ -945,10 +948,7 @@ impl SubmissionChunk {
             stream::iter(groups)
                 .map(Ok)
                 .try_for_each_concurrent(None, |name| async {
-                    Group::get(user, name, shared)
-                        .await?
-                        .modifiable(user)
-                        .map(|()| ())
+                    Group::get(user, name, shared).await?.modifiable(user)
                 })
                 .await?;
         }
@@ -1343,7 +1343,7 @@ impl CursorCore for SampleListLine {
     ///
     /// * `params` - The params to use to build this cursor
     fn get_id(params: &Self::Params) -> Option<Uuid> {
-        params.cursor.clone()
+        params.cursor
     }
 
     /// Get our start and end timestamps

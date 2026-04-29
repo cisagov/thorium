@@ -3,11 +3,11 @@
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
-use crate::models::{CriticalSector, Entity, VendorEntity};
+use crate::models::{CriticalSector, Entity};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
-        use crate::{bad, internal_err};
+        use crate::bad;
         use crate::utils::{ApiError, Shared};
         use crate::models::backends::db;
         use crate::models::EntityMetadataForm;
@@ -15,7 +15,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "client")]
-use crate::{multipart_list, multipart_list_conv, multipart_text, multipart_text_to_string};
+use crate::{multipart_list, multipart_list_conv, multipart_text_to_string};
 
 /// A device entity
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -52,20 +52,20 @@ impl DeviceEntity {
         groups: &[String],
         shared: &Shared,
     ) -> Result<Self, ApiError> {
-        //// get all of the entities that were specified as vendors
-        //let entities = db::entities::get_many(groups, &form.vendors, shared).await?;
-        //// validate that all of these entities are vendors
-        //if let Some(bad_id) = entities
-        //    .iter()
-        //    .find(|entity| entity.kind != crate::models::EntityKinds::Vendor)
-        //{
-        //    // we found an entity that is not a vendor so reject this request
-        //    return bad!(format!("Entity {} is not a vendor!", bad.id));
-        //}
+        // get all of the entities that were specified as vendors
+        let vendors = db::entities::get_many(groups, &form.vendors, shared).await?;
+        // validate that all of these entities are vendors
+        if let Some(bad) = vendors
+            .iter()
+            .find(|entity| entity.kind != crate::models::EntityKinds::Vendor)
+        {
+            // we found an entity that is not a vendor so reject this request
+            return bad!(format!("Entity {} ({}) is not a vendor!", bad.name, bad.id));
+        }
         // build our device entity
         Ok(DeviceEntity {
             urls: form.urls,
-            vendors: vec![],
+            vendors,
             critical_system: form.critical_system,
             sensitive_location: form.sensitive_location,
             critical_sectors: form.critical_sectors.into_iter().collect(),

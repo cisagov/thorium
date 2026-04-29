@@ -221,6 +221,7 @@ impl TreeSupport for TreeTags {
 
     /// Gather any initial nodes for a tree
     #[cfg(feature = "api")]
+    #[tracing::instrument(name = "TreeSupport::<TreeTags>::gather_initial", skip_all, err(Debug))]
     async fn gather_initial(
         _user: &super::User,
         query: &TreeQuery,
@@ -241,6 +242,11 @@ impl TreeSupport for TreeTags {
     }
     /// Gather any children for this child node
     #[cfg(feature = "api")]
+    #[tracing::instrument(
+        name = "TreeSupport::<TreeTags>::gather_children",
+        skip_all,
+        err(Debug)
+    )]
     async fn gather_children(
         &self,
         _user: &super::User,
@@ -266,14 +272,15 @@ impl TreeSupport for TreeTags {
         let mut cursor = crate::models::backends::db::files::list(params, true, shared).await?;
         // crawl this cursor and add its nodes to our tree
         loop {
-            // we don't need to get any data we already have again
-            let mut sha256s = cursor
-                .data
-                .drain(..)
-                .map(|line| line.sha256)
-                .collect::<Vec<String>>();
-            // filter out any nodes that we already have in our tree
-            sha256s.retain(|sha256| !ring.contains(tree, Sample::tree_hash_direct(sha256)));
+            // preallocate a list for our new sha256s
+            let mut sha256s = Vec::with_capacity(cursor.data.len());
+            // only keep sha256s that are not in our tree or ring already
+            for sha256 in cursor.data.drain(..).map(|line| line.sha256) {
+                // check if this sample is already in our tree
+                if !ring.contains(tree, Sample::tree_hash_direct(&sha256)).await {
+                    sha256s.push(sha256);
+                }
+            }
             // only list details if there are node details to list
             if !sha256s.is_empty() {
                 // get the details on these samples
@@ -287,7 +294,7 @@ impl TreeSupport for TreeTags {
                     // get our sample nodes hash
                     let node_hash = node.hash();
                     // add this node to our tree ring
-                    ring.add_node(node);
+                    ring.add_node(node).await;
                     // build the branch to and from our target node
                     let to = UnhashedTreeBranch::new(
                         tag_hash,
@@ -300,8 +307,8 @@ impl TreeSupport for TreeTags {
                         Directionality::From,
                     );
                     // add these relationships to our ring
-                    ring.add_branch(node_hash, to, false);
-                    ring.add_branch(tag_hash, from, false);
+                    ring.add_branch(node_hash, to, false).await;
+                    ring.add_branch(tag_hash, from, false).await;
                 }
             }
             // if our cursor is exhausted then stop crawling

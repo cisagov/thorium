@@ -627,8 +627,7 @@ impl Entity {
     ///
     /// # Arguments
     ///
-    /// * `update` - The update to apply
-    /// * `user` - The user updating the entity
+    /// * `user` - The user deleting an entity
     /// * `shared` - Shared Thorium objects
     pub async fn delete(self, user: &User, shared: &Shared) -> Result<(), ApiError> {
         // if we are the owner of this entity then we can delete it from all groups
@@ -875,6 +874,12 @@ impl EntityForm {
     }
 
     /// Build an association request for anything in this entity form
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user building an association request
+    /// * `id` - The id of the entity this association is coming from
+    /// * `shared` - Shared Thorium objects
     pub(super) async fn build_association_req(
         &mut self,
         user: &User,
@@ -1084,7 +1089,7 @@ impl EntityMetadataForm {
                     "urls" => {
                         self.urls.push(field.text().await?);
                     }
-                    "vendor" => {
+                    "vendors" => {
                         // try to parse this vendor id
                         let vendor_id = field.text().await?.parse::<Uuid>()?;
                         // add this id to our vendor list

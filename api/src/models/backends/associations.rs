@@ -7,7 +7,7 @@ use futures_util::Future;
 use scylla::errors::ExecutionError;
 use scylla::response::query_result::QueryResult;
 use std::collections::{HashMap, HashSet};
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 use super::db;
@@ -155,7 +155,7 @@ impl CursorCore for ListableAssociation {
     ///
     /// * `params` - The params to use to build this cursor
     fn get_id(params: &Self::Params) -> Option<Uuid> {
-        params.cursor.clone()
+        params.cursor
     }
 
     // Get our start and end timestamps
@@ -415,6 +415,16 @@ impl Association {
         Ok(api_cursor)
     }
 
+    /// Generate a hash of everything in this association
+    pub fn full_hash(&self) -> u64 {
+        // build a hasher
+        let mut hasher = gxhash::GxHasher::with_seed(1234);
+        // hash this association
+        self.hash(&mut hasher);
+        // get this associations hash
+        hasher.finish()
+    }
+
     /// Generate a tree node hash for this item
     pub fn tree_hash(&self) -> u64 {
         // build a hasher
@@ -426,8 +436,7 @@ impl Association {
             AssociationTarget::Repo(url) => hasher.write(url.as_bytes()),
         }
         // finalize our hasher
-        let hash = hasher.finish();
-        hash
+        hasher.finish()
     }
 
     /// get the data for this association
@@ -468,7 +477,7 @@ impl TryFrom<ScyllaCursor<ListableAssociation>> for ApiCursor<Association> {
         let data = cursor
             .data
             .into_iter()
-            .map(|listable| Association::try_from(listable))
+            .map(Association::try_from)
             .collect::<Result<Vec<Association>, ApiError>>()?;
         // build our api cursor with our converted data
         Ok(ApiCursor { cursor: id, data })

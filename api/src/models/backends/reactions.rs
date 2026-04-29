@@ -54,6 +54,7 @@ impl ReactionRequest {
     /// * `user` - The user trying to override args
     /// * `group` - The group this reaction is in
     /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ReactionRequest::can_override", skip_all, err(Debug))]
     pub async fn can_override(
         &self,
         user: &User,
@@ -248,7 +249,7 @@ impl Reaction {
     /// * `pipeline` - The pipeline this reaction is apart of
     /// * `request` - The ReactionRequest to build a reaction on
     /// * `shared` - Shared objects in Thorium
-    #[instrument(name = "Reactions::create", skip_all, err(Debug))]
+    #[instrument(name = "Reactions::create", skip_all, fields(group = &group.name, pipeline = &pipeline.name), err(Debug))]
     pub async fn create(
         user: &User,
         group: &Group,
@@ -256,8 +257,12 @@ impl Reaction {
         request: ReactionRequest,
         shared: &Shared,
     ) -> Result<Reaction, ApiError> {
-        // log the group and pipeline we are creating a reaction for
-        event!(Level::INFO, group = &group.name, pipeline = &pipeline.name);
+        // ensure that all args defined are contained in the pipeline
+        for image in request.args.keys() {
+            if !pipeline.order.iter().any(|stage| stage.contains(image)) {
+                return bad!(format!("image {} is not in this pipeline", image));
+            }
+        }
         // make sure we can create reactions in this group
         group.allowable(GroupAllowAction::Reactions)?;
         // make sure we can create reactions in this group
