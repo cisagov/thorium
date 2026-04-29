@@ -8028,7 +8028,6 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "walkdir",
 ]
 
 [[package]]
@@ -8039,6 +8038,7 @@ dependencies = [
  "argon2",
  "async-recursion",
  "async-trait",
+ "async-walkdir",
  "aws-credential-types",
  "aws-sdk-s3",
  "aws-smithy-http 0.62.6",

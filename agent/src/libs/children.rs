@@ -1,6 +1,6 @@
 //! collects children files from jobs and submits them to Thorium
 
-use async_walkdir::WalkDir as AsyncWalkDir;
+use async_walkdir::WalkDir;
 use crossbeam::channel::Sender;
 use futures::stream::{self, StreamExt};
 use itertools::Itertools;
@@ -18,9 +18,7 @@ use thorium::models::{
 use thorium::{Error, Thorium};
 use tracing::{Level, event, instrument};
 use uuid::Uuid;
-use walkdir::WalkDir;
 
-use super::helpers;
 use crate::log;
 
 /// A cache of compiled child filter regular expressions mapped to their raw
@@ -55,21 +53,27 @@ pub async fn setup<P: AsRef<Path>>(root: P) -> Result<(), Error> {
 /// # Arguments
 ///
 /// * `path` - The path to the directory to start looking for child files at
-pub fn get_children(path: &PathBuf) -> Vec<PathBuf> {
+pub async fn get_children(path: &PathBuf) -> Result<Vec<PathBuf>, Error> {
+    // build a list of children paths
+    let mut children = Vec::default();
     // only crawl this dir if it exists
     if path.exists() {
-        // walk this dir and get all children
-        WalkDir::new(path)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(helpers::is_file)
-            .map(|entry| entry.path().to_path_buf())
-            .collect::<Vec<PathBuf>>()
-    } else {
-        // this path doesn't exist so just return an empty vec
-        Vec::default()
+        // walk over entries in this path
+        let mut walker = WalkDir::new(path);
+        // start walking over entries in this dir
+        while let Some(entry_result) = walker.next().await {
+            // check if we failed to get info on this entry
+            let entry = entry_result?;
+            // get this entry's metadata
+            let meta = entry.metadata().await?;
+            // check if this is a file or not
+            if meta.is_file() {
+                // add the path to this file
+                children.push(entry.path());
+            }
+        }
     }
+    Ok(children)
 }
 
 /// Recursively walk a directory and get all files in a filesystem
@@ -83,7 +87,7 @@ pub async fn get_filesystem_children(path: &PathBuf) -> Result<FileSystemEntityB
     // only crawl this dir if it exists
     if path.exists() {
         // walk over entries in this path
-        let mut walker = AsyncWalkDir::new(path);
+        let mut walker = WalkDir::new(path);
         // start walking over entries in this dir
         while let Some(entry_result) = walker.next().await {
             // check if we failed to get an entry
@@ -558,7 +562,7 @@ impl Children {
             ChildrenFiles::Fs(get_filesystem_children(&root).await?)
         } else {
             // recursively walk through this directory and get all files
-            ChildrenFiles::Loose(get_children(&root))
+            ChildrenFiles::Loose(get_children(&root).await?)
         };
         // update our source files
         self.source = Some(children);
@@ -578,7 +582,7 @@ impl Children {
             ChildrenFiles::Fs(get_filesystem_children(&root).await?)
         } else {
             // recursively walk through this directory and get all files
-            ChildrenFiles::Loose(get_children(&root))
+            ChildrenFiles::Loose(get_children(&root).await?)
         };
         // update our unpacked files
         self.unpacked = Some(children);
@@ -602,10 +606,10 @@ impl Children {
             ))
         } else {
             // recursively walk through this directory and get all files
-            Some(ChildrenFiles::Loose(get_children(&root)))
+            Some(ChildrenFiles::Loose(get_children(&root).await?))
         };
         // collect any files carved from pcaps
-        let pcap = Some(ChildrenFiles::Loose(get_children(&pcap_root)));
+        let pcap = Some(ChildrenFiles::Loose(get_children(&pcap_root).await?));
         // recursively walk through this directory skipping any hidden files
         self.carved = CarvedChildren { unknown, pcap };
         Ok(())

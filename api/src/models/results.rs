@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use super::backends::OutputSupport;
 use super::{Buffer, ImageVersion, InvalidEnum};
+use crate::models::EntityKinds;
 use crate::{
     matches_adds, matches_clear, matches_removes, matches_update, matches_update_opt, same,
 };
@@ -81,6 +82,8 @@ pub struct OutputRequest<O: OutputSupport> {
     /// Any files tied to this result
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<OnDiskFile>,
+    /// What entities were found in this result but not neccesarily created in Thorium
+    pub entities: HashMap<EntityKinds, (usize, Buffer)>,
     /// Any buffers to upload as result files
     pub buffers: Vec<Buffer>,
     /// The display type of this result
@@ -118,6 +121,7 @@ impl<O: OutputSupport> OutputRequest<O> {
             tool_version: None,
             files: Vec::default(),
             buffers: Vec::default(),
+            entities: HashMap::default(),
             display_type,
         }
     }
@@ -255,6 +259,20 @@ impl<O: OutputSupport> OutputRequest<O> {
         self
     }
 
+    /// Adds some entities to upload with this result
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The kind of entities we are adding
+    /// * `count` - The number of entities in this buffer
+    /// * `entities` - The buffer containing the entities to add
+    #[must_use]
+    pub fn entities(mut self, kind: EntityKinds, count: usize, entities: Buffer) -> Self {
+        // add these entities to our map of entities to upload
+        self.entities.insert(kind, (count, entities));
+        self
+    }
+
     /// Adds a buffer to upload with this result
     ///
     /// # Arguments
@@ -272,7 +290,7 @@ impl<O: OutputSupport> OutputRequest<O> {
     /// ```
     #[must_use]
     pub fn buffer(mut self, buffer: Buffer) -> Self {
-        // add our buffer to our list of buffers to upload
+        // add this buffer to our list of buffers to upload
         self.buffers.push(buffer);
         self
     }
@@ -294,7 +312,7 @@ impl<O: OutputSupport> OutputRequest<O> {
     /// ```
     #[must_use]
     pub fn buffers(mut self, mut buffers: Vec<Buffer>) -> Self {
-        // append our new buffers on to our list of buffers to upload
+        // append these new buffers on to our list of buffers to upload
         self.buffers.append(&mut buffers);
         self
     }
@@ -347,6 +365,13 @@ impl<O: OutputSupport> OutputRequest<O> {
         for on_disk in self.files {
             // a path was set so read in that file and add it to the form
             form = multipart_file!(form, "files", on_disk.path, on_disk.trim_prefix);
+        }
+        // add any entities in this result
+        for (kind, (count, buff)) in self.entities {
+            // add this entity kind and its data to our form
+            form = form.part(format!("entities[{kind}]"), buff.to_part()?);
+            // add the number of entites of this kind to our form
+            form = form.text(format!("entities_count[{kind}]"), count.to_string());
         }
         // add any buffers that were added directly
         for buff in self.buffers {
@@ -540,6 +565,8 @@ pub struct Output {
     /// Any files tied to this result
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
+    /// What entities were found in this result but not neccesarily created in Thorium
+    pub entities: HashMap<EntityKinds, usize>,
     /// The display type of this tool output
     pub display_type: OutputDisplayType,
     /// The children that were found when generating this result
@@ -784,6 +811,12 @@ fn default_results_path() -> String {
 fn default_result_files_path() -> String {
     "/tmp/thorium/result-files".into()
 }
+
+/// helps serde default the result files path
+fn default_entities_path() -> String {
+    "/tmp/thorium/entities.json".into()
+}
+
 /// helps serde default the tags path
 fn default_tags_path() -> String {
     "/tmp/thorium/tags".into()
@@ -799,6 +832,9 @@ pub struct FilesHandler {
     /// The location to look for files that should be uploaded as result files
     #[serde(default = "default_result_files_path")]
     pub result_files: String,
+    /// The location to look for entities
+    #[serde(default = "default_entities_path")]
+    pub entities: String,
     /// The location to load tags to set from
     #[serde(default = "default_tags_path")]
     pub tags: String,
@@ -813,6 +849,7 @@ impl Default for FilesHandler {
         FilesHandler {
             results: "/tmp/thorium/results".into(),
             result_files: "/tmp/thorium/result-files".into(),
+            entities: "/tmp/thorium/entities.json".into(),
             tags: "/tmp/thorium/tags".into(),
             names: Vec::default(),
         }
@@ -855,6 +892,25 @@ impl FilesHandler {
     #[must_use]
     pub fn result_files<T: Into<String>>(mut self, path: T) -> Self {
         self.result_files = path.into();
+        self
+    }
+
+    /// Set the entities path
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FilesHandler;
+    ///
+    /// FilesHandler::default().entities("/data/entities.json");
+    /// ```
+    #[must_use]
+    pub fn entities<T: Into<String>>(mut self, path: T) -> Self {
+        self.entities = path.into();
         self
     }
 

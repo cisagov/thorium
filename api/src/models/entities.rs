@@ -515,7 +515,8 @@ impl TagSupport for Entity {
     AsRefStr,
     EnumString,
     EnumIter,
-    strum::Display
+    strum::Display,
+    Hash,
 ))]
 #[cfg_attr(
     feature = "scylla-utils",
@@ -606,6 +607,36 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }
     }
+
+    /// Get our entity kind
+    pub fn kind(&self) -> EntityKinds {
+        match self {
+            EntityMetadataRequest::Device(_) => EntityKinds::Device,
+            EntityMetadataRequest::Vendor(_) => EntityKinds::Vendor,
+            EntityMetadataRequest::Collection(_) => EntityKinds::Collection,
+            EntityMetadataRequest::FileSystem(_) => EntityKinds::FileSystem,
+            EntityMetadataRequest::Folder(_) => EntityKinds::Folder,
+            EntityMetadataRequest::WindowsProcessTree => EntityKinds::WindowsProcessTree,
+            EntityMetadataRequest::WindowsProcess(_) => EntityKinds::WindowsProcess,
+            EntityMetadataRequest::SigmaRule(_) => EntityKinds::SigmaRule,
+            EntityMetadataRequest::Other => EntityKinds::Other,
+        }
+    }
+
+    /// Deserialize a list of metadata requests from disk
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to read
+    /// * `kind` - The kind of metadata request to read
+    #[cfg(feature = "client")]
+    pub async fn load_all<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Self>, crate::Error> {
+        // read our target file from disk
+        let data = tokio::fs::read(path.as_ref()).await?;
+        // try to parse this to a list of entities
+        let parsed = serde_json::from_slice(&data)?;
+        Ok(parsed)
+    }
 }
 
 impl EntityKinds {
@@ -617,7 +648,7 @@ impl EntityKinds {
 }
 
 /// A request to create an entity
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityRequest {
     /// The entity's name
     pub name: String,
@@ -685,6 +716,12 @@ impl EntityRequest {
         // add our description to this requet
         let form = multipart_text!(form, "description", self.description);
         Ok(form)
+    }
+
+    /// Get our entity kind
+    pub fn kind(&self) -> EntityKinds {
+        // get our entity kind based on our metadata
+        self.metadata.kind()
     }
 }
 

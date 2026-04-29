@@ -1,7 +1,5 @@
 //! Helper functions/macros for the agent
 
-use walkdir::DirEntry;
-
 /// Serializes data to a string
 #[doc(hidden)]
 #[macro_export]
@@ -146,32 +144,6 @@ macro_rules! log_fail {
             }
         }
     }};
-}
-
-/// Checks if an entry is a hidden file or not
-///
-/// # Arguments
-///
-/// * `entry` - The entry to check
-pub fn is_hidden(entry: &DirEntry) -> bool {
-    entry
-        .file_name()
-        .to_str()
-        .map(|s| s.starts_with("."))
-        .unwrap_or(false)
-}
-
-/// Checks if an entry is a file or not
-///
-/// # Arguments
-///
-/// * `entry` - The entry to check
-pub fn is_file(entry: &DirEntry) -> bool {
-    if let Ok(metadata) = entry.metadata() {
-        metadata.is_file() && metadata.len() > 0
-    } else {
-        false
-    }
 }
 
 /// purge a directory if its a file or directory

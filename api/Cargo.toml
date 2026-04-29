@@ -30,7 +30,7 @@ rkyv-support = ["rkyv", "bytecheck"]
 # include async client dependencies
 client = [
   "reqwest", "tokio", "tokio-util", "futures", "git2", "shellexpand", "elasticsearch",
-  "tokio-tar", "http", "gix", "gix-date", "async-trait", "data-encoding", "sha2"
+  "tokio-tar", "http", "gix", "gix-date", "async-trait", "data-encoding", "sha2", "walkdir-err"
   ]
 
 # include sync client dependencies
@@ -81,6 +81,9 @@ openai = ["openai-api-rs"]
 
 # include rmcp error support
 rmcp-err = ["rmcp"]
+
+# include async walkdir error support
+walkdir-err = ["async-walkdir"]
 
 [dependencies]
 serde = { workspace = true }
@@ -190,6 +193,7 @@ k8s-openapi = { workspace = true, optional = true }
 rustix = { version = "1.0", optional = true }
 kanal = { version = "0.1.1", optional = true }
 dialoguer = { version = "0.11", optional = true }
+async-walkdir = { version = "2", optional = true }
 
 # ai dependencies
 owo-colors = "4"

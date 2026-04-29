@@ -128,6 +128,7 @@ async fn setup_results_table(session: &Session, config: &Conf) {
             files Set<TEXT>,
             display_type TEXT,
             children Map<TEXT, UUID>,
+            entities MAP<TEXT, BIGINT>,
             PRIMARY KEY (id, uploaded)) \
             WITH CLUSTERING ORDER BY (uploaded DESC)",
         ns = &config.thorium.namespace,
@@ -148,7 +149,7 @@ async fn setup_results_auth_mat_view(session: &Session, config: &Conf) {
     // build cmd for table insert
     // build cmd for materialized view insert
     let table_create = format!(
-            "CREATE MATERIALIZED VIEW IF NOT EXISTS {ns}.results_auth AS \
+        "CREATE MATERIALIZED VIEW IF NOT EXISTS {ns}.results_auth AS \
             SELECT kind, group, year, bucket, uploaded, id, key, tool, tool_version, display_type, cmd FROM {ns}.results_stream \
             WHERE kind IS NOT NULL \
             AND group IS NOT NULL \
@@ -159,8 +160,8 @@ async fn setup_results_auth_mat_view(session: &Session, config: &Conf) {
             AND key IS NOT NULL \
             AND tool IS NOT NULL \
             PRIMARY KEY (key, kind, group, tool, id, year, bucket, uploaded)",
-            ns = &config.thorium.namespace,
-        );
+        ns = &config.thorium.namespace,
+    );
     session
         .query_unpaged(table_create, &[])
         .await
@@ -205,8 +206,8 @@ async fn insert(session: &Session, config: &Conf) -> PreparedStatement {
     session
         .prepare(format!(
             "INSERT INTO {}.results \
-                (id, uploaded, tool, tool_version, cmd, result, files, display_type) \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (id, uploaded, tool, tool_version, cmd, result, files, entities, display_type) \
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             &config.thorium.namespace
         ))
         .await
@@ -223,7 +224,7 @@ async fn get(session: &Session, config: &Conf) -> PreparedStatement {
     // build results get prepared statement
     session
         .prepare(format!(
-            "SELECT id, tool, tool_version, cmd, uploaded, result, files, display_type, children \
+            "SELECT id, tool, tool_version, cmd, uploaded, result, files, entities, display_type, children \
                 FROM {}.results \
                 WHERE id in ?",
             &config.thorium.namespace

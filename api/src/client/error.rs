@@ -111,6 +111,9 @@ pub enum Error {
     /// An mcp service error
     #[cfg(feature = "rmcp-err")]
     RmcpServiceError(rmcp::service::ServiceError),
+    /// An async walkdir error
+    #[cfg(feature = "walkdir-err")]
+    WalkDir(async_walkdir::Error),
 }
 
 impl Error {
@@ -131,10 +134,7 @@ impl Error {
             Error::Reqwest(err) => err.status(),
             Error::Elastic(err) => err.status_code(),
             #[cfg(feature = "k8s")]
-            Error::K8s(err) => match err {
-                kube::Error::Api(resp) => StatusCode::from_u16(resp.code).ok(),
-                _ => None,
-            },
+            Error::K8s(kube::Error::Api(resp)) => StatusCode::from_u16(resp.code).ok(),
             _ => None,
         }
     }
@@ -201,6 +201,8 @@ impl Error {
             Error::OpenAI(error) => Some(error.to_string()),
             #[cfg(feature = "rmcp-err")]
             Error::RmcpServiceError(error) => Some(error.to_string()),
+            #[cfg(feature = "walkdir-err")]
+            Error::WalkDir(error) => Some(error.to_string()),
         }
     }
 
@@ -266,6 +268,8 @@ impl Error {
             Error::OpenAI(_) => "OpenAI",
             #[cfg(feature = "rmcp-err")]
             Error::RmcpServiceError(_) => "RmcpServiceError",
+            #[cfg(feature = "walkdir-err")]
+            Error::WalkDir(_) => "WalkDir",
         }
     }
 }
@@ -587,6 +591,13 @@ impl From<openai_api_rs::v1::error::APIError> for Error {
 impl From<rmcp::service::ServiceError> for Error {
     fn from(error: rmcp::service::ServiceError) -> Self {
         Error::RmcpServiceError(error)
+    }
+}
+
+#[cfg(feature = "walkdir-err")]
+impl From<async_walkdir::Error> for Error {
+    fn from(error: async_walkdir::Error) -> Self {
+        Error::WalkDir(error)
     }
 }
 

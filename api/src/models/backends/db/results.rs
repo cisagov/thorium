@@ -5,13 +5,13 @@ use futures::StreamExt;
 use futures::stream::{self};
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
-use tracing::{Level, event, instrument, span};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use crate::models::backends::OutputSupport;
 use crate::models::{
-    Output, OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKind, OutputMap, OutputRow,
-    ResultSearchEvent,
+    EntityKinds, Output, OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKind,
+    OutputMap, OutputRow, ResultSearchEvent,
 };
 use crate::utils::{ApiError, Shared, helpers};
 use crate::{internal_err, log_scylla_err, unauthorized};
@@ -60,6 +60,7 @@ pub async fn create<O: OutputSupport>(
                 &form.cmd,
                 &form.result,
                 &form.files,
+                &form.entities,
                 form.display_type,
             ),
         )
@@ -416,6 +417,7 @@ pub async fn get(
 /// * `key` - The key to prune results from
 /// * `result_id` - The id of the result to possibly prune
 /// * `files` - The files in s3 to prune if neccesary
+/// * `entities` - The entity kinds to prune if needed
 /// * `shared` - Shared Thorium objects
 #[instrument(
     name = "db::results::prune_helper",
@@ -427,6 +429,7 @@ async fn prune_helper(
     key: &str,
     result_id: &Uuid,
     files: &[String],
+    entities: &HashMap<EntityKinds, usize>,
     shared: &Shared,
 ) -> Result<(), ApiError> {
     // query scylla to see if this result is reachable
@@ -450,7 +453,14 @@ async fn prune_helper(
         // then dangling ones
         for name in files {
             // build our result id path
-            let s3_path = format!("{}/{}", &result_id, name);
+            let s3_path = format!("{}/{}", result_id, name);
+            shared.s3.results.delete(&s3_path).await?;
+        }
+        // delete all of our dangling entity files
+        for kind in entities.keys() {
+            // build the path to save this attachment at in s3
+            let s3_path = format!("{}/__thorium_entities/{}.json", result_id, kind);
+            // delete this result file from s3
             shared.s3.results.delete(&s3_path).await?;
         }
     }
@@ -516,13 +526,13 @@ pub async fn prune(
         }
         // if a result was pruned then add this to our list of pruned ids
         if prune_flag {
-            pruned.push((&result.id, &result.files));
+            pruned.push((&result.id, (&result.files, &result.entities)));
         }
     }
     // crawl ove the result files that might need to be pruned
-    for (result_id, files) in &pruned {
+    for (result_id, (files, entities)) in &pruned {
         // prune this result if its no longer needed
-        prune_helper(kind, key, result_id, files, shared).await?;
+        prune_helper(kind, key, result_id, files, entities, shared).await?;
     }
     Ok(())
 }
@@ -578,13 +588,13 @@ pub async fn delete(
                 }
             }
             // add this result id and its files to the list of results to prune
-            pruned.push((&tool_result.id, &tool_result.files));
+            pruned.push((&tool_result.id, (&tool_result.files, &tool_result.entities)));
         }
     }
     // crawl over the result files that might need to be pruned
-    for (result_id, files) in &pruned {
+    for (result_id, (files, entities)) in &pruned {
         // prune this result if its no longer needed
-        if prune_helper(kind, key, result_id, files, shared)
+        if prune_helper(kind, key, result_id, files, entities, shared)
             .await
             .is_err()
         {
