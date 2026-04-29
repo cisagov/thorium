@@ -5,6 +5,7 @@ use axum::extract::multipart::Field;
 use axum::extract::{FromRequestParts, Multipart};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::instrument;
@@ -13,24 +14,105 @@ use uuid::Uuid;
 use super::db::{self};
 use crate::models::backends::OutputSupport;
 use crate::models::{
-    AutoTag, AutoTagUpdate, ImageVersion, Output, OutputChunk, OutputCollection,
+    AutoTag, AutoTagUpdate, EntityKinds, ImageVersion, Output, OutputChunk, OutputCollection,
     OutputCollectionUpdate, OutputDisplayType, OutputForm, OutputFormBuilder, OutputKind,
     OutputMap, OutputRow, Repo, ResultGetParams, Sample, User,
 };
 use crate::utils::{ApiError, Shared, bounder};
-use crate::{bad, deserialize, update, update_clear, update_opt};
+use crate::{bad, bad_internal, deserialize, update, update_clear, update_opt};
+
+/// The different kinds of files to upload for results
+enum ResultFileUpload<'a> {
+    /// Some entities need to be uploaded
+    Entities { field: Field<'a>, kind: EntityKinds },
+    /// A result file needs to be uploaded
+    ResultFile(Field<'a>),
+}
 
 impl<O: OutputSupport> OutputFormBuilder<O> {
+    /// Upload a entities file or entity file to s3
+    ///
+    /// # Arguments
+    ///
+    /// * `result_id` - The id of the result we are uploading an entities file for
+    /// * `kind` - The kind of entity we are uploading
+    /// * `field` - The field to upload an entity file from
+    /// * `shared` - Shared Thorium objects
+    async fn upload_entities_file<'a>(
+        &mut self,
+        kind: EntityKinds,
+        field: Field<'a>,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
+        // throw an error if the correct content type is not used
+        if field.content_type().is_none() {
+            return bad!("A content type must be set for the entities form entry!".to_owned());
+        }
+        // we don't need to validate this path because we completely control it
+        // build the path to save this attachment at in s3
+        let s3_path = format!("{}/__thorium_entities/{}.json", self.id, kind);
+        // cart and stream this file into s3
+        shared.s3.results.stream(&s3_path, field).await?;
+        // add this entity kind to our form
+        self.entities.entry(kind).or_default();
+        Ok(())
+    }
+
+    /// Upload a result file or entity file to s3
+    ///
+    /// # Arguments
+    ///
+    /// * `result_id` - The id of the result we are uploading a result file for
+    /// * `field` - The field to upload a result file from
+    /// * `shared` - Shared Thorium objects
+    async fn upload_result_file<'a>(
+        &mut self,
+        field: Field<'a>,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
+        // throw an error if the correct content type is not used
+        if field.content_type().is_none() {
+            return bad!("A content type must be set for the result file form entry!".to_owned());
+        }
+        // validate our file name for this field if we have one
+        // if we don't then just use a random uuid
+        let file_name = bounder::multipart_path(&field, "Result File")?;
+        // result files cannot start with __thorium_ as those are protected names
+        if file_name.starts_with("__thorium_") {
+            // raise an error since this result file uses a protected prefix
+            return bad!(format!(
+                "Result files cannot start with __thorium_: '{file_name}'"
+            ));
+        }
+        // build the path to save this attachment at in s3
+        let s3_path = format!("{}/{}", self.id, file_name);
+        // cart and stream this file into s3
+        shared.s3.results.stream(&s3_path, field).await?;
+        // add this file name to our form
+        self.files.push(file_name);
+        Ok(())
+    }
+
     /// Adds a multipart field to our sample form
     ///
     /// # Arguments
     ///
     /// * `field` - The field to try to add
-    pub async fn add<'a>(&'a mut self, field: Field<'a>) -> Result<Option<Field<'a>>, ApiError> {
+    async fn add<'a>(
+        &mut self,
+        field: Field<'a>,
+    ) -> Result<Option<ResultFileUpload<'a>>, ApiError> {
         // get the name of this field
         if let Some(name) = field.name() {
             // add this fields value to our form
-            match name {
+            // iterate over the segments ('<NAME>[<KEY1>][<KEY2>]') in the field name
+            let name_segments = super::helpers::parse_bracket_segments(&name)?;
+            let mut name_segments_iter = name_segments.into_iter();
+            // add this fields value to our form
+            match name_segments_iter
+                .next()
+                .ok_or(bad_internal!("Multipart field name is empty".to_string()))?
+            {
                 "groups" => self.groups.push(field.text().await?),
                 "tool" => self.tool = Some(field.text().await?),
                 "tool_version" => {
@@ -43,9 +125,38 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
                         Some(OutputDisplayType::from_str(&field.text().await?[..])?);
                 }
                 "extra" => self.extra = Some(deserialize!(&field.text().await?)),
-                // this is the data so return it so we can stream it to s3
-                "files" => return Ok(Some(field)),
-                _ => return bad!(format!("{} is not a valid form name", name)),
+                "files" => return Ok(Some(ResultFileUpload::ResultFile(field))),
+                "entities_count" => {
+                    // the next segment contains the kind of entity this buffer contains
+                    let kind = match name_segments_iter.next() {
+                        Some(kind_str) => EntityKinds::try_from(kind_str)?,
+                        None => {
+                            return bad!(
+                                "entities must contain a kind (ex. entities[WindowsProcess])"
+                                    .to_string()
+                            );
+                        }
+                    };
+                    // get the number of entities for this kind
+                    let count: i64 = field.text().await?.parse()?;
+                    // update our count for this entity kind
+                    self.entities.insert(kind, count);
+                }
+                "entities" => {
+                    // the next segment contains the kind of entity this buffer contains
+                    let kind = match name_segments_iter.next() {
+                        Some(kind_str) => EntityKinds::try_from(kind_str)?,
+                        None => {
+                            return bad!(
+                                "entities must contain a kind (ex. entities[WindowsProcess])"
+                                    .to_string()
+                            );
+                        }
+                    };
+                    // return this entity field so we can stream
+                    return Ok(Some(ResultFileUpload::Entities { field, kind }));
+                }
+                _ => return bad!(format!("'{name}' is not a valid form name")),
             }
             // we found and consumed a valid form entry
             return Ok(None);
@@ -66,6 +177,11 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
                 Some("OutputRequest is missing fields!".to_owned()),
             ));
         }
+        // Raise an error if any of our entities have a count of 0
+        if let Some((kind, _)) = self.entities.iter().find(|(_, count)| **count == 0) {
+            // some entity kind was uploaded but the count was set to 0 or never set
+            return bad!(format!("{kind} entities did not have a count set"));
+        }
         // build our output request
         let valid = OutputForm {
             id: self.id,
@@ -76,6 +192,7 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
             result: self.result.take().unwrap(),
             display_type: self.display_type.take().unwrap(),
             files: self.files.clone(),
+            entities: self.entities.clone(),
             extra: O::extract_extra(self.extra.take()),
         };
         Ok(valid)
@@ -102,25 +219,19 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         mut upload: Multipart,
         shared: &Shared,
     ) -> Result<(), ApiError> {
-        // copy our results id
-        let result_id = self.id;
         // begin crawling over our multipart form upload
         while let Some(field) = upload.next_field().await? {
-            // try to consume our fields
-            if let Some(data_field) = self.add(field).await? {
-                // throw an error if the correct content type is not used
-                if data_field.content_type().is_none() {
-                    return bad!("A content type must be set for the data form entry!".to_owned());
+            // try to consume this field
+            match self.add(field).await? {
+                // stream this entity file to s3
+                Some(ResultFileUpload::Entities { field, kind }) => {
+                    self.upload_entities_file(kind, field, shared).await?;
                 }
-                // validate our file name for this field if we have one
-                // if we don't then just use a random uuid
-                let file_name = bounder::multipart_path(&data_field, "Result File")?;
-                // build the path to save this attachment at in s3
-                let s3_path = format!("{}/{}", &result_id, file_name);
-                // cart and stream this file into s3
-                shared.s3.results.stream(&s3_path, data_field).await?;
-                // add this file name to our form
-                self.files.push(file_name);
+                // stream this result file to s3
+                Some(ResultFileUpload::ResultFile(field)) => {
+                    self.upload_result_file(field, shared).await?;
+                }
+                None => (),
             }
         }
         // validate and cast our results
@@ -173,10 +284,17 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         {
             Ok(()) => Ok(self.id),
             Err(err) => {
-                // delete all our dangling comment attachments
+                // delete all our dangling result files
                 for name in self.files {
                     // build the path to delete this attachment at in s3
                     let s3_path = format!("{}/{}", self.id, name);
+                    // delete this result file from s3
+                    shared.s3.results.delete(&s3_path).await?;
+                }
+                // delete all of our dangling entity files
+                for kind in self.entities.keys() {
+                    // build the path to save this attachment at in s3
+                    let s3_path = format!("{}/__thorium_entities/{}.json", self.id, kind);
                     // delete this result file from s3
                     shared.s3.results.delete(&s3_path).await?;
                 }
@@ -235,6 +353,14 @@ impl OutputMap {
             Ok(value) => (value, None),
             Err(e) => (serde_json::Value::String(row.result), Some(e.to_string())),
         };
+        // convert our entity counts into unsigned ints
+        let entities = match row.entities {
+            Some(entities) => entities
+                .into_iter()
+                .map(|(kind, count)| (kind, count as usize))
+                .collect(),
+            None => HashMap::default(),
+        };
         // build our output object for this row
         let output = Output {
             id: row.id,
@@ -245,6 +371,7 @@ impl OutputMap {
             deserialization_error,
             result,
             files: row.files.unwrap_or_default(),
+            entities,
             display_type: row.display_type,
             children: row.children.unwrap_or_default(),
         };

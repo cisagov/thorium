@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::models::backends::OutputSupport;
-use crate::models::{ImageVersion, OutputDisplayType};
+use crate::models::{EntityKinds, ImageVersion, OutputDisplayType};
 
 /// A request to store the output or result of a tool in scylla
 #[derive(Debug)]
@@ -27,6 +27,8 @@ pub struct OutputForm<O: OutputSupport> {
     pub display_type: OutputDisplayType,
     /// Any files tied to this result
     pub files: Vec<String>,
+    /// What entities were found in this result but not neccesarily created in Thorium
+    pub entities: HashMap<EntityKinds, i64>,
     /// Any extra info thats needed in this result form
     pub extra: O::ExtraKey,
 }
@@ -50,6 +52,8 @@ pub struct OutputFormBuilder<O: OutputSupport> {
     pub display_type: Option<OutputDisplayType>,
     /// Any files tied to this result
     pub files: Vec<String>,
+    /// What entities were found in this result but not neccesarily created in Thorium
+    pub entities: HashMap<EntityKinds, i64>,
     /// Any extra info thats needed in this result form
     pub extra: Option<O::ExtraKey>,
 }
@@ -66,6 +70,7 @@ impl<O: OutputSupport> Default for OutputFormBuilder<O> {
             result: None,
             display_type: None,
             files: Vec::default(),
+            entities: HashMap::default(),
             extra: None,
         }
     }
@@ -122,6 +127,8 @@ pub struct OutputRow {
     pub result: String,
     /// An optional file tied to this result
     pub files: Option<Vec<String>>,
+    /// What entities were found in this result but not neccesarily created in Thorium
+    pub entities: Option<HashMap<EntityKinds, i64>>,
     /// The display type of this tool output
     pub display_type: OutputDisplayType,
     /// The children that were found when generating this result

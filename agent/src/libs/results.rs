@@ -1,18 +1,19 @@
 //! Handles collecting results for the agent and sending them back to the API
 
+use async_walkdir::WalkDir;
 use crossbeam::channel::Sender;
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::path::Path;
 use thorium::client::ResultsClient;
 use thorium::models::{
-    GenericJob, Image, OnDiskFile, OutputDisplayType, OutputRequest, Repo, Sample,
+    Buffer, EntityKinds, EntityRequest, GenericJob, Image, OnDiskFile, OutputDisplayType,
+    OutputRequest, Repo, Sample,
 };
 use thorium::{Error, Thorium};
 use tracing::instrument;
 use uuid::Uuid;
-use walkdir::WalkDir;
 
-use super::helpers;
 use crate::log;
 
 /// Whether this result should be uploaded to the db or to s3
@@ -64,11 +65,224 @@ pub struct RawResults {
     pub results: ResultTarget,
     /// Any files tied to this result
     pub files: Vec<OnDiskFile>,
+    /// What entities were found in this result but not neccesarily created in Thorium
+    pub entities: HashMap<EntityKinds, (usize, Buffer)>,
     /// The display type of this result
     pub display_type: OutputDisplayType,
 }
 
 impl RawResults {
+    /// Checks the filesystem for results to send to Thorium
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The job we are collecting results from
+    /// * `image` - The image we are collecting results in
+    /// * `path` - The path to collect results at
+    /// * `logs` - The logs to send to the API
+    #[instrument(name = "RawResults::new", skip_all, fields(path = path.to_string_lossy().into_owned()), err(Debug))]
+    async fn new(
+        image: &Image,
+        path: &Path,
+        logs: &mut Sender<String>,
+    ) -> Result<RawResults, Error> {
+        // check to see if this path exists
+        if path.exists() {
+            // check the size of this file to determine if it should be a result file
+            let metadata = path.metadata()?;
+            // only try to ingest results if this is a file
+            if metadata.is_file() {
+                // check if our results file length is too large or empty
+                let raw_result = match metadata.len() {
+                    // results is empty so don't bother uploading it
+                    0 => {
+                        if image.display_type.requires_results() {
+                            // log that our results file is empty
+                            log!(logs, "Warning: Results file exists but is empty");
+                            // create an output with the warning that the result was empty
+                            let mut output = HashMap::with_capacity(1);
+                            output.insert("Warnings", vec!["Results file exists but is empty"]);
+                            // serialize our results
+                            let results = serde_json::to_string(&output)?;
+                            // build our raw results
+                            RawResults {
+                                scan: false,
+                                results: ResultTarget::Db(results),
+                                files: Vec::default(),
+                                entities: HashMap::default(),
+                                display_type: OutputDisplayType::Json,
+                            }
+                        } else {
+                            // build our raw results with our empty but not required results
+                            RawResults {
+                                scan: image.display_type == OutputDisplayType::Json,
+                                results: ResultTarget::Db("".to_string()),
+                                files: Vec::default(),
+                                entities: HashMap::default(),
+                                display_type: image.display_type,
+                            }
+                        }
+                    }
+                    // results is too large to be stored in the DB
+                    len if len > 1_000_000 => {
+                        // read in our results
+                        let results = tokio::fs::read_to_string(path).await?;
+                        // build our result file to store
+                        let file = OnDiskFile::new(path)
+                            .trim_prefix(path.parent().unwrap_or_else(|| Path::new("/")));
+                        // build our raw results
+                        RawResults {
+                            scan: true,
+                            results: ResultTarget::S3 { results, len },
+                            files: vec![file],
+                            entities: HashMap::default(),
+                            display_type: OutputDisplayType::Json,
+                        }
+                    }
+                    // the result is the correct size to be stored in the DB
+                    _ => {
+                        // read in our results
+                        let results = tokio::fs::read_to_string(path).await?;
+                        // build our raw results
+                        RawResults {
+                            scan: image.display_type == OutputDisplayType::Json,
+                            results: ResultTarget::Db(results),
+                            files: Vec::default(),
+                            entities: HashMap::default(),
+                            display_type: image.display_type,
+                        }
+                    }
+                };
+                Ok(raw_result)
+            } else {
+                // log that our results file is over 1 MB
+                log!(logs, "Warning: Results file is not a file");
+                // create an output with the warning that the result was not a file
+                let mut output = HashMap::with_capacity(1);
+                output.insert("Warnings", vec!["Results file is not a file"]);
+                // serialize our results
+                let results = serde_json::to_string(&output)?;
+                // build our raw results
+                let raw_result = RawResults {
+                    scan: false,
+                    results: ResultTarget::Db(results),
+                    files: Vec::default(),
+                    entities: HashMap::default(),
+                    display_type: OutputDisplayType::Json,
+                };
+                Ok(raw_result)
+            }
+        } else {
+            if image.display_type.requires_results() {
+                // log that no results file was found
+                log!(logs, "Warning: No results file found");
+                // create an output with the warning that the result was not found
+                let mut output = HashMap::with_capacity(1);
+                output.insert("Warnings", vec!["No non file results found"]);
+                // serialize our results
+                let results = serde_json::to_string(&output)?;
+                // build our raw results
+                let raw_result = RawResults {
+                    scan: false,
+                    results: ResultTarget::Db(results),
+                    files: Vec::default(),
+                    entities: HashMap::default(),
+                    display_type: OutputDisplayType::Json,
+                };
+                Ok(raw_result)
+            } else {
+                // build our raw results with our empty but not required results
+                let raw_results = RawResults {
+                    scan: image.display_type == OutputDisplayType::Json,
+                    results: ResultTarget::Db("".to_string()),
+                    files: Vec::default(),
+                    entities: HashMap::default(),
+                    display_type: image.display_type,
+                };
+                Ok(raw_results)
+            }
+        }
+    }
+
+    /// Collect all discovered entities
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image to collect entities for
+    async fn collect_entities(&mut self, image: &Image) -> Result<(), Error> {
+        // build a map of our different entity request kinds
+        let mut kind_map = HashMap::<EntityKinds, Vec<EntityRequest>>::default();
+        // check if this file exists
+        if tokio::fs::try_exists(&image.output_collection.files.entities).await? {
+            // read the raw bytes for our entities from disk
+            let data = tokio::fs::read(&image.output_collection.files.entities).await?;
+            // deserialize our entities from disk
+            let parsed: Vec<EntityRequest> = serde_json::from_slice(&data)?;
+            // break our list up based on what kind of entity this is
+            for req in parsed {
+                // get what kind of entity this is
+                let kind = req.kind();
+                // get an entry to our kinds entity list
+                let entry = kind_map.entry(kind).or_default();
+                // add this request to its kinds
+                entry.push(req);
+            }
+            // add each of our entity kinds to our raw results
+            for (kind, reqs) in kind_map {
+                // serialize this kinds requests
+                let serialized = serde_json::to_string(&reqs)?;
+                // wrap our serialized data in a buffer
+                let buff = Buffer::new(serialized);
+                // add our serialized entity kinds to our results
+                self.entities.insert(kind, (reqs.len(), buff));
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks the filesystem for result files to send to Thorium
+    ///
+    /// This looks for result files not results to store in s3.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to collect result files from
+    /// * `logs` - The logs to send to the API
+    #[instrument(name = "RawResults::collect_result_files", skip_all, fields(path = path.to_string_lossy().into_owned()), err(Debug))]
+    async fn collect_result_files(
+        &mut self,
+        path: &Path,
+        logs: &mut Sender<String>,
+    ) -> Result<(), Error> {
+        // check to see if this path exists
+        if path.exists() {
+            // check the size of this file to determine if it should be a result file
+            let metadata = path.metadata()?;
+            // only try to ingest results files if this path is a directory
+            if metadata.is_dir() {
+                // walk over entries in this path
+                let mut walker = WalkDir::new(path);
+                // start walking over entries in this dir
+                while let Some(entry_result) = walker.next().await {
+                    // check if we failed to get info on this entry
+                    let entry = entry_result?;
+                    // get this entry's metadata
+                    let meta = entry.metadata().await?;
+                    // check if this is a file or not
+                    if meta.is_file() {
+                        // build an on disk file for this file
+                        let on_disk = OnDiskFile::new(entry.path()).trim_prefix(path);
+                        // log that we found this file
+                        log!(logs, "Found result file {}", on_disk.path.display());
+                        // add this file to our list fo result files
+                        self.files.push(on_disk);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Create a sample output request for these raw results
     ///
     /// # Arguments
@@ -84,13 +298,15 @@ impl RawResults {
         // convert our results
         let results = self.results.to_output_request(logs)?;
         // build our output request
-        let req = OutputRequest::<Sample>::new(
+        let mut req = OutputRequest::<Sample>::new(
             sha256.to_owned(),
             image.name.clone(),
             results,
             self.display_type,
         )
         .files(self.files.clone());
+        // add our any entities from this job
+        req.entities = self.entities.clone();
         Ok(req)
     }
 
@@ -109,181 +325,17 @@ impl RawResults {
         // convert our results
         let results = self.results.to_output_request(logs)?;
         // build our output request
-        let req = OutputRequest::<Repo>::new(
+        let mut req = OutputRequest::<Repo>::new(
             repo.to_owned(),
             image.name.clone(),
             results,
             self.display_type,
         )
         .files(self.files.clone());
+        // add our any entities from this job
+        req.entities = self.entities.clone();
         Ok(req)
     }
-}
-
-/// Checks the filesystem for results to send to Thorium
-///
-/// # Arguments
-///
-/// * `job` - The job we are collecting results from
-/// * `image` - The image we are collecting results in
-/// * `path` - The path to collect results at
-/// * `logs` - The logs to send to the API
-#[instrument(name = "results::collect_file", skip_all, fields(path = path.to_string_lossy().into_owned()), err(Debug))]
-async fn collect_file(
-    image: &Image,
-    path: &Path,
-    logs: &mut Sender<String>,
-) -> Result<RawResults, Error> {
-    // check to see if this path exists
-    if path.exists() {
-        // check the size of this file to determine if it should be a result file
-        let metadata = path.metadata()?;
-        // only try to ingest results if this is a file
-        if metadata.is_file() {
-            // check if our results file length is too large or empty
-            let raw_result = match metadata.len() {
-                // results is empty so don't bother uploading it
-                0 => {
-                    if image.display_type.requires_results() {
-                        // log that our results file is empty
-                        log!(logs, "Warning: Results file exists but is empty");
-                        // create an output with the warning that the result was empty
-                        let mut output = HashMap::with_capacity(1);
-                        output.insert("Warnings", vec!["Results file exists but is empty"]);
-                        // serialize our results
-                        let results = serde_json::to_string(&output)?;
-                        // build our raw results
-                        RawResults {
-                            scan: false,
-                            results: ResultTarget::Db(results),
-                            files: Vec::default(),
-                            display_type: OutputDisplayType::Json,
-                        }
-                    } else {
-                        // build our raw results with our empty but not required results
-                        RawResults {
-                            scan: image.display_type == OutputDisplayType::Json,
-                            results: ResultTarget::Db("".to_string()),
-                            files: Vec::default(),
-                            display_type: image.display_type,
-                        }
-                    }
-                }
-                // results is too large to be stored in the DB
-                len if len > 1_000_000 => {
-                    // read in our results
-                    let results = tokio::fs::read_to_string(path).await?;
-                    // build our result file to store
-                    let file = OnDiskFile::new(path)
-                        .trim_prefix(path.parent().unwrap_or_else(|| Path::new("/")));
-                    // build our raw results
-                    RawResults {
-                        scan: true,
-                        results: ResultTarget::S3 { results, len },
-                        files: vec![file],
-                        display_type: OutputDisplayType::Json,
-                    }
-                }
-                // the result is the correct size to be stored in the DB
-                _ => {
-                    // read in our results
-                    let results = tokio::fs::read_to_string(path).await?;
-                    // build our raw results
-                    RawResults {
-                        scan: image.display_type == OutputDisplayType::Json,
-                        results: ResultTarget::Db(results),
-                        files: Vec::default(),
-                        display_type: image.display_type,
-                    }
-                }
-            };
-            Ok(raw_result)
-        } else {
-            // log that our results file is over 1 MB
-            log!(logs, "Warning: Results file is not a file");
-            // create an output with the warning that the result was not a file
-            let mut output = HashMap::with_capacity(1);
-            output.insert("Warnings", vec!["Results file is not a file"]);
-            // serialize our results
-            let results = serde_json::to_string(&output)?;
-            // build our raw results
-            let raw_result = RawResults {
-                scan: false,
-                results: ResultTarget::Db(results),
-                files: Vec::default(),
-                display_type: OutputDisplayType::Json,
-            };
-            Ok(raw_result)
-        }
-    } else {
-        if image.display_type.requires_results() {
-            // log that no results file was found
-            log!(logs, "Warning: No results file found");
-            // create an output with the warning that the result was not found
-            let mut output = HashMap::with_capacity(1);
-            output.insert("Warnings", vec!["No non file results found"]);
-            // serialize our results
-            let results = serde_json::to_string(&output)?;
-            // build our raw results
-            let raw_result = RawResults {
-                scan: false,
-                results: ResultTarget::Db(results),
-                files: Vec::default(),
-                display_type: OutputDisplayType::Json,
-            };
-            Ok(raw_result)
-        } else {
-            // build our raw results with our empty but not required results
-            let raw_results = RawResults {
-                scan: image.display_type == OutputDisplayType::Json,
-                results: ResultTarget::Db("".to_string()),
-                files: Vec::default(),
-                display_type: image.display_type,
-            };
-            Ok(raw_results)
-        }
-    }
-}
-
-/// Checks the filesystem for result files to send to Thorium
-///
-/// This looks for result files not results to store in s3.
-///
-/// # Arguments
-///
-/// * `path` - The path to collect result files from
-/// * `outputs` - The output requests to add our result files too
-/// * `logs` - The logs to send to the API
-#[instrument(name = "results::collect_result_files", skip_all, fields(path = path.to_string_lossy().into_owned()), err(Debug))]
-fn collect_result_files(
-    path: &Path,
-    mut raw: RawResults,
-    logs: &mut Sender<String>,
-) -> Result<RawResults, Error> {
-    // check to see if this path exists
-    if path.exists() {
-        // check the size of this file to determine if it should be a result file
-        let metadata = path.metadata()?;
-        // only try to ingest results files if this path is a directory
-        if metadata.is_dir() {
-            // recrusively walk through this directory skipping any hidden files
-            let files = WalkDir::new(path)
-                .follow_links(true)
-                .into_iter()
-                .filter_entry(|entry| !helpers::is_hidden(entry))
-                .filter_map(Result::ok)
-                .filter(helpers::is_file)
-                .map(|entry| OnDiskFile::new(entry.into_path()).trim_prefix(path))
-                .collect::<Vec<OnDiskFile>>();
-            // log all results files that were found
-            for path in &files {
-                log!(logs, "Found result file {}", path.path.to_string_lossy());
-            }
-            // add this to our result file paths
-            raw.files.extend(files);
-        }
-    }
-    Ok(raw)
 }
 
 /// Collects any results from executing a job
@@ -310,9 +362,14 @@ pub async fn collect<P: AsRef<Path>>(
     logs: &mut Sender<String>,
 ) -> Result<RawResults, Error> {
     // call the correct output collector
-    let outputs = collect_file(image, results.as_ref(), logs).await?;
+    let mut outputs = RawResults::new(image, results.as_ref(), logs).await?;
+    // collect any entities from this job
+    outputs.collect_entities(image).await?;
     // we have results so collect any result files
-    collect_result_files(result_files.as_ref(), outputs, logs)
+    outputs
+        .collect_result_files(result_files.as_ref(), logs)
+        .await?;
+    Ok(outputs)
 }
 
 ///  Send any collected results to Thorium
