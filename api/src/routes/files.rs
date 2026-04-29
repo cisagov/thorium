@@ -14,12 +14,12 @@ use super::OpenApiSecurity;
 use crate::models::backends::{CommentSupport, TagSupport};
 use crate::models::{
     ApiCursor, Association, AssociationListParams, AssociationTargetColumn, CarvedOrigin, Comment,
-    CommentResponse, DeleteCommentParams, DeleteSampleParams, FileListParams, ImageVersion, Origin,
-    OriginRequest, Output, OutputDisplayType, OutputFormBuilder, OutputHandler, OutputKind,
-    OutputMap, OutputResponse, PcapNetworkProtocol, ResultFileDownloadParams, ResultGetParams,
-    Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse,
-    SubmissionChunk, SubmissionUpdate, TagCounts, TagDeleteRequest, TagRequest, User,
-    ZipDownloadParams,
+    CommentResponse, DeleteCommentParams, DeleteSampleParams, EntityKinds, FileListParams,
+    ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputFormBuilder,
+    OutputHandler, OutputKind, OutputMap, OutputResponse, PcapNetworkProtocol,
+    ResultFileDownloadParams, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
+    SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagCounts,
+    TagDeleteRequest, TagRequest, User, ZipDownloadParams,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -698,21 +698,20 @@ async fn get_results(
 /// * `user` - The user submitting these results
 /// * `path_params` - All params in this url path
 /// * `state` - Shared Thorium objects
-// TODO_UTOIPA: WILDCARD
-// #[utoipa::path(
-//     get,
-//     path = "/api/files/results/:sha256/:tool/:result_id/*path",
-//     params(
-//         ("path_params" = Vec<String>, Path, description = "3 path-formatted paramters containing the sample sha256, tool name, and result uuid")
-//     ),
-//     responses(
-//         (status = 200, description = "Response containing body of requested result file", body = Vec<u8>),
-//         (status = 401, description = "This user is not authorized to access this route"),
-//     ),
-//     security(
-//         ("basic" = []),
-//     )
-// )]
+#[utoipa::path(
+    get,
+    path = "/api/files/results/:sha256/:tool/:result_id",
+    params(
+        ("params" = ResultFileDownloadParams, description = "Parameters for downloading result files"),
+    ),
+    responses(
+        (status = 200, description = "Response containing body of requested result file", body = Vec<u8>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
 #[instrument(name = "routes::files::download_result_file", skip_all, err(Debug))]
 async fn download_result_file(
     user: User,
@@ -736,11 +735,51 @@ async fn download_result_file(
     Ok(body)
 }
 
+/// Downloads a files results file from s3
+///
+/// # Arguments
+///
+/// * `user` - The user submitting these results
+/// * `path_params` - All params in this url path
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+     get,
+     path = "/api/files/results/:sha256/:tool/:result_id/:entity_kind",
+     responses(
+         (status = 200, description = "Response containing body of requested entity requests", body = Vec<u8>),
+         (status = 401, description = "This user is not authorized to access this route"),
+     ),
+     security(
+         ("basic" = []),
+     )
+ )]
+#[instrument(name = "routes::files::download_result_entities", skip_all, err(Debug))]
+async fn download_result_entities(
+    user: User,
+    Path((sha256, tool, result_id, entity_kind)): Path<(String, String, Uuid, EntityKinds)>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    // start streaming a results file from s3
+    let stream = Output::download_entity(
+        OutputKind::Files,
+        &user,
+        &sha256,
+        &tool,
+        &result_id,
+        entity_kind,
+        &state.shared,
+    )
+    .await?;
+    // convert our byte stream to a streamable body
+    let body = AsyncReadBody::new(stream.into_async_read());
+    Ok(body)
+}
+
 /// The struct containing our openapi docs
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, upload, list_details, get_sample, delete_sample, exists, download, download_as_zip, /*download_result_file,*/ update, tag, delete_tags, create_comment, delete_comment, download_attachment, get_results, upload_results),
-    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams, TagCounts)),
+    paths(list, upload, list_details, get_sample, delete_sample, exists, download, download_as_zip, download_result_file, download_result_entities, update, tag, delete_tags, create_comment, delete_comment, download_attachment, get_results, upload_results),
+    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams, TagCounts, EntityKinds)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct FileApiDocs;
@@ -782,5 +821,9 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/files/result-files/{sha256}/{tool}/{result_id}",
             get(download_result_file),
+        )
+        .route(
+            "/files/result-files/{sha256}/{tool}/{result_id}/{entity_kind}",
+            get(download_result_entities),
         )
 }

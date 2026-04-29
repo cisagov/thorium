@@ -1,7 +1,7 @@
 //! Saves files into the backend
 
 use chrono::prelude::*;
-use futures::{StreamExt, stream};
+use futures::{StreamExt, TryStreamExt, stream};
 use itertools::Itertools;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -540,11 +540,14 @@ pub async fn get(
     if let Some(sub) = descending.next() {
         // cast this submission object to a sample
         let mut sample = Sample::try_from_submission(groups, sub, shared).await?;
-        // crawl the remaining submission objects and add them
-        for sub in descending {
-            // add this submission to our sample
-            sample.add(groups, sub, shared).await?;
-        }
+        // crawl the remaining submission objects and add them in parallel
+        let mut submissions = stream::iter(descending)
+            .map(|sub| SubmissionChunk::get(groups, sub, shared))
+            .buffered(10)
+            .try_collect::<Vec<SubmissionChunk>>()
+            .await?;
+        // add all of our retrieved submissions
+        sample.submissions.append(&mut submissions);
         // get the tags and comments for this sample
         sample.get_tags(groups, shared).await?;
         get_comments(groups, sha256, &mut sample.comments, shared).await?;

@@ -18,7 +18,7 @@ api = [
   "scylla", "ldap3", "itertools", "sha-1", "sha2", "md-5", "data-encoding", "anyhow", "elasticsearch", "zip", "async-trait",
   "axum", "http", "tower", "axum-macros", "tower-http", "tokio-stream", "generic-array", "futures-util", "tokio-util", "serde_qs",
   "aws-sdk-s3", "aws-types", "aws-smithy-http", "aws-credential-types", "scylla-utils", "http-body", "axum-extra", "once_cell", "utoipa",
-  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "mime", "rmcp"
+  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "scc", "mime", "rmcp"
   ]
 
 # include scylla utility functions
@@ -155,6 +155,7 @@ lettre = { version = "0.11", features = ["tokio1", "tokio1-rustls-tls", "builder
 thorium-derive = { workspace = true, optional = true}
 percent-encoding = { version = "2.3.1", optional = true }
 dashmap = { version = "6.1", optional = true }
+scc = { version = "3.7", optional = true }
 mime = { version = "0.3", optional = true }
 bytesize = { version = "2.1.0", features = ["serde"] }
 sigma-rust = { workspace = true }

@@ -76,6 +76,7 @@ pub fn build(
 /// * `request` - The image request to create in the backend
 /// * `shared` - Shared objects in Thorium
 #[rustfmt::skip]
+#[instrument(name = "db::images::create", skip_all, err(Debug))]
 pub async fn create(user: &User, request: ImageRequest, shared: &Shared) -> Result<Image, ApiError> {
     let settings = super::system::get_settings(shared).await?;
     // try to cast to an image
@@ -103,6 +104,7 @@ pub async fn create(user: &User, request: ImageRequest, shared: &Shared) -> Resu
 /// * `group` - The group to get an image From
 /// * `name` - The name of the image to get
 /// * `shared` - Shared objects in Thorium
+#[instrument(name = "db::images::get", skip(shared), err(Debug))]
 pub async fn get(group: &str, name: &str, shared: &Shared) -> Result<Image, ApiError> {
     // build image keys
     let data_key = ImageKeys::data(group, name, shared);
@@ -131,6 +133,7 @@ pub async fn get(group: &str, name: &str, shared: &Shared) -> Result<Image, ApiE
 /// * `names` - The names of the images to get info about
 /// * `shared` - Shared objects in Thorium
 #[rustfmt::skip]
+#[instrument(name = "db::images::job_info", skip_all, err(Debug))]
 pub async fn job_info<'a>(
     group: &'a str,
     names: &'a [String],
@@ -167,6 +170,7 @@ pub async fn job_info<'a>(
 /// * `image` - The image to update in the backend
 /// * `shared` - Shared objects in Thorium
 #[rustfmt::skip]
+#[instrument(name = "db::images::update", skip_all, err(Debug))]
 pub async fn update(image: &Image, shared: &Shared) -> Result<(), ApiError> {
     // build image keys
     let keys = ImageKeys::new(image, shared);
@@ -219,6 +223,7 @@ pub async fn update(image: &Image, shared: &Shared) -> Result<(), ApiError> {
 /// * `name` - The name of the image to check the existence of
 /// * `group` - The image's group
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::images::exists_authenticated", skip_all, err(Debug))]
 pub async fn exists_authenticated<T: AsRef<str>>(
     name: T,
     group: &Group,
@@ -235,6 +240,7 @@ pub async fn exists_authenticated<T: AsRef<str>>(
 /// * `group` - The group this image is in
 /// * `name` - The name of the image to inspect
 /// * `shared` - Shared objects in Thorium
+#[instrument(name = "db::images::get_scaler", skip(shared), err(Debug))]
 pub async fn get_scaler(group: &str, name: &str, shared: &Shared) -> Result<ImageScaler, ApiError> {
     // get group image set key
     let data_key = ImageKeys::data(group, name, shared);
@@ -256,6 +262,7 @@ pub async fn get_scaler(group: &str, name: &str, shared: &Shared) -> Result<Imag
 /// * `group` - The group this image is in
 /// * `names` - The names of the images to inspect
 /// * `shared` - Shared objects in Thorium
+#[instrument(name = "db::images::get_scalers", skip(shared), err(Debug))]
 pub async fn get_scalers(
     group: &str,
     names: &[&String],
@@ -298,6 +305,7 @@ pub async fn get_scalers(
 /// * `group` - The group this image is in
 /// * `name` - The name of the images to inspect
 /// * `shared` - Shared objects in Thorium
+#[instrument(name = "db::images::get_bans", skip(shared), err(Debug))]
 pub async fn get_bans(
     group: &str,
     name: &str,
@@ -324,6 +332,7 @@ pub async fn get_bans(
 /// * `cursor` - The cursor to use when paging through images
 /// * `limit` - The number of objects to try and return (weakly enforced)
 /// * `shared` - Shared Thorium objects
+#[instrument(name = "db::images::list", skip(shared), err(Debug))]
 pub async fn list(
     group: &str,
     cursor: usize,

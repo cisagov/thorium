@@ -2,7 +2,7 @@
 
 use axum::Router;
 use axum::extract::{Json, Path, State};
-use axum::routing::{patch, post};
+use axum::routing::{get, post};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -85,7 +85,7 @@ async fn grow_tree(
     Json(query): Json<TreeGrowQuery>,
 ) -> Result<Json<Tree>, ApiError> {
     // load our existing tree
-    let mut tree = Tree::load(&user, &cursor, &state.shared).await?;
+    let mut tree = Tree::load(&user, cursor, &state.shared).await?;
     // set our growable nodes
     tree.growable.clone_from(&query.growable);
     // grow this tree
@@ -95,9 +95,44 @@ async fn grow_tree(
     // save the latest info on this tree
     tree.save(&user, &state.shared).await?;
     // trim to only the new info for this tree
-    tree.trim(&query.growable, &added);
+    tree.trim(&query.growable, &added).await;
     // clear any non user facing info
     tree.clear_non_user_facing();
+    Ok(Json(tree))
+}
+
+/// Get an existing tree
+///
+/// # Arguments
+///
+/// * `user` - The user that is getting a tree
+/// * `id` - The ID of the tree to get
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/trees/:id",
+    params(
+        ("id" = Uuid, Path, description = "The id of the tree to get in its entirety"),
+    ),
+    responses(
+        (status = 200, description = "A tree", body = Tree),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::trees::get", skip_all, err(Debug))]
+async fn get_tree(
+    user: User,
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<Tree>, ApiError> {
+    // load our existing tree
+    let mut tree = Tree::load(&user, id, &state.shared).await?;
+    // clear any non user facing info
+    tree.clear_non_user_facing();
+    // return our tree
     Ok(Json(tree))
 }
 
@@ -109,5 +144,5 @@ async fn grow_tree(
 pub fn mount(router: Router<AppState>) -> Router<AppState> {
     router
         .route("/trees/", post(start_tree))
-        .route("/trees/{cursor}", patch(grow_tree))
+        .route("/trees/{cursor}", get(get_tree).patch(grow_tree))
 }

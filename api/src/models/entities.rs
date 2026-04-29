@@ -9,7 +9,6 @@ use std::net::IpAddr;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
 use uuid::Uuid;
 
-use super::Association;
 use crate::models::{
     CollectionEntity, CollectionEntityRequest, CollectionKind, Country, DeviceEntityRequest,
     TagMap, TreeSupport, VendorEntity, VendorEntityRequest,
@@ -28,20 +27,9 @@ pub mod vendors;
 
 use devices::DeviceEntity;
 use filesystem::{FileSystemEntity, FileSystemFolderEntity};
-use network_activity::{NetConState, NetworkConnection, TransportLayerProtocol};
+use network_activity::NetworkConnection;
 use processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
-use rules::{SigmaActionToTake, SigmaRule, SigmaRuleAppliesTo};
-use shared::CriticalSector;
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "api")] {
-        use super::{TagRequest, User, TagDeleteRequest, Group, GroupAllowAction, UnhashedTreeBranch};
-        use crate::utils::{ApiError, Shared};
-        use chrono::TimeZone;
-        use crate::models::Tree;
-        use itertools::Itertools;
-    }
-}
+use rules::SigmaRule;
 
 // api/client imports
 cfg_if::cfg_if! {
@@ -57,6 +45,13 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
         use std::collections::BTreeSet;
+        use super::{TagRequest, User, TagDeleteRequest, Group, GroupAllowAction, UnhashedTreeBranch};
+        use crate::utils::{ApiError, Shared};
+        use chrono::TimeZone;
+        use crate::models::Tree;
+        use network_activity::{NetConState, TransportLayerProtocol};
+        use rules::{SigmaActionToTake, SigmaRuleAppliesTo};
+        use shared::CriticalSector;
 
         /// The form for entity metadata
         #[derive(Debug, Default)]
@@ -275,6 +270,7 @@ impl TreeSupport for Entity {
 
     /// Gather any initial nodes for a tree
     #[cfg(feature = "api")]
+    #[tracing::instrument(name = "TreeSupport::<Entities>::gather_initial", skip_all, err(Debug))]
     async fn gather_initial(
         _user: &User,
         query: &crate::models::TreeQuery,
@@ -298,6 +294,11 @@ impl TreeSupport for Entity {
 
     /// Gather any children for this child node
     #[cfg(feature = "api")]
+    #[tracing::instrument(
+        name = "TreeSupport::<Entities>::gather_children",
+        skip_all,
+        err(Debug)
+    )]
     async fn gather_children(
         &self,
         user: &User,
@@ -311,21 +312,35 @@ impl TreeSupport for Entity {
             let source_hash = self.tree_hash();
             // crawl through this entities associations and add them to the tree
             loop {
+                // build a full list of all associations
+                let mut associations = Vec::with_capacity(cursor.data.len());
+                // track which associations have been newly added
+                let mut new_set = HashSet::with_capacity(cursor.data.len());
+                // preallocate a list of associations that are filtered to just new ones
+                let mut new_list = Vec::with_capacity(cursor.data.len());
                 // convert all of the listable associations to full associations
-                let associations = cursor
-                    .data
-                    .drain(..)
-                    .map(Association::try_from)
-                    .collect::<Result<Vec<Association>, ApiError>>()?;
-                // make sure we don't get the same target node multiple times
-                let filtered_targets = associations
-                    .iter()
-                    .filter(|assoc| !ring.contains(tree, assoc.tree_hash()))
-                    .unique_by(|assoc| assoc.tree_hash())
-                    .map(Clone::clone)
-                    .collect::<Vec<super::Association>>();
+                let assoc_iter = cursor.data.drain(..).map(super::Association::try_from);
+                // iterate over our associations and filter them
+                for cast in assoc_iter {
+                    // check if the cast for this association failed
+                    let assoc = cast?;
+                    // get the hash for this association
+                    let tree_hash = assoc.tree_hash();
+                    // check if our ring already contains this association
+                    if !ring.contains(tree, tree_hash).await {
+                        // only add associations that aren't already in our new set
+                        if !new_set.contains(&tree_hash) {
+                            // add this associations treee hash to our new set
+                            new_set.insert(tree_hash);
+                            // add this association to our new list
+                            new_list.push(assoc.clone());
+                        }
+                    }
+                    // add this association
+                    associations.push(assoc);
+                }
                 // get this pages tree nodes in parallel
-                let mut node_stream = stream::iter(filtered_targets)
+                let mut node_stream = stream::iter(new_list)
                     .map(|assoc| async move { assoc.get_tree_node(user, shared).await })
                     .buffer_unordered(10);
                 // add our tree nodes as we get them
@@ -333,10 +348,14 @@ impl TreeSupport for Entity {
                     // if we failed to get this node then raise an error
                     let node = node_result?;
                     // add this node
-                    ring.add_node(node);
+                    ring.add_node(node).await;
                 }
                 // get an entry to our parent nodes relationships
-                let entry = ring.relationships.entry(source_hash).or_default();
+                let entry = ring
+                    .relationships
+                    .entry_async(source_hash)
+                    .await
+                    .or_default();
                 // build the branches for these associations
                 for association in associations {
                     // get the tree hash for what this association points too
@@ -347,8 +366,10 @@ impl TreeSupport for Entity {
                     let relationship = crate::models::TreeRelationships::Association(association);
                     // wrap our relationship in a branch
                     let branch = UnhashedTreeBranch::new(target_hash, relationship, direction);
+                    // get the hash for this branch (not the tree hash the hash of the full object)
+                    let full_hash = branch.full_hash();
                     // insert our relationship
-                    entry.insert(branch);
+                    entry.upsert_async(full_hash, branch).await;
                 }
                 // if our cursor is exhausted then stop crawling
                 if cursor.exhausted() {
@@ -518,6 +539,7 @@ impl TagSupport for Entity {
     strum::Display,
     Hash,
 ))]
+#[cfg_attr(feature = "python", strum_discriminants(pyo3::pyclass(from_py_object)))]
 #[cfg_attr(
     feature = "scylla-utils",
     strum_discriminants(derive(thorium_derive::ScyllaStoreJson))

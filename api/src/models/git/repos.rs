@@ -636,6 +636,7 @@ impl TreeSupport for Repo {
     /// Gather any initial nodes for a tree
     #[cfg(feature = "api")]
     #[allow(async_fn_in_trait)]
+    #[tracing::instrument(name = "TreeSupport::<Repo>::gather_initial", skip_all, err(Debug))]
     async fn gather_initial(
         user: &crate::models::User,
         query: &TreeQuery,
@@ -659,6 +660,7 @@ impl TreeSupport for Repo {
     /// Gather any children for this child node
     #[cfg(feature = "api")]
     #[allow(async_fn_in_trait)]
+    #[tracing::instrument(name = "TreeSupport::<Repo>::gather_children", skip_all, err(Debug))]
     async fn gather_children(
         &self,
         _user: &crate::models::User,

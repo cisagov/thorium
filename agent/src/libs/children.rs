@@ -660,6 +660,7 @@ impl Children {
     /// * `depth` - The depth for this child source sample
     /// * `commits` - The commit that each repo is checked out too
     /// * `logs` - The logs to send to the API
+    #[expect(clippy::too_many_arguments)]
     #[instrument(name = "Children::submit_source", skip_all, err(Debug))]
     pub async fn submit_source(
         &mut self,
@@ -668,7 +669,7 @@ impl Children {
         results: &[Uuid],
         depth: Option<u8>,
         commits: &HashMap<String, String>,
-        groups: &Vec<String>,
+        groups: &[String],
         logs: &mut Sender<String>,
     ) -> Result<(), Error> {
         // get the name of the tool that source this sample
@@ -693,7 +694,7 @@ impl Children {
         };
         // get the build system or error
         let system = match job.args.kwargs.get("--builder") {
-            Some(system_vec) => match system_vec.get(0) {
+            Some(system_vec) => match system_vec.first() {
                 Some(system) => system,
                 // default to the stage name if --builder isn't set
                 None => &job.stage,
@@ -1069,6 +1070,7 @@ impl Children {
     /// * `commits` - The commits for any repos passed in as inputs
     /// * `image` - The image for this job
     /// * `logs` - The logs to send to the API
+    #[expect(clippy::too_many_arguments)]
     #[instrument(name = "Children::submit", skip(self, thorium, logs), err(Debug))]
     pub async fn submit(
         &mut self,

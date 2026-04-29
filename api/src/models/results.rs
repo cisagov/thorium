@@ -440,7 +440,7 @@ impl ResultGetParams {
     ///     .tools(vec!("CornDetector", "AppleDetector"));
     /// ```
     #[must_use]
-    pub fn tools<'a, T, I>(mut self, tools: I) -> Self
+    pub fn tools<T, I>(mut self, tools: I) -> Self
     where
         T: Into<String>,
         I: IntoIterator<Item = T>,

@@ -76,7 +76,6 @@ impl RawResults {
     ///
     /// # Arguments
     ///
-    /// * `job` - The job we are collecting results from
     /// * `image` - The image we are collecting results in
     /// * `path` - The path to collect results at
     /// * `logs` - The logs to send to the API
@@ -155,7 +154,7 @@ impl RawResults {
                 };
                 Ok(raw_result)
             } else {
-                // log that our results file is over 1 MB
+                // log that this result file is not a file
                 log!(logs, "Warning: Results file is not a file");
                 // create an output with the warning that the result was not a file
                 let mut output = HashMap::with_capacity(1);
@@ -173,6 +172,7 @@ impl RawResults {
                 Ok(raw_result)
             }
         } else {
+            // there is no file at the result path
             if image.display_type.requires_results() {
                 // log that no results file was found
                 log!(logs, "Warning: No results file found");
@@ -278,6 +278,9 @@ impl RawResults {
                         self.files.push(on_disk);
                     }
                 }
+            } else {
+                // log that this result file is not a file
+                log!(logs, "Warning: Results files path is not a directory");
             }
         }
         Ok(())

@@ -127,7 +127,7 @@ async fn setup_results_table(session: &Session, config: &Conf) {
             result TEXT,
             files Set<TEXT>,
             display_type TEXT,
-            children Map<TEXT, UUID>,
+            children MAP<TEXT, UUID>,
             entities MAP<TEXT, BIGINT>,
             PRIMARY KEY (id, uploaded)) \
             WITH CLUSTERING ORDER BY (uploaded DESC)",

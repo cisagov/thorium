@@ -41,7 +41,7 @@ pub async fn create(
     // cast our form to an entity
     let entity = form.cast(user, id, shared).await?;
     // populate our intrinsic tags
-    entity.populate_intrinsic_tags(&mut tags);
+    entity.populate_intrinsic_tags(&mut tags)?;
     // serialize our metadata
     let serialized_meta = serialize!(&entity.metadata);
     // get the current timestamp for when this entity was created
@@ -352,7 +352,7 @@ pub async fn update(
     // instance a set of tags that we want to ensure exist
     let mut tags = HashMap::default();
     // populate our intrinsic tags
-    entity.populate_intrinsic_tags(&mut tags);
+    entity.populate_intrinsic_tags(&mut tags)?;
     // drop any association specific data
     entity.drop_associated_data();
     // serialize our metadata

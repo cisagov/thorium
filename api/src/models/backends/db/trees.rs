@@ -45,7 +45,7 @@ pub async fn save(_user: &User, tree: &mut Tree, shared: &Shared) -> Result<(), 
 /// * `user` - The  user that is saving this cursor
 /// * `id` - The id of the tree to load
 /// * `shared` - Shared Thorium objects
-pub async fn load(_user: &User, id: &Uuid, shared: &Shared) -> Result<Tree, ApiError> {
+pub async fn load(_user: &User, id: Uuid, shared: &Shared) -> Result<Tree, ApiError> {
     // build the key to save this cursor data too
     let key = cursors::data(CursorKind::Tree, &id, shared);
     // data this cursors data to redis

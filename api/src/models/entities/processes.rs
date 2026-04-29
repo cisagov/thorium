@@ -317,13 +317,18 @@ impl WindowsProcessEntity {
     }
 }
 
-#[cfg(feature = "client")]
-async fn create_windows_process_helper(
+/// Build a request for this Windows process entity
+///
+/// # Arguments
+///
+/// * `pid` - The id of the process to create
+/// * `process` - The entity for the process to create
+/// * `groups` - The groups to set for this process request
+fn create_windows_process_req(
     pid: u64,
     process: WindowsProcessEntity,
-    groups: &[String],
-    thorium: &crate::Thorium,
-) -> Result<(u64, Option<u64>, String, uuid::Uuid), crate::Error> {
+    groups: Vec<String>,
+) -> EntityRequest {
     // get our name from one of several possible values
     let name = match (&process.name, &process.command, &process.image_path) {
         (Some(name), _, _) => name.clone(),
@@ -347,11 +352,72 @@ async fn create_windows_process_helper(
         exit_time: process.exit_time,
     });
     // build the process entity request
-    let entity_req = EntityRequest::new(&name, metadata, groups);
+    EntityRequest::new(name, metadata, groups)
+}
+
+/// Build a request for this Windows process entity with empty groups
+///
+/// # Arguments
+///
+/// * `pid` - The id of the process to create
+/// * `process` - The entity for the process to create
+fn create_windows_process_req_empty_groups(
+    pid: u64,
+    process: WindowsProcessEntity,
+) -> EntityRequest {
+    // get our name from one of several possible values
+    let name = match (&process.name, &process.command, &process.image_path) {
+        (Some(name), _, _) => name.clone(),
+        (None, Some(command), _) => command.clone(),
+        (None, None, Some(image_path)) => image_path.clone(),
+        (None, None, None) => format!("Process {pid}"),
+    };
+    // build the metadata request for this process
+    let metadata = EntityMetadataRequest::WindowsProcess(WindowsProcessEntity {
+        pid,
+        parent_pid: process.parent_pid,
+        name: process.name,
+        image_path: process.image_path,
+        command: process.command,
+        offset: process.offset,
+        threads: process.threads,
+        handles: process.handles,
+        is_wow64: process.is_wow64,
+        session_id: process.session_id,
+        create_time: process.create_time,
+        exit_time: process.exit_time,
+    });
+    // don't specify groups in our stored entity requests
+    let groups = Vec::<String>::default();
+    // build the process entity request
+    EntityRequest::new(name, metadata, groups)
+}
+
+/// Create this windows process in Thorium
+///
+/// # Arguments
+///
+/// * `pid` - The id of the process to create
+/// * `process` - The entity for the process to create
+/// * `groups` - The groups to create this process in
+/// * `thorium` - A Thorium client
+#[cfg(feature = "client")]
+async fn create_windows_process_helper(
+    pid: u64,
+    process: WindowsProcessEntity,
+    groups: &[String],
+    thorium: &crate::Thorium,
+) -> Result<(u64, Option<u64>, String, uuid::Uuid), crate::Error> {
+    // get our parent process id
+    let parent_pid = process.parent_pid;
+    // build the request for this windows process
+    let entity_req = create_windows_process_req(pid, process, groups.to_vec());
+    // get our new entities name
+    let name = entity_req.name.clone();
     // create this entity
     let resp = thorium.entities.create(entity_req).await?;
     // return our pid, our parent pid, and this processes entity id
-    Ok((pid, process.parent_pid, name, resp.id))
+    Ok((pid, parent_pid, name, resp.id))
 }
 
 /// A single entry into a windows process trees pid_map context
@@ -419,7 +485,7 @@ impl WindowsProcessTreeBuilder {
     ) -> Result<WindowsProcTreeContext, crate::Error> {
         // build the metadata for building
         let metadata = EntityMetadataRequest::WindowsProcessTree;
-        // build the entity request for our roo
+        // build the entity request for our root
         let req = EntityRequest::new(&self.name, metadata, groups);
         // create our root process entity
         let resp = thorium.entities.create(req).await?;
@@ -532,7 +598,7 @@ impl WindowsProcessTreeBuilder {
     ///
     /// * `groups` - The groups to create this process tree for
     /// * `thorium` - A Thorium client
-    pub async fn create(
+    pub async fn create_all(
         mut self,
         groups: &[String],
         thorium: &crate::Thorium,
@@ -544,5 +610,23 @@ impl WindowsProcessTreeBuilder {
         // link our entities
         self.link_entities(&mut context, groups, thorium).await?;
         Ok(context.id)
+    }
+
+    /// Convert all of this process tree to a a list of EntityRequests
+    pub fn to_requests(self) -> Vec<EntityRequest> {
+        // correctly size our list of entity requests (one extra with our root entity)
+        let mut reqs = Vec::with_capacity(self.processes.len() + 1);
+        // build the metadata for building
+        let metadata = EntityMetadataRequest::WindowsProcessTree;
+        // don't specify groups in our stored entity requests
+        let groups = Vec::<String>::default();
+        // build the entity request for our root
+        reqs.push(EntityRequest::new(&self.name, metadata, groups));
+        // add all of the processes we find to our list
+        for (pid, process) in self.processes {
+            // convert this process to a request
+            reqs.push(create_windows_process_req_empty_groups(pid, process));
+        }
+        reqs
     }
 }

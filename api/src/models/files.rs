@@ -1740,7 +1740,7 @@ impl Origin {
             Origin::None => None,
         };
         // deref our found parent if we found one
-        found.map(|hash| *hash)
+        found.copied()
     }
 
     /// Get a parent sha256 for this sample if it exists
@@ -2628,6 +2628,7 @@ impl TreeSupport for Sample {
 
     /// Gather any initial nodes for a tree
     #[cfg(feature = "api")]
+    #[tracing::instrument(name = "TreeSupport::<Sample>::gather_initial", skip_all, err(Debug))]
     async fn gather_initial(
         user: &User,
         query: &crate::models::TreeQuery,
@@ -2659,6 +2660,7 @@ impl TreeSupport for Sample {
     /// * `shared` - Shared Thorium objects
     #[cfg(feature = "api")]
     #[allow(async_fn_in_trait)]
+    #[tracing::instrument(name = "TreeSupport::<Sample>::gather_parents", skip_all, err(Debug))]
     async fn gather_parents(
         &self,
         user: &super::User,
@@ -2685,7 +2687,7 @@ impl TreeSupport for Sample {
                     // calculate this samples tree hash
                     let tree_hash = Sample::tree_hash_direct(sha256);
                     // skip this node if its already in our tree
-                    if !ring.contains(tree, tree_hash) {
+                    if !ring.contains(tree, tree_hash).await {
                         // get this files data
                         let sample = Sample::get(user, sha256, shared).await?;
                         // wrap this sample in a tree node
@@ -2700,7 +2702,7 @@ impl TreeSupport for Sample {
                     // calculate this repos tree hash
                     let tree_hash = crate::models::Repo::tree_hash_direct(url);
                     // skip this node if its already in our tree
-                    if !ring.contains(tree, tree_hash) {
+                    if !ring.contains(tree, tree_hash).await {
                         // get this repos data
                         let repo = crate::models::Repo::get(user, url, shared).await?;
                         // wrap this sample in a tree node
@@ -2716,23 +2718,25 @@ impl TreeSupport for Sample {
             // get the hash of our current node
             let node_hash = self.tree_hash();
             // add this node to the ring
-            let is_hint = ring.add_parent_node(child_node, node);
+            let is_hint = ring.add_parent_node(child_node, node).await;
             // build the relationship for this node
             let relationship = TreeRelationships::Origin(sub.origin.clone());
             // wrap our relationship in a branch
             let branch =
                 super::UnhashedTreeBranch::new(parent_hash, relationship, Directionality::From);
+            // get this branchs hash (not the tree hash but a hash of the branch object)
+            let hash = branch.full_hash();
             // add this relationship to our displayable branches or hinted ones
             if is_hint {
                 // get an entry to this parent nodes hinted relationships
-                let entry = ring.hints.entry(node_hash).or_default();
+                let entry = ring.hints.entry_async(node_hash).await.or_default();
                 // insert our relationship
-                entry.insert(branch);
+                entry.upsert_async(hash, branch).await;
             } else {
                 // get an entry to this parent nodes displayable relationships
-                let entry = ring.relationships.entry(node_hash).or_default();
+                let entry = ring.relationships.entry_async(node_hash).await.or_default();
                 // insert our relationship
-                entry.insert(branch);
+                entry.upsert_async(hash, branch).await;
             }
         }
         Ok(())
@@ -2740,6 +2744,7 @@ impl TreeSupport for Sample {
 
     /// Gather any children for this child node
     #[cfg(feature = "api")]
+    #[tracing::instrument(name = "TreeSupport::<Sample>::gather_children", skip_all, err(Debug))]
     async fn gather_children(
         &self,
         _user: &User,
@@ -2976,11 +2981,11 @@ impl From<FileListOpts> for FileListParams {
     fn from(opts: FileListOpts) -> Self {
         FileListParams {
             groups: opts.groups,
-            start: opts.start.unwrap_or_else(|| Utc::now()),
+            start: opts.start.unwrap_or_else(Utc::now),
             end: opts.end,
             tags: opts.tags,
             cursor: opts.cursor,
-            limit: opts.limit.unwrap_or_else(|| default_list_limit()),
+            limit: opts.limit.unwrap_or_else(default_list_limit),
             tags_case_insensitive: opts.tags_case_insensitive,
         }
     }
