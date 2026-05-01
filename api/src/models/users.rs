@@ -497,6 +497,8 @@ pub struct User {
     pub verification_token: Option<String>,
     /// When a verification email was last sent
     pub verification_sent: Option<DateTime<Utc>>,
+    /// The different auth provider aliases by their provider
+    pub aliases: HashMap<String, String>,
 }
 
 /// A user within Thorium that does not have its password

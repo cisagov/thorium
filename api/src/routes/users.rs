@@ -39,7 +39,6 @@ use crate::{is_admin, unauthorized, unavailable};
     )
 )]
 #[instrument(name = "routes::users::create", skip_all, fields(key_set = key.is_some()), err(Debug))]
-#[axum_macros::debug_handler]
 async fn create(
     key: Option<TypedHeader<Key>>,
     State(state): State<AppState>,

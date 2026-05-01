@@ -18,6 +18,7 @@ pub mod jobs;
 pub mod logs;
 pub mod network_policies;
 pub mod notifications;
+mod oauth;
 pub mod pipelines;
 pub mod reactions;
 pub mod requisitions;
@@ -102,6 +103,10 @@ pub use network_policies::{
     NetworkPolicyCustomLabel, NetworkPolicyListLine, NetworkPolicyListOpts,
     NetworkPolicyListParams, NetworkPolicyPort, NetworkPolicyRequest, NetworkPolicyRule,
     NetworkPolicyRuleRaw, NetworkPolicyUpdate, NetworkProtocol,
+};
+pub use oauth::{
+    OAuthCallbackParams, OAuthLinkParams, OAuthMaybeAuthed, OAuthRegistrationSessionId,
+    OAuthUserCreate, OAuthUsernameCheck,
 };
 pub use pipelines::{
     Pipeline, PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineDetailsList, PipelineList,

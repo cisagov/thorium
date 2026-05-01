@@ -6,8 +6,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use uuid::Uuid;
 
-#[cfg(feature = "scylla-utils")]
-use crate::models::CensusKeys;
+use super::{Branch, BranchDetails};
 use crate::models::InvalidEnum;
 
 #[cfg(feature = "python")]
@@ -375,32 +374,6 @@ pub struct CommitDetails {
     pub description: Option<String>,
     /// Whether this description was truncated or not
     pub truncated: bool,
-}
-
-/// A branch for a git repo
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct Branch {
-    /// The name of this branch
-    pub name: String,
-    /// The groups this branch is visible too
-    pub groups: Vec<String>,
-    /// When this branch was last updated
-    pub timestamp: DateTime<Utc>,
-}
-
-/// A branch for a git repo with detailed info
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct BranchDetails {
-    /// The name of this branch
-    pub name: String,
-    /// The groups this branch is visible too
-    pub groups: Vec<String>,
-    /// The commit this branch is on
-    pub commit: String,
-    /// When this branch was last updated
-    pub timestamp: DateTime<Utc>,
 }
 
 /// A tag for a git repo

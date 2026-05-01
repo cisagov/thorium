@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use super::CommitishKinds;
-use crate::models::{KeySupport, TagMap, TreeBranch, TreeSupport};
+use crate::models::{KeySupport, TagMap, TreeSupport};
 
 // api only imports
 #[cfg(feature = "api")]

@@ -282,6 +282,44 @@ pub struct Ldap {
     pub credentials: Option<LdapCreds>,
 }
 
+/// The setttings for a oauth provider
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct OauthProvider {
+    /// The url for this provider
+    pub issuer_url: String,
+    /// The id for Thorium to use to identify itself to this provider
+    pub client_id: String,
+    /// The secret for Thorium to ues to identify itself to this provider
+    pub client_secret: String,
+    /// The scope to set for this provider
+    pub scopes: Vec<String>,
+}
+
+/// Helps serde default the csrf token lifetime to 10 minutes
+pub const fn default_csrf_expire() -> u64 {
+    600
+}
+
+/// Helps serde default the oauth account link lifetime to 1 day
+pub const fn default_oauth_link_expire() -> u64 {
+    86_400
+}
+
+/// The settings for oauth
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
+pub struct OAuth {
+    /// The base scheme + domain for to redirect back to
+    pub redirect_base: String,
+    /// How long any registration tokens should be valid for in seconds
+    #[serde(default = "default_csrf_expire")]
+    pub register_expire: u64,
+    /// How long any account linking tokens should be valid for in seconds
+    #[serde(default = "default_oauth_link_expire")]
+    pub link_expire: u64,
+    /// The different settings for oauth providers
+    pub providers: HashMap<String, OauthProvider>,
+}
+
 /// Help serde default the email rate limit to 10 minutes
 fn default_email_rate_limit() -> u64 {
     600
@@ -360,6 +398,8 @@ pub struct Auth {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ldap: Option<Ldap>,
+    /// The settings for oauth based auth
+    pub oauth: Option<OAuth>,
     /// The user/group unix ids to use for local users
     #[serde(default = "default_local_user_ids")]
     pub local_user_ids: UnixInfo,
@@ -373,6 +413,7 @@ impl Default for Auth {
         Auth {
             token_expire: default_token_expire(),
             ldap: None,
+            oauth: None,
             local_user_ids: default_local_user_ids(),
             email: None,
         }

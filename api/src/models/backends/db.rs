@@ -14,6 +14,7 @@ pub mod keys;
 pub mod logs;
 pub mod network_policies;
 pub mod notifications;
+pub mod oauth;
 pub mod pipelines;
 pub mod reactions;
 pub mod repos;

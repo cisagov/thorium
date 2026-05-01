@@ -114,6 +114,7 @@ async fn initial_settings_consistency_scan(
         verified: bool::default(),
         verification_token: None,
         verification_sent: None,
+        aliases: std::collections::HashMap::default(),
     };
     // do a scan for consistency according to current settings
     settings.consistency_scan(&fake_admin, &shared).await?;
@@ -140,7 +141,8 @@ fn build_app(
     use axum::{http::Request, response::Response};
     use routes::{
         associations, basic, binaries, docs, entities, events, files, groups, images, jobs, mcp,
-        network_policies, pipelines, reactions, repos, search, streams, system, trees, ui, users,
+        network_policies, oauth, pipelines, reactions, repos, search, streams, system, trees, ui,
+        users,
     };
     use std::time::Duration;
     use tower_http::set_header::SetResponseHeaderLayer;
@@ -168,6 +170,7 @@ fn build_app(
     api_router = jobs::mount(api_router);
     api_router = pipelines::mount(api_router);
     api_router = network_policies::mount(api_router);
+    api_router = oauth::mount(api_router);
     api_router = reactions::mount(api_router);
     api_router = repos::mount(api_router);
     api_router = search::mount(api_router);
