@@ -5,9 +5,9 @@ mod commits;
 mod repos;
 
 pub use commits::{
-    Branch, BranchDetails, BranchRequest, Commit, CommitDetails, CommitListOpts, CommitRequest,
-    Commitish, CommitishDetails, CommitishKinds, CommitishListParams, CommitishMapRequest,
-    CommitishRequest, GitTag, GitTagDetails, GitTagRequest,
+    BranchRequest, Commit, CommitDetails, CommitListOpts, CommitRequest, Commitish,
+    CommitishDetails, CommitishKinds, CommitishListParams, CommitishMapRequest, CommitishRequest,
+    GitTag, GitTagDetails, GitTagRequest,
 };
 pub use repos::{
     Repo, RepoCheckout, RepoCreateResponse, RepoDataUploadResponse, RepoDependency,
@@ -15,6 +15,8 @@ pub use repos::{
     RepoRequest, RepoScheme, RepoSubmission, RepoSubmissionChunk, RepoUrlComponents, TarredRepo,
     UntarredRepo,
 };
+
+pub use branches::{Branch, BranchDetails};
 
 #[cfg(feature = "api")]
 pub use repos::RepoDataForm;

@@ -13,6 +13,7 @@ mod routes_reexport {
     pub mod jobs;
     pub mod mcp;
     pub mod network_policies;
+    pub mod oauth;
     pub mod pipelines;
     pub mod reactions;
     pub mod repos;

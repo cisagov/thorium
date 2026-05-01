@@ -7,7 +7,9 @@ pub struct UserKeys {
     /// The key to user list
     pub global: String,
     /// The key to user/token map
-    pub tokens: String,
+    pub by_token: String,
+    /// The key to the email/username map
+    pub by_email: String,
     /// The key to user data
     pub data: String,
     /// The key to this users group set
@@ -29,7 +31,9 @@ impl UserKeys {
         // build key to user list
         let global = Self::global(shared);
         // build key to user token map
-        let tokens = Self::tokens(shared);
+        let by_token = Self::tokens(shared);
+        // build the key to the user by email map
+        let by_email = Self::by_email(shared);
         // build key to store user data at
         let data = Self::data(&user.username, shared);
         // build key to store user groups at
@@ -39,7 +43,8 @@ impl UserKeys {
         // build key object
         UserKeys {
             global,
-            tokens,
+            by_token,
+            by_email,
             data,
             groups,
             analysts,
@@ -64,7 +69,16 @@ impl UserKeys {
         format!("{ns}:users_token_map", ns = shared.config.thorium.namespace)
     }
 
-    // user data key
+    /// builds users by email key
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    pub fn by_email(shared: &Shared) -> String {
+        format!("{ns}:users_email_map", ns = shared.config.thorium.namespace)
+    }
+
+    /// The user data key
     ///
     /// # Arguments
     ///

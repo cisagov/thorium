@@ -8,6 +8,7 @@ pub mod images;
 pub mod jobs;
 pub mod logs;
 pub mod network_policies;
+pub mod oauth;
 pub mod pipelines;
 pub mod reactions;
 pub mod repos;

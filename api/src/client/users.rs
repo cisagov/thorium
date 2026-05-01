@@ -1,9 +1,7 @@
 use base64::Engine as _;
 
 use super::{ClientSettings, Error, helpers};
-use crate::models::{
-    AiSettings, AiSettingsUpdate, AuthResponse, ScrubbedUser, UserCreate, UserUpdate,
-};
+use crate::models::{AuthResponse, ScrubbedUser, UserCreate, UserUpdate};
 use crate::{send, send_build};
 
 // import our static runtime if we need a blocking client

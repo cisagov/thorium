@@ -482,6 +482,58 @@ impl From<std::convert::Infallible> for ApiError {
     }
 }
 
+/// Convert an OAuth config error to unauthorized
+impl From<openidconnect::ConfigurationError> for ApiError {
+    fn from(_: openidconnect::ConfigurationError) -> Self {
+        // just return an authorized error
+        ApiError::new(StatusCode::UNAUTHORIZED, None)
+    }
+}
+
+/// Conert an OAuth token error to unauthorized
+impl
+    From<
+        openidconnect::RequestTokenError<
+            openidconnect::HttpClientError<reqwest::Error>,
+            openidconnect::StandardErrorResponse<openidconnect::core::CoreErrorResponseType>,
+        >,
+    > for ApiError
+{
+    fn from(
+        _: openidconnect::RequestTokenError<
+            openidconnect::HttpClientError<reqwest::Error>,
+            openidconnect::StandardErrorResponse<openidconnect::core::CoreErrorResponseType>,
+        >,
+    ) -> Self {
+        // just return an authorized error
+        ApiError::new(StatusCode::UNAUTHORIZED, None)
+    }
+}
+
+/// Convert an OAuth claims verification error to unauthorized
+impl From<openidconnect::ClaimsVerificationError> for ApiError {
+    fn from(_: openidconnect::ClaimsVerificationError) -> Self {
+        // just return an authorized error
+        ApiError::new(StatusCode::UNAUTHORIZED, None)
+    }
+}
+
+/// Convert an OAuth signature verification error to unauthorized
+impl From<openidconnect::SignatureVerificationError> for ApiError {
+    fn from(_: openidconnect::SignatureVerificationError) -> Self {
+        // just return an authorized error
+        ApiError::new(StatusCode::UNAUTHORIZED, None)
+    }
+}
+
+/// Convert an OAuth signing error to unauthorized
+impl From<openidconnect::SigningError> for ApiError {
+    fn from(_: openidconnect::SigningError) -> Self {
+        // just return an authorized error
+        ApiError::new(StatusCode::UNAUTHORIZED, None)
+    }
+}
+
 /// Convert [`ApiError`] into an [`rmcp::ErrorData`]
 impl From<ApiError> for rmcp::ErrorData {
     fn from(error: ApiError) -> Self {

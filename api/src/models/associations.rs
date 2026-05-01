@@ -3,10 +3,12 @@
 //! Associations are directional relationships between two objects in Thorium.
 
 use chrono::prelude::*;
-use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::models::{Directionality, InvalidEnum};
+#[cfg(feature = "scylla-utils")]
+use std::str::FromStr;
+
+use crate::models::Directionality;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]

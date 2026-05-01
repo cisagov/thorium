@@ -3,7 +3,7 @@
 
 use base64::Engine as _;
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 // only support tokio for file reads in tokio mode
@@ -23,6 +23,7 @@ use crate::{matches_adds, matches_removes, matches_vec, same};
 cfg_if::cfg_if! {
     if #[cfg(feature = "api")] {
         use serde_json::Value;
+        use std::collections::BTreeMap;
 
         use super::GenericJobOpts;
         use crate::{deserialize_value, bad, utils::ApiError};

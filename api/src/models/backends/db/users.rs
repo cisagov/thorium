@@ -40,10 +40,13 @@ pub fn build(
         .cmd("hsetnx").arg(&keys.data).arg("token_expiration")
             .arg(serialize!(&cast.token_expiration))
         .cmd("hset").arg(&SystemKeys::data(shared)).arg("scaler_cache").arg(true)
-        .cmd("hsetnx").arg(&keys.tokens).arg(&cast.token).arg(&cast.username)
+        .cmd("hsetnx").arg(&keys.by_token).arg(&cast.token).arg(&cast.username)
         .cmd("hset").arg(cache_status).arg("status").arg(true)
         .cmd("hsetnx").arg(&keys.data).arg("settings").arg(serialize!(&cast.settings))
-        .cmd("hsetnx").arg(&keys.data).arg("verified").arg(cast.verified);
+        .cmd("hsetnx").arg(&keys.data).arg("verified").arg(cast.verified)
+        .cmd("hsetnx").arg(&keys.data).arg("aliases").arg(serialize!(&cast.aliases))
+        // add this users email to username map
+        .cmd("hsetnx").arg(&keys.by_email).arg(&cast.email).arg(&cast.username);
     // if password is set then set that in redis
     if let Some(password) = &cast.password {
         pipe.cmd("hsetnx").arg(&keys.data).arg("password").arg(password);
@@ -63,6 +66,13 @@ pub fn build(
     if let Some(verification_token) = &cast.verification_token {
         pipe.cmd("hsetnx").arg(&keys.data).arg("verification_token")
             .arg(verification_token);
+    }
+    // add any aliases for this user
+    for (provider, alias) in &cast.aliases {
+        // build the key to this providers alias map
+        let alias_key = super::keys::oauth::alias_to_username(provider, shared);
+        // add this alias to our alias map
+        pipe.cmd("hsetnx").arg(alias_key).arg(alias).arg(&cast.username);
     }
     Ok(())
 }
@@ -106,7 +116,7 @@ pub(super) fn cast(
     let username = extract!(raw, "username");
     // cast to a User document
     let user = User {
-        email: extract!(raw, "email", format!("{}@sandia.gov", &username)),
+        email: extract!(raw, "email"),
         username,
         password: helpers::extract_opt(&mut raw, "password"),
         role: deserialize_ext!(raw, "role"),
@@ -118,6 +128,7 @@ pub(super) fn cast(
         verified: helpers::extract_bool_default(&mut raw, "verified", true)?,
         verification_token: helpers::extract_opt(&mut raw, "verification_token"),
         verification_sent: deserialize_opt!(&mut raw, "verification_sent"),
+        aliases: deserialize_ext!(raw, "aliases", HashMap::default()),
     };
     Ok(user)
 }
@@ -316,8 +327,8 @@ pub async fn save_token(user: &User, old: &str, shared: &Shared) -> Result<(), A
         .cmd("hset").arg(&keys.data).arg("token_expiration")
             .arg(serialize!(&user.token_expiration))
         // update the token map
-        .cmd("hset").arg(&keys.tokens).arg(&user.token).arg(&user.username)
-        .cmd("hdel").arg(&keys.tokens).arg(old)
+        .cmd("hset").arg(&keys.by_token).arg(&user.token).arg(&user.username)
+        .cmd("hdel").arg(&keys.by_token).arg(old)
         .cmd("hset").arg(cache_status).arg("status").arg(true)
         .cmd("hset").arg(&system_map).arg("scaler_cache").arg("true")
         .query_async(conn!(shared)).await?;
@@ -344,6 +355,24 @@ pub async fn get_token(token: &str, shared: &Shared) -> Result<User, ApiError> {
     }
 }
 
+/// Gets the username associated with an email if it exists
+///
+/// # Arguments
+///
+/// * `email` - The email to get a username for
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::users::get_username_for_email", skip_all, err(Debug))]
+pub async fn get_username_for_email(
+    email: &str,
+    shared: &Shared,
+) -> Result<Option<String>, ApiError> {
+    // build key to username/token map
+    let key = UserKeys::by_email(shared);
+    // get username for this email if it exists
+    let username: Option<String> = query!(cmd("hget").arg(&key).arg(email), shared).await?;
+    Ok(username)
+}
+
 /// Saves a users data in Redis
 ///
 /// # Arguments
@@ -364,7 +393,8 @@ pub async fn save(user: &User, shared: &Shared) -> Result<(), ApiError> {
         .cmd("hset").arg(&data_key).arg("groups").arg(serialize!(&user.groups))
         .cmd("hset").arg(&data_key).arg("role").arg(serialize!(&user.role))
         .cmd("hset").arg(cache_status).arg("status").arg(true)
-        .cmd("hset").arg(&data_key).arg("settings").arg(serialize!(&user.settings));
+        .cmd("hset").arg(&data_key).arg("settings").arg(serialize!(&user.settings))
+        .cmd("hset").arg(&data_key).arg("aliases").arg(serialize!(&user.aliases));
     // if password is set then save that in redis
     if let Some(password) = &user.password {
         pipe.cmd("hset").arg(&data_key).arg("password").arg(password);
@@ -381,6 +411,13 @@ pub async fn save(user: &User, shared: &Shared) -> Result<(), ApiError> {
     } else {
         // make sure this user is not in the analyst set
         pipe.cmd("srem").arg(analyst_key).arg(&user.username);
+    }
+    // add any aliases for this user
+    for (provider, alias) in &user.aliases {
+        // build the key to this providers alias map
+        let alias_key = super::keys::oauth::alias_to_username(provider, shared);
+        // add this alias to our alias map
+        pipe.cmd("hset").arg(alias_key).arg(alias).arg(&user.username);
     }
     // save user into redis
     let _: () = pipe.atomic()
@@ -404,8 +441,7 @@ pub async fn update_unix_info(username: &str, info: &UnixInfo, shared: &Shared) 
     // build a redis pipeline
     let mut pipe = redis::pipe();
     // set our updated unix info
-    pipe.cmd("hset").arg(&data_key).arg("unix").arg(serialize!(info))
-        .cmd("hset").arg(&data_key).arg("email").arg(format!("{}@sandia.gov", username));
+    pipe.cmd("hset").arg(&data_key).arg("unix").arg(serialize!(info));
     // save user into redis
     let _: () = pipe.atomic()
         .query_async(conn!(shared))
@@ -492,7 +528,7 @@ pub fn build_delete(
     pipe.cmd("srem").arg(&keys.global).arg(&user.username)
         .cmd("del").arg(&keys.data)
         .cmd("del").arg(&keys.groups)
-        .cmd("hdel").arg(&keys.tokens).arg(&user.token);
+        .cmd("hdel").arg(&keys.by_token).arg(&user.token);
     // if this users role is analyst then add them to the analyst set
     if user.role == UserRole::Analyst {
         // build the key to the analyst set

@@ -1553,6 +1553,7 @@ pub enum Origin {
 }
 
 /// Whether something is a file or repo
+#[cfg(feature = "api")]
 enum FileOrRepo<'a> {
     /// This is a sha256 for a file
     File(&'a String),
@@ -1744,6 +1745,7 @@ impl Origin {
     }
 
     /// Get a parent sha256 for this sample if it exists
+    #[cfg(feature = "api")]
     fn get_parent_sha256_or_repo<'a>(&'a self) -> Option<FileOrRepo<'a>> {
         match self {
             Origin::Downloaded { .. } => None,

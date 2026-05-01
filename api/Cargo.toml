@@ -18,7 +18,7 @@ api = [
   "scylla", "ldap3", "itertools", "sha-1", "sha2", "md-5", "data-encoding", "anyhow", "elasticsearch", "zip", "async-trait",
   "axum", "http", "tower", "axum-macros", "tower-http", "tokio-stream", "generic-array", "futures-util", "tokio-util", "serde_qs",
   "aws-sdk-s3", "aws-types", "aws-smithy-http", "aws-credential-types", "scylla-utils", "http-body", "axum-extra", "once_cell", "utoipa",
-  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "scc", "mime", "rmcp"
+  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "scc", "mime", "rmcp", "openidconnect", "humantime"
   ]
 
 # include scylla utility functions
@@ -159,6 +159,8 @@ scc = { version = "3.7", optional = true }
 mime = { version = "0.3", optional = true }
 bytesize = { version = "2.1.0", features = ["serde"] }
 sigma-rust = { workspace = true }
+openidconnect = { version = "4", features = ["reqwest"], optional = true }
+humantime = { version = "2.3", optional = true }
 
 # rkyv dependencies
 rkyv = { version = "=0.7.43", features = ["arbitrary_enum_discriminant", "uuid", "validation"], optional = true }

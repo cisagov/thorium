@@ -1,16 +1,30 @@
 //! Shared objects and methods across all requests
 use axum::extract::FromRef;
-use bb8_redis::{bb8::Pool, RedisConnectionManager};
+use bb8_redis::{RedisConnectionManager, bb8::Pool};
 use elasticsearch::Elasticsearch;
 use lettre::message::header::ContentType;
 use lettre::message::{IntoBody, Mailbox};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use openidconnect::core::{
+    CoreAuthDisplay, CoreAuthPrompt, CoreAuthenticationFlow, CoreClient, CoreErrorResponseType,
+    CoreGenderClaim, CoreJsonWebKey, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm,
+    CoreProviderMetadata, CoreRevocableToken, CoreTokenType,
+};
+use openidconnect::{
+    ClientId, ClientSecret, CsrfToken, EmptyAdditionalClaims, EmptyExtraTokenFields,
+    EndpointMaybeSet, EndpointNotSet, EndpointSet, IdTokenFields, IssuerUrl, Nonce,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RevocationErrorResponseType, Scope,
+    StandardErrorResponse, StandardTokenIntrospectionResponse, StandardTokenResponse,
+};
 use regex::RegexSet;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::fs;
+use url::Url;
 
 use super::s3::S3;
+use crate::conf::OauthProvider;
 use crate::info;
 use crate::models::backends::setup::{self, Scylla};
 use crate::utils::ApiError;
@@ -130,6 +144,143 @@ impl EmailClient {
     }
 }
 
+/// A client for any OAuth provider
+pub struct OAuthClient {
+    /// The name of the provider this client is for
+    pub name: String,
+    /// The different scopes for this provider
+    pub scopes: Vec<String>,
+    /// The http client to use to drive this client
+    pub http_client: reqwest::Client,
+    /// The client to this provider
+    pub client: openidconnect::Client<
+        EmptyAdditionalClaims,
+        CoreAuthDisplay,
+        CoreGenderClaim,
+        CoreJweContentEncryptionAlgorithm,
+        CoreJsonWebKey,
+        CoreAuthPrompt,
+        StandardErrorResponse<CoreErrorResponseType>,
+        StandardTokenResponse<
+            IdTokenFields<
+                EmptyAdditionalClaims,
+                EmptyExtraTokenFields,
+                CoreGenderClaim,
+                CoreJweContentEncryptionAlgorithm,
+                CoreJwsSigningAlgorithm,
+            >,
+            CoreTokenType,
+        >,
+        StandardTokenIntrospectionResponse<EmptyExtraTokenFields, CoreTokenType>,
+        CoreRevocableToken,
+        StandardErrorResponse<RevocationErrorResponseType>,
+        EndpointSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointNotSet,
+        EndpointMaybeSet,
+        EndpointMaybeSet,
+    >,
+}
+
+impl OAuthClient {
+    /// Create a new client for a provider
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the provider to build a client for
+    /// * `redirect_base` - The base sheme + domain to redirect too
+    /// * `conf` - The config for this OAuth provider
+    pub async fn new(
+        name: &str,
+        redirect_base: &str,
+        conf: &OauthProvider,
+    ) -> Result<Self, ApiError> {
+        // create a reqwest for this oauth client to use
+        let http_client = reqwest::ClientBuilder::new()
+            // disable following redirects to prevent SSRF vulnerabilities
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("Client should build");
+        // get this providers metadata
+        let provider_metadata = CoreProviderMetadata::discover_async(
+            IssuerUrl::new(conf.issuer_url.clone()).unwrap(),
+            &http_client,
+        )
+        .await
+        .unwrap();
+        // build our id and secret values
+        let id = ClientId::new(conf.client_id.clone());
+        let secret = Some(ClientSecret::new(conf.client_secret.clone()));
+        // build our redirect url
+        let redirect_url = format!("{redirect_base}/oauth/{name}/callback");
+        // build an oauth client from our providers metadata
+        let client = CoreClient::from_provider_metadata(provider_metadata, id, secret)
+            // set the url to redirect back to after authentication
+            .set_redirect_uri(RedirectUrl::new(redirect_url).unwrap());
+        // build our oauth client struct
+        let wrapper = OAuthClient {
+            name: name.to_string(),
+            scopes: conf.scopes.clone(),
+            http_client,
+            client,
+        };
+        Ok(wrapper)
+    }
+
+    /// Generate an auth url for this provider
+    pub fn generate_auth_url(&self) -> (Url, CsrfToken, Nonce, PkceCodeVerifier) {
+        // generate a PKCE challenge.
+        let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+        // generate the full authorization URL
+        let builder = self
+            .client
+            .authorize_url(
+                CoreAuthenticationFlow::AuthorizationCode,
+                CsrfToken::new_random,
+                Nonce::new_random,
+            )
+            // Set the PKCE code challenge.
+            .set_pkce_challenge(pkce_challenge);
+        // add the scopes that this provider needs
+        let builder = self.scopes.iter().fold(builder, |builder, scope| {
+            builder.add_scope(Scope::new(scope.clone()))
+        });
+        // get the url for this user to auth with
+        let (url, csrf_token, nonce) = builder.url();
+        // return all of the relevant info
+        (url, csrf_token, nonce, pkce_verifier)
+    }
+}
+
+/// Setup all of the oauth provider clients mentioned in our config
+///
+/// # Arguments
+///
+/// * `config` - The Thorium config to build clients from
+async fn setup_oauth_providers(config: &Conf) -> HashMap<String, OAuthClient> {
+    // get our oauth config if we have one
+    match &config.thorium.auth.oauth {
+        Some(oauth_conf) => {
+            // preallocate a map for our oauth providers
+            let mut provider_map = HashMap::with_capacity(oauth_conf.providers.len());
+            // step over the oauth providers and build clients for them
+            for (name, provider_conf) in &oauth_conf.providers {
+                // build a client for this provider
+                let client = OAuthClient::new(name, &oauth_conf.redirect_base, provider_conf)
+                    .await
+                    .unwrap_or_else(|error| {
+                        panic!("Failed to setup Oauth provider {name}: {error:#?}")
+                    });
+                // add this client to our map
+                provider_map.insert(name.to_owned(), client);
+            }
+            provider_map
+        }
+        None => HashMap::default(),
+    }
+}
+
 /// Shared objects between all requests
 pub struct Shared {
     /// The Thorium config f
@@ -144,6 +295,8 @@ pub struct Shared {
     pub elastic: Elasticsearch,
     /// An email client for verification emails
     pub email: Option<EmailClient>,
+    /// Client for OAuth based auth
+    pub oauth: HashMap<String, OAuthClient>,
     /// A site banner for displaying messages to UI users
     pub banner: String,
 }
@@ -170,6 +323,8 @@ impl Shared {
         let email = EmailClient::new(&config).await;
         // setup s3 clients
         let s3 = S3::new(&config);
+        // setup our oauth clients
+        let oauth = setup_oauth_providers(&config).await;
         // read banner from local path
         let banner = fs::read_to_string("banner.txt")
             .await
@@ -181,6 +336,7 @@ impl Shared {
             s3,
             elastic,
             email,
+            oauth,
             banner,
         }
     }

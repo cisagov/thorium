@@ -86,6 +86,7 @@ macro_rules! hash_pw {
 }
 
 /// generate a token
+#[macro_export]
 macro_rules! token {
     () => {{
         let mut rng = rand::rng();
@@ -95,6 +96,7 @@ macro_rules! token {
 }
 
 /// get the time a new token should expire
+#[macro_export]
 macro_rules! token_expire {
     ($shared:expr) => {
         // update token expiration
@@ -624,6 +626,7 @@ impl User {
             verified: false,
             verification_token: None,
             verification_sent: None,
+            aliases: HashMap::default(),
         };
         // send a verification email if needed
         match (req.skip_verification, &shared.email) {
@@ -698,7 +701,7 @@ impl User {
         client.send(&self.email, subject, body).await
     }
 
-    /// Verify an email for a useri
+    /// Verify an email for a user
     ///
     /// # Arguments
     ///
@@ -771,15 +774,15 @@ impl User {
         db::users::exists_many(usernames, shared).await
     }
 
-    /// Checks if a users exists
+    /// Checks if a user exists
     ///
     /// # Arguments
     ///
-    /// * `username` - the names of the users to check
+    /// * `username` - the name of a user to check
     /// * `shared` - Shared Thorium objects
-    pub async fn exists(usernames: &str, shared: &Shared) -> Result<(), ApiError> {
+    pub async fn exists(username: &str, shared: &Shared) -> Result<(), ApiError> {
         // check if this user exists
-        db::users::exists(usernames, shared).await
+        db::users::exists(username, shared).await
     }
 
     /// Deletes a user from Thorium
