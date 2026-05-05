@@ -1,0 +1,2436 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+########################################
+# Shared utilities
+########################################
+
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+DRIVER=""
+CONTAINER_CMD=""
+
+kctl() { minikube kubectl -- "$@"; }
+
+log() { echo -e "\n====== $1 ======\n"; }
+
+generate_password() {
+    openssl rand -base64 32 | tr -d '/+=' | head -c 32
+}
+
+has_podman() {
+    command -v podman >/dev/null 2>&1 &&
+    podman info >/dev/null 2>&1
+}
+
+has_docker() {
+    command -v docker >/dev/null 2>&1 &&
+    env -u DOCKER_HOST docker info >/dev/null 2>&1
+}
+
+has_kvm2() {
+    [ "$OS" = "Linux" ] || return 1
+    command -v virsh >/dev/null 2>&1 &&
+    [ -e /dev/kvm ] &&
+    (
+        systemctl is-active --quiet libvirtd 2>/dev/null ||
+        systemctl is-active --quiet virtqemud 2>/dev/null
+    )
+}
+
+select_driver() {
+    if has_podman; then
+        DRIVER="podman"
+        CONTAINER_CMD="podman"
+    elif has_docker; then
+        DRIVER="docker"
+        CONTAINER_CMD="docker"
+    elif has_kvm2; then
+        DRIVER="kvm2"
+        CONTAINER_CMD=""
+    else
+        echo "No supported and working minikube driver found."
+        return 1
+    fi
+}
+
+minikube_start() {
+    if [ "$DRIVER" = "docker" ]; then
+        env -u DOCKER_HOST minikube start --cni calico --driver="$DRIVER"
+    elif [ "$DRIVER" = "podman" ]; then
+        minikube start --cni calico --container-runtime=containerd --driver="$DRIVER"
+    else
+        minikube start --cni calico --driver="$DRIVER"
+    fi
+}
+
+fix_container_config() {
+    if [ -n "$CONTAINER_CMD" ]; then
+        local api_port cluster
+        api_port="$($CONTAINER_CMD port minikube 8443/tcp | awk -F: '{print $2}')"
+        cluster="$(kctl config view --minify -o jsonpath='{.contexts[0].context.cluster}')"
+        kctl config set-cluster "$cluster" --server="https://127.0.0.1:${api_port}"
+    fi
+}
+
+ensure_minikube_running() {
+    local status_output
+    status_output="$(minikube status 2>/dev/null)" || true
+    local host_status
+    host_status="$(echo "$status_output" | grep -oP '^host: \K\S+')" || true
+    if [[ "$host_status" != "Running" ]]; then
+        echo "ERROR: minikube is not running. Start it with: minithor start" >&2
+        exit 1
+    fi
+    # Auto-fix stale kubeconfig (e.g. after host reboot changed the container port mapping)
+    local kube_status
+    kube_status="$(echo "$status_output" | grep -oP '^kubeconfig: \K\S+')" || true
+    if [[ "$kube_status" != "Configured" ]]; then
+        echo "Kubeconfig is stale, updating context..." >&2
+        minikube update-context >/dev/null 2>&1
+    fi
+}
+
+wait_for_rollout() {
+    local resource=$1 namespace=$2 timeout=${3:-300}
+    kctl rollout status --watch --timeout="${timeout}s" "$resource" -n "$namespace"
+}
+
+wait_for_resource() {
+    local resource_type=$1 resource_name=$2 namespace=$3 timeout=${4:-300}
+    local elapsed=0
+    echo "Waiting for $resource_type/$resource_name in $namespace (timeout: ${timeout}s)..."
+    until kctl get "$resource_type" "$resource_name" -n "$namespace" &>/dev/null; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo "ERROR: Timed out waiting for $resource_type/$resource_name in $namespace" >&2
+            return 1
+        fi
+    done
+}
+
+wait_for_port_forward() {
+    local port=$1 max_attempts=${2:-20}
+    for attempt in $(seq 1 "$max_attempts"); do
+        if curl -sf -o /dev/null "http://localhost:$port" 2>/dev/null; then return 0; fi
+        sleep 1
+    done
+    echo "ERROR: Port-forward on port $port not ready after ${max_attempts}s" >&2
+    return 1
+}
+
+# Error-tolerant execution — uses FAILURES global set by the caller
+run_step() {
+    if ! "$@"; then
+        FAILURES=$((FAILURES + 1))
+        echo "ERROR: Command failed (continuing): $*" >&2
+    fi
+}
+
+helm_uninstall() {
+    local release=$1 namespace=$2
+    if helm status "$release" -n "$namespace" &>/dev/null; then
+        run_step helm uninstall "$release" -n "$namespace" --timeout=120s
+    else
+        echo "Helm release '$release' not found in namespace '$namespace', skipping"
+    fi
+}
+
+clear_finalizers_and_delete() {
+    local crd=$1 resource_type=$2 namespace=$3
+    if kctl get crd "$crd" &>/dev/null; then
+        for item in $(kctl get "$resource_type" -n "$namespace" -o name 2>/dev/null); do
+            run_step kctl patch "$item" -n "$namespace" --type merge -p '{"metadata":{"finalizers":[]}}'
+        done
+        run_step kctl delete "$resource_type" --all -n "$namespace" --ignore-not-found --timeout=60s
+    fi
+}
+
+force_delete_ns() {
+    local ns=$1
+    echo "Force-clearing finalizers on stuck namespace '$ns'..."
+    kctl get ns "$ns" -o json \
+        | sed 's/"finalizers":[^]]*]/"finalizers":[]/' \
+        | kctl replace --raw "/api/v1/namespaces/$ns/finalize" -f -
+}
+
+wait_for_ns_termination() {
+    local timeout=${1:-300}
+    local elapsed=0
+    while kctl get ns 2>&1 | grep -q Terminating; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [ "$elapsed" -ge "$timeout" ]; then
+            echo "WARNING: Namespaces still terminating after ${timeout}s, force-clearing..." >&2
+            local stuck_ns
+            stuck_ns=$(kctl get ns -o jsonpath='{range .items[?(@.status.phase=="Terminating")]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+            for ns in $stuck_ns; do
+                force_delete_ns "$ns" || true
+            done
+            sleep 5
+            if kctl get ns 2>&1 | grep -q Terminating; then
+                echo "ERROR: Namespaces still stuck after force-clear:" >&2
+                kctl get ns 2>&1 | grep Terminating >&2 || true
+                return 1
+            fi
+            return 0
+        fi
+    done
+}
+
+########################################
+# Usage / help functions
+########################################
+
+usage() {
+    cat <<EOF
+minithor — manage a local Thorium instance on Minikube
+
+Usage: minithor <command> [options]
+
+Commands:
+  minikube         Manage the minikube cluster (install, delete)
+  start            Start a previously stopped minikube cluster
+  deploy           Deploy all Thorium services and backing infrastructure
+  get-config       Extract the running Thorium config to ~/thorium.yml
+  expose           Port-forward Thorium (and optionally backing services) to localhost
+  stop             Stop the minikube cluster (preserves state)
+  cleanup          Remove all Thorium resources for a fresh deploy (requires --confirm)
+
+Global options:
+  -h, --help       Show this help message
+
+Run 'minithor <command> --help' for command-specific options.
+EOF
+}
+
+usage_minikube() {
+    cat <<EOF
+minithor minikube — manage the minikube cluster
+
+Usage: minithor minikube <subcommand> [options]
+
+Subcommands:
+  install          Install minikube and start a Kubernetes cluster
+  delete           Completely remove minikube and all associated data (requires --confirm)
+
+Run 'minithor minikube <subcommand> --help' for subcommand-specific options.
+EOF
+}
+
+usage_minikube_install() {
+    cat <<EOF
+minithor minikube install — install minikube and start a Kubernetes cluster
+
+Usage: minithor minikube install [options]
+
+Options:
+  --cpus <n>           Number of CPUs to allocate to minikube (default: 8)
+  --memory <n>         Memory in GiB to allocate to minikube (default: 16)
+  --certs-dir <path>   Directory containing .crt files to trust
+                       (default: \$PWD/.certs/)
+  -h, --help           Show this help message
+
+Detects the best available driver (podman > docker > kvm2), downloads
+minikube for your OS/architecture, configures resource limits, and starts
+the cluster with Calico CNI, CSI, and Ingress addons.
+EOF
+}
+
+usage_minikube_delete() {
+    cat <<EOF
+minithor minikube delete — completely remove minikube
+
+Usage: minithor minikube delete --confirm
+
+Options:
+  --confirm        Required. Confirms you want to remove minikube entirely.
+  -h, --help       Show this help message
+
+Runs 'minikube delete --all --purge', removes ~/.minikube and ~/.kube,
+uninstalls the minikube and kubectl binaries, and prunes unused container
+images. This is irreversible.
+EOF
+}
+
+usage_start() {
+    cat <<EOF
+minithor start — start a stopped minikube cluster
+
+Usage: minithor start
+
+Detects the container driver, starts minikube, corrects the kubeconfig
+API server address if needed, and cleans up pods stuck in terminal
+failure states.
+EOF
+}
+
+usage_deploy() {
+    cat <<EOF
+minithor deploy — deploy Thorium and all backing services
+
+Usage: minithor deploy [options]
+
+Options:
+  --config <path>         Path to thorium-cluster.yml
+                          (default: \$PWD/thorium-cluster.yml)
+  --docker-config <path>  Path to .dockerconfigjson for private registries
+                          (default: \$PWD/.dockerconfigjson)
+  --banner <path>         Path to banner.txt for the login banner
+                          (default: \$PWD/banner.txt, generates a default if absent)
+  --bin <path>            Directory for downloaded binaries (e.g. thorctl)
+                          (default: /usr/local/bin)
+  --toolbox <path>        Download location for toolbox.json
+                          (default: \$PWD/toolbox.json)
+  --user <name>           Username for the initial admin user (default: test)
+  --password <pass>       Password for the initial admin user
+                          (default: INSECURE_DEV_PASSWORD)
+  --rand-password         Generate a random password for the admin user
+  --registry              Deploy a container registry in the thorium namespace
+  --registry-user <name>  Enable registry basic auth for this user (implies --registry,
+                          password is auto-generated and printed to stdout)
+  -h, --help              Show this help message
+
+Deploys the full stack: Redis, Elasticsearch (ECK), cert-manager,
+ScyllaDB, MinIO, Jaeger, Kubegres, Quickwit, and the Thorium operator.
+Optionally deploys a container registry (registry:2) with persistent storage.
+Configures databases, creates a test user, installs thorctl, and imports
+the default toolbox. Service passwords are randomly generated per deploy.
+EOF
+}
+
+usage_get_config() {
+    cat <<EOF
+minithor get-config — extract Thorium config from the cluster
+
+Usage: minithor get-config
+
+Reads the 'thorium' secret in the thorium namespace and writes
+thorium.yml to your home directory (~/).
+EOF
+}
+
+usage_expose() {
+    cat <<EOF
+minithor expose — port-forward services to localhost
+
+Usage: minithor expose [options]
+
+Options:
+  --dev            Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla)
+  --port <port>    Local port for the Thorium API (default: 8080)
+  --stop           Stop all running port-forwards
+  --status         Show which port-forwards are running
+  -h, --help       Show this help message
+EOF
+}
+
+usage_stop() {
+    cat <<EOF
+minithor stop — stop the minikube cluster
+
+Usage: minithor stop
+
+Gracefully stops the minikube VM/container. Cluster state is preserved
+and can be resumed with 'minithor start'.
+EOF
+}
+
+usage_cleanup() {
+    cat <<EOF
+minithor cleanup — remove all Thorium resources for a fresh deploy
+
+Usage: minithor cleanup --confirm
+
+Options:
+  --confirm        Required. Confirms you want to remove all resources.
+  -h, --help       Show this help message
+
+Removes all Thorium services, backing infrastructure, Helm releases,
+namespaces, and CRDs. The minikube cluster itself is preserved — use
+'minithor minikube delete --confirm' to fully remove minikube.
+EOF
+}
+
+########################################
+# Subcommand: minikube install
+########################################
+
+cmd_minikube_install() {
+    local certs_dir="$PWD/.certs"
+    local install_cpus=8
+    local install_memory_gib=16
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) usage_minikube_install; return 0 ;;
+            --cpus)
+                shift
+                if [ $# -eq 0 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
+                    echo "ERROR: --cpus requires a numeric argument" >&2; exit 1
+                fi
+                install_cpus="$1"
+                ;;
+            --memory)
+                shift
+                if [ $# -eq 0 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
+                    echo "ERROR: --memory requires a numeric argument (GiB)" >&2; exit 1
+                fi
+                install_memory_gib="$1"
+                ;;
+            --certs-dir)
+                shift
+                if [ $# -eq 0 ]; then
+                    echo "ERROR: --certs-dir requires an argument" >&2; exit 1
+                fi
+                certs_dir="$1"
+                ;;
+            *) echo "Unknown option: $1"; usage_minikube_install; exit 1 ;;
+        esac
+        shift
+    done
+
+    select_driver
+    echo "Selected driver: $DRIVER"
+
+    # Inject org certs into podman VM on macOS
+    if [ "$DRIVER" = "podman" ] && [ "$OS" = "Darwin" ]; then
+        podman machine ssh "sudo mkdir -p /etc/pki/ca-trust/source/anchors/"
+        cat "$certs_dir"/*.crt | podman machine ssh "sudo tee /etc/pki/ca-trust/source/anchors/thorium-org-cert.crt > /dev/null"
+        podman machine ssh "sudo update-ca-trust"
+    fi
+
+    # Download and install minikube
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" RETURN
+
+    case "$OS" in
+        Darwin)
+            if [ "$ARCH" = "arm64" ]; then
+                curl -LO --output-dir "$tmp_dir" https://storage.googleapis.com/minikube/releases/latest/minikube-darwin-arm64
+                sudo install "$tmp_dir/minikube-darwin-arm64" /usr/local/bin/minikube
+            else
+                curl -LO --output-dir "$tmp_dir" https://storage.googleapis.com/minikube/releases/latest/minikube-darwin-amd64
+                sudo install "$tmp_dir/minikube-darwin-amd64" /usr/local/bin/minikube
+            fi
+            ;;
+        Linux)
+            if [ "$ARCH" = "x86_64" ]; then
+                curl -LO --output-dir "$tmp_dir" https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+                sudo install "$tmp_dir/minikube-linux-amd64" /usr/local/bin/minikube
+            elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+                curl -LO --output-dir "$tmp_dir" https://storage.googleapis.com/minikube/releases/latest/minikube-linux-arm64
+                sudo install "$tmp_dir/minikube-linux-arm64" /usr/local/bin/minikube
+            else
+                echo "Unsupported Linux architecture: $ARCH"
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Unsupported OS: $OS"
+            exit 1
+            ;;
+    esac
+
+    local install_memory_mib=$((install_memory_gib * 1024))
+    minikube config set cpus "$install_cpus"
+    minikube config set memory "$install_memory_mib"
+
+    touch ~/.bashrc
+    if ! grep -q 'alias kubectl="minikube kubectl --"' ~/.bashrc 2>/dev/null; then
+        echo 'alias kubectl="minikube kubectl --"' >> ~/.bashrc
+    fi
+
+    touch ~/.zshrc
+    if ! grep -q 'alias kubectl="minikube kubectl --"' ~/.zshrc 2>/dev/null; then
+        echo 'alias kubectl="minikube kubectl --"' >> ~/.zshrc
+    fi
+
+    local proxy_bypass="localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16"
+    export NO_PROXY="$proxy_bypass"
+    export no_proxy="$proxy_bypass"
+
+    for rc in ~/.bashrc ~/.zshrc; do
+        if ! grep -q 'NO_PROXY=.*192\.168\.0\.0' "$rc" 2>/dev/null; then
+            cat >> "$rc" <<RCEOF
+
+export NO_PROXY="$proxy_bypass"
+export no_proxy="$proxy_bypass"
+RCEOF
+        fi
+    done
+
+    mkdir -p ~/.minikube/certs/
+    cp "$certs_dir"/*.crt ~/.minikube/certs/ 2>/dev/null || true
+
+    minikube_start
+    fix_container_config
+    kctl config view --minify
+
+    minikube addons enable csi-hostpath-driver
+    minikube addons enable ingress
+    minikube addons enable ingress-dns
+}
+
+########################################
+# Subcommand: minikube delete
+########################################
+
+cmd_minikube_delete() {
+    local confirm=false
+
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage_minikube_delete; return 0 ;;
+            --confirm) confirm=true ;;
+            *) echo "Unknown option: $arg"; usage_minikube_delete; exit 1 ;;
+        esac
+    done
+
+    if [ "$confirm" = false ]; then
+        echo "ERROR: --confirm flag is required to delete minikube." >&2
+        echo "" >&2
+        usage_minikube_delete >&2
+        return 1
+    fi
+
+    select_driver
+
+    if [ -n "$DRIVER" ]; then
+        echo "Detected available driver: $DRIVER"
+    else
+        echo "No working podman/docker/kvm2 driver detected."
+    fi
+
+    if command -v minikube >/dev/null 2>&1; then
+        minikube delete --all --purge || true
+    else
+        echo "minikube not found; skipping minikube delete."
+    fi
+
+    rm -rf ~/.minikube ~/.kube
+    sudo rm -f /usr/local/bin/minikube
+    sudo rm -f /usr/local/bin/kubectl
+
+    if [ "$CONTAINER_CMD" = "podman" ]; then
+        echo "Using podman for container cleanup..."
+        podman system prune --force
+        podman image prune -a --force
+    elif [ "$CONTAINER_CMD" = "docker" ]; then
+        echo "Using docker for container cleanup..."
+        env -u DOCKER_HOST docker system prune --force
+        env -u DOCKER_HOST docker image prune -a --force
+    else
+        echo "No working container runtime found; skipping container cleanup."
+    fi
+}
+
+########################################
+# Subcommand: minikube (dispatcher)
+########################################
+
+cmd_minikube() {
+    if [ $# -eq 0 ]; then
+        usage_minikube
+        exit 1
+    fi
+
+    local subcmd="$1"
+    shift
+
+    case "$subcmd" in
+        install) cmd_minikube_install "$@" ;;
+        delete)  cmd_minikube_delete "$@" ;;
+        -h|--help) usage_minikube; return 0 ;;
+        *)
+            echo "Unknown minikube subcommand: $subcmd" >&2
+            echo "" >&2
+            usage_minikube >&2
+            exit 1
+            ;;
+    esac
+}
+
+########################################
+# Subcommand: start
+########################################
+
+cmd_start() {
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage_start; return 0 ;;
+        esac
+    done
+
+    select_driver
+    echo "Detected driver: $DRIVER"
+
+    minikube_start
+    fix_container_config
+
+    sleep 30
+
+    # Delete pods stuck in terminal failure states
+    kctl get pods -A --no-headers 2>/dev/null \
+        | grep -E 'CrashLoopBackOff|Error|ImagePullBackOff|ErrImagePull|InvalidImageName' \
+        | awk '{print $2 " -n " $1}' \
+        | while read -r line; do
+            kctl delete pod $line --ignore-not-found 2>/dev/null || true
+        done
+}
+
+########################################
+# Subcommand: stop
+########################################
+
+cmd_stop() {
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage_stop; return 0 ;;
+        esac
+    done
+
+    ensure_minikube_running
+    minikube stop
+}
+
+########################################
+# Subcommand: deploy
+########################################
+
+cmd_deploy() {
+    local cluster_config="$PWD/thorium-cluster.yml"
+    local docker_config="$PWD/.dockerconfigjson"
+    local banner_path="$PWD/banner.txt"
+    local bin_dir="/usr/local/bin"
+    local toolbox_path="$PWD/toolbox.json"
+    local deploy_user="test"
+    local deploy_pass="INSECURE_DEV_PASSWORD"
+    local deploy_registry=false
+    local registry_user=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help) usage_deploy; return 0 ;;
+            --config)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --config requires an argument" >&2; exit 1; fi
+                cluster_config="$1"
+                ;;
+            --docker-config)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --docker-config requires an argument" >&2; exit 1; fi
+                docker_config="$1"
+                ;;
+            --banner)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --banner requires an argument" >&2; exit 1; fi
+                banner_path="$1"
+                ;;
+            --bin)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --bin requires an argument" >&2; exit 1; fi
+                bin_dir="$1"
+                ;;
+            --toolbox)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --toolbox requires an argument" >&2; exit 1; fi
+                toolbox_path="$1"
+                ;;
+            --user)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --user requires an argument" >&2; exit 1; fi
+                deploy_user="$1"
+                ;;
+            --password)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --password requires an argument" >&2; exit 1; fi
+                deploy_pass="$1"
+                ;;
+            --rand-password)
+                deploy_pass=$(generate_password)
+                ;;
+            --registry)
+                deploy_registry=true
+                ;;
+            --registry-user)
+                shift
+                if [ $# -eq 0 ]; then echo "ERROR: --registry-user requires an argument" >&2; exit 1; fi
+                registry_user="$1"
+                deploy_registry=true
+                ;;
+            *) echo "Unknown option: $1"; usage_deploy; exit 1 ;;
+        esac
+        shift
+    done
+
+    local REDIS_PASS PG_PASS SCYLLA_PASS ES_PASS MINIO_AK MINIO_SK THORIUM_SECRET
+    REDIS_PASS=$(generate_password)
+    PG_PASS=$(generate_password)
+    SCYLLA_PASS=$(generate_password)
+    ES_PASS=$(generate_password)
+    MINIO_AK=$(generate_password)
+    MINIO_SK=$(generate_password)
+    THORIUM_SECRET=$(generate_password)
+
+    CURRENT_SECTION="startup"
+    trap 'echo "FATAL: Failed in \"$CURRENT_SECTION\" at line $LINENO (command: $BASH_COMMAND)" >&2' ERR
+
+    ensure_minikube_running
+
+    ########################################
+    # Wait for healthy cluster
+    ########################################
+    CURRENT_SECTION="Wait for healthy cluster"
+    wait_for_healthy_cluster() {
+        kctl wait --for=condition=Ready node/minikube --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l k8s-app=calico-node -n kube-system --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l k8s-app=calico-kube-controllers -n kube-system --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l k8s-app=kube-dns -n kube-system --timeout=120s &&
+        kctl rollout status deployment.apps/coredns -n kube-system --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l app.kubernetes.io/name=csi-hostpath-attacher -n kube-system --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l app.kubernetes.io/name=csi-hostpath-resizer -n kube-system --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l app.kubernetes.io/name=csi-hostpathplugin -n kube-system --timeout=120s &&
+        kctl wait --for=condition=Ready pod -l app.kubernetes.io/component=controller -n ingress-nginx --timeout=120s
+    }
+
+    log "Waiting for cluster to be healthy"
+    max_retries=30
+    retry_delay=10
+    for attempt in $(seq 1 $max_retries); do
+        output=$(wait_for_healthy_cluster 2>&1) && break
+        echo "Cluster not ready yet (attempt $attempt/$max_retries): $(echo "$output" | tail -1)"
+        if [ "$attempt" -eq "$max_retries" ]; then
+            echo "Cluster did not become ready after $max_retries attempts"
+            echo "$output" >&2
+            exit 1
+        fi
+        sleep "$retry_delay"
+    done
+
+    ########################################
+    # Helm setup
+    ########################################
+    CURRENT_SECTION="Helm setup"
+
+    if ! command -v helm &>/dev/null; then
+        log "Installing Helm"
+        local helm_script
+        helm_script=$(mktemp)
+        curl -fsSL -o "$helm_script" https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 "$helm_script"
+        "$helm_script"
+        rm -f "$helm_script"
+    else
+        log "Helm already installed, skipping download"
+    fi
+
+    log "Adding Helm repos"
+    helm repo add --force-update jetstack https://charts.jetstack.io
+    helm repo add --force-update scylla https://scylla-operator-charts.storage.googleapis.com/stable
+    helm repo add --force-update elastic https://helm.elastic.co
+    helm repo add --force-update quickwit https://helm.quickwit.io
+    helm repo update
+
+    ########################################
+    # Redis
+    ########################################
+    CURRENT_SECTION="Redis"
+    log "Deploying Redis"
+    kctl apply -f - <<EOF
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-conf
+  namespace: redis
+type: Opaque
+stringData:
+  redis.conf: |
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    daemonize no
+    supervised no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+    databases 16
+    always-show-logo yes
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump2.rdb
+    dir /data
+    requirepass $REDIS_PASS
+    appendonly no
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    lua-time-limit 5000
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    latency-monitor-threshold 0
+    notify-keyspace-events ""
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    hz 10
+    dynamic-hz yes
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+    jemalloc-bg-thread yes
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-persistent-storage-claim
+  namespace: redis
+spec:
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 16Gi
+  accessModes:
+  - ReadWriteOnce
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: redis
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: docker.io/redis:7
+          imagePullPolicy: Always
+          command: ["redis-server", "/var/lib/redis/redis.conf"]
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - mountPath: "/data"
+              name: redis-data
+            - mountPath: "/var/lib/redis/"
+              name: redis-conf
+      volumes:
+        - name: redis-conf
+          secret:
+            secretName: redis-conf
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-persistent-storage-claim
+EOF
+
+    ########################################
+    # Elasticsearch
+    ########################################
+    CURRENT_SECTION="Elasticsearch"
+
+    log "Deploying ECK Operator"
+    helm upgrade --install elastic-operator elastic/eck-operator \
+        --namespace elastic-system --create-namespace
+    wait_for_rollout statefulset/elastic-operator elastic-system 300
+
+    log "Deploying Elasticsearch and Kibana"
+    kctl apply -f - <<'EOF'
+---
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elastic
+  namespace: elastic-system
+spec:
+  version: 8.19.2
+  volumeClaimDeletePolicy: DeleteOnScaledownOnly
+  nodeSets:
+  - name: default
+    count: 1
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          env:
+          - name: ES_JAVA_OPTS
+            value: -Xms1g -Xmx1g
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 1
+              memory: 2Gi
+    volumeClaimTemplates:
+      - metadata:
+          name: elasticsearch-data
+        spec:
+          storageClassName: csi-hostpath-sc
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 32Gi
+    config:
+      node.store.allow_mmap: true
+      http.max_content_length: 1024mb
+---
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: elastic
+  namespace: elastic-system
+spec:
+  version: 8.19.2
+  count: 1
+  elasticsearchRef:
+    name: elastic
+  podTemplate:
+    spec:
+      containers:
+      - name: kibana
+        resources:
+          requests:
+            cpu: 0
+            memory: 0
+          limits:
+            cpu: 1
+            memory: "1Gi"
+EOF
+
+    ########################################
+    # Scylla
+    ########################################
+    CURRENT_SECTION="Scylla"
+
+    log "Deploying cert-manager"
+    helm upgrade --install cert-manager jetstack/cert-manager \
+        --namespace cert-manager --create-namespace \
+        --set crds.enabled=true
+    kctl wait --for condition=established \
+        crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s
+    kctl -n cert-manager rollout status deployment.apps/cert-manager-webhook -w --timeout=120s
+
+    log "Deploying Scylla Operator"
+    helm upgrade --install scylla-operator scylla/scylla-operator \
+        --namespace scylla-operator --create-namespace
+    kctl wait --for condition=established \
+        crd/scyllaclusters.scylla.scylladb.com --timeout=120s
+    kctl -n scylla-operator rollout status deployment.apps/scylla-operator -w --timeout=120s
+    kctl -n scylla-operator rollout status deployment.apps/webhook-server -w --timeout=120s
+    sleep 10
+
+    log "Deploying Scylla Cluster"
+    kctl apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scylla
+EOF
+    kctl create secret generic scylla-auth-token -n scylla \
+        --from-literal=auth-token.yaml='auth_token: dummy-minithor-token' \
+        --dry-run=client -o yaml | kctl apply -f -
+    kctl apply -f - <<'EOF'
+---
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: scylla
+  namespace: scylla
+spec:
+  version: 6.2.3
+  agentVersion: 3.4.2
+  developerMode: true
+  datacenter:
+    name: us-east-1
+    racks:
+      - name: us-east-1a
+        scyllaConfig: "scylla-config"
+        scyllaAgentConfig: "scylla-agent-config"
+        members: 1
+        storage:
+          capacity: 32Gi
+          storageClassName: csi-hostpath-sc
+        resources:
+          requests:
+            cpu: 0
+            memory: 0
+          limits:
+            cpu: 2
+            memory: 4Gi
+        volumes:
+          - name: coredumpfs
+            hostPath:
+              path: /tmp/coredumps
+        volumeMounts:
+          - mountPath: /tmp/coredumps
+            name: coredumpfs
+EOF
+    wait_for_resource statefulset scylla-us-east-1-us-east-1a scylla 300
+    wait_for_rollout statefulset/scylla-us-east-1-us-east-1a scylla 600
+
+    kctl apply -f - <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scylla-config
+  namespace: scylla
+data:
+  scylla.yaml: |
+    num_tokens: 256
+    commitlog_sync: periodic
+    commitlog_sync_period_in_ms: 10000
+    commitlog_segment_size_in_mb: 32
+    seed_provider:
+        - class_name: org.apache.cassandra.locator.SimpleSeedProvider
+          parameters:
+              - seeds: "127.0.0.1"
+    listen_address: 0.0.0.0
+    broadcast_address: 10.233.13.110
+    native_transport_port: 9042
+    native_shard_aware_transport_port: 19042
+    read_request_timeout_in_ms: 5000
+    write_request_timeout_in_ms: 2000
+    cas_contention_timeout_in_ms: 1000
+    endpoint_snitch: SimpleSnitch
+    rpc_address: localhost
+    rpc_port: 9160
+    api_port: 10000
+    api_address: 127.0.0.1
+    batch_size_warn_threshold_in_kb: 128
+    batch_size_fail_threshold_in_kb: 1024
+    authenticator: PasswordAuthenticator
+    authorizer: CassandraAuthorizer
+    partitioner: org.apache.cassandra.dht.Murmur3Partitioner
+    commitlog_total_space_in_mb: -1
+    developer_mode: true
+    murmur3_partitioner_ignore_msb_bits: 12
+    force_schema_commit_log: true
+EOF
+    kctl rollout restart -n scylla statefulset.apps/scylla-us-east-1-us-east-1a
+    wait_for_rollout statefulset/scylla-us-east-1-us-east-1a scylla 600
+
+    ########################################
+    # MinIO
+    ########################################
+    CURRENT_SECTION="MinIO"
+    log "Deploying MinIO"
+    kctl apply -f - <<EOF
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: minio
+  labels:
+    app: minio
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          resources:
+            requests:
+              cpu: 256m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          command:
+            - /bin/bash
+            - -c
+          args:
+            - minio server /data
+          volumeMounts:
+            - mountPath: /data
+              name: minio-data
+          env:
+            - name: MINIO_ACCESS_KEY
+              value: "$MINIO_AK"
+            - name: MINIO_SECRET_KEY
+              value: "$MINIO_SK"
+  volumeClaimTemplates:
+    - metadata:
+        name: minio-data
+      spec:
+        storageClassName: csi-hostpath-sc
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  selector:
+    app: minio
+  ports:
+  - port: 9000
+    targetPort: 9000
+    name: minio-web
+    protocol: TCP
+  type: ClusterIP
+EOF
+
+    ########################################
+    # Jaeger
+    ########################################
+    CURRENT_SECTION="Jaeger"
+    log "Deploying Jaeger"
+    kctl apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jaeger
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: jaeger
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+  - name: jaeger
+    port: 16686
+    targetPort: 16686
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jaeger
+  namespace: jaeger
+  labels:
+    app: jaeger
+spec:
+  serviceName: jaeger
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/jaeger-query:latest
+          imagePullPolicy: Always
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: "grpc"
+            - name: GRPC_STORAGE_SERVER
+              value: "quickwit-searcher.quickwit.svc.cluster.local:7281"
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 1
+              memory: 1Gi
+EOF
+
+    ########################################
+    # Kubegres + Quickwit
+    ########################################
+    CURRENT_SECTION="Kubegres + Quickwit"
+
+    log "Deploying Kubegres"
+    kctl apply -f https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml
+    wait_for_rollout deployment.apps/kubegres-controller-manager kubegres-system 300
+
+    log "Deploying Quickwit Postgres"
+    kctl apply -f - <<EOF
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quickwit
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-cluster-auth
+  namespace: quickwit
+type: Opaque
+stringData:
+  superUserPassword: $PG_PASS
+  replicationUserPassword: $PG_PASS
+---
+apiVersion: kubegres.reactive-tech.io/v1
+kind: Kubegres
+metadata:
+  name: postgres
+  namespace: quickwit
+spec:
+  replicas: 1
+  image: docker.io/postgres:17
+  database:
+    storageClassName: csi-hostpath-sc
+    size: 32Gi
+  resources:
+    requests:
+      memory: "0"
+      cpu: "0"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  env:
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-cluster-auth
+          key: superUserPassword
+    - name: POSTGRES_REPLICATION_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: postgres-cluster-auth
+          key: replicationUserPassword
+EOF
+    wait_for_resource statefulset postgres-1 quickwit 120
+    wait_for_rollout statefulset/postgres-1 quickwit 120
+
+    log "Creating Quickwit metastore database"
+    kctl -n quickwit exec pod/postgres-1-0 -- \
+        /bin/bash -c "PGPASSWORD=$PG_PASS psql -U postgres -c \"SELECT 1 FROM pg_database WHERE datname='quickwit-metastore'\" | grep -q 1 || PGPASSWORD=$PG_PASS createdb -U postgres quickwit-metastore"
+
+    log "Deploying Quickwit"
+    QUICKWIT_VALUES=$(mktemp)
+    cat > "$QUICKWIT_VALUES" <<EOF
+image:
+  repository: docker.io/quickwit/quickwit
+  pullPolicy: IfNotPresent
+
+config:
+  default_index_root_uri: s3://quickwit/quickwit-indexes
+  metastore_uri: postgres://postgres:$PG_PASS@postgres.quickwit.svc.cluster.local:5432/quickwit-metastore
+  storage:
+    s3:
+      flavor: minio
+      region: default
+      endpoint: http://minio.minio.svc.cluster.local:9000
+      force_path_style_access: true
+      access_key_id: "$MINIO_AK"
+      secret_access_key: "$MINIO_SK"
+
+metastore:
+  replicaCount: 1
+
+searcher:
+  replicaCount: 1
+EOF
+    helm upgrade --install quickwit quickwit/quickwit -n quickwit -f "$QUICKWIT_VALUES"
+    rm -f "$QUICKWIT_VALUES"
+
+    ########################################
+    # Wait for all rollouts
+    ########################################
+    CURRENT_SECTION="Wait for all rollouts"
+    log "Waiting for all services"
+    wait_for_rollout statefulset/scylla-us-east-1-us-east-1a scylla 600
+    wait_for_rollout statefulset/minio minio 300
+    wait_for_rollout statefulset/redis redis 300
+    wait_for_rollout statefulset/postgres-1 quickwit 300
+    wait_for_rollout statefulset/quickwit-searcher quickwit 300
+    wait_for_rollout statefulset/quickwit-indexer quickwit 300
+
+    ########################################
+    # Post-deploy configuration
+    ########################################
+    CURRENT_SECTION="Post-deploy configuration"
+
+    ### Scylla DB init
+    log "Configuring Scylla"
+    kctl -n scylla exec -i --tty=false pod/scylla-us-east-1-us-east-1a-0 -c scylla -- /bin/bash <<EOF
+HOST='scylla-us-east-1-us-east-1a-0.scylla.svc.cluster.local'
+
+# Determine which credentials work: cassandra (first run) or thorium (redeploy)
+if cqlsh "\$HOST" -u cassandra -p cassandra -e "DESCRIBE CLUSTER" &>/dev/null; then
+    AUTH_USER=cassandra
+    AUTH_PASS=cassandra
+else
+    AUTH_USER=thorium
+    AUTH_PASS=\$SCYLLA_PASS
+fi
+
+cqlsh "\$HOST" -u "\$AUTH_USER" -p "\$AUTH_PASS" -e "CREATE ROLE IF NOT EXISTS admin WITH SUPERUSER = true"
+cqlsh "\$HOST" -u "\$AUTH_USER" -p "\$AUTH_PASS" -e "CREATE ROLE IF NOT EXISTS thorium WITH PASSWORD = '$SCYLLA_PASS' AND LOGIN = true AND SUPERUSER = true"
+cqlsh "\$HOST" -u "\$AUTH_USER" -p "\$AUTH_PASS" -e "GRANT admin TO thorium" 2>/dev/null || true
+cqlsh "\$HOST" -u "\$AUTH_USER" -p "\$AUTH_PASS" -e "CREATE KEYSPACE IF NOT EXISTS thorium WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1}"
+cqlsh "\$HOST" -u "\$AUTH_USER" -p "\$AUTH_PASS" -e "GRANT ALL ON KEYSPACE thorium TO thorium" 2>/dev/null || true
+cqlsh "\$HOST" -u "\$AUTH_USER" -p "\$AUTH_PASS" -e "GRANT CREATE ON ALL KEYSPACES TO thorium" 2>/dev/null || true
+
+# Drop default cassandra role on first run only
+if [ "\$AUTH_USER" = "cassandra" ]; then
+    cqlsh "\$HOST" -u thorium -p $SCYLLA_PASS -e "DROP ROLE IF EXISTS cassandra"
+fi
+EOF
+
+    ### Elastic index/role/user
+    log "Configuring Elasticsearch"
+    ESPASS=$(kctl get secret -n elastic-system elastic-es-elastic-user -o go-template='{{index .data "elastic" | base64decode}}')
+    kctl -n elastic-system exec -i --tty=false pod/elastic-es-default-0 -- /bin/bash <<ESEOF
+# Create index (ignore 400 = already exists)
+HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' -k -X PUT -u elastic:$ESPASS "https://localhost:9200/thorium")
+if [ "\$HTTP_CODE" = "200" ]; then
+    echo "Elasticsearch index 'thorium' created"
+elif [ "\$HTTP_CODE" = "400" ]; then
+    echo "Elasticsearch index 'thorium' already exists, skipping"
+else
+    echo "WARNING: Unexpected HTTP \$HTTP_CODE creating Elasticsearch index"
+fi
+
+curl -k -X POST -u elastic:$ESPASS "https://localhost:9200/_security/role/thorium?pretty" -H 'Content-Type: application/json' -d'
+{
+  "indices": [
+    {
+      "names": ["thorium*"],
+      "privileges": ["all"]
+    }
+  ]
+}
+'
+curl -k -X POST -u elastic:$ESPASS "https://localhost:9200/_security/user/thorium?pretty" -H 'Content-Type: application/json' -d'
+{
+  "password" : "$ES_PASS",
+  "roles" : ["thorium"],
+  "full_name" : "Thorium",
+  "email" : "thorium@localhost"
+}
+'
+ESEOF
+
+    ### MinIO quickwit bucket
+    log "Creating Quickwit S3 bucket"
+    kctl delete job create-quickwit-bucket -n minio --ignore-not-found
+    kctl apply -f - <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-quickwit-bucket
+  namespace: minio
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: mc
+        image: minio/mc:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mc alias set myminio http://minio.minio.svc.cluster.local:9000 $MINIO_AK $MINIO_SK
+          mc mb --ignore-existing myminio/quickwit
+EOF
+    kctl wait --for=condition=complete job/create-quickwit-bucket -n minio --timeout=120s
+
+    ########################################
+    # Thorium
+    ########################################
+    CURRENT_SECTION="Thorium deployment"
+
+    log "Deploying Thorium"
+    kctl create ns thorium --dry-run=client -o yaml | kctl apply -f -
+
+    local banner_file="$banner_path"
+    local banner_tmp=""
+    if [ ! -f "$banner_file" ]; then
+        banner_tmp=$(mktemp)
+        echo "Welcome to Thorium. <Please place your banner here>" > "$banner_tmp"
+        banner_file="$banner_tmp"
+    fi
+    kctl create cm banner --from-file="banner.txt=$banner_file" -n thorium \
+        --dry-run=client -o yaml | kctl apply -f -
+    [ -n "$banner_tmp" ] && rm -f "$banner_tmp"
+    kctl apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: thorium
+  namespace: thorium
+imagePullSecrets:
+  - name: registry-token
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thorium-account-token
+  namespace: thorium
+  annotations:
+    kubernetes.io/service-account.name: thorium
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: thorium-operator
+rules:
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["sandia.gov"]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["events.k8s.io"]
+  resources: ["events"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services", "secrets", "configmaps", "nodes", "namespaces", "events"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: thorium-operator-binding
+subjects:
+- kind: ServiceAccount
+  name: thorium
+  namespace: thorium
+roleRef:
+  kind: ClusterRole
+  name: thorium-operator
+  apiGroup: "rbac.authorization.k8s.io"
+EOF
+
+    if [ -f "$docker_config" ]; then
+        kctl create secret docker-registry registry-token -n thorium \
+            --from-file=".dockerconfigjson=$docker_config" \
+            --dry-run=client -o yaml | kctl apply -f -
+        kctl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: thorium
+  labels:
+    app: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+        app: operator
+    spec:
+      serviceAccountName: thorium
+      automountServiceAccountToken: true
+      containers:
+        - name: operator
+          image: ghcr.io/cisagov/thorium/infrastructure/thorium:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: 0
+              cpu: 0
+            limits:
+              memory: 1Gi
+              cpu: 256m
+          env:
+            - name: "http_proxy"
+            - name: "https_proxy"
+            - name: "HTTP_PROXY"
+            - name: "HTTPS_PROXY"
+      imagePullSecrets:
+      - name: registry-token
+EOF
+    else
+        kctl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: thorium
+  labels:
+    app: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+        app: operator
+    spec:
+      serviceAccountName: thorium
+      automountServiceAccountToken: true
+      containers:
+        - name: operator
+          image: ghcr.io/cisagov/thorium/infrastructure/thorium:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: 0
+              cpu: 0
+            limits:
+              memory: 1Gi
+              cpu: 256m
+          env:
+            - name: "http_proxy"
+            - name: "https_proxy"
+            - name: "HTTP_PROXY"
+            - name: "HTTPS_PROXY"
+EOF
+    fi
+
+    kctl apply -f - <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: thorium-default-ingress
+  namespace: thorium
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: localhost
+      http:
+        paths:
+          - path: "/"
+            pathType: Prefix
+            backend:
+              service:
+                name: thorium-api
+                port:
+                  number: 80
+EOF
+
+    wait_for_rollout deployment.apps/operator thorium 300
+
+    ########################################
+    # ThoriumCluster CRD
+    ########################################
+    CURRENT_SECTION="ThoriumCluster CRD"
+    log "Creating ThoriumCluster resource"
+    if [ -f "$cluster_config" ]; then
+        kctl apply -f "$cluster_config" -n thorium
+    else
+        echo "No cluster config found at $cluster_config, using built-in default" >&2
+        local default_config
+        default_config=$(mktemp)
+        cat > "$default_config" <<DEFEOF
+apiVersion: sandia.gov/v1
+kind: ThoriumCluster
+metadata:
+  name: dev
+  namespace: thorium
+spec:
+  registry: "ghcr.io/gabaker/thorium/infrastructure/thorium"
+  version: "FixMinithorDeploy"
+  image_pull_policy: Always
+  components:
+    api:
+      replicas: 1
+      resources:
+        cpu: 0
+        memory: 0
+    scaler:
+      service_account: true
+      resources:
+        cpu: 0
+        memory: 0
+    search_streamer:
+      resources:
+        cpu: 0
+        memory: 0
+      cmd:
+        - "/app/thorium-search-streamer"
+      args:
+        - "--config"
+        - "/conf/thorium.yml"
+        - "--keys"
+        - "/keys/keys.yml"
+    event_handler:
+      resources:
+        cpu: 0
+        memory: 0
+  config:
+    thorium:
+      secret_key: "$THORIUM_SECRET"
+      tracing:
+        external:
+          Grpc:
+            endpoint: "http://quickwit-indexer.quickwit.svc.cluster.local:7281"
+            level: "Info"
+        local:
+          level: "Info"
+      cors:
+        insecure: true
+      files:
+        bucket: "thorium-files"
+        earliest: 1610596807
+        partition_size: 3600
+      repos:
+        bucket: "thorium-repos"
+        partition_size: 3600
+      attachments:
+        bucket: "thorium-attachments"
+      results:
+        bucket: "thorium-results"
+        earliest: 1610596807
+        partition_size: 3600
+      ephemeral:
+        bucket: "thorium-ephemeral"
+      s3:
+        access_key: "$MINIO_AK"
+        secret_token: "$MINIO_SK"
+        endpoint: "http://minio.minio.svc.cluster.local:9000"
+        region: "us-east-1"
+        use_path_style: true
+      auth:
+      scaler:
+        crane:
+          insecure: true
+        k8s:
+          clusters:
+            kubernetes-admin@cluster.local:
+              alias: "dev"
+              nodes:
+                - "minikube"
+    redis:
+      host: "redis.redis.svc.cluster.local"
+      port: 6379
+      password: "$REDIS_PASS"
+    scylla:
+      nodes:
+        - "scylla-client.scylla.svc.cluster.local"
+      replication: 1
+      auth:
+        username: "thorium"
+        password: "$SCYLLA_PASS"
+    elastic:
+      node: "https://elastic-es-http.elastic-system.svc.cluster.local:9200"
+      username: "thorium"
+      password: "$ES_PASS"
+      results:
+        repos: thorium_repo_results
+        samples: thorium_sample_results
+      tags:
+        repos: thorium_repo_tags
+        samples: thorium_sample_tags
+DEFEOF
+        kctl apply -f "$default_config" -n thorium
+        rm -f "$default_config"
+    fi
+
+    ########################################
+    # Wait for Thorium components
+    ########################################
+    CURRENT_SECTION="Wait for Thorium components"
+
+    log "Waiting for Thorium components to start"
+
+    echo "Waiting for API deployment..."
+    wait_for_resource deployment api thorium 300
+    wait_for_rollout deployment.apps/api thorium 300
+
+    echo "Waiting for scaler deployment..."
+    wait_for_resource deployment scaler thorium 300
+    wait_for_rollout deployment.apps/scaler thorium 300
+
+    echo "Waiting for event-handler deployment..."
+    wait_for_resource deployment event-handler thorium 300
+    wait_for_rollout deployment.apps/event-handler thorium 300
+
+    echo "Waiting for search-streamer deployment..."
+    wait_for_resource deployment search-streamer thorium 300
+    wait_for_rollout deployment.apps/search-streamer thorium 300
+
+    log "All Thorium components are running"
+
+    ########################################
+    # Create test user
+    ########################################
+    CURRENT_SECTION="Create test user"
+    log "Creating test admin user"
+    API_POD=$(kctl get pod -n thorium -l app=api -o jsonpath='{.items[0].metadata.name}')
+    CREATE_RESP=$(kctl -n thorium exec -i "pod/$API_POD" -- \
+        curl -s -w '\n%{http_code}' -X POST http://localhost/api/users/ \
+        -H 'Content-Type: application/json' \
+        -H "secret-key: $THORIUM_SECRET" \
+        -d "{\"username\":\"$deploy_user\",\"password\":\"$deploy_pass\",\"email\":\"${deploy_user}@localhost\",\"role\":\"Admin\",\"local\":true,\"skip_verification\":true}")
+    HTTP_CODE=$(echo "$CREATE_RESP" | tail -1)
+    BODY=$(echo "$CREATE_RESP" | sed '$d')
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo "Admin user created successfully"
+        echo "  Username: $deploy_user"
+        echo "  Password: $deploy_pass"
+    elif echo "$BODY" | grep -q "already exists"; then
+        echo "Test admin user already exists, skipping"
+    else
+        echo "WARNING: Failed to create test user (HTTP $HTTP_CODE): $BODY"
+    fi
+
+    ########################################
+    # Install thorctl & import toolbox
+    ########################################
+    CURRENT_SECTION="Install thorctl & import toolbox"
+
+    log "Installing thorctl"
+
+    pkill -f 'port-forward svc/thorium-api' 2>/dev/null || true
+
+    PF_PORT=8080
+    kctl -n thorium port-forward svc/thorium-api "$PF_PORT":80 &
+    PF_PID=$!
+    trap 'kill $PF_PID 2>/dev/null; kill -9 $PF_PID 2>/dev/null; pkill -9 -f "port-forward svc/thorium-api" 2>/dev/null || true' EXIT
+    wait_for_port_forward "$PF_PORT" 20
+
+    THORCTL_URL="http://localhost:$PF_PORT"
+
+    local thorctl_os thorctl_hw
+    thorctl_os=$(uname -s | awk '{print tolower($0)}')
+    thorctl_hw=$(uname -m | tr '_' '-')
+
+    THORCTL_BIN="$bin_dir/thorctl"
+    echo "Downloading thorctl to $THORCTL_BIN for $thorctl_os/$thorctl_hw..."
+    sudo curl -sf "$THORCTL_URL/api/binaries/$thorctl_os/$thorctl_hw/thorctl" -o "$THORCTL_BIN"
+    sudo chmod +x "$THORCTL_BIN"
+
+    log "Logging into Thorium via thorctl"
+    "$THORCTL_BIN" login "$THORCTL_URL" --user "$deploy_user" --password "$deploy_pass"
+
+    log "Creating 'static' group and 'allow-all' network policy"
+    BASIC_AUTH=$(echo -n "$deploy_user:$deploy_pass" | base64)
+    kctl -n thorium exec -i "pod/$API_POD" -- \
+        curl -sf -X POST http://localhost/api/groups/ \
+        -H "Authorization: Basic $BASIC_AUTH" \
+        -H 'Content-Type: application/json' \
+        -d '{"name":"static"}' || true
+    kctl -n thorium exec -i "pod/$API_POD" -- \
+        curl -sf -X POST http://localhost/api/network-policies \
+        -H "Authorization: Basic $BASIC_AUTH" \
+        -H 'Content-Type: application/json' \
+        -d '{"name":"allow-all","groups":["static"],"ingress":[],"egress":null,"forced_policy":false,"default_policy":false}' || true
+
+    log "Importing toolbox"
+    curl -o "$toolbox_path" https://raw.githubusercontent.com/cisagov/thorium/refs/heads/main/tools/toolbox.json
+    echo "Toolbox downloaded to $toolbox_path"
+    "$THORCTL_BIN" toolbox import "$toolbox_path" -y
+
+    ########################################
+    # Optional: Container Registry
+    ########################################
+    if [ "$deploy_registry" = true ]; then
+        CURRENT_SECTION="Container Registry"
+        log "Deploying Container Registry"
+
+        local reg_auth_env=""
+        local reg_auth_vol=""
+        local reg_auth_mount=""
+        local reg_auth_config=""
+        local REGISTRY_PASS=""
+
+        if [ -n "$registry_user" ]; then
+            REGISTRY_PASS=$(generate_password)
+            echo "Configuring registry basic auth for user '$registry_user'..."
+
+            local htpasswd_entry
+            htpasswd_entry=$(kctl run htpasswd-gen --rm -i --restart=Never \
+                --image=docker.io/httpd:2-alpine \
+                -- htpasswd -Bbn "$registry_user" "$REGISTRY_PASS" 2>/dev/null \
+                | grep -v '^pod ' | tr -d '\r')
+
+            kctl create secret generic registry-auth -n thorium \
+                --from-literal=htpasswd="$htpasswd_entry" \
+                --from-literal=username="$registry_user" \
+                --from-literal=password="$REGISTRY_PASS" \
+                --dry-run=client -o yaml | kctl apply -f -
+
+            reg_auth_config='
+    auth:
+      htpasswd:
+        realm: "Thorium Registry"
+        path: /auth/htpasswd'
+            reg_auth_env='
+            - name: REGISTRY_AUTH
+              value: "htpasswd"
+            - name: REGISTRY_AUTH_HTPASSWD_REALM
+              value: "Thorium Registry"
+            - name: REGISTRY_AUTH_HTPASSWD_PATH
+              value: "/auth/htpasswd"'
+            reg_auth_vol='
+        - name: auth
+          secret:
+            secretName: registry-auth
+            items:
+              - key: htpasswd
+                path: htpasswd'
+            reg_auth_mount='
+            - name: auth
+              mountPath: /auth
+              readOnly: true'
+        fi
+
+        kctl apply -f - <<REGEOF
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-config
+  namespace: thorium
+data:
+  config.yml: |
+    version: 0.1
+    log:
+      fields:
+        service: registry
+    storage:
+      filesystem:
+        rootdirectory: /var/lib/registry
+      delete:
+        enabled: true
+    http:
+      addr: :5000
+      headers:
+        X-Content-Type-Options: [nosniff]${reg_auth_config}
+    health:
+      storagedriver:
+        enabled: true
+        interval: 10s
+        threshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: thorium
+  labels:
+    app: registry
+spec:
+  type: ClusterIP
+  selector:
+    app: registry
+  ports:
+  - name: registry
+    port: 5000
+    targetPort: 5000
+    protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: registry
+  namespace: thorium
+  labels:
+    app: registry
+spec:
+  serviceName: registry
+  replicas: 1
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      containers:
+        - name: registry
+          image: docker.io/registry:2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: registry
+          env:
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: "/var/lib/registry"${reg_auth_env}
+          resources:
+            requests:
+              cpu: 0
+              memory: 0
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: registry-data
+              mountPath: /var/lib/registry
+            - name: config
+              mountPath: /etc/docker/registry
+              readOnly: true${reg_auth_mount}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: registry-config${reg_auth_vol}
+  volumeClaimTemplates:
+    - metadata:
+        name: registry-data
+        labels:
+          app: registry
+      spec:
+        storageClassName: csi-hostpath-sc
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+REGEOF
+
+        wait_for_rollout statefulset/registry thorium 180
+
+        log "Verifying registry"
+        local catalog_response
+        catalog_response=$(kctl -n thorium exec "pod/registry-0" -- \
+            wget -qO- "http://localhost:5000/v2/_catalog" 2>/dev/null) || true
+        if echo "$catalog_response" | grep -q "repositories"; then
+            echo "Registry is healthy: $catalog_response"
+        else
+            echo "Registry is up (auth may be required for catalog access)"
+        fi
+
+        if [ -n "$registry_user" ]; then
+            echo ""
+            echo "Registry auth credentials:"
+            echo "  Username: $registry_user"
+            echo "  Password: $REGISTRY_PASS"
+        fi
+
+        echo ""
+        echo "Registry:"
+        echo "  Internal (Thorium): registry.thorium.svc.cluster.local:5000"
+        echo "  External (host):    localhost:5000  (requires 'minithor expose')"
+    fi
+
+    log "Deployment complete!"
+    echo ""
+    echo "Access Thorium:"
+    echo "  1. Run 'minithor expose' in a separate terminal"
+    echo "  2. Open http://localhost:8080 in your browser"
+    echo "  3. Login with username '$deploy_user' and password '$deploy_pass'"
+    echo "  4. Service passwords were randomly generated — run 'minithor get-config' to view"
+}
+
+########################################
+# Subcommand: get-config
+########################################
+
+cmd_get_config() {
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage_get_config; return 0 ;;
+        esac
+    done
+
+    ensure_minikube_running
+
+    local output="${HOME}/thorium.yml"
+
+    echo "Extracting Thorium config from cluster secret..."
+    kctl get secret thorium -n thorium \
+        -o go-template='{{index .data "thorium.yml" | base64decode}}' \
+        > "$output"
+
+    echo "Config written to $output"
+}
+
+########################################
+# Subcommand: expose
+########################################
+
+cmd_expose() {
+    local DEV_MODE=false
+    local STOP_MODE=false
+    local STATUS_MODE=false
+    local API_PORT=8080
+    local CURRENT_USER
+    CURRENT_USER="$(id -un)"
+    local LOG_DIR="/tmp/minithor-expose-logs"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dev)    DEV_MODE=true ;;
+            --stop)   STOP_MODE=true ;;
+            --status) STATUS_MODE=true ;;
+            --port)
+                shift
+                if [ $# -eq 0 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
+                    echo "ERROR: --port requires a numeric argument" >&2
+                    exit 1
+                fi
+                API_PORT="$1"
+                ;;
+            -h|--help) usage_expose; return 0 ;;
+            *) echo "Unknown option: $1"; usage_expose; exit 1 ;;
+        esac
+        shift
+    done
+
+    # Ensure minikube IP bypasses any configured HTTP proxy
+    if [ -n "${HTTP_PROXY:-}${HTTPS_PROXY:-}${http_proxy:-}${https_proxy:-}" ]; then
+        local minikube_ip
+        minikube_ip=$(minikube ip 2>/dev/null || true)
+        if [ -n "$minikube_ip" ]; then
+            export NO_PROXY="${NO_PROXY:+$NO_PROXY,}$minikube_ip"
+            export no_proxy="${no_proxy:+$no_proxy,}$minikube_ip"
+        fi
+    fi
+
+    ensure_minikube_running
+    mkdir -p "$LOG_DIR"
+
+    ########################################
+    # Process inspection helpers
+    ########################################
+
+    find_forwards() {
+        ps -eo user:20,pid,args 2>/dev/null \
+            | grep 'minikube kubectl.*[p]ort-forward svc/' \
+            || true
+    }
+
+    parse_service() {
+        echo "$1" | grep -oP 'svc/\K[^ ]+'
+    }
+
+    parse_ports() {
+        echo "$1" | grep -oP '(\d+:\d+|\d+)(?=\s*$)'
+    }
+
+    kill_process() {
+        local pid=$1 owner=$2
+        if [ "$owner" = "$CURRENT_USER" ]; then
+            pkill -P "$pid" 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
+        else
+            echo "  Port-forward owned by $owner, using sudo to stop"
+            sudo pkill -P "$pid" 2>/dev/null || true
+            sudo kill "$pid" 2>/dev/null || true
+        fi
+    }
+
+    is_forward_alive() {
+        local service=$1
+        find_forwards | grep -q "svc/$service"
+    }
+
+    stop_forward() {
+        local service=$1
+        local line owner pid
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            owner=$(echo "$line" | awk '{print $1}')
+            pid=$(echo "$line" | awk '{print $2}')
+            kill_process "$pid" "$owner"
+            echo "Stopped $service (PID $pid, owner $owner)"
+        done < <(find_forwards | grep "svc/$service")
+    }
+
+    stop_all() {
+        local found=false
+        local line owner pid service
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            found=true
+            owner=$(echo "$line" | awk '{print $1}')
+            pid=$(echo "$line" | awk '{print $2}')
+            service=$(parse_service "$line")
+            kill_process "$pid" "$owner"
+            echo "Stopped $service (PID $pid, owner $owner)"
+        done < <(find_forwards)
+        if [ "$found" = false ]; then
+            echo "No port-forwards running"
+        fi
+    }
+
+    show_status() {
+        local found=false
+        local line owner pid service ports
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            found=true
+            owner=$(echo "$line" | awk '{print $1}')
+            pid=$(echo "$line" | awk '{print $2}')
+            service=$(parse_service "$line")
+            ports=$(parse_ports "$line")
+            echo "  $service: running as $owner (PID $pid) -> $ports"
+        done < <(find_forwards)
+        if [ "$found" = false ]; then
+            echo "  No port-forwards running"
+        fi
+    }
+
+    start_forward() {
+        local name=$1 namespace=$2 service=$3
+        shift 3
+        local ports=("$@")
+
+        if is_forward_alive "$service"; then
+            local existing
+            existing=$(find_forwards | grep "svc/$service" | head -1)
+            local owner pid
+            owner=$(echo "$existing" | awk '{print $1}')
+            pid=$(echo "$existing" | awk '{print $2}')
+            echo "  $name: already running as $owner (PID $pid), skipping"
+            return
+        fi
+
+        if ! kctl get svc "$service" -n "$namespace" &>/dev/null; then
+            echo "  $name: SKIPPED (service $service not found in namespace $namespace)"
+            return 1
+        fi
+
+        # Kill any stale process holding the local port
+        local local_port="${ports[0]%%:*}"
+        local stale_pid stale_owner
+        if command -v ss &>/dev/null; then
+            stale_pid=$(ss -tlnp "sport = :$local_port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1 || true)
+        else
+            stale_pid=$(lsof -nP -ti "TCP:$local_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
+        fi
+        if [ -n "$stale_pid" ]; then
+            stale_owner=$(ps -o user= -p "$stale_pid" 2>/dev/null | awk '{print $1}' || true)
+            echo "  $name: killing stale process on port $local_port (PID $stale_pid, owner ${stale_owner:-unknown})"
+            kill_process "$stale_pid" "${stale_owner:-$CURRENT_USER}"
+            sleep 1
+        fi
+
+        local log_file="$LOG_DIR/$name.log"
+        kctl port-forward "svc/$service" -n "$namespace" "${ports[@]}" >/dev/null 2>"$log_file" &
+        local pid=$!
+
+        sleep 1
+        if is_forward_alive "$service"; then
+            echo "  $name: forwarding ${ports[*]} (PID $pid)"
+        else
+            echo "  $name: FAILED to start (port-forward exited immediately)"
+            if [ -s "$log_file" ]; then
+                echo "  $name: log: $(cat "$log_file")"
+            fi
+            return 1
+        fi
+    }
+
+    ########################################
+    # Main expose logic
+    ########################################
+
+    if [ "$STOP_MODE" = true ]; then
+        echo "Stopping all port-forwards..."
+        stop_all
+        return 0
+    fi
+
+    if [ "$STATUS_MODE" = true ]; then
+        echo "Port-forward status:"
+        show_status
+        return 0
+    fi
+
+    echo "Starting port-forwards..."
+
+    start_forward thorium-api thorium thorium-api "$API_PORT:80"
+    start_forward registry thorium registry 5000
+
+    if [ "$DEV_MODE" = true ]; then
+        start_forward elastic elastic-system elastic-es-http 9200
+        start_forward kibana elastic-system elastic-kb-http 5601
+        start_forward redis redis redis 6379
+        start_forward minio minio minio 9000
+        start_forward scylla scylla scylla-client 9042
+    fi
+
+    echo ""
+    echo "Port-forward status:"
+    show_status
+    echo ""
+    echo "Thorium API available at http://localhost:$API_PORT"
+    echo "Registry at http://localhost:5000"
+    if [ "$DEV_MODE" = true ]; then
+        echo "Elasticsearch at https://localhost:9200"
+        echo "Kibana at https://localhost:5601"
+        echo "Redis at localhost:6379"
+        echo "MinIO at http://localhost:9000"
+        echo "Scylla CQL at localhost:9042"
+    fi
+    echo ""
+    echo "Logs: $LOG_DIR/"
+    echo "Run 'minithor expose --status' to check, 'minithor expose --stop' to stop all"
+}
+
+########################################
+# Subcommand: cleanup
+########################################
+
+cmd_cleanup() {
+    local confirm=false
+    FAILURES=0
+
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) usage_cleanup; return 0 ;;
+            --confirm) confirm=true ;;
+            *) echo "Unknown option: $arg"; usage_cleanup; exit 1 ;;
+        esac
+    done
+
+    if [ "$confirm" = false ]; then
+        echo "ERROR: --confirm flag is required to clean up resources." >&2
+        echo "" >&2
+        usage_cleanup >&2
+        return 1
+    fi
+
+    CURRENT_SECTION="startup"
+    trap 'echo "FATAL: Failed in \"$CURRENT_SECTION\" at line $LINENO (command: $BASH_COMMAND)" >&2' ERR
+
+    ensure_minikube_running
+
+    ########################################
+    # Container Registry (in thorium ns)
+    ########################################
+    CURRENT_SECTION="Removing Container Registry"
+    log "Removing Container Registry"
+    run_step kctl delete statefulset registry -n thorium --ignore-not-found --timeout=60s
+    run_step kctl delete svc registry -n thorium --ignore-not-found --timeout=60s
+    run_step kctl delete secret registry-auth -n thorium --ignore-not-found --timeout=60s
+    run_step kctl delete configmap registry-config -n thorium --ignore-not-found --timeout=60s
+    run_step kctl delete pvc registry-data-registry-0 -n thorium --ignore-not-found --timeout=60s
+
+    ########################################
+    # Thorium
+    ########################################
+    CURRENT_SECTION="Removing Thorium"
+    log "Removing Thorium"
+    run_step kctl delete deployment operator -n thorium --ignore-not-found --timeout=60s
+    clear_finalizers_and_delete thoriumclusters.sandia.gov thoriumclusters.sandia.gov thorium
+    run_step kctl delete ns thorium --ignore-not-found --timeout=300s
+    run_step kctl delete clusterrole thorium-operator --ignore-not-found --timeout=60s
+    run_step kctl delete clusterrolebinding thorium-operator-binding --ignore-not-found --timeout=60s
+
+    ########################################
+    # Quickwit
+    ########################################
+    CURRENT_SECTION="Removing Quickwit"
+    log "Removing Quickwit"
+    helm_uninstall quickwit quickwit
+
+    ########################################
+    # Kubegres + Postgres
+    ########################################
+    CURRENT_SECTION="Removing Kubegres + Postgres"
+    log "Removing Kubegres + Postgres"
+    run_step kctl delete deployment kubegres-controller-manager -n kubegres-system --ignore-not-found --timeout=60s
+    clear_finalizers_and_delete kubegres.reactive-tech.io kubegres.reactive-tech.io quickwit
+    run_step kctl delete statefulsets,deployments,services,pods --all -n quickwit --force --grace-period=0 --ignore-not-found --timeout=60s
+    run_step kctl delete ns quickwit --ignore-not-found --timeout=300s
+    run_step kctl delete ns kubegres-system --ignore-not-found --timeout=60s
+    run_step kctl delete clusterrole kubegres-kubegres-editor-role kubegres-kubegres-viewer-role kubegres-manager-role kubegres-metrics-auth-role kubegres-metrics-reader --ignore-not-found --timeout=60s
+    run_step kctl delete clusterrolebinding kubegres-manager-rolebinding kubegres-metrics-auth-rolebinding --ignore-not-found --timeout=60s
+
+    ########################################
+    # Jaeger
+    ########################################
+    CURRENT_SECTION="Removing Jaeger"
+    log "Removing Jaeger"
+    run_step kctl delete ns jaeger --ignore-not-found --timeout=300s
+
+    ########################################
+    # MinIO
+    ########################################
+    CURRENT_SECTION="Removing MinIO"
+    log "Removing MinIO"
+    run_step kctl delete ns minio --ignore-not-found --timeout=300s
+
+    ########################################
+    # Scylla
+    ########################################
+    CURRENT_SECTION="Removing Scylla"
+    log "Removing Scylla"
+    run_step kctl delete deployment scylla-operator -n scylla-operator --ignore-not-found --timeout=60s
+    run_step kctl delete deployment webhook-server -n scylla-operator --ignore-not-found --timeout=60s
+    clear_finalizers_and_delete scyllaclusters.scylla.scylladb.com scyllaclusters.scylla.scylladb.com scylla
+    run_step kctl delete statefulsets,deployments,services,pods --all -n scylla --force --grace-period=0 --ignore-not-found --timeout=60s
+    run_step kctl delete ns scylla --ignore-not-found --timeout=300s
+    helm_uninstall scylla-operator scylla-operator
+    run_step kctl delete ns scylla-operator --ignore-not-found --timeout=300s
+
+    ########################################
+    # cert-manager
+    ########################################
+    CURRENT_SECTION="Removing cert-manager"
+    log "Removing cert-manager"
+    helm_uninstall cert-manager cert-manager
+    run_step kctl delete ns cert-manager --ignore-not-found --timeout=300s
+
+    ########################################
+    # Elasticsearch
+    ########################################
+    CURRENT_SECTION="Removing Elasticsearch"
+    log "Removing Elasticsearch"
+    helm_uninstall elastic-operator elastic-system
+    clear_finalizers_and_delete elasticsearches.elasticsearch.k8s.elastic.co elasticsearches.elasticsearch.k8s.elastic.co elastic-system
+    clear_finalizers_and_delete kibanas.kibana.k8s.elastic.co kibanas.kibana.k8s.elastic.co elastic-system
+    run_step kctl delete statefulsets,deployments,services,pods --all -n elastic-system --force --grace-period=0 --ignore-not-found --timeout=60s
+    run_step kctl delete ns elastic-system --ignore-not-found --timeout=300s
+
+    ########################################
+    # Redis
+    ########################################
+    CURRENT_SECTION="Removing Redis"
+    log "Removing Redis"
+    run_step kctl delete ns redis --ignore-not-found --timeout=300s
+
+    ########################################
+    # Leftover CRDs
+    ########################################
+    CURRENT_SECTION="Cleaning up CRDs"
+    log "Cleaning up leftover CRDs"
+    CRDS=$(kctl get crds -o name 2>/dev/null | grep -E 'cert-manager|elastic|scylla|kubegres|sandia' || true)
+    if [ -n "$CRDS" ]; then
+        run_step kctl delete $CRDS --timeout=300s
+    fi
+
+    ########################################
+    # Wait for namespace termination
+    ########################################
+    CURRENT_SECTION="Waiting for namespace termination"
+    log "Waiting for namespaces to terminate"
+    run_step wait_for_ns_termination 300
+
+    ########################################
+    # Summary
+    ########################################
+    if [ "$FAILURES" -gt 0 ]; then
+        log "Cleanup finished with $FAILURES failure(s)"
+        kctl get ns
+        return 1
+    else
+        log "Cleanup complete"
+        kctl get ns
+    fi
+}
+
+########################################
+# Dispatch
+########################################
+
+if [ $# -eq 0 ]; then
+    usage
+    exit 1
+fi
+
+command="$1"
+shift
+
+case "$command" in
+    minikube)   cmd_minikube "$@" ;;
+    start)      cmd_start "$@" ;;
+    deploy)     cmd_deploy "$@" ;;
+    get-config) cmd_get_config "$@" ;;
+    expose)     cmd_expose "$@" ;;
+    stop)       cmd_stop "$@" ;;
+    cleanup)    cmd_cleanup "$@" ;;
+    -h|--help)  usage; exit 0 ;;
+    *)
+        echo "Unknown command: $command" >&2
+        echo "" >&2
+        usage >&2
+        exit 1
+        ;;
+esac

@@ -76,10 +76,10 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }) => 
     if (!results || typeof results !== 'object') return {};
     return Object.fromEntries(
       Object.entries(results).filter(([_, image]) => {
-        return (!(image[0].display_type && image[0].display_type == 'Hidden'))
-      })
-    )
-  }, [results])
+        return !(image[0].display_type && image[0].display_type == 'Hidden');
+      }),
+    );
+  }, [results]);
 
   return (
     <div id="results-tab" className="navbar-scroll-offset results-container">

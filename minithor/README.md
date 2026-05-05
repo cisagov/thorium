@@ -1,23 +1,66 @@
 
 # Overview
 
-Minithor utilizes Minikube to provide a local Kubernetes instance with minimal custom configuration required. Such an instance is useful for development and testing of Thorium as well as small stand alone analyst fly-away kits where external network access may not be available. Minithor deployments are not highly available distributed systems like our production instances and provides minimal redundancy. The Thorium deployment produced by following these instructions should be considered Beta. We will work to improve its stability over time. While a Minithor deployment is accessible only from your localhost, it has not been configured to be secure. Please change DB passwords if working with sensitive data on a multi-user system using a Minithor deployment.
+Minithor utilizes Minikube to provide a local Kubernetes instance with minimal custom configuration required. Such an instance is useful for development and testing of Thorium as well as small stand alone analyst fly-away kits where external network access may not be available. Minithor deployments are not highly available distributed systems like our production instances and provides minimal redundancy. The Thorium deployment produced by following these instructions should be considered Beta. We will work to improve its stability over time. While a Minithor deployment is accessible only from your localhost, all backing-service passwords are randomly generated per deploy. The default admin user password can be randomized with `--rand-password`.
 
 ### Requirements
 
-To deploy Minithor, you will need a container runtime such as that provided by the docker engine or podman. Minithor also requires a relatively beefy machine, with > 12 GiB of memory, 8+ CPUs, and 100GiB of local storage.
+To deploy Minithor, you will need a container runtime such as that provided by the docker engine or podman. KVM/libvirt (`kvm2` driver) is also supported on Linux. Minithor automatically selects the best available driver in order of preference: podman > docker > kvm2. Minithor also requires a relatively beefy machine, with 16+ GiB of memory, 8+ CPUs, and 100GiB of local storage.
+
+## Usage
+
+All lifecycle operations are available through the `minithor` CLI. The script reads input files from your current working directory by default and can be installed globally (e.g. `/usr/local/bin/minithor`).
+
+```
+minithor — manage a local Thorium instance on Minikube
+
+Usage: minithor <command> [options]
+
+Commands:
+  minikube         Manage the minikube cluster (install, delete)
+  start            Start a previously stopped minikube cluster
+  deploy           Deploy all Thorium services and backing infrastructure
+  get-config       Extract the running Thorium config to ~/thorium.yml
+  expose           Port-forward Thorium (and optionally backing services) to localhost
+  stop             Stop the minikube cluster (preserves state)
+  cleanup          Remove all Thorium resources for a fresh deploy (requires --confirm)
+
+Global options:
+  -h, --help       Show this help message
+
+Run 'minithor <command> --help' for command-specific options.
+```
+
+### Working directory layout
+
+When running `minithor` commands, the following files are looked for in your current working directory:
+
+| File | Used by | Required? |
+|------|---------|-----------|
+| `.certs/*.crt` | `minikube install` | No — optional TLS proxy certs to trust in minikube |
+| `thorium-cluster.yml` | `deploy` | No — cluster config (a built-in default is used if absent) |
+| `.dockerconfigjson` | `deploy` | No — private registry credentials for pulling images |
+| `banner.txt` | `deploy` | No — login banner (a default is generated if absent) |
+
+All paths can be overridden with CLI flags — run `minithor <command> --help` for details.
 
 ### Install Minikube
 
 Install and start minikube and any necessary plugins.
 
 ```bash
-./install
+minithor minikube install [--cpus <n>] [--memory <n>] [--certs-dir <path>]
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--cpus <n>` | Number of CPUs to allocate to minikube (default: 8) |
+| `--memory <n>` | Memory in GiB to allocate to minikube (default: 16) |
+| `--certs-dir <path>` | Directory containing `.crt` files to trust (default: `$PWD/.certs/`) |
 
 ### Create registry auth file (optional)
 
-If the Thorium container image is hosted in a private registry, create a `.dockerconfigjson` file in this directory containing the registry credentials. The deploy script will detect this file and create a Kubernetes image pull secret automatically.
+If the Thorium container image is hosted in a private registry, create a `.dockerconfigjson` file in your working directory containing the registry credentials. The deploy command will detect this file and create a Kubernetes image pull secret automatically.
 
 ```bash
 docker login registry.domain:port
@@ -28,7 +71,7 @@ If omitted, the operator will pull images without authentication (works for publ
 
 ### Proxy configuration (optional)
 
-If your organization maintains a proxy for all traffic going to the internet, export proxy settings before running the deploy script:
+If your organization maintains a proxy for all traffic going to the internet, export proxy settings before running the deploy command:
 
 ```bash
 export HTTP_PROXY=<HTTP_PROXY_URL:PORT>
@@ -40,11 +83,24 @@ Or use the provided proxy file: `source proxy`
 
 ### Deploy
 
-The `deploy` script handles the full deployment in a single step: all backing services (Redis, Elasticsearch, ScyllaDB, MinIO, Quickwit, Jaeger), the Thorium operator, the ThoriumCluster resource, and a default test user.
+The `deploy` command handles the full deployment in a single step: all backing services (Redis, Elasticsearch, ScyllaDB, MinIO, Postgres, Quickwit, Jaeger), the Thorium operator, the ThoriumCluster resource, and a default test user.
 
 ```bash
-./deploy
+minithor deploy [options]
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--config <path>` | Path to `thorium-cluster.yml` (default: `$PWD/thorium-cluster.yml`; a built-in default is used if absent) |
+| `--docker-config <path>` | Path to `.dockerconfigjson` (default: `$PWD/.dockerconfigjson`) |
+| `--banner <path>` | Path to `banner.txt` (default: `$PWD/banner.txt`, generates default if absent) |
+| `--bin <path>` | Directory for downloaded binaries like thorctl (default: `/usr/local/bin`) |
+| `--toolbox <path>` | Download location for `toolbox.json` (default: `$PWD/toolbox.json`) |
+| `--user <name>` | Username for the initial admin user (default: `test`) |
+| `--password <pass>` | Password for the initial admin user (default: `INSECURE_DEV_PASSWORD`) |
+| `--rand-password` | Generate a random password for the admin user |
+| `--registry` | Deploy a container registry (registry:2) in the thorium namespace with persistent storage |
+| `--registry-user <name>` | Enable registry basic auth for this user (implies `--registry`, password is auto-generated and printed to stdout) |
 
 This will:
 
@@ -54,55 +110,81 @@ This will:
 4. Configure databases (Scylla roles/keyspace, Elasticsearch index/user, MinIO buckets)
 5. Deploy the Thorium operator and create the ThoriumCluster CRD
 6. Wait for all Thorium components (API, scaler, event-handler, search-streamer) to be running
-7. Create a test admin user (`test` / `INSECURE_DEV_PASSWORD`)
-8. Install `thorctl` from the API and import the default toolbox (analysis tools and pipelines)
+7. Create an admin user (default: `test` / `INSECURE_DEV_PASSWORD`, customizable via `--user` / `--password` / `--rand-password`)
+8. Install `thorctl` to the bin directory and import the default toolbox
+9. Create a `static` group and an `allow-all` network policy
+10. Optionally deploy a container registry with persistent storage (if `--registry` or `--registry-user` is specified)
 
-To customize the ThoriumCluster configuration, copy the example and edit it before running the deploy script:
+All backing-service passwords (Redis, Scylla, Elasticsearch, MinIO, Postgres, and the Thorium API secret key) are randomly generated per deploy using a cryptographically secure RNG. These passwords are not displayed during deployment but can be retrieved afterward with `minithor get-config`.
+
+To customize the ThoriumCluster configuration, provide your own config file:
 
 ```bash
-cp thorium-cluster.yml.example thorium-cluster.yml
-# edit thorium-cluster.yml as needed
-./deploy.sh
+minithor deploy --config path/to/thorium-cluster.yml
 ```
-
-If no `thorium-cluster.yml` exists, the script falls back to `thorium-cluster.yml.example`.
 
 ### Access Thorium
 
-Start the minikube tunnel in a separate terminal (this is a blocking command):
+Port-forward the Thorium API to localhost:
 
 ```bash
-./expose --help
-Usage: ./expose [--dev] [--stop] [--status]
-  --dev     Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla)
-  --stop    Stop all running port-forwards
-  --status  Show which port-forwards are running
+minithor expose [--dev] [--port <port>] [--stop] [--status]
 ```
 
-Then open http://localhost in your browser and log in:
-- **Username:** `test`
-- **Password:** `INSECURE_DEV_PASSWORD`
+| Flag             | Description                                                     |
+|------------------|-----------------------------------------------------------------|
+| `--dev`          | Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla) |
+| `--port <port>`  | Local port for the Thorium API (default: 8080)                  |
+| `--stop`         | Stop all running port-forwards                                  |
+| `--status`       | Show which port-forwards are running                            |
 
-### Dev tunnels (Elastic/Kibana, Scylla, Redis)
+The registry service (port 5000) is also forwarded by default when a registry has been deployed. Port-forward logs are written to `/tmp/minithor-expose-logs/`.
 
-To access backing services directly from your host (useful for debugging):
+Then open http://localhost:8080 in your browser and log in with the credentials shown at the end of the deploy output (default: `test` / `INSECURE_DEV_PASSWORD`).
+
+### Get Config
+
+Extract the running Thorium config from the cluster:
 
 ```bash
-./expose --dev
+minithor get-config
+# Writes thorium.yml to ~/thorium.yml
+```
+
+### Stop
+
+Stop the minikube cluster while preserving its state:
+
+```bash
+minithor stop
+```
+
+Resume later with `minithor start`.
+
+### Start
+
+Restart a previously stopped cluster:
+
+```bash
+minithor start
 ```
 
 ### Cleanup
 
-Remove all deployed resources (without deleting the minikube cluster itself):
+Remove all deployed Thorium resources and backing services for a fresh deploy. The `--confirm` flag is required:
 
 ```bash
-./cleanup
+minithor cleanup --confirm
 ```
 
-To fully remove minikube:
+This removes all namespaces, Helm releases, CRDs, and cluster-level RBAC created by the deploy step. Individual step failures are logged but do not abort the cleanup. The minikube cluster itself is preserved.
+
+### Delete Minikube
+
+Completely remove minikube, its data, and associated binaries. The `--confirm` flag is required:
 
 ```bash
-./stop
-./delete
-rm -r ~/.minikube ~/.kube
+minithor minikube delete --confirm
 ```
+
+This runs `minikube delete --all --purge`, removes `~/.minikube` and `~/.kube`, uninstalls the minikube and kubectl binaries, and prunes unused container images. This is irreversible.

@@ -5,3 +5,5 @@ thorctl
 .certs/*
 .s3cfg
 *.crt
+.expose-pids/
+.expose-logs/

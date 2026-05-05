@@ -5,13 +5,14 @@ on:
   - cron: '0 0 * * *'
   push:
     branches:
-      - '*' 
+      - main
 
 concurrency:
   group: tool-build-group
 
 jobs:
   generate-tool-builds:
+    if: github.repository == 'cisagov/thorium'
     runs-on: ubuntu-latest
     permissions:
       contents: read

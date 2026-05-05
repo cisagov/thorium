@@ -82,7 +82,6 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         seen.add(key);
         return true;
       });
-
     });
   }, [options, valuesMap]);
 
