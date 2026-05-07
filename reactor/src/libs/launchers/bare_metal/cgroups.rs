@@ -1,10 +1,10 @@
 //! Setup the correct cgroups for a specific image
+use cgroups_rs::Controller;
 use cgroups_rs::cpu::CpuController;
 use cgroups_rs::memory::MemController;
-use cgroups_rs::Controller;
-use cgroups_rs::{cgroup_builder::CgroupBuilder, CgroupPid};
-use thorium::models::Image;
+use cgroups_rs::{CgroupPid, cgroup_builder::CgroupBuilder};
 use thorium::Error;
+use thorium::models::Image;
 
 /// a specific cgroup for a specific image
 pub struct Cgroup {

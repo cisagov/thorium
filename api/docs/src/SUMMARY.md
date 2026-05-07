@@ -50,6 +50,7 @@
         - [Delete A User](./admins/delete_user.md)
         - [Ban Things in Thorium](./admins/bans_admins.md)
         - [Create Notifications](./admins/notifications_admins.md)
+        - [Setting Up KVM VMs for Reactor](./admins/reactor_kvm_setup.md)
     - [Admin Command Line Tool](./admins/thoradm/thoradm.md)
     - [Common Issues](./admins/common_issues.md)
         - [Jobs Stuck At Created](./admins/common_issues/jobs_stuck_at_created.md)

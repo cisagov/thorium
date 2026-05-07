@@ -6,6 +6,7 @@ target
 binaries
 built
 .vscode
+.zed
 .DS_Store
 
 # ignore Thorium configs to avoid exposing sensitive info

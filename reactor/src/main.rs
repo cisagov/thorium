@@ -4,13 +4,11 @@
 //! for k8s nodes would come at the cost of everthing k8s buys us.
 //!
 //! The Thorium reactor is only supported on Linux and Windows
-#![feature(btree_extract_if)]
 
 cfg_if::cfg_if! {
     if #[cfg(any(target_os = "linux", target_os = "windows"))] {
         // add dependencies
         use clap::Parser;
-        use tracing::{span, Level};
 
         pub use libs::Reactor;
     }
@@ -24,30 +22,65 @@ mod args;
 pub mod libs;
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
+use libs::Error;
+
+#[cfg(target_os = "linux")]
+use libs::launchers::BareMetal;
+#[cfg(target_os = "windows")]
+use libs::launchers::Windows;
+#[cfg(all(target_os = "linux", feature = "kvm"))]
+use libs::launchers::kvm::Kvm;
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Error> {
     // parse our args
     let args = args::Args::parse();
     // build the name for this reactor based on type
     let trace_name = format!("Thorium{}Reactor", args.scaler);
     // setup our tracers/subscribers
     let trace_provider = thorium::utils::trace::from_file(&trace_name, &args.trace);
-    // build and start this nodes reactor
-    let reactor = match Reactor::new(args).await {
-        Ok(reactor) => reactor,
-        Err(err) => {
-            // start our reactor build failure span
-            span!(Level::ERROR, "Reactor Build Failure", err = err.msg());
-            panic!("Reactor Build Error: {:#?}", err);
-        }
-    };
-    if let Err(err) = reactor.start().await {
-        // start our reactor failure span
-        span!(Level::ERROR, "Reactor Failure", err = err.msg());
-        panic!("Error: {:#?}", err);
+    // run the reactor
+    if let Err(err) = run(args).await {
+        // shutdown the trace provider first
+        thorium::utils::trace::shutdown(trace_provider);
+        // then propagate the error
+        return Err(err);
     }
-    // export any remaining traces and shutdown this provider
+    // shut down our trace provider if we're shutting down cleanly
     thorium::utils::trace::shutdown(trace_provider);
+    Ok(())
+}
+
+/// Builds and runs the reactor
+///
+/// # Arguments
+///
+/// * `args` - The arguments to the reactor
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+async fn run(args: args::Args) -> Result<(), Error> {
+    // build and start this nodes reactor
+    match &args.launchers {
+        #[cfg(target_os = "linux")]
+        args::Launchers::BareMetal => {
+            let node = args.node()?;
+            let launcher = BareMetal::new(&args.cluster, node);
+            let reactor = Reactor::new(args, launcher).await?;
+            reactor.start().await
+        }
+        #[cfg(target_os = "windows")]
+        args::Launchers::Windows => {
+            let launcher = Windows::default();
+            let reactor = Reactor::new(args, launcher).await?;
+            reactor.start().await
+        }
+        #[cfg(feature = "kvm")]
+        args::Launchers::Kvm(kvm) => {
+            let launcher = Kvm::new(kvm.clone().into(), &args.agents_dir).await?;
+            let reactor = Reactor::new(args, launcher).await?;
+            reactor.start().await
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]

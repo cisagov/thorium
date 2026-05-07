@@ -8,10 +8,10 @@ license-file = "../LICENSE"
 
 [features]
 # include kvm by default
-default = []
+default = ["kvm"]
 
-# support kvm based builds
-kvm = ["virt"]
+# support kvm-based builds
+kvm = ["virt", "kanal", "rand", "base64", "quick_cache", "tempfile"]
 
 # Force openssl-sys to staticly link in the openssl library. Necessary when
 # cross compiling to x86_64-unknown-linux-musl.
@@ -34,14 +34,23 @@ rustix = { version = "1.0", features = ["process"] }
 semver = { version = "1", features = ["serde"] }
 uuid = { version = "1", features = ["serde", "v4"] }
 cfg-if = "1.0.0"
+strum = { workspace = true }
+http = { workspace = true }
+thiserror = "2.0.18"
 
+# kvm-only dependencies
+kanal = { version = "0.1.1", optional = true }
+rand = { version = "0.9.1", optional = true }
+base64 = { version = "0.22", optional = true }
+quick_cache = { version = "0.6", optional = true }
+tempfile = { version = "3.27", optional = true }
 
 # enable cgroups support for linux
 [target.'cfg(target_os = "linux")'.dependencies]
 thorium-api = { workspace = true, features = ["client", "cgroups", "crossbeam-err", "trace", "rustix"]}
 cgroups-rs = "0.3"
 # enable support for kvm based jobs
-virt = { version = "0.4", optional = true }
+virt = { version = "0.4", features = ["qemu"], optional = true }
 
 # disable cgroups support when on windows or macos
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]

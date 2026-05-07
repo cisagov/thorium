@@ -60,3 +60,5 @@ cart-rs = { version = "1.2.5", path = "cart-rs"}
 openssl = "0.10"
 pyo3 = { version = "0.28", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono", "abi3-py310"] }
 sigma-rust = { version = "0.7.0", path = "../public/sigma-rust", features = ["openapi"] }
+strum = { version = "0.27", features = ["derive"] }
+http = { version = "1.3" }

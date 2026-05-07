@@ -101,7 +101,7 @@ url = "2"
 schemars = { workspace = true }
 semver = { version = "1", features = ["serde"] }
 openssl = { workspace = true }
-strum = { version = "0.27", features = ["derive"] }
+strum = { workspace = true }
 indicatif = { version = "0.17", features = ["tokio"] }
 cidr = { version = "0.3", features = ["serde"] }
 gxhash = { version = "3.5", features = ["deterministic"] }

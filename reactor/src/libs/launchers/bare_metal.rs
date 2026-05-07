@@ -2,14 +2,15 @@
 use rustix::process::Signal;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use thorium::Thorium;
 use thorium::models::{ArgStrategy, ImageScaler, Node, Worker, WorkerDeleteMap, WorkerStatus};
-use thorium::{Error, Thorium};
 use tokio::process::{Child, Command};
-use tracing::{event, span, Level, Span};
+use tracing::{Level, event, instrument};
 
 mod cgroups;
 
 use super::Launcher;
+use crate::Error;
 use crate::libs::keys;
 use cgroups::Cgroup;
 
@@ -79,7 +80,7 @@ fn isolate<P: AsRef<Path>>(raw: P, id: &str) -> Result<String, Error> {
                 return Err(Error::new(format!(
                     "{} cannot be isolated by job",
                     path.to_string_lossy()
-                )))
+                )));
             }
         }
     };
@@ -94,7 +95,7 @@ fn isolate<P: AsRef<Path>>(raw: P, id: &str) -> Result<String, Error> {
 }
 
 /// A currently active bare metal worker
-struct ActiveWorker {
+pub struct ActiveWorker {
     /// The control group this worker is tied too
     cgroup: Cgroup,
     /// The spawned child process if we have one
@@ -103,7 +104,8 @@ struct ActiveWorker {
 
 impl ActiveWorker {
     /// Spawn a new active worker
-    pub async fn new(thorium: &Thorium, worker: &Worker, span: &Span) -> Result<Self, Error> {
+    #[instrument(name = "ActiveWorker::new", skip_all, err(Debug))]
+    pub async fn new(thorium: &Thorium, worker: &Worker) -> Result<Self, Error> {
         // get our image
         let image = thorium.images.get(&worker.group, &worker.stage).await?;
         // build the control group for this worker
@@ -116,7 +118,6 @@ impl ActiveWorker {
             None => {
                 // log that our keys path is not valid unicode
                 event!(
-                    parent: span,
                     Level::ERROR,
                     error = true,
                     error_msg = "Keys path is not valid unicode",
@@ -150,7 +151,6 @@ impl ActiveWorker {
             cgroup.add(pid)?;
         } else {
             event!(
-                parent: span,
                 Level::ERROR,
                 error = true,
                 error_msg = "Failed to add child to cgroup!"
@@ -165,11 +165,8 @@ impl ActiveWorker {
     }
 
     /// Checks if this worker is alive still
-    ///
-    /// # Arguments
-    ///
-    /// * `span` - The span to log traces under
-    pub fn alive(&mut self, span: &Span) -> Result<bool, Error> {
+    #[instrument(name = "ActiveWorker::alive", skip_all, err(Debug))]
+    pub fn alive(&mut self) -> Result<bool, Error> {
         // if we don't have a child struct then check if this cgroup has any active pids
         match &mut self.child {
             Some(child) => {
@@ -180,12 +177,7 @@ impl ActiveWorker {
                         Some(status) => {
                             // log any worker failures
                             if !status.success() {
-                                event!(
-                                    parent: span,
-                                    Level::ERROR,
-                                    error = true,
-                                    error_msg = status.to_string()
-                                );
+                                event!(Level::ERROR, error = true, error_msg = status.to_string());
                             }
                             Ok(false)
                         }
@@ -194,12 +186,7 @@ impl ActiveWorker {
                     },
                     Err(err) => {
                         // we failed to get this workers status
-                        event!(
-                            parent: span,
-                            Level::ERROR,
-                            error = true,
-                            error_msg = err.to_string()
-                        );
+                        event!(Level::ERROR, error = true, error_msg = err.to_string());
                         Ok(true)
                     }
                 }
@@ -210,13 +197,8 @@ impl ActiveWorker {
     }
 
     /// Kill all active processes of this child
-    ///
-    /// # Arguments
-    ///
-    /// * `span` - The span to log traces under
-    pub async fn kill(&mut self, span: &Span) -> Result<(), Error> {
-        // start our kill worker span
-        span!(parent: span, Level::INFO, "Kill Worker");
+    #[instrument(name = "ActiveWorker::kill", skip_all, err(Debug))]
+    pub async fn kill(&mut self) -> Result<(), Error> {
         // try to kill this child if it exists
         if let Some(child) = self.child.as_mut() {
             // send sigkill to this child
@@ -262,34 +244,23 @@ impl BareMetal {
     }
 
     /// Helps our launcher check and clean up any active processes
-    ///
-    /// # Arguments
-    ///
-    /// * `thorium` - A Thorium client
-    /// * `active` - The names of the currently active workers in the reactor
-    /// * `span` - The span to log traces under
+    #[instrument(name = "BareMetal::check_helper", skip_all, err(Debug))]
     async fn check_helper(
         &mut self,
         thorium: &Thorium,
         info: &mut Node,
         active: &mut HashMap<String, Worker>,
-        span: &Span,
     ) -> Result<(), Error> {
         // keep a list of workers that should be deleted since they no longer exist
         let mut deletes = WorkerDeleteMap::default();
         // drop any workers that have completed
         self.active.retain(|name, worker| {
             // get whether this worker is alive or not
-            let alive = match worker.alive(span) {
+            let alive = match worker.alive() {
                 Ok(alive) => alive,
                 Err(error) => {
                     // we failed to get whether this worker was alive or not
-                    event!(
-                        parent: span,
-                        Level::ERROR,
-                        error = true,
-                        error_msg = error.to_string()
-                    );
+                    event!(Level::ERROR, error = true, error_msg = error.to_string());
                     // default to this worker still being alive
                     true
                 }
@@ -303,12 +274,7 @@ impl BareMetal {
                 // try to delete this workers cgroup
                 if let Err(error) = worker.cgroup.delete() {
                     // we failed to delete a cgroup
-                    event!(
-                        parent: span,
-                        Level::ERROR,
-                        error = true,
-                        error_msg = error.to_string()
-                    );
+                    event!(Level::ERROR, error = true, error_msg = error.to_string());
                 }
                 false
             } else {
@@ -337,12 +303,11 @@ impl BareMetal {
     /// * `thorium` - A Thorium client
     /// * `info` - Info about our node and its workers
     /// * `active` - The names of the currently active workers in the reactor
-    /// * `span` - The span to log traces under
+    #[instrument(name = "BareMetal::recover_workers", skip_all, err(Debug))]
     fn recover_workers(
         &mut self,
         info: &mut Node,
         active: &mut HashMap<String, Worker>,
-        span: &Span,
     ) -> Result<(), Error> {
         // whether we have recovered any workers or not
         let recovered = false;
@@ -358,12 +323,7 @@ impl BareMetal {
             // only recover this worker if it has procs
             if !cgroup.procs().is_empty() {
                 // we have some processes so recover this worker
-                event!(
-                    parent: span,
-                    Level::INFO,
-                    msg = "Recovered worker",
-                    name = &name
-                );
+                event!(Level::INFO, msg = "Recovered worker", name = &name);
                 // build our recovered worker without a child
                 let recovered = ActiveWorker {
                     cgroup,
@@ -392,36 +352,22 @@ impl BareMetal {
     /// # Arguments
     ///
     /// * `name` - The name of the worker to try to kill
-    /// * `span` - The span to log traces under
-    pub async fn kill(&mut self, name: &str, span: &Span) -> Result<(), Error> {
-        // start our cancel worker span
-        let span = span!(parent: span, Level::INFO, "Cancel Worker", worker = name);
+    #[instrument(name = "BareMetal::kill", skip_all, fields(worker = name), err(Debug))]
+    pub async fn kill(&mut self, name: &str) -> Result<(), Error> {
         // Try to get this workers child
         if let Some(mut worker) = self.active.remove(name) {
             // we only have to cancel if this child is still alive
-            if worker.alive(&span)? {
+            if worker.alive()? {
                 // this worker is alive so kill all of its processes
-                worker.kill(&span).await?;
+                worker.kill().await?;
             }
         }
         Ok(())
     }
 
     /// Execute the cancel script for a killed worker
-    ///
-    /// # Arguments
-    ///
-    /// * `thorium` - A Thorium client
-    /// * `name` - The name of the worker to run the clean up script for
-    /// * `span` - The span to log traces under
-    pub async fn cleanup(
-        &mut self,
-        thorium: &Thorium,
-        name: &str,
-        span: &Span,
-    ) -> Result<(), Error> {
-        // start our clean up span
-        let span = span!(parent: span, Level::INFO, "Clean Up Worker", worker = name);
+    #[instrument(name = "BareMetal::cleanup", skip_all, fields(worker = name), err(Debug))]
+    pub async fn cleanup(&mut self, thorium: &Thorium, name: &str) -> Result<(), Error> {
         // get this workers info
         let worker = thorium.system.get_worker(&name).await?;
         // if this worker has an active job then get its image
@@ -450,17 +396,21 @@ impl BareMetal {
                     .await?;
                 // check if this failed to run or not
                 if !output.status.success() {
-                    event!(parent: &span, Level::ERROR, exit_code = output.status.to_string());
+                    event!(Level::ERROR, exit_code = output.status.to_string());
                     // cast our error to a string
                     match std::str::from_utf8(&output.stderr) {
                         Ok(cast) => {
                             // get the first 512 chars of the error
                             let start = cast.chars().take(512).collect::<String>();
                             // log this error
-                            event!(parent: &span, Level::ERROR, error = start);
+                            event!(Level::ERROR, error = start);
                         }
                         Err(error) => {
-                            event!(parent: &span, Level::ERROR, msg = "Failed to cast stderr to str", error = error.to_string())
+                            event!(
+                                Level::ERROR,
+                                msg = "Failed to cast stderr to str",
+                                error = error.to_string()
+                            )
                         }
                     }
                 }
@@ -490,35 +440,49 @@ impl BareMetal {
 
 #[async_trait::async_trait]
 impl Launcher for BareMetal {
+    type LaunchedWorkerData = ActiveWorker;
+
     /// Spawn a worker and then return a process id that can be used to track it
     ///
     /// # Arguments
     ///
     /// * `thorium` - A Thorium client
     /// * `worker` - The worker to launch
-    /// * `span` - The span to log traces under
-    async fn launch(
-        &mut self,
-        thorium: &Thorium,
-        worker: &Worker,
-        span: &Span,
-    ) -> Result<(), Error> {
-        // start our worker launch span
-        let span = span!(
-            parent: span,
-            Level::INFO,
-            "Launching Worker",
+    #[instrument(
+        name = "BareMetal::launch",
+        skip_all,
+        fields(
             name = worker.name,
             user = worker.user,
             group = worker.group,
             pipeline = worker.pipeline,
             stage = worker.stage
-        );
+        ),
+        err(Debug)
+    )]
+    async fn launch(
+        &self,
+        thorium: &Thorium,
+        worker: Worker,
+    ) -> Result<(Worker, ActiveWorker), Error> {
         // start our agent
-        let active = ActiveWorker::new(thorium, worker, &span).await?;
+        let active = ActiveWorker::new(&thorium, &worker).await?;
+        Ok((worker, active))
+    }
+
+    /// Resolve all of the data from this batch of launches, modifying any relevant data
+    /// in the launcher's state
+    ///
+    /// # Arguments
+    ///
+    /// * `launches` - The batch of workers and their data to resolve
+    fn resolve_launches(&mut self, launches: Vec<(&Worker, ActiveWorker)>) {
         // add this active worker to our map
-        self.active.insert(worker.name.clone(), active);
-        Ok(())
+        self.active.extend(
+            launches
+                .into_iter()
+                .map(|(worker, active_worker)| (worker.name.clone(), active_worker)),
+        );
     }
 
     /// Check if any of our current workers have completed or died
@@ -530,20 +494,17 @@ impl Launcher for BareMetal {
     /// * `thorium` - A Thorium client
     /// * `info` - Info about our node and its workers
     /// * `active` - The names of the currently active workers in the reactor
-    /// * `span` - The span to log traces under
-    async fn check(
+    #[instrument(name = "BareMetal::reconcile", skip_all, err(Debug))]
+    async fn reconcile(
         &mut self,
         thorium: &Thorium,
         info: &mut Node,
         active: &mut HashMap<String, Worker>,
-        span: &Span,
     ) -> Result<(), Error> {
-        // stat our check active containers span
-        let span = span!(parent: span, Level::INFO, "Checking Active Workers");
         // recover any already existing workers
-        self.recover_workers(info, active, &span)?;
+        self.recover_workers(info, active)?;
         // check our currently active workers
-        self.check_helper(thorium, info, active, &span).await?;
+        self.check_helper(thorium, info, active).await?;
         Ok(())
     }
 
@@ -553,43 +514,23 @@ impl Launcher for BareMetal {
     ///
     /// * `thorium` - A Thorium client
     /// * `workers` - The workers to shutdown
-    /// * `span` - The span to log traces under
-    async fn shutdown(
-        &mut self,
-        thorium: &Thorium,
-        workers: HashSet<String>,
-        span: &Span,
-    ) -> Result<(), Error> {
-        // start our shutdown workers span
-        let span = span!(parent: span, Level::INFO, "Shutdown Workers", workers = workers.len());
+    #[instrument(name = "BareMetal::shutdown", skip_all, fields(workers = workers.len()), err(Debug))]
+    async fn shutdown(&mut self, thorium: &Thorium, workers: HashSet<String>) -> Result<(), Error> {
         // assume we will delete all requested workers
         let mut deletes = WorkerDeleteMap::with_capacity(workers.len());
         // crawl over the workers we want to shut down
         for worker in workers {
             // try to kill this worker
-            match self.kill(&worker, &span).await {
-                Ok(_) => {
-                    // execute our cancel script
-                    match self.cleanup(thorium, &worker, &span).await {
-                        // add this worker to our delete map
-                        Ok(_) => deletes.add_mut(&worker),
-                        // log that we failed to clean up a worker
-                        Err(error) => {
-                            event!(parent: &span, Level::ERROR, worker = worker, error = error.to_string())
-                        }
-                    }
-                }
-                Err(err) => {
-                    // log that we failed to shut down a worker
-                    event!(parent: &span, Level::ERROR, error = err.to_string());
-                }
-            }
+            self.kill(&worker).await?;
+            // execute our cleanup script
+            self.cleanup(thorium, &worker).await?;
+            deletes.add_mut(&worker);
+            // remove this workers from Thorium
+            thorium
+                .system
+                .delete_workers(ImageScaler::BareMetal, &deletes)
+                .await?;
         }
-        // remove this workers from Thorium
-        thorium
-            .system
-            .delete_workers(ImageScaler::BareMetal, &deletes)
-            .await?;
         Ok(())
     }
 }

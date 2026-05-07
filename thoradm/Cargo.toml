@@ -44,6 +44,6 @@ aws-smithy-http = "0.62"
 aws-credential-types = "1.2"
 async-walkdir = "2.1"
 dirs = "6"
-strum = { version = "0.27", features = ["derive"] }
+strum = { workspace = true }
 bb8-redis = "0.24"
 redis = { version = "0.32.1", default-features = false, features = ["tokio-comp", "script"] }

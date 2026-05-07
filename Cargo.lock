@@ -6006,6 +6006,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick_cache"
+version = "0.6.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1c821816e9b928e20e92ed59bb3ac4aab321d16ca2316871c9fe7ca739cd477"
+dependencies = [
+ "ahash 0.8.12",
+ "equivalent",
+ "hashbrown 0.16.1",
+ "parking_lot",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8201,19 +8213,27 @@ name = "thorium-reactor"
 version = "1.7.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "cfg-if",
  "cgroups-rs",
  "chrono",
  "clap",
  "gethostname",
+ "http 1.4.1",
+ "kanal",
  "openssl",
  "opentelemetry 0.30.0",
+ "quick_cache",
+ "rand 0.9.4",
  "rustix",
  "semver",
  "serde",
  "serde_json",
  "serde_norway",
+ "strum 0.27.2",
  "sysinfo",
+ "tempfile",
+ "thiserror 2.0.18",
  "thorium-api",
  "tokio",
  "tracing",

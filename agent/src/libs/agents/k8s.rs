@@ -136,7 +136,12 @@ impl K8s {
             tags: Vec::default(),
             children: Vec::default(),
             cache: DownloadedCache::default(),
+            // KVM can run Windows or Linux jobs, so detect what's expected based
+            // on what OS this agent was compiled for
+            #[cfg(target_os = "windows")]
             windows: true,
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            windows: false,
         };
         Ok(k8s)
     }

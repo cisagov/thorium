@@ -3,60 +3,65 @@
 //! Currently only windows is supported;
 
 use std::collections::{HashMap, HashSet};
+
+use thorium::Thorium;
 use thorium::models::{Node, Worker};
-use thorium::{Error, Thorium};
-use tracing::Span;
+
+use crate::Error;
 
 #[cfg(target_os = "linux")]
 mod bare_metal;
 //#[cfg(feature = "kvm")]
 #[cfg(target_os = "linux")]
 #[cfg(feature = "kvm")]
-mod kvm;
+pub mod kvm;
 #[cfg(target_os = "windows")]
 mod windows;
 
 #[cfg(target_os = "linux")]
-use bare_metal::BareMetal;
-//#[cfg(feature = "kvm")]
-#[cfg(feature = "kvm")]
-#[cfg(target_os = "linux")]
-use kvm::Kvm;
+pub use bare_metal::BareMetal;
 #[cfg(target_os = "windows")]
-use windows::Windows;
-
-use crate::args::{Args, Launchers};
+pub use windows::Windows;
 
 #[async_trait::async_trait]
-pub trait Launcher {
-    /// Spawn a worker and then return a process id that can be used to track it
+pub trait Launcher: Send + Sync + 'static {
+    /// The data returned for an individual launched worker
+    type LaunchedWorkerData: Send;
+
+    /// Launch a worker in a new task, returning the worker that was launched and
+    /// any data to resolve in the launcher's state afterward
     ///
     /// # Arguments
     ///
     /// * `thorium` - A Thorium client
     /// * `worker` - The worker to launch
-    /// * `span` - The span to log traces under
     async fn launch(
-        &mut self,
+        &self,
         thorium: &Thorium,
-        worker: &Worker,
-        span: &Span,
-    ) -> Result<(), Error>;
+        worker: Worker,
+    ) -> Result<(Worker, Self::LaunchedWorkerData), Error>;
 
-    /// Check if any of our current workers have completed or died
+    /// Resolve all of the data from this batch of launches, modifying any relevant data
+    /// in the launcher's state
+    ///
+    /// # Arguments
+    ///
+    /// * `launches` - The batch of workers and their data to resolve
+    fn resolve_launches(&mut self, launches: Vec<(&Worker, Self::LaunchedWorkerData)>);
+
+    /// Reconcile the current worker state with what is reported in the API,
+    /// handling worker failures, reclaiming workers, etc.
     ///
     /// # Arguments
     ///
     /// * `thorium` - A Thorium client
     /// * `info` - Info about our node and its workers
     /// * `active` - The names of the currently active workers in the reactor
-    /// * `span` - The span to log traces under
-    async fn check(
+    async fn reconcile(
         &mut self,
         thorium: &Thorium,
         info: &mut Node,
         active: &mut HashMap<String, Worker>,
-        span: &Span,
     ) -> Result<(), Error>;
 
     /// Shutdown a list of workers
@@ -65,33 +70,9 @@ pub trait Launcher {
     ///
     /// * `thorium` - A Thorium client
     /// * `workers` - The workers to shutdown
-    /// * `span` - The span to log traces under
     async fn shutdown(
         &mut self,
         thorium: &Thorium,
         mut workers: HashSet<String>,
-        span: &Span,
     ) -> Result<(), Error>;
-}
-
-/// Creates a new instance of the launcher
-pub fn new(args: &Args) -> Box<dyn Launcher> {
-    match &args.launchers {
-        #[cfg(target_os = "linux")]
-        Launchers::BareMetal => {
-            // get our node name
-            let node = args.node().expect("Failed to get node name");
-            Box::new(BareMetal::new(&args.cluster, node))
-        }
-        #[cfg(target_os = "windows")]
-        Launchers::Windows => Box::new(Windows::default()),
-        #[cfg(feature = "kvm")]
-        #[cfg(target_os = "linux")]
-        Launchers::Kvm(kvm) => {
-            // build our kvm launcher
-            let kvm = Kvm::new(kvm).expect("Failed to build kvm launcher");
-            // box and return our kvm launcher
-            Box::new(kvm)
-        }
-    }
 }
