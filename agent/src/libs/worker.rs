@@ -81,10 +81,10 @@ impl Worker {
         if version.thorium != semver::Version::parse(current)? {
             // start our update needed span
             event!(
-                Level::INFO,
-                update_neede = true,
+                Level::WARN,
+                update_needed = true,
                 current = current,
-                new = version.thorium.to_string()
+                api = version.thorium.to_string()
             );
             // set the halt spawning flag so we stop spawning new agents
             self.halt_claiming = true;
