@@ -7,7 +7,9 @@ use uuid::Uuid;
 
 use super::db::{self};
 use crate::models::backends::TagSupport;
-use crate::models::{EventCacheStatus, EventPopOpts};
+use crate::models::{
+    EventCacheStatus, EventPopOpts, OutputKey, SigmaRuleAppliesTo, SigmaScannableResultsEvent,
+};
 use crate::{
     is_admin,
     models::{Event, EventData, EventRow, EventType, TagRequest},
@@ -94,6 +96,44 @@ impl Event {
             user: user.username.clone(),
             data,
             depth,
+        }
+    }
+
+    /// Create a new scannable by sigma event
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is creating
+    #[must_use]
+    pub fn sigma_scannable_results(
+        user: &User,
+        key: OutputKey,
+        groups: Vec<String>,
+        applies_to: Vec<SigmaRuleAppliesTo>,
+        tool: impl Into<String>,
+    ) -> Self {
+        // generate a random event id
+        let id = Uuid::new_v4();
+        // get the current timestamp
+        let timestamp = Utc::now();
+        // build our inner event data type
+        let inner = SigmaScannableResultsEvent {
+            key,
+            groups,
+            applies_to,
+            tool: tool.into(),
+        };
+        // build our event data
+        let data = EventData::SigmaScannableResults(inner);
+        // build our tag event
+        Event {
+            id,
+            timestamp,
+            parent: None,
+            user: user.username.clone(),
+            data,
+            // depth has no meaning for sigma scannable results
+            depth: 0,
         }
     }
 

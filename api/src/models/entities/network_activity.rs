@@ -10,7 +10,7 @@ use crate::models::InvalidEnum;
 use crate::{multipart_text, multipart_text_to_string};
 
 /// The different states for a network connection
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display, strum::EnumString)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display, strum::EnumString, Hash)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum NetConState {
@@ -54,7 +54,7 @@ impl NetConState {
 /// The different protocols at the transport layer
 ///
 /// This is not exhaustive and more protocols should be added as needed.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display, Hash)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum TransportLayerProtocol {
@@ -95,7 +95,7 @@ impl FromStr for TransportLayerProtocol {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct NetworkConnection {
     /// The protocol this network connection is using at the transport layer

@@ -7,8 +7,8 @@ use crate::{
     add_query_bool, add_query_list,
     client::Error,
     models::{
-        Attachment, KeySupport, OutputMap, OutputRequest, OutputResponse, ResultGetParams,
-        backends::OutputSupport,
+        Attachment, EntityKinds, EntityRequest, KeySupport, OutputMap, OutputRequest,
+        OutputResponse, ResultGetParams, backends::OutputSupport,
     },
     send_build, send_bytes,
 };
@@ -96,7 +96,7 @@ pub trait ResultsClientHelper: GenericClient {
         T: AsRef<str>,
         P: AsRef<Path>,
     {
-        // build url for downloading results files for the repo
+        // build url for downloading results files
         let url = format!(
             "{base}/result-files/{key}/{tool}/{result_id}",
             base = self.base_url(),
@@ -114,6 +114,39 @@ pub trait ResultsClientHelper: GenericClient {
         let data = send_bytes!(self.client(), req)?;
         // build our attachment object from the bytes
         Ok(Attachment { data })
+    }
+
+    /// Downloads a specific result entities file for the type of `Self::OutputSupport`
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to use to access the data the results are attached to
+    /// * `tool` - The tool to that made this result file
+    /// * `result_id` - The uuid for this result
+    /// * `entity_kind` - The kind of entity to download
+    async fn download_result_entities_generic<T>(
+        &self,
+        key: T,
+        tool: &str,
+        result_id: Uuid,
+        entity_kind: EntityKinds,
+    ) -> Result<Vec<EntityRequest>, Error>
+    where
+        T: AsRef<str>,
+    {
+        // build url for downloading results entities
+        let url = format!(
+            "{base}/result-files/{key}/{tool}/{result_id}/{entity_kind}",
+            base = self.base_url(),
+            key = key.as_ref()
+        );
+        // build request
+        let req = self
+            .client()
+            .get(&url)
+            .header("authorization", self.token());
+        // send this request and get the result as bytes
+        send_build!(self.client(), req, Vec<EntityRequest>)
     }
 }
 
@@ -148,4 +181,14 @@ pub trait ResultsClient {
     where
         T: AsRef<str>,
         P: AsRef<Path>;
+
+    async fn download_result_entities<T>(
+        &self,
+        sha256: T,
+        tool: &str,
+        result_id: Uuid,
+        entity_kind: EntityKinds,
+    ) -> Result<Vec<EntityRequest>, Error>
+    where
+        T: AsRef<str>;
 }

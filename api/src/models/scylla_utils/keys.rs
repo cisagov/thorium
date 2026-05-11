@@ -8,6 +8,8 @@ pub use pipelines::PipelineKey;
 
 use serde::{Deserialize, Serialize};
 
+use crate::models::OutputKey;
+
 /// The keys trait for identifying things in scylla
 pub trait KeySupport {
     // require scylla bounds only if scylla-utils is enabled

@@ -17,9 +17,9 @@ use super::Error;
 use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferProgress};
 use crate::models::{
     Attachment, CommitListOpts, Commitish, CommitishDetails, CommitishMapRequest, Cursor,
-    OutputMap, OutputRequest, OutputResponse, Repo, RepoCreateResponse, RepoDataUploadResponse,
-    RepoDownloadOpts, RepoListLine, RepoListOpts, RepoRequest, ResultGetParams, TagDeleteRequest,
-    TagRequest, TarredRepo, UntarredRepo,
+    EntityKinds, EntityRequest, OutputMap, OutputRequest, OutputResponse, Repo, RepoCreateResponse,
+    RepoDataUploadResponse, RepoDownloadOpts, RepoListLine, RepoListOpts, RepoRequest,
+    ResultGetParams, TagDeleteRequest, TagRequest, TarredRepo, UntarredRepo,
 };
 use crate::{
     add_date, add_query, add_query_bool, add_query_list, add_query_list_clone, send, send_build,
@@ -790,6 +790,64 @@ impl ResultsClient for Repos {
         // trim any ending '/' from the repo URL
         let repo_trimmed = repo.as_ref().trim_end_matches('/');
         self.download_result_file_generic(repo_trimmed, tool, result_id, path)
+            .await
+    }
+
+    /// Downloads a result entity file for a repo
+    ///
+    /// # Arguments
+    ///
+    /// * `repo` - The repo to get a result file for
+    /// * `tool` - The tool to that made this result file
+    /// * `result_id` - The uuid for this result
+    /// * `path` - The path of the result file to download
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::client::ResultsClient;
+    /// use thorium::models::EntityKinds;
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // the repo to get results for
+    /// let repo = "github.com/user/repo";
+    /// // download an attachment from this result
+    /// thorium.repos.download_result_entities(repo, "tool", Uuid::new_v4(), EntityKinds::WindowsProcess).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(
+            name = "ResultsClient<Repos>::download_result_entities",
+            skip(self, repo, result_id),
+            fields(repo = repo.as_ref())
+            err(Debug)
+        )
+    )]
+    async fn download_result_entities<T>(
+        &self,
+        repo: T,
+        tool: &str,
+        result_id: Uuid,
+        entity_kind: EntityKinds,
+    ) -> Result<Vec<EntityRequest>, Error>
+    where
+        T: AsRef<str>,
+    {
+        // trim any ending '/' from the repo URL
+        let repo_trimmed = repo.as_ref().trim_end_matches('/');
+        // download this results entity file
+        self.download_result_entities_generic(repo_trimmed, tool, result_id, entity_kind)
             .await
     }
 }

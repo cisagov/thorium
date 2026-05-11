@@ -660,7 +660,7 @@ pub async fn error<'a>(
                 Level::ERROR,
                 msg = "Invalid Status",
                 job = job.id.to_string(),
-                status = job.status.to_string(),
+                status = job.status.as_str(),
             );
         return conflict!(format!("job {} must be running to error", &job.id));
     }

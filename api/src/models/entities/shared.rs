@@ -15,6 +15,7 @@ use strum::EnumString;
     Ord,
     EnumString,
     strum::Display,
+    Hash,
 )]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum CriticalSector {

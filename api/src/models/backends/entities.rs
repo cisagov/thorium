@@ -24,8 +24,8 @@ use crate::models::{
     AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
     EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow, EntityMetadata,
     EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, FileSystemEntity,
-    FileSystemFolderEntity, Group, GroupAllowAction, ListableAssociation, SigmaRule, TagListRow,
-    TagMap, TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity,
+    FileSystemFolderEntity, Flag, Group, GroupAllowAction, ListableAssociation, SigmaRule,
+    TagListRow, TagMap, TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity,
     WindowsProcessTreeEntity,
 };
 use crate::utils::{ApiError, Shared};
@@ -56,7 +56,7 @@ impl Entity {
         s3_path: &mut Option<String>,
         user: &User,
         shared: &Shared,
-    ) -> Result<Uuid, ApiError> {
+    ) -> Result<(Uuid, String), ApiError> {
         // generate a UUID for this entity
         let entity_id = Uuid::new_v4();
         // build an entity form to populate
@@ -88,9 +88,9 @@ impl Entity {
         // make sure the data in the finished form is valid
         entity_form.validate()?;
         // create the entity
-        db::entities::create(user, entity_form, entity_id, shared).await?;
+        let entity = db::entities::create(user, entity_form, entity_id, shared).await?;
         // the entity was created successfully
-        Ok(entity_id)
+        Ok((entity_id, entity.name))
     }
 
     /// Create an `Entity` in the db
@@ -110,9 +110,9 @@ impl Entity {
         let mut s3_path: Option<String> = None;
         // try creating the entity
         match Self::create_helper(form, &mut s3_path, user, shared).await {
-            Ok(entity_id) => {
+            Ok((entity_id, name)) => {
                 // entity was successfully created, so return a response
-                let resp = EntityResponse::new(entity_id);
+                let resp = EntityResponse::new(entity_id, name);
                 Ok(resp)
             }
             // we got an error creating the entity, so delete the image from S3 in case
@@ -211,6 +211,10 @@ impl Entity {
                 // tag this rules level
                 opt_tag_to_string!(tags, "SigmaRuleLevel", parsed.level);
             }
+            EntityMetadata::Flag(flag) => {
+                // tag this rules confidence
+                tag!(tags, "FlagConfidence", flag.confidence.to_string());
+            }
             // other and windows process trees have no taggable data
             EntityMetadata::Other
             | EntityMetadata::Collection(_)
@@ -275,6 +279,7 @@ impl Entity {
                 | EntityMetadata::WindowsProcessTree(_)
                 | EntityMetadata::WindowsProcess(_)
                 | EntityMetadata::SigmaRule(_)
+                | EntityMetadata::Flag(_)
                 | EntityMetadata::NetworkConnection(_) => (),
             }
         }
@@ -458,6 +463,14 @@ impl Entity {
                         rule.actions.remove(*index);
                     }
                 }
+            }
+            EntityMetadata::Flag(flag) => {
+                // update the required values in this flag if needed
+                update!(flag.suspicion, form.suspicion);
+                update!(flag.confidence, form.confidence);
+                update!(flag.reasoning, form.reasoning.take());
+                // update any optional values if needed
+                update_opt!(flag.content, form.content);
             }
             // other kinds have no metadata to update
             EntityMetadata::Other | EntityMetadata::Folder(_) => (),
@@ -756,6 +769,7 @@ impl Entity {
             | EntityMetadata::WindowsProcess(_)
             | EntityMetadata::NetworkConnection(_)
             | EntityMetadata::SigmaRule(_)
+            | EntityMetadata::Flag(_)
             | EntityMetadata::Other => (),
         }
     }
@@ -793,6 +807,7 @@ impl EntityMetadata {
             EntityMetadata::WindowsProcess(win_proc) => Some(serialize!(win_proc)),
             EntityMetadata::NetworkConnection(conn) => Some(serialize!(conn)),
             EntityMetadata::SigmaRule(rule) => Some(serialize!(rule)),
+            EntityMetadata::Flag(flag) => Some(serialize!(flag)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -1084,6 +1099,11 @@ impl EntityMetadataForm {
             // the sigma rule specific fields
             "sigma_rule" => self.sigma_rule = Some(field.text().await?),
             "score" => self.score = Some(field.text().await?.parse()?),
+            // the flag specific fields
+            "suspicion" => self.suspicion = Some(field.text().await?.parse()?),
+            "confidence" => self.confidence = Some(field.text().await?.parse()?),
+            "content" => self.content = Some(field.text().await?),
+            "reasoning" => self.reasoning = Some(field.text().await?),
             maybe_list => {
                 match maybe_list {
                     "urls" => {
@@ -1172,6 +1192,7 @@ impl EntityMetadataForm {
                 NetworkConnection::from_form(self)?,
             )),
             EntityKinds::SigmaRule => Ok(EntityMetadata::SigmaRule(SigmaRule::from_form(self)?)),
+            EntityKinds::Flag => Ok(EntityMetadata::Flag(Flag::from_form(self)?)),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }
     }

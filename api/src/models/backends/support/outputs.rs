@@ -1,7 +1,7 @@
 //! Support for interacting with outputs (results)
 use super::TagSupport;
 use crate::models::KeySupport;
-use crate::models::{OutputKind, TagRequest};
+use crate::models::{OutputKey, OutputKind, TagRequest};
 
 // dependencies required for api
 cfg_if::cfg_if! {
@@ -52,6 +52,17 @@ pub trait OutputSupport: TagSupport + KeySupport {
     ///
     /// `extra` - The extra field to extract
     fn extract_extra(extra: Option<Self::ExtraKey>) -> Self::ExtraKey;
+
+    /// Build the key to use as part of the partition key when storing this data in scylla
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The root part of this key
+    /// * `extra` - Any extra info required to build this key
+    fn build_output_key(
+        key: <Self as KeySupport>::Key,
+        extra: &<Self as KeySupport>::ExtraKey,
+    ) -> OutputKey;
 
     /// Ensures any user requested groups are valid for this result.
     ///

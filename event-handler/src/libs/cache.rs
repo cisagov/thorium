@@ -1,14 +1,15 @@
 //! A cache of pipeline trigger info
 
-use chrono::{prelude::*, Duration};
+use chrono::{Duration, prelude::*};
 use futures::stream::{self, StreamExt};
+use futures_locks::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thorium::models::{
     Event, EventData, EventTrigger, Repo, Sample, ScrubbedUser, TagType, TriggerPotential,
 };
 use thorium::{Error, Thorium};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 pub type EventsVec<'a> = Vec<(Uuid, Vec<(&'a String, &'a String, &'a EventTrigger)>)>;
@@ -45,6 +46,7 @@ impl<'a> FilteredEvents<'a> {
 }
 
 /// The different triggers currently cached
+#[derive(Clone)]
 pub struct TriggerCache {
     /// The users we know about
     pub users: HashMap<String, ScrubbedUser>,
@@ -60,9 +62,8 @@ impl TriggerCache {
     /// # Arguments
     ///
     /// * `thorium` - A client for Thorium
-    /// * `span` - The span to log traces under
     async fn get_triggers(
-        thorium: &Arc<Thorium>,
+        thorium: &Thorium,
     ) -> Result<HashMap<String, HashMap<String, HashMap<String, EventTrigger>>>, Error> {
         // assume we will have at least 10 groups
         let mut triggers = HashMap::with_capacity(10);
@@ -101,7 +102,11 @@ impl TriggerCache {
     }
 
     /// Build a new trigger cache
-    async fn get_users(thorium: &Arc<Thorium>) -> Result<HashMap<String, ScrubbedUser>, Error> {
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - a Thorium client
+    async fn get_users(thorium: &Thorium) -> Result<HashMap<String, ScrubbedUser>, Error> {
         // get all users in Thorium
         let list = thorium.users.list_details().await?;
         // create a user map preallocated for the number of users we found
@@ -116,7 +121,12 @@ impl TriggerCache {
     }
 
     /// Build a new trigger cache
-    pub async fn new(thorium: &Arc<Thorium>, max_depth: u8) -> Result<Self, Error> {
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - A thorium client
+    /// * `max_depth` - The max depth of an event to handle
+    pub async fn new(thorium: &Thorium, max_depth: u8) -> Result<Self, Error> {
         // get all users in Thorium
         let users = Self::get_users(thorium).await?;
         // get all pipeline triggers in Thorium
@@ -147,7 +157,7 @@ impl TriggerCache {
                 // check if any of these pipelines could potentially be triggered
                 for (pipeline, triggers) in pipeline_map {
                     // check all of this pipelines triggers
-                    for (_, trigger) in triggers {
+                    for trigger in triggers.values() {
                         // check if this triggers conditions could be potentially met
                         // This will filter out all true negative but triggers but
                         // could have false positives
@@ -258,7 +268,7 @@ impl DataCache {
         thorium: &Thorium,
         filtered: &FilteredEvents<'a>,
         event_cache: &HashMap<Uuid, Event>,
-        retry_ts: &mut Option<DateTime<Utc>>,
+        retry_ts: &Arc<RwLock<Option<DateTime<Utc>>>>,
     ) -> Result<(), Error> {
         // A set of futures for our data requests
         let mut futures = Vec::default();
@@ -290,11 +300,11 @@ impl DataCache {
                         error = error.to_string()
                     );
                     // set our retry timestamp for 3 minutes in the future if its not already set
-                    if retry_ts.is_none() {
+                    if retry_ts.read().await.is_none() {
                         // get a timestamp for 3 minutes in the future
                         let future_ts = Utc::now() + Duration::minutes(3);
                         // set the timestamp for when to retry these errors
-                        *retry_ts = Some(future_ts);
+                        *retry_ts.write().await = Some(future_ts);
                     }
                     // continue to the next future
                     continue;
@@ -380,6 +390,7 @@ impl DataCache {
                 }
             }
             (EventData::NewTags { .. }, EventTrigger::NewSample) => false,
+            (EventData::SigmaScannableResults { .. }, _) => false,
         }
     }
 

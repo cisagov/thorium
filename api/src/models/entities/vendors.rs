@@ -39,7 +39,7 @@ impl VendorEntity {
 }
 
 /// A request for creating a new vendor entity in Thorium
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct VendorEntityRequest {
     /// The country this vendor operates in or is headquatered in

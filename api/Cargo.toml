@@ -109,6 +109,7 @@ indicatif = { version = "0.17", features = ["tokio"] }
 cidr = { version = "0.3", features = ["serde"] }
 gxhash = { version = "3.5", features = ["deterministic"] }
 isocountry = "0.3"
+linearize = { version = "0.1", features = ["derive"] }
 
 # api dependencies
 bb8-redis = { version = "0.24", optional = true }

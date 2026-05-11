@@ -68,7 +68,7 @@ impl WindowsProcessTreeEntity {
 }
 
 /// A windows process
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct WindowsProcessEntity {
     /// This processes id

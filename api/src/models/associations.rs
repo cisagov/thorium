@@ -3,12 +3,10 @@
 //! Associations are directional relationships between two objects in Thorium.
 
 use chrono::prelude::*;
+use std::str::FromStr;
 use uuid::Uuid;
 
-#[cfg(feature = "scylla-utils")]
-use std::str::FromStr;
-
-use crate::models::Directionality;
+use crate::models::{Directionality, EntityKinds, InvalidEnum, OutputKey};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -72,6 +70,10 @@ pub enum AssociationKind {
     ChildProcess,
     /// Opens or receives data from a network connection
     HasNetworkConnection,
+    /// A flag on some data in Thorium
+    FlagFor,
+    /// This entity was created by
+    CreatedBy,
     /// A Sigma rule hit
     SigmaRuleHit,
 }
@@ -109,7 +111,38 @@ impl AssociationKind {
             AssociationKind::ProcessTreeIn => "ProcessTreeIn",
             AssociationKind::ChildProcess => "ChildProcess",
             AssociationKind::HasNetworkConnection => "HasNetworkConnection",
+            AssociationKind::FlagFor => "FlagFor",
+            AssociationKind::CreatedBy => "CreatedBy",
             AssociationKind::SigmaRuleHit => "SigmaRuleHit",
+        }
+    }
+
+    /// The association kind for for an entity back to a sample/repo (not an entity)
+    ///
+    /// This is not exhaustive and is best effort
+    pub fn to_parent_nonentity(kind: EntityKinds) -> Self {
+        match kind {
+            EntityKinds::WindowsProcessTree => Self::ProcessTreeIn,
+            EntityKinds::WindowsProcess => Self::ChildProcess,
+            EntityKinds::FileSystem => Self::FileSystemIn,
+            EntityKinds::Folder => Self::FolderIn,
+            EntityKinds::Flag => Self::FlagFor,
+            EntityKinds::NetworkConnection => Self::HasNetworkConnection,
+            _ => Self::AssociatedWith,
+        }
+    }
+}
+
+impl From<(EntityKinds, EntityKinds)> for AssociationKind {
+    fn from(kinds: (EntityKinds, EntityKinds)) -> Self {
+        match kinds {
+            (EntityKinds::WindowsProcessTree, EntityKinds::WindowsProcess)
+            | (EntityKinds::WindowsProcess, EntityKinds::WindowsProcess) => Self::ChildProcess,
+            (EntityKinds::FileSystem, EntityKinds::Folder) => Self::FolderIn,
+            (EntityKinds::SigmaRule, EntityKinds::Flag) => Self::CreatedBy,
+            (EntityKinds::Flag, _) => Self::FlagFor,
+            (EntityKinds::Vendor, EntityKinds::Device) => Self::DevelopedBy,
+            (EntityKinds::Other, _) | (_, EntityKinds::Other) | _ => Self::AssociatedWith,
         }
     }
 }

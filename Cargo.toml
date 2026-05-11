@@ -49,7 +49,7 @@ kube = { git = "https://github.com/stackabletech/kube-rs.git", rev="cfdfcd1", fe
 kube-derive = { git = "https://github.com/stackabletech/kube-rs.git", rev="cfdfcd1" }
 k8s-openapi = { version = "0.26", default-features = false, features = ["v1_30"] }
 schemars = { version = "1.0.4", features = ["uuid1"] }
-tracing = { version = "0.1" }
+tracing = { version = "0.1", features = ["valuable"] }
 opentelemetry = { version = "0.30", features = ["trace"] }
 clap = { version = "4", features = ["derive", "wrap_help", "string"] }
 serde = { version = "1.0", features = ["derive"] }

@@ -1,11 +1,14 @@
 //! A Sigma rule that can be applied to logs or log like data
+use linearize::Linearize;
 use sigma_rust::rule::Level;
 use std::str::FromStr;
 
-use crate::models::InvalidEnum;
+use crate::models::{Confidence, Flag, InvalidEnum};
 
 /// The different kinds of data this rule should be run on
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::Display, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, strum::Display, PartialEq, Eq, Hash, Linearize,
+)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum SigmaRuleAppliesTo {
@@ -43,17 +46,31 @@ impl FromStr for SigmaRuleAppliesTo {
 }
 
 /// Automatically promote this sigma rule hit to a flag
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct SigmaAutoFlag {
+    /// How confident we are in this rule/flag not being a false positive
+    pub confidence: Confidence,
     /// The interesting, odd, or suspicious characteristic
     pub content: Option<String>,
     /// The reason for this Flag
     pub reasoning: String,
 }
 
+impl SigmaAutoFlag {
+    /// Build a flag with this info and its owner rule
+    pub fn to_flag(&self, rule: &SigmaRule) -> Flag {
+        Flag {
+            suspicion: rule.score,
+            confidence: self.confidence,
+            content: self.content.clone(),
+            reasoning: self.reasoning.clone(),
+        }
+    }
+}
+
 /// The action to take when a sigma rule hits
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreJson))]
 pub enum SigmaActionToTake {
@@ -62,7 +79,7 @@ pub enum SigmaActionToTake {
 }
 
 /// A Sigma rule that can be applied to logs or log like data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct SigmaRule {
     /// The original unparsed rule
