@@ -32,7 +32,7 @@ pub async fn create(
     mut form: EntityForm,
     id: Uuid,
     shared: &Shared,
-) -> Result<(), ApiError> {
+) -> Result<Entity, ApiError> {
     // build an association req for this entity
     let assoc_req = form.build_association_req(user, id, shared).await?;
     // take our form tags since we need those to setup tags and this entity object
@@ -117,7 +117,7 @@ pub async fn create(
         // create the associations for this entity
         assoc_req.apply(user, shared).await?;
     }
-    Ok(())
+    Ok(entity)
 }
 
 /// Get an entity from Scylla
@@ -443,6 +443,8 @@ pub async fn update(
         );
         super::census::decr_cache(keys, shared).await?;
     }
+    // build the key for this entity
+    let entity_key = Entity::build_key(entity.id.to_string(), &());
     // add tags if we have any
     if !tags.is_empty() {
         // build a tag request
@@ -452,14 +454,7 @@ pub async fn update(
         // get the earliest time each group can see this entity
         let earliest = entity.earliest();
         // save the tags in scylla
-        super::tags::create(
-            user,
-            Entity::build_key(entity.id.to_string(), &()),
-            req,
-            &earliest,
-            shared,
-        )
-        .await?;
+        super::tags::create(user, entity_key.clone(), req, &earliest, shared).await?;
     }
     // delete tag rows for the deleted groups
     let mut tag_delete_req = TagDeleteRequest::<Entity>::default().groups(remove_groups);
@@ -471,12 +466,7 @@ pub async fn update(
             (key.clone(), values_with_groups.keys().cloned().collect())
         })
         .collect();
-    super::tags::delete(
-        &Entity::build_key(entity.id.to_string(), &()),
-        &tag_delete_req,
-        shared,
-    )
-    .await?;
+    super::tags::delete(&entity_key, &tag_delete_req, shared).await?;
     Ok(())
 }
 

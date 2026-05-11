@@ -4877,6 +4877,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "linearize"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c733520a3e6c2c5ff9933f88e5bbde446838d4fa65d357ce9b20eb4d264dcd9"
+dependencies = [
+ "cfg-if",
+ "linearize-derive",
+ "rand 0.10.1",
+ "rand 0.8.6",
+ "rand 0.9.4",
+ "version_check",
+]
+
+[[package]]
+name = "linearize-derive"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f657db73fbcad5341c5991ddee6c464d4bfd521575c0dc1a47913e0f434defeb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6418,6 +6443,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
+dependencies = [
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6469,6 +6503,12 @@ checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_pcg"
@@ -8473,6 +8513,7 @@ dependencies = [
  "kube",
  "ldap3",
  "lettre",
+ "linearize",
  "md-5 0.10.6",
  "mime",
  "once_cell",
@@ -8543,11 +8584,18 @@ dependencies = [
 name = "thorium-event-handler"
 version = "1.7.0"
 dependencies = [
+ "async-recursion",
  "chrono",
  "clap",
  "futures 0.3.32",
  "futures-locks",
+ "gxhash",
+ "kanal",
+ "linearize",
+ "papaya",
  "reqwest",
+ "sigma-rust",
+ "strum 0.28.0",
  "thorium-api",
  "tokio",
  "tracing",

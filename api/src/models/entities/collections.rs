@@ -1,7 +1,8 @@
 //! Contains models for collections
 
 use chrono::{DateTime, Utc};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::hash::Hash;
 use strum::{AsRefStr, EnumString};
 
 #[cfg(feature = "client")]
@@ -35,7 +36,9 @@ pub struct CollectionEntity {
     pub end: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, EnumString, strum::Display, AsRefStr)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, EnumString, strum::Display, AsRefStr, Hash,
+)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum CollectionKind {
     /// A collection of files
@@ -45,14 +48,14 @@ pub enum CollectionKind {
 }
 
 /// A request to create a collection entity
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct CollectionEntityRequest {
     /// The kind of collection to create
     pub collection_kind: CollectionKind,
     /// The tags defining this collection
     #[serde(default)]
-    pub collection_tags: HashMap<String, HashSet<String>>,
+    pub collection_tags: BTreeMap<String, BTreeSet<String>>,
     /// Whether tag matching for this collection should be case-insensitive
     #[serde(default)]
     pub tags_case_insensitive: Option<bool>,
@@ -114,7 +117,9 @@ impl CollectionEntityRequest {
             // build the tag key for this and_tag
             let tag_key = format!("metadata[collection_tags][{key}][]");
             // add this tags list of values to our form
-            form = multipart_set!(form, &tag_key, values);
+            form = values
+                .into_iter()
+                .fold(form, |form, value| form.text(key.to_owned(), value))
         }
         Ok(form)
     }

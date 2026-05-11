@@ -16,10 +16,11 @@ use super::Error;
 use super::traits::{GenericClient, ResultsClient, ResultsClientHelper, TransferProgress};
 use crate::models::{
     Attachment, CartedFile, CommentRequest, CommentResponse, CountCursor, Cursor,
-    DeleteCommentParams, DownloadedFile, FileDeleteOpts, FileDownloadOpts, FileListOpts, OutputMap,
-    OutputRequest, OutputResponse, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
-    SampleListLine, SampleRequest, SampleSubmissionResponse, SubmissionUpdate, TagCounts,
-    TagDeleteRequest, TagRequest, UncartedFile,
+    DeleteCommentParams, DownloadedFile, EntityKinds, EntityRequest, FileDeleteOpts,
+    FileDownloadOpts, FileListOpts, OutputMap, OutputRequest, OutputResponse, ResultGetParams,
+    Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleRequest,
+    SampleSubmissionResponse, SubmissionUpdate, TagCounts, TagDeleteRequest, TagRequest,
+    UncartedFile,
 };
 use crate::{
     add_date, add_query, add_query_bool, add_query_list, add_query_list_clone, send, send_build,
@@ -1050,7 +1051,7 @@ impl ResultsClient for Files {
     /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
     /// // the hash to get results for
     /// let sha256 = "63b0490d4736e740f26ea9483d55c254abe032845b70ba84ea463ca6582d106f";
-    /// // download an attachment from this result
+    /// // download a file from this result
     /// thorium.files.download_result_file(sha256, "tool", &Uuid::new_v4(), "crabs.png").await?;
     /// # // allow test code to be compiled but don't unwrap as no API instance would be up
     /// # Ok(())
@@ -1071,6 +1072,52 @@ impl ResultsClient for Files {
         P: AsRef<Path>,
     {
         self.download_result_file_generic(sha256, tool, result_id, path)
+            .await
+    }
+
+    /// Downloads a result entity file
+    ///
+    /// # Arguments
+    ///
+    /// * `sha256` - The sha256 of the sample to get result entities for
+    /// * `tool` - The tool to that made this result
+    /// * `result_id` - The uuid for this result
+    /// * `entity_kind` - The kind of entities to download
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::client::ResultsClient;
+    /// use thorium::models::EntityKinds;
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // the hash to get results for
+    /// let sha256 = "63b0490d4736e740f26ea9483d55c254abe032845b70ba84ea463ca6582d106f";
+    /// // download entities from this result
+    /// thorium.files.download_result_entities(sha256, "tool", Uuid::new_v4(), EntityKinds::WindowsProcess).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    async fn download_result_entities<T>(
+        &self,
+        sha256: T,
+        tool: &str,
+        result_id: Uuid,
+        entity_kind: EntityKinds,
+    ) -> Result<Vec<EntityRequest>, Error>
+    where
+        T: AsRef<str>,
+    {
+        self.download_result_entities_generic(sha256, tool, result_id, entity_kind)
             .await
     }
 }

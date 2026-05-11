@@ -2,8 +2,7 @@
 
 mod cache;
 mod controller;
-//mod handler;
-mod worker;
+mod stats;
+pub mod workers;
 
-pub use controller::EventController;
-//pub use handler::Handler;
+pub use controller::{EventWorkerCache, EventWorkerController};

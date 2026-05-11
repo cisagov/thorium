@@ -43,18 +43,19 @@ pub use entities::collections::{CollectionEntity, CollectionEntityRequest, Colle
 pub use entities::countries::Country;
 pub use entities::devices::{DeviceEntity, DeviceEntityRequest};
 pub use entities::filesystem::{FileSystemEntity, FileSystemEntityBuilder, FileSystemFolderEntity};
+pub use entities::flags::{Confidence, Flag};
 pub use entities::processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 pub use entities::rules::{SigmaRule, SigmaRuleAppliesTo};
 pub use entities::shared::CriticalSector;
 pub use entities::vendors::{VendorEntity, VendorEntityRequest};
 pub use entities::{
     Entity, EntityKinds, EntityListLine, EntityListOpts, EntityListParams, EntityMetadata,
-    EntityMetadataRequest, EntityRequest, EntityResponse, EntityUpdate,
+    EntityMetadataRequest, EntityParentInfo, EntityRequest, EntityResponse, EntityUpdate,
 };
 pub use errors::InvalidEnum;
 pub use events::{
     Event, EventCacheStatus, EventCacheStatusOpts, EventData, EventIds, EventMarks, EventPopOpts,
-    EventRequest, EventTrigger, EventType, TriggerPotential,
+    EventRequest, EventTrigger, EventType, SigmaScannableResultsEvent, TriggerPotential,
 };
 pub use files::{
     Attachment, Buffer, CartedFile, CarvedOrigin, CarvedOriginTypes, Comment, CommentRequest,
@@ -122,7 +123,7 @@ pub use requisitions::{Requisition, ScopedRequisition, SpawnedUpdate};
 pub use results::{
     AutoTag, AutoTagLogic, AutoTagUpdate, FilesHandler, FilesHandlerUpdate, OnDiskFile, Output,
     OutputChunk, OutputCollection, OutputCollectionUpdate, OutputDisplayType, OutputHandler,
-    OutputResponse, ResultGetParams,
+    OutputKey, OutputResponse, ResultGetParams,
 };
 pub use search::events::{
     ResultSearchEvent, SearchEvent, SearchEventPopOpts, SearchEventStatus, SearchEventType,

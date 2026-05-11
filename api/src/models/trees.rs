@@ -8,8 +8,11 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::str::FromStr;
+use strum::IntoEnumIterator;
 use uuid::Uuid;
 
+use crate::models::EntityKinds;
+use crate::models::OutputKey;
 use crate::models::{Association, AssociationKind, Entity, EntityMetadata, InvalidEnum, Repo};
 
 use super::{Origin, Sample};
@@ -352,6 +355,11 @@ impl TreeRelatedQuery {
     }
 }
 
+/// Help serde default the entity kinds limit to all variants
+fn default_entity_kinds() -> Vec<EntityKinds> {
+    EntityKinds::iter().collect()
+}
+
 /// The settings to use for determining which branches should not be automically grown
 #[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -359,6 +367,9 @@ pub struct TreeBounds {
     /// The filesystems to stay within
     #[serde(default)]
     pub filesystem: Vec<Uuid>,
+    /// The kinds of entities to bound this tree to
+    #[serde(default = "default_entity_kinds")]
+    pub entity_kinds: Vec<EntityKinds>,
 }
 
 impl TreeBounds {
@@ -492,6 +503,39 @@ impl TreeQuery {
         // convert this sha256 into a string and add it
         self.samples.push(sha256.into());
         self
+    }
+
+    /// Set the entities to use with this tree
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The id of a entity to build a tree from
+    #[must_use]
+    pub fn entity(mut self, id: Uuid) -> Self {
+        self.entities.push(id);
+        self
+    }
+
+    /// Set the repos to use with this tree
+    ///
+    /// # Arguments
+    ///
+    /// * `repo` - The url of a repo to build a tree from
+    #[must_use]
+    pub fn repo<T: Into<String>>(mut self, repo: T) -> Self {
+        // convert this repo url into a string and add it
+        self.repos.push(repo.into());
+        self
+    }
+}
+
+impl From<OutputKey> for TreeQuery {
+    fn from(key: OutputKey) -> Self {
+        match key {
+            OutputKey::Sample(sha256) => TreeQuery::default().sample(sha256),
+            OutputKey::Entity(id) => TreeQuery::default().entity(id),
+            OutputKey::Repo(url) => TreeQuery::default().repo(url),
+        }
     }
 }
 

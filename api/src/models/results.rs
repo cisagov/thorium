@@ -21,7 +21,7 @@ use crate::{
 use crate::{multipart_file, multipart_list, multipart_text};
 
 #[cfg(feature = "client")]
-use crate::client::Error;
+use crate::client::{Error, ResultsClient};
 
 #[cfg(feature = "python")]
 use pyo3::pyclass;
@@ -1513,5 +1513,88 @@ impl PartialEq<OutputCollection> for OutputCollectionUpdate {
             }
         }
         true
+    }
+}
+
+/// The different kinds of results that need to be scanned
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreJson))]
+pub enum OutputKey {
+    /// The key for a samples output (sha256)
+    Sample(String),
+    /// The key for a repos output (url)
+    Repo(String),
+    /// The key to an entities output (id)
+    Entity(Uuid),
+}
+
+impl OutputKey {
+    /// Get the key to this kind of output as a single string
+    pub fn key_string(self) -> String {
+        // convert this output key to a single string
+        match self {
+            Self::Sample(sha256) => sha256,
+            Self::Repo(url) => url,
+            Self::Entity(id) => id.to_string(),
+        }
+    }
+
+    /// Get the results for this result key
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - A Thorium client
+    /// * `tool` - The name of the tool we are getting results for
+    #[cfg(feature = "client")]
+    pub async fn get_results(
+        &self,
+        thorium: &crate::Thorium,
+        tool: &str,
+    ) -> Result<OutputMap, Error> {
+        // build the params for getting results
+        let params = ResultGetParams::default().tool(tool).hidden();
+        // use the correct client method based on our result key
+        let results = match self {
+            Self::Sample(sha256) => thorium.files.get_results(sha256, &params).await?,
+            Self::Repo(url) => thorium.repos.get_results(url, &params).await?,
+            Self::Entity(_) => unimplemented!("Entities do not yet support results"),
+        };
+        Ok(results)
+    }
+
+    /// Get the results for this result key
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - A Thorium client
+    /// * `tool` - The name of the tool we are getting results for
+    /// * `result_id` - The id of the results to get
+    /// * `entity_kind` - The kind of entity to get
+    #[cfg(feature = "client")]
+    pub async fn get_entities(
+        &self,
+        thorium: &crate::Thorium,
+        tool: &str,
+        result_id: Uuid,
+        entity_kind: EntityKinds,
+    ) -> Result<Vec<crate::models::EntityRequest>, Error> {
+        // use the correct client method based on our result key
+        let entities = match self {
+            Self::Sample(sha256) => {
+                thorium
+                    .files
+                    .download_result_entities(sha256, tool, result_id, entity_kind)
+                    .await?
+            }
+            Self::Repo(url) => {
+                thorium
+                    .repos
+                    .download_result_entities(url, tool, result_id, entity_kind)
+                    .await?
+            }
+            Self::Entity(_) => unimplemented!("Entities do not yet support results"),
+        };
+        Ok(entities)
     }
 }

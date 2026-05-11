@@ -5,7 +5,7 @@ use clap::Parser;
 mod args;
 mod libs;
 
-use libs::EventController;
+use libs::{EventWorkerCache, EventWorkerController};
 
 #[tokio::main]
 async fn main() {
@@ -16,11 +16,11 @@ async fn main() {
     // setup our tracer
     let trace_provider = thorium::utils::trace::setup("ThoriumEventHandler", &conf.thorium.tracing);
     // build our event controller
-    let controller = EventController::new(args, conf)
+    let controller = EventWorkerController::new(args, conf)
         .await
         .expect("Failed to start event controller");
     // start our event handler workers
-    controller.start().await;
+    controller.start().await.expect("Event controller failed!");
     // export any remaining traces and shutdown this provider
     thorium::utils::trace::shutdown(trace_provider);
 }

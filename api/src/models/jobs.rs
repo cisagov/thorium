@@ -173,6 +173,19 @@ impl fmt::Display for JobStatus {
     }
 }
 
+impl JobStatus {
+    /// Get our job status as a str
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Created => "Created",
+            Self::Running => "Running",
+            Self::Completed => "Completed",
+            Self::Failed => "Failed",
+            Self::Sleeping => "Sleeping",
+        }
+    }
+}
+
 /// The different possible statuses for a Job handle command
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "python", pyclass(from_py_object))]

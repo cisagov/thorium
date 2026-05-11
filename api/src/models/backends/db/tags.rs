@@ -6,14 +6,14 @@
 
 use chrono::prelude::*;
 use std::collections::{HashMap, HashSet};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 use super::keys::tags;
 use crate::models::backends::TagSupport;
 use crate::models::{
     Event, FullTagRow, TagDeleteRequest, TagMap, TagRequest, TagRow, TagSearchEvent, TagType, User,
 };
-use crate::utils::{helpers, ApiError, Shared};
+use crate::utils::{ApiError, Shared, helpers};
 use crate::{bad, conn, internal_err, log_scylla_err};
 
 /// Save new tags into scylla

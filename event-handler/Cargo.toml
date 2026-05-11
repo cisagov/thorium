@@ -7,7 +7,7 @@ edition = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thorium-api = { workspace = true, features = ["client", "trace"] }
+thorium-api = { workspace = true, features = ["client", "trace", "kanal-err"] }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
@@ -16,3 +16,10 @@ uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { workspace = true }
 futures = { version = "0.3.31" }
 futures-locks = { version = "0.7.1" }
+sigma-rust = { workspace = true }
+linearize = { version = "0.1", features = ["derive"] }
+kanal = "0.1.1"
+papaya = "0.2"
+strum = { version = "0.28", features = ["derive"] }
+gxhash = { version = "3.5", features = ["deterministic"] }
+async-recursion = "1.1.1"

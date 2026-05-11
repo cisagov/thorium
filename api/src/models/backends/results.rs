@@ -250,9 +250,9 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
             .validate_groups_editable(user, &mut form.groups, shared)
             .await?;
         // build the key to save results and tags too
-        let key = O::build_key(key.clone(), &form.extra);
+        let key = O::build_output_key(key, &form.extra);
         // save these results to the backend
-        db::results::create(&key, &form, shared).await?;
+        let key_str = db::results::create(user, key, &form, shared).await?;
         // build the tag request for this results tags
         let tag_req = O::tag_req()
             .groups(form.groups.clone())
@@ -260,7 +260,7 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         // get the earliest each group has seen this object
         let earliest = object.earliest();
         // add the tags for this result
-        db::tags::create(user, key, tag_req, &earliest, shared).await?;
+        db::tags::create(user, key_str, tag_req, &earliest, shared).await?;
         Ok(())
     }
 

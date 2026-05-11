@@ -19,7 +19,7 @@ use crate::models::{
 use crate::utils::helpers;
 
 /// A filesystem entity
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct FileSystemEntity {
     /// The sha256 for this filesystem
@@ -75,7 +75,7 @@ impl FileSystemEntity {
 }
 
 /// A file system folder entity
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct FileSystemFolderEntity {
     /// The id of the filesystem this fodler is from

@@ -74,7 +74,7 @@ impl DeviceEntity {
 }
 
 /// A device entity
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct DeviceEntityRequest {
     /// Any URL's associated with this device

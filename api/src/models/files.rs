@@ -20,6 +20,8 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use super::{OnDiskFile, TreeSupport};
+#[cfg(any(feature = "api", feature = "client"))]
+use crate::models::OutputKey;
 #[cfg(feature = "api")]
 use crate::models::Tree;
 use crate::{matches_adds, matches_removes, matches_update_opt, opt_tag, same, tag};
@@ -2523,6 +2525,19 @@ impl OutputSupport for Sample {
     ///
     /// `extra` - The extra field to extract
     fn extract_extra(_: Option<Self::ExtraKey>) -> Self::ExtraKey {}
+
+    /// Build the key to use as part of the partition key when storing this data in scylla
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The root part of this key
+    /// * `extra` - Any extra info required to build this key
+    fn build_output_key(
+        key: <Self as KeySupport>::Key,
+        extra: &<Self as KeySupport>::ExtraKey,
+    ) -> OutputKey {
+        OutputKey::Sample(key)
+    }
 
     /// Ensures any user requested groups are valid for this result.
     ///

@@ -103,6 +103,44 @@ impl Entities {
         send_build!(self.client, req, EntityResponse)
     }
 
+    /// Gets details about a specific [`Entity`] in Thorium
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The uuid of the entity to get details on
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// # use thorium::Error;
+    /// # use uuid::Uuid;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // get details on this entity by id (use a real entity id though)
+    /// thorium.entities.get(Uuid::new_v4()).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Entities::get", skip(self), err(Debug))
+    )]
+    pub async fn get(&self, id: Uuid) -> Result<Entity, Error> {
+        // build url for getting info on a sample
+        let url = format!("{base}/api/entities/{id}", base = self.host,);
+        // build request
+        let req = self.client.get(&url).header("authorization", &self.token);
+        // send this request and build a sample from the response
+        send_build!(self.client, req, Entity)
+    }
+
     /// Updates an [`Entity`] in Thorium
     ///
     /// # Arguments
@@ -198,6 +236,7 @@ impl Entities {
         add_date!(query, "start".to_owned(), opts.start);
         add_date!(query, "end".to_owned(), opts.end);
         add_query!(query, "cursor".to_owned(), opts.cursor);
+        add_query_list!(query, "kinds[]".to_owned(), opts.kinds);
         // add our tag query params
         for (key, values) in &opts.tags {
             // build the key for this tag param
@@ -271,6 +310,7 @@ impl Entities {
         add_query!(query, "start".to_owned(), opts.start);
         add_query!(query, "end".to_owned(), opts.end);
         add_query!(query, "cursor".to_owned(), opts.cursor);
+        add_query_list!(query, "kinds[]".to_owned(), opts.kinds);
         // add our tag query params
         for (key, values) in &opts.tags {
             // build the key for this tag param

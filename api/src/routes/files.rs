@@ -14,9 +14,9 @@ use super::OpenApiSecurity;
 use crate::models::backends::{CommentSupport, TagSupport};
 use crate::models::{
     ApiCursor, Association, AssociationListParams, AssociationTargetColumn, CarvedOrigin, Comment,
-    CommentResponse, DeleteCommentParams, DeleteSampleParams, EntityKinds, FileListParams,
-    ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputFormBuilder,
-    OutputHandler, OutputKind, OutputMap, OutputResponse, PcapNetworkProtocol,
+    CommentResponse, DeleteCommentParams, DeleteSampleParams, EntityKinds, EntityRequest,
+    FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType,
+    OutputFormBuilder, OutputHandler, OutputKind, OutputMap, OutputResponse, PcapNetworkProtocol,
     ResultFileDownloadParams, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
     SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagCounts,
     TagDeleteRequest, TagRequest, User, ZipDownloadParams,
@@ -744,9 +744,9 @@ async fn download_result_file(
 /// * `state` - Shared Thorium objects
 #[utoipa::path(
      get,
-     path = "/api/files/results/:sha256/:tool/:result_id/:entity_kind",
+     path = "/api/files/result-files/:sha256/:tool/:result_id/:entity_kind",
      responses(
-         (status = 200, description = "Response containing body of requested entity requests", body = Vec<u8>),
+         (status = 200, description = "Response containing body of requested entity requests", body = Vec<EntityRequest>),
          (status = 401, description = "This user is not authorized to access this route"),
      ),
      security(
@@ -759,7 +759,7 @@ async fn download_result_entities(
     Path((sha256, tool, result_id, entity_kind)): Path<(String, String, Uuid, EntityKinds)>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // start streaming a results file from s3
+    // start streaming a results entities file from s3
     let stream = Output::download_entity(
         OutputKind::Files,
         &user,
@@ -779,7 +779,7 @@ async fn download_result_entities(
 #[derive(OpenApi)]
 #[openapi(
     paths(list, upload, list_details, get_sample, delete_sample, exists, download, download_as_zip, download_result_file, download_result_entities, update, tag, delete_tags, create_comment, delete_comment, download_attachment, get_results, upload_results),
-    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams, TagCounts, EntityKinds)),
+    components(schemas(ApiCursor<Sample>, ApiCursor<SampleListLine>, CarvedOrigin, Comment, CommentResponse, DeleteCommentParams, DeleteSampleParams,FileListParams, ImageVersion, Origin, OriginRequest, Output, OutputDisplayType, OutputHandler, OutputMap, OutputResponse, PcapNetworkProtocol, ResultGetParams, Sample, SampleCheck, SampleCheckResponse, SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagDeleteRequest<Sample>, TagRequest<Sample>, ZipDownloadParams, TagCounts, EntityKinds, EntityRequest)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct FileApiDocs;

@@ -10,13 +10,15 @@ use uuid::Uuid;
 
 use crate::models::backends::OutputSupport;
 use crate::models::{
-    EntityKinds, Output, OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKind,
-    OutputMap, OutputRow, ResultSearchEvent,
+    EntityKinds, Event, Output, OutputDisplayType, OutputForm, OutputId, OutputIdRow, OutputKey,
+    OutputKind, OutputMap, OutputRow, ResultSearchEvent, SigmaRuleAppliesTo, User,
 };
 use crate::utils::{ApiError, Shared, helpers};
 use crate::{internal_err, log_scylla_err, unauthorized};
 
 /// Saves a files result into the backend
+///
+/// Returns the string version of the passed in `OutputKey`.
 ///
 /// # Arguments
 ///
@@ -25,16 +27,19 @@ use crate::{internal_err, log_scylla_err, unauthorized};
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::results::create", skip(form, shared), err(Debug))]
 pub async fn create<O: OutputSupport>(
-    key: &str,
+    user: &User,
+    key: OutputKey,
     form: &OutputForm<O>,
     shared: &Shared,
-) -> Result<(), ApiError> {
+) -> Result<String, ApiError> {
     // get the type of tag we are creating
     let kind = O::output_kind();
     // wrap our tool in a vec
     let tools = vec![form.tool.clone()];
+    // get output key as a string
+    let key_str = key.clone().key_string();
     // get our previous results
-    let mut past = get(kind, &form.groups, key, &tools, true, shared).await?;
+    let mut past = get(kind, &form.groups, &key_str, &tools, true, shared).await?;
     // downselect to just this tools results
     let past = past.results.remove(&form.tool).unwrap_or_default();
     // get the current year and number of hours so far this year
@@ -77,7 +82,7 @@ pub async fn create<O: OutputSupport>(
                     &group,
                     year,
                     bucket,
-                    key,
+                    &key_str,
                     &form.tool,
                     &form.tool_version,
                     form.display_type,
@@ -91,10 +96,10 @@ pub async fn create<O: OutputSupport>(
     // if we have more then our max results stored then delete any past that
     if past.len() >= shared.config.thorium.retention.results {
         // prune any results in groups with more then 3 values
-        prune(kind, &form.groups, key, &past, shared).await?;
+        prune(kind, &form.groups, &key_str, &past, shared).await?;
     }
     // create an event since we've modified results
-    let event = ResultSearchEvent::modified::<O>(key.to_string(), form.groups.clone());
+    let event = ResultSearchEvent::modified::<O>(key_str.clone(), form.groups.clone());
     if let Err(err) = super::search::events::create(event, shared).await {
         return internal_err!(format!(
             "Failed to create result search event! {}",
@@ -102,7 +107,22 @@ pub async fn create<O: OutputSupport>(
                 .unwrap_or_else(|| "An unknown error occurred".to_string())
         ));
     }
-    Ok(())
+    // downselect to only entity kinds that are scannable by sigma
+    let applies_to = form
+        .entities
+        .keys()
+        .filter_map(|kind| kind.to_sigma_applies_to())
+        .collect::<Vec<SigmaRuleAppliesTo>>();
+    // if this result had any scannable entities then create a sigma scanning event
+    if !applies_to.is_empty() {
+        // only create scan events if we found some
+        // create an event for these newly scannable sigma rules
+        let event =
+            Event::sigma_scannable_results(user, key, form.groups.clone(), applies_to, &form.tool);
+        // save our event
+        super::events::create(&event, shared).await?;
+    }
+    Ok(key_str)
 }
 
 /// Authorize a user has access to a specific result_id
@@ -204,7 +224,7 @@ async fn get_ids(
     // build a list of queries
     let mut queries = Vec::with_capacity(groups.len() * tools.len() / 50);
     // get the number of tools or default to 10
-    let tools_len = if tools.len() > 0 { tools.len() } else { 1 };
+    let tools_len = if !tools.is_empty() { tools.len() } else { 1 };
     event!(Level::INFO, groups = groups.len(), tools = tools.len());
     // check if can do this all in one request or not
     if groups.len() * tools_len < 100 {
@@ -232,7 +252,7 @@ async fn get_ids(
         };
         // add our query
         queries.push(query);
-    } else if tools.len() > 0 {
+    } else if !tools.is_empty() {
         // our combined cartesian product is too high so we need to break up this query
         // crawl our groups 50 at a time and our tools 50 at a time
         for (groups_chunk, tools_chunk) in groups[..]

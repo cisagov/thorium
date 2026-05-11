@@ -5,32 +5,37 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use uuid::Uuid;
 
-use super::{InvalidEnum, TagType};
+use crate::models::{OutputKey, SigmaRuleAppliesTo};
+
+use super::TagType;
 
 /// The different types of events
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
 #[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreAsStr))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum EventType {
     /// A trigger that may cause a reaction to be spawned
     ReactionTrigger,
-}
-
-impl std::fmt::Display for EventType {
-    /// Cleanly print an event type
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            EventType::ReactionTrigger => write!(f, "ReactionTrigger"),
-        }
-    }
+    /// A result with new entities was added and can be scanned by a sigma rule
+    SigmaScannableResults,
 }
 
 impl EventType {
     /// Cast our event type to a str
     pub fn as_str(&self) -> &str {
-        match self {
-            EventType::ReactionTrigger => "ReactionTrigger",
-        }
+        self.as_ref()
     }
 }
 
@@ -38,22 +43,26 @@ impl From<&EventData> for EventType {
     /// Get the event type for some event data
     fn from(data: &EventData) -> Self {
         match data {
-            &EventData::NewSample { .. } => EventType::ReactionTrigger,
-            &EventData::NewTags { .. } => EventType::ReactionTrigger,
+            EventData::NewSample { .. } => EventType::ReactionTrigger,
+            EventData::NewTags { .. } => EventType::ReactionTrigger,
+            EventData::SigmaScannableResults { .. } => EventType::SigmaScannableResults,
         }
     }
 }
 
-impl FromStr for EventType {
-    type Err = InvalidEnum;
-
-    /// Conver this str to an [`EventType`]
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        match raw {
-            "ReactionTrigger" => Ok(EventType::ReactionTrigger),
-            _ => Err(InvalidEnum(format!("Unknown EventType: {raw}"))),
-        }
-    }
+/// An event for a sigma scannable result
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreJson))]
+pub struct SigmaScannableResultsEvent {
+    /// The key to the output we want to scan
+    pub key: OutputKey,
+    /// The groups these results/entities were added too
+    pub groups: Vec<String>,
+    /// What rules we can apply to these entities
+    pub applies_to: Vec<SigmaRuleAppliesTo>,
+    /// The tool that created these results/entities
+    pub tool: String,
 }
 
 /// The data for an event
@@ -74,6 +83,8 @@ pub enum EventData {
         /// The new tags that were added
         tags: HashMap<String, HashSet<String>>,
     },
+    /// A result with sigma scannable entities was added
+    SigmaScannableResults(SigmaScannableResultsEvent),
 }
 
 /// An request for a new event in Thorium
@@ -215,6 +226,7 @@ impl Event {
             ) => Self::check_tag_trigger(tag_type, tags, tag_types, required, not),
             (EventData::NewSample { .. }, EventTrigger::Tag { .. }) => TriggerPotential::CanNot,
             (EventData::NewTags { .. }, EventTrigger::NewSample) => TriggerPotential::CanNot,
+            (EventData::SigmaScannableResults { .. }, _) => TriggerPotential::CanNot,
         }
     }
 }
@@ -229,6 +241,24 @@ pub struct EventIds {
 
 impl From<Vec<Uuid>> for EventIds {
     fn from(ids: Vec<Uuid>) -> Self {
+        EventIds { ids }
+    }
+}
+
+impl FromIterator<Uuid> for EventIds {
+    fn from_iter<T: IntoIterator<Item = Uuid>>(iter: T) -> Self {
+        // get our ids as a list
+        let ids = iter.into_iter().collect();
+        // build our event id list
+        EventIds { ids }
+    }
+}
+
+impl From<std::vec::Drain<'_, Uuid>> for EventIds {
+    fn from(drain: std::vec::Drain<'_, Uuid>) -> Self {
+        // get our ids as a list
+        let ids = drain.collect();
+        // build our event id list
         EventIds { ids }
     }
 }

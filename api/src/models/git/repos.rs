@@ -22,7 +22,7 @@ use pyo3::pyclass;
 // api/client imports
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "api", feature = "client"))] {
-        use crate::models::{TagRequest, TagType, OutputKind};
+        use crate::models::{TagRequest, TagType, OutputKind, OutputKey};
         use crate::models::backends::{TagSupport, OutputSupport};
     }
 }
@@ -563,6 +563,19 @@ impl OutputSupport for Repo {
     ///
     /// `extra` - The extra field to extract
     fn extract_extra(_: Option<Self::ExtraKey>) -> Self::ExtraKey {}
+
+    /// Build the key to use as part of the partition key when storing this data in scylla
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The root part of this key
+    /// * `extra` - Any extra info required to build this key
+    fn build_output_key(
+        key: <Self as KeySupport>::Key,
+        extra: &<Self as KeySupport>::ExtraKey,
+    ) -> OutputKey {
+        OutputKey::Repo(key)
+    }
 
     /// Ensures any user requested groups are valid for this result.
     ///
