@@ -206,12 +206,17 @@ async fn scan(pod_api: &Api<Pod>) -> Option<String> {
             continue;
         };
         // get this pods phase
+        // skip any pods that are going to terminate or have a bad phase
         match pod
             .status
             .as_ref()
             .and_then(|status| status.phase.as_deref())
         {
             Some("Pending" | "Running") => (),
+            // this pod is probably one of our old pods that we are replacing
+            // if we log that we are skipping it then it constantly looks like
+            // the operator is failing when this is expected and normal behavior
+            Some("Failed") => continue,
             Some(phase) => {
                 // log that we are skipping an api pod with the wrong phase
                 println!("Skipping API pod with phase: {phase}");

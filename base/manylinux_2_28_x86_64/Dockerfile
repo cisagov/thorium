@@ -13,7 +13,7 @@ RUN yum -y update && \
         libvirt-devel
 # install rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > installer && \
-      sh installer --default-toolchain nightly-2025-08-01 -y
+      sh installer --default-toolchain nightly -y
 ENV PATH="/root/.cargo/bin:$PATH"
 ENV RUSTFLAGS="-C target-feature=+aes,+sse2"
 # install maturin (PyO3 build system)

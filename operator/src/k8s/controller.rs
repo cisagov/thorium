@@ -28,20 +28,54 @@ pub struct SharedInfo {
 
 impl SharedInfo {
     /// Get the Thorium info for a specific node
-    pub fn get_for_node(&self, k8s_cluster: &str, node: &String) -> Result<ThoriumInfo, Error> {
+    pub fn get_for_node(
+        &self,
+        k8s_cluster: &str,
+        node: &String,
+    ) -> Result<Option<ThoriumInfo>, Error> {
+        // whether this cluster has any config or not
+        let mut has_config = false;
+        // track clusters with this name but an empty node list
+        let mut possible_cluster = None;
         // iterate over our clusters
         for (_, info) in &self.info.pin() {
             // get a ref to our k8s clusters
             let k8s_config = &info.meta.cluster.spec.config.thorium.scaler.k8s;
             // get the k8s cluster this node comes from
             if let Some(cluster) = k8s_config.clusters.get(k8s_cluster) {
-                // return the cluster that we found if it contains our node or is empty
-                if cluster.nodes.is_empty() || cluster.nodes.contains(node) {
-                    return Ok(info.to_owned());
+                // if this cluster contains this node explicitly then return its config
+                if cluster.nodes.contains(node) {
+                    return Ok(Some(info.to_owned()));
+                }
+                // if this cluster contains no nodes then add it as a possible cluster to return
+                if cluster.nodes.is_empty() {
+                    // set this cluster info as a possible match
+                    // but make sure we don't have an ambiguous cluster assignment
+                    if possible_cluster.replace(info.to_owned()).is_some() {
+                        // we have an ambiguous cluster assignment
+                        return Err(Error::new(format!(
+                            "{k8s_cluster}:{node} has an ambiguous Thorium cluster assigment"
+                        )));
+                    }
+                }
+                // this cluster does have a config
+                has_config = true;
+            }
+        }
+        // if we have a possible cluster then return that
+        match possible_cluster {
+            Some(info) => Ok(Some(info)),
+            None => {
+                // if this cluster has specified nodes and this node is one of them
+                // then its been deliberately ignored and we should not return any cluster info
+                if has_config {
+                    Ok(None)
+                } else {
+                    // this cluster has no config set so return an error
+                    Err(Error::new(format!("No config for {k8s_cluster}:{node}")))
                 }
             }
         }
-        Err(Error::new(format!("No config for {k8s_cluster}:{node}")))
     }
 }
 

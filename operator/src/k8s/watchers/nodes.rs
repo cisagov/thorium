@@ -48,7 +48,12 @@ async fn reconcile_nodes(node: Arc<Node>, ctx: Arc<NodeWatchContext>) -> Result<
     // get this nodes labels so we can check if its already been enabled/disabled for Thorium
     if let Some(labels) = &node.metadata.labels {
         // get the info for this nodes k8s cluster
-        let info = ctx.shared.get_for_node(&ctx.k8s_name, name)?;
+        let info = match ctx.shared.get_for_node(&ctx.k8s_name, name)? {
+            // this node is a valid node for Thorium to potentially schedule on
+            Some(info) => info,
+            // this node has been deliberately excluded from usage in Thorium so ignore it
+            None => return Ok(Action::requeue(Duration::from_mins(15))),
+        };
         // get the current version of the api
         let api_version = info.thorium.updates.get_version().await?;
         // check if this node already has a Thorium enabled label
