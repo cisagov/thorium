@@ -523,8 +523,8 @@ impl AddAssign for Resources {
         self.ephemeral_storage += other.ephemeral_storage;
         self.nvidia_gpu += other.nvidia_gpu;
         self.amd_gpu += other.amd_gpu;
-        self.worker_slots += self.worker_slots;
-        self.burstable += self.burstable;
+        self.worker_slots += other.worker_slots;
+        self.burstable += other.burstable;
     }
 }
 
