@@ -1856,33 +1856,33 @@ where
             let cnt = query_rows.rows_num();
             // set the type to cast this stream too
             let typed_iter = query_rows.rows::<D>()?;
-            // check if we found any rows
+            // if we found any rows then cast them and add them to our data
             if cnt > 0 {
                 // cast our rows into the correct objects and log any errors
                 let found = typed_iter.filter_map(|res| log_scylla_err!(res));
                 // add this data to the data to return
                 self.data.extend(found);
-                // if cnt is less then our limit then go to the next partition
-                if cnt < limit {
-                    // check if we are at the last index
-                    if self.retain.index == self.retain.partitions.len() - 1 {
-                        // we are at the last index so just return what we have
-                        self.exhausted = true;
-                        break;
-                    }
-                    // we have more data to get so continue on
-                    self.retain.index += 1;
-                    // reset our tie value
-                    self.retain.tie = None;
-                }
-                // if we have all the data we need then return
-                if self.data.len() == self.limit {
-                    // set our tie value if we have any data
-                    if let Some(last) = self.data.last() {
-                        self.retain.tie = last.get_tie();
-                    }
+            }
+            // getting fewer rows than our limit means this partition is exhausted
+            if cnt < limit {
+                // check if we are at the last index
+                if self.retain.index == self.retain.partitions.len() - 1 {
+                    // we are at the last index so just return what we have
+                    self.exhausted = true;
                     break;
                 }
+                // we have more partitions to get data from so continue on
+                self.retain.index += 1;
+                // reset our tie value
+                self.retain.tie = None;
+            }
+            // if we have all the data we need then return
+            if self.data.len() == self.limit {
+                // set our tie value if we have any data
+                if let Some(last) = self.data.last() {
+                    self.retain.tie = last.get_tie();
+                }
+                break;
             }
         }
         Ok(())
