@@ -364,6 +364,8 @@ Usage: minithor expose [options]
 
 Options:
   --dev            Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla)
+  --no-api         Forward only the backing services (skip api/registry) so a
+                   locally-run API can use them; implies the database ports
   --port <port>    Local port for the Thorium API (default: 8080)
   --stop           Stop all running port-forwards
   --status         Show which port-forwards are running
@@ -2146,6 +2148,7 @@ cmd_expose() {
     local DEV_MODE=false
     local STOP_MODE=false
     local STATUS_MODE=false
+    local NO_API=false
     local API_PORT=8080
     local CURRENT_USER
     CURRENT_USER="$(id -un)"
@@ -2154,6 +2157,7 @@ cmd_expose() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --dev)    DEV_MODE=true ;;
+            --no-api) NO_API=true ;;
             --stop)   STOP_MODE=true ;;
             --status) STATUS_MODE=true ;;
             --port)
@@ -2333,10 +2337,14 @@ cmd_expose() {
 
     echo "Starting port-forwards..."
 
-    start_forward thorium-api thorium thorium-api "$API_PORT:80"
-    start_forward registry thorium registry 5000
+    # --no-api forwards only the backing services so a locally-run API can use them
+    if [ "$NO_API" = false ]; then
+        start_forward thorium-api thorium thorium-api "$API_PORT:80"
+        start_forward registry thorium registry 5000
+    fi
 
-    if [ "$DEV_MODE" = true ]; then
+    # forward the backing services for --dev or when only the infrastructure is wanted
+    if [ "$DEV_MODE" = true ] || [ "$NO_API" = true ]; then
         start_forward elastic elastic-system elastic-es-http 9200
         start_forward kibana elastic-system elastic-kb-http 5601
         start_forward redis redis redis 6379
@@ -2348,9 +2356,11 @@ cmd_expose() {
     echo "Port-forward status:"
     show_status
     echo ""
-    echo "Thorium API available at http://localhost:$API_PORT"
-    echo "Registry at http://localhost:5000"
-    if [ "$DEV_MODE" = true ]; then
+    if [ "$NO_API" = false ]; then
+        echo "Thorium API available at http://localhost:$API_PORT"
+        echo "Registry at http://localhost:5000"
+    fi
+    if [ "$DEV_MODE" = true ] || [ "$NO_API" = true ]; then
         echo "Elasticsearch at https://localhost:9200"
         echo "Kibana at https://localhost:5601"
         echo "Redis at localhost:6379"
