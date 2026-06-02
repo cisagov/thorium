@@ -2,6 +2,7 @@ import { describe, test, expect } from 'vitest';
 
 // project imports
 import { YaraRuleChecker } from './index';
+import { Severity } from '../types';
 
 const VALID_RULE = `import "pe"
 
@@ -24,11 +25,11 @@ rule DetectUPX : packer compression
 const checker = new YaraRuleChecker();
 
 function errors(text: string) {
-  return checker.check(text).diagnostics.filter((d) => d.severity === 'error');
+  return checker.check(text).diagnostics.filter((d) => d.severity === Severity.Error);
 }
 
 function warnings(text: string) {
-  return checker.check(text).diagnostics.filter((d) => d.severity === 'warning');
+  return checker.check(text).diagnostics.filter((d) => d.severity === Severity.Warning);
 }
 
 function suggestions(text: string) {

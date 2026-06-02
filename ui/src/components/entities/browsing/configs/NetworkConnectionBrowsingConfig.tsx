@@ -89,11 +89,9 @@ const NetworkConnectionItem: React.FC<NetworkConnectionItemProps> = ({ conn }) =
           </LinkFields>
         </Link>
         {conn.tags != undefined && <hr />}
-        <Row>
-          {conn.tags && Object.keys(conn.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.NetworkConnection} tags={conn.tags} />
-          ) : null}
-        </Row>
+        {conn.tags && Object.keys(conn.tags).length > 1 ? (
+          <CondensedEntityTags resource={Entities.NetworkConnection} tags={conn.tags} />
+        ) : null}
       </BrowsingContents>
     </BrowsingCard>
   );

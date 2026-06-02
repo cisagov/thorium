@@ -5,7 +5,7 @@ import { FaChevronRight } from 'react-icons/fa';
 import styled, { createGlobalStyle, css, keyframes } from 'styled-components';
 
 // project imports
-import { NAV_ITEMS, NavCategory, NavIcon, NavSubItem } from './navConfig';
+import { NAV_ITEMS, NavCategory, NavSubItem } from './navConfig';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import { RequireAuth, useAuth } from '@utilities/auth';
 import { RoleKey, UserInfo } from '@models/users';
@@ -263,10 +263,12 @@ interface SidebarSubItemProps {
 const SidebarSubItem: React.FC<SidebarSubItemProps> = ({ item }) => {
   const Icon = item.icon;
   return (
-    <SubItemLink to={item.path} end>
-      <Icon size={ICON_SIZE - 4} />
-      <SubItemLabel>{item.label}</SubItemLabel>
-    </SubItemLink>
+    <OverlayTipRight tip={item.label} className="sidebar-nav-tooltip">
+      <SubItemLink to={item.path} end>
+        <Icon size={ICON_SIZE - 4} />
+        <SubItemLabel>{item.label}</SubItemLabel>
+      </SubItemLink>
+    </OverlayTipRight>
   );
 };
 

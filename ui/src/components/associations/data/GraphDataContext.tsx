@@ -5,7 +5,10 @@ import { mergeGrowthInto, computeDistances } from './graphMerge';
 import { Seed, Graph, BlankGraph } from '@models/trees';
 import { getInitialTree, growTree } from '@thorpi/trees';
 
-type FocusSource = 'tree' | 'graph';
+export enum FocusSource {
+  Tree = 'tree',
+  Graph = 'graph',
+}
 
 interface GraphDataContextType {
   /** Snapshot of the graph ref at the last version bump. Use for render-time reads.

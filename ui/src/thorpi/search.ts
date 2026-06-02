@@ -1,34 +1,41 @@
-// import the base client function that loads from the config
-// and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { ElasticIndex, SearchFilters } from '@models/search';
+
+// project imports
+import { ElasticDoc, ElasticIndex, SearchFilters } from '@models/search';
+
+interface ApiCursor<T> {
+  cursor?: string;
+  data: T[];
+}
 
 /**
- * Search for query string
- * @async
- * @function
- * @param {string} query - The search string to query results
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {ElasticIndex[]} indexes - The indexes to search
- * @param {string[] | undefined | null} groups - A list of groups to filter results
- * @param {string | undefined | null} start - The start date range of filtered results
- * @param {string | undefined | null,} end - The end date range of filtered results
- * @param {string | undefined | null} cursor - The UUID cursor for an existing search
- * @param {number} limit - The max number of results to return
- * @returns {Promise<{ entityList: any; entityCursor: string | null }>} - results object
+ * Run a full-text search against Elasticsearch-indexed data (`GET /search/`).
+ *
+ * Results are paginated via an opaque cursor: pass the returned `entityCursor` back in on the
+ * next call to fetch the following page (`null` cursor means no more pages).
+ *
+ * @param query - The Lucene/full-text query string.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param indexes - Optional list of {@link ElasticIndex}es to restrict the search to.
+ * @param groups - Optional list of groups to restrict results to.
+ * @param start - Optional ISO start timestamp bounding the result time range.
+ * @param end - Optional ISO end timestamp bounding the result time range.
+ * @param cursor - Pagination cursor from a previous call, or `null`/omitted for the first page.
+ * @param limit - Maximum number of documents to return per page (defaults to 100).
+ * @returns The page of {@link ElasticDoc}s and the next-page cursor (`entityCursor` is `null` when exhausted).
+ *          On failure, returns an empty list and a `null` cursor.
  */
 export async function search(
   query: string,
   errorHandler: (error: string) => void,
   indexes?: ElasticIndex[],
-  groups?: string[] | undefined | null,
-  start?: string | undefined | null,
-  end?: string | undefined | null,
-  cursor?: string | undefined | null,
+  groups?: string[] | null,
+  start?: string | null,
+  end?: string | null,
+  cursor?: string | null,
   limit = 100,
-): Promise<{ entityList: any; entityCursor: string | null }> {
+): Promise<{ entityList: ElasticDoc[]; entityCursor: string | null }> {
   const url = '/search/';
-  // pass in params to search request
   const params: SearchFilters = { query: query };
   if (indexes) {
     params['indexes'] = indexes;
@@ -48,15 +55,15 @@ export async function search(
   params['limit'] = limit;
 
   return client
-    .get(url, { params: params })
+    .get<ApiCursor<ElasticDoc>>(url, { params: params })
     .then((res) => {
       if (res?.status == 200 && res.data) {
-        const cursor = res.data.cursor ? (res.data.cursor as string) : null;
-        return { entityList: res.data.data as any[], entityCursor: cursor };
+        const cursor = res.data.cursor ?? null;
+        return { entityList: res.data.data, entityCursor: cursor };
       }
       return { entityList: [], entityCursor: null };
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Search Elastic');
       return { entityList: [], entityCursor: null };
     });

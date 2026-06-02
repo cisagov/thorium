@@ -1,8 +1,15 @@
+type ScorableNode = {
+  Sample?: { tags?: Record<string, Record<string, unknown>> };
+  Repo?: unknown;
+  Tag?: unknown;
+  Entity?: { kind?: string };
+};
+
 // score the tags applied to an entity redo this later
-export function scoreTags(tags: any): number {
+export function scoreTags(tags: Record<string, Record<string, unknown>>): number {
   let score = 0;
   Object.keys(tags).map((tagKey) => {
-    Object.keys(tags[tagKey]).map((tagValue) => {
+    Object.keys(tags[tagKey]).map(() => {
       // check tag key and then add additional values based on certain tags
       if (['YaraRuleHit', 'ClamAV', 'AVHit'].includes(tagKey)) {
         score += 100;
@@ -16,7 +23,7 @@ export function scoreTags(tags: any): number {
   return score;
 }
 
-export function scoreNode(node: any): number {
+export function scoreNode(node: ScorableNode): number {
   if (node?.Sample) {
     if (node.Sample?.tags) {
       const tags = node.Sample.tags;
@@ -41,5 +48,8 @@ export function scoreNode(node: any): number {
 }
 
 export function getNodeSize(score: number, numElements: number) {
-  return score / 10;
+  const base = score / 10;
+  if (numElements <= 30) return base;
+  const scale = Math.max(0.3, 1 - Math.log10(numElements / 30) * 0.35);
+  return base * scale;
 }

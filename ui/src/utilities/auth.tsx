@@ -15,7 +15,7 @@ type AuthContextType = {
   logout: () => Promise<unknown>;
   register: (username: string, password: string, handleError: (error: string) => void, email?: string, role?: string) => Promise<unknown>;
   revoke: () => Promise<unknown>;
-  impersonate: (userToken: string, tokenExpires: string) => Promise<void>;
+  impersonate: (userToken: string, tokenExpires: string) => void;
 };
 
 // auth context to store info about auth state across app
@@ -53,18 +53,17 @@ function useAuthProvider() {
   const getUserInfo = async () => {
     // get user details
     if (token != undefined) {
-      whoami().then((response) => {
-        if (response) {
-          setUserInfo(response);
-          setToken(response.token);
-          setLastUpdateDate(Date.now());
-          fetchLocalStorageTags();
-        } else {
-          clearTagDataFromLocalStorage();
-          document.cookie = REVOKE_TOKEN_COOKIE;
-          setToken('');
-        }
-      });
+      const response = await whoami();
+      if (response) {
+        setUserInfo(response);
+        setToken(response.token);
+        setLastUpdateDate(Date.now());
+        void fetchLocalStorageTags();
+      } else {
+        clearTagDataFromLocalStorage();
+        document.cookie = REVOKE_TOKEN_COOKIE;
+        setToken('');
+      }
     }
   };
 
@@ -86,9 +85,8 @@ function useAuthProvider() {
   }, [userInfo]);
 
   useEffect(() => {
-    getUserInfo();
+    void getUserInfo();
     // need to run whoami to get user info after login
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return {
@@ -99,46 +97,39 @@ function useAuthProvider() {
       // check if userInfo is fresher than 60 seconds (60k msec)
       if (force || Date.now() - lastUpdateDate > 60000) {
         // refresh user info
-        getUserInfo();
+        await getUserInfo();
       }
       return;
     },
     // validate cookie with request to Thorium whoami route
     // a 401 response will clear cookie
-    checkCookie() {
-      return new Promise((resolve) => {
-        if (getCookie('THORIUM_TOKEN')) {
-          whoami().then((response) => {
-            if (response) {
-              setUserInfo(response);
-              setToken(response.token);
-              setLastUpdateDate(Date.now());
-              resolve(response);
-            } else {
-              document.cookie = REVOKE_TOKEN_COOKIE;
-              setUserInfo(null);
-              setToken(undefined);
-              resolve(null);
-            }
-          });
-        }
-      });
+    async checkCookie() {
+      if (!getCookie('THORIUM_TOKEN')) return null;
+      const response = await whoami();
+      if (response) {
+        setUserInfo(response);
+        setToken(response.token);
+        setLastUpdateDate(Date.now());
+        return response;
+      } else {
+        document.cookie = REVOKE_TOKEN_COOKIE;
+        setUserInfo(null);
+        setToken(undefined);
+        return null;
+      }
     },
     // login via password to get Thorium token
-    login(username: string, password: string, handleError: (error: string) => void) {
-      return new Promise((resolve) => {
-        authUserPass(username, password, handleError).then((authResp) => {
-          if (authResp) {
-            // set cookie with name THORIUM_TOKEN
-            document.cookie = buildCookie(authResp.token, authResp.expires);
-            // set user's Thorium token
-            setToken(authResp.token);
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        });
-      });
+    async login(username: string, password: string, handleError: (error: string) => void) {
+      const authResp = await authUserPass(username, password, handleError);
+      if (authResp) {
+        // set cookie with name THORIUM_TOKEN
+        document.cookie = buildCookie(authResp.token, authResp.expires);
+        // set user's Thorium token
+        setToken(authResp.token);
+        return true;
+      } else {
+        return false;
+      }
     },
     // remove token and clear user info on logout
     logout() {
@@ -150,46 +141,29 @@ function useAuthProvider() {
       });
     },
     // register with Thorium
-    register(username: string, password: string, handleError: (error: string) => void, email = 'thorium@sandia.gov', role = 'User') {
-      return new Promise((resolve) => {
-        createUser(username, email, password, role, handleError).then((authResp) => {
-          if (authResp) {
-            // set cookie with name THORIUM_TOKEN
-            document.cookie = buildCookie(authResp.token, authResp.expires);
-            // set user's Thorium token
-            setToken(authResp.token);
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        });
-      });
+    async register(username: string, password: string, handleError: (error: string) => void, email = 'thorium@sandia.gov', role = 'User') {
+      const authResp = await createUser(username, email, password, role, handleError);
+      if (authResp) {
+        // set cookie with name THORIUM_TOKEN
+        document.cookie = buildCookie(authResp.token, authResp.expires);
+        // set user's Thorium token
+        setToken(authResp.token);
+        return true;
+      } else {
+        return false;
+      }
     },
     // revoke token and clear cookie user info from session
-    revoke() {
-      return new Promise((resolve) => {
-        /**
-         * Submits a token revocation request to the Thorium API
-         * @returns {object} promise for async revocation action
-         */
-        async function handleRevoke() {
-          const response = await logout();
-          if (response?.status == 200) {
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        }
-        handleRevoke().then(() => {
-          setToken(undefined);
-          setUserInfo(null);
-          document.cookie = REVOKE_TOKEN_COOKIE;
-          resolve(null);
-        });
-      });
+    async revoke() {
+      const response = await logout();
+      const result = response?.status == 200 ? true : false;
+      setToken(undefined);
+      setUserInfo(null);
+      document.cookie = REVOKE_TOKEN_COOKIE;
+      return result;
     },
     // logout of any current session and impersonate a user
-    async impersonate(userToken: string, tokenExpires: string) {
+    impersonate(userToken: string, tokenExpires: string) {
       // set cookie with name THORIUM_TOKEN
       document.cookie = buildCookie(userToken, tokenExpires);
       setToken(userToken);

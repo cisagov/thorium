@@ -22,29 +22,43 @@ export type Volume = {
   nfs?: NFS;
 };
 
-export type VolumeTypes = 'host_path' | 'config_map' | 'secret' | 'nfs';
-export type HostPathTypes = 'DirectoryOrCreate' | 'Directory' | 'FileOrCreate' | 'File' | 'Socket' | 'CharDevice' | 'BlockDevice';
+export enum VolumeTypes {
+  HostPath = 'HostPath',
+  ConfigMap = 'ConfigMap',
+  Secret = 'Secret',
+  NFS = 'NFS',
+}
 
-type HostPath = {
+export enum HostPathTypes {
+  DirectoryOrCreate = 'DirectoryOrCreate',
+  Directory = 'Directory',
+  FileOrCreate = 'FileOrCreate',
+  File = 'File',
+  Socket = 'Socket',
+  CharDevice = 'CharDevice',
+  BlockDevice = 'BlockDevice',
+}
+
+export type HostPath = {
   path: string;
   path_type?: HostPathTypes;
 };
 
-type ConfigMap = {
+export type ConfigMap = {
   /// The mode bits to set on files in this volume
   default_mode?: number;
   /// Whether this configmap is optional or not
   optional?: boolean;
 };
 
-type Secret = {
+export type Secret = {
   /// The mode bits to set on files in this volume
   default_mode?: number;
   /// Whether this secret is optional or not
   optional?: boolean;
 };
 
-type NFS = {
+export type NFS = {
   /// The path that is exported by the NFS server
   path: string;
   /// The host/ip:port of the NFS server

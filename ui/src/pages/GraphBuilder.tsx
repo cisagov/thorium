@@ -62,7 +62,7 @@ const GraphBuilder = () => {
             <Card className="panel">
               <Card.Body>
                 <Subtitle className="text-center">Associations</Subtitle>
-                <AssociationGraph inView />
+                <AssociationGraph inView bordered={false} />
               </Card.Body>
             </Card>
           </GraphDataProvider>

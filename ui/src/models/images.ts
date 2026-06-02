@@ -1,18 +1,310 @@
-// project imports
 import { SemVer } from './semver';
+import { OutputCollection, OutputDisplayType } from './results';
 import { Volume } from './volumes';
-import { OutputDisplayType, OutputCollection } from './results';
 
 export type ImageVersion = {
   SemVer?: SemVer;
   Custom?: string;
 };
 
-export type ImageScaler = 'K8s' | 'BareMetal' | 'Windows' | 'Kvm' | 'External';
+export enum ImageScaler {
+  K8s = 'K8s',
+  BareMetal = 'BareMetal',
+  Windows = 'Windows',
+  Kvm = 'Kvm',
+  External = 'External',
+}
 
-type ImageLifetime = {
+export enum ArgStrategy {
+  None = 'None',
+  Append = 'Append',
+}
+
+export type ArgStrategyKwarg = {
+  Kwarg: string;
+};
+
+export type ArgStrategyValue = ArgStrategy | ArgStrategyKwarg;
+
+export type SpawnLimitsBasic = {
+  Basic: number;
+};
+
+export type SpawnLimitsValue = 'Unlimited' | SpawnLimitsBasic;
+
+export enum DependencyPassStrategy {
+  Paths = 'Paths',
+  Names = 'Names',
+  Directory = 'Directory',
+  Disabled = 'Disabled',
+}
+
+export enum FileNamingStrategy {
+  Sha256 = 'Sha256',
+  MostRecent = 'MostRecent',
+}
+
+export enum OutputHandler {
+  Files = 'Files',
+}
+
+export enum AutoTagLogic {
+  Exists = 'Exists',
+}
+
+export type AutoTagLogicValue =
+  | AutoTagLogic
+  | { Equal: unknown }
+  | { Not: unknown }
+  | { Greater: unknown }
+  | { GreaterOrEqual: unknown }
+  | { LesserOrEqual: unknown }
+  | { Lesser: unknown }
+  | { In: unknown[] }
+  | { NotIn: unknown[] };
+
+/// The requested burstable resources to spawn the container with
+export type BurstableResourcesRequest = {
+  /// Cpu cores in millicpus
+  cpu: number;
+  /// Ram in mebibytes
+  memory: number;
+};
+
+/// The requested resources to spawn the container with
+export type ResourcesRequest = {
+  /// Cpu cores in millicpus
+  cpu: number;
+  /// Ram in mebibytes
+  memory: number;
+  /// Ephemeral storage in mebibytes
+  ephemeral_storage?: number;
+  /// The number of available worker slots
+  worker_slots?: number;
+  /// The total number of Nvidia GPUs
+  nvidia_gpu?: number;
+  /// The total number of AMD GPUs
+  amd_gpu?: number;
+  /// The amount of resources to allow an image to burst with
+  burstable?: BurstableResourcesRequest;
+};
+
+/// The resources available on a node or required for an image
+export type Resources = {
+  /// The total amount of cpu in millicpu
+  cpu: number;
+  /// The total amount of ram in mebibytes
+  memory: number;
+  /// The total amount of ephemeral storage in mebibytes
+  ephemeral_storage: number;
+  /// The number of available worker slots
+  worker_slots: number;
+  /// The total number of Nvidia GPUs
+  nvidia_gpu: number;
+  /// The total number of AMD GPUs
+  amd_gpu: number;
+  /// The amount of resources to allow an image to burst with
+  burstable: BurstableResourcesRequest;
+};
+
+export type ImageLifetime = {
   counter: string;
   amount: number;
+};
+
+export type SecurityContext = {
+  user?: number;
+  group?: number;
+  allow_privilege_escalation?: boolean;
+};
+
+/// The arguments to add to this images jobs
+export type ImageArgs = {
+  /// The entrypoint to force all jobs to use
+  entrypoint?: string[];
+  /// The command to force all jobs to use
+  command?: string[];
+  /// What kwarg to pass the current reaction id in with
+  reaction?: string;
+  /// What kwarg to pass the repo url in as
+  repo?: string;
+  /// What kwarg to pass the repo commit in with
+  commit?: string;
+  /// How to pass the result files location in
+  output?: ArgStrategyValue;
+  /// How to pass the result location in
+  output_files?: ArgStrategyValue;
+};
+
+export type SampleDependencySettings = {
+  location?: string;
+  kwarg?: string;
+  strategy?: DependencyPassStrategy;
+  naming?: FileNamingStrategy;
+};
+
+export type RepoDependencySettings = {
+  location?: string;
+  kwarg?: string;
+  strategy?: DependencyPassStrategy;
+};
+
+export type TagDependencySettings = {
+  enabled?: boolean;
+  location?: string;
+  kwarg?: string;
+  strategy?: DependencyPassStrategy;
+};
+
+export type ChildrenDependencySettings = {
+  enabled?: boolean;
+  images?: string[];
+  location?: string;
+  kwarg?: string;
+  strategy?: DependencyPassStrategy;
+};
+
+export type EphemeralDependencySettings = {
+  location?: string;
+  kwarg?: string;
+  strategy?: DependencyPassStrategy;
+  names?: string[];
+};
+
+export type KwargDependencyList = {
+  List: string;
+};
+
+export type KwargDependencyMap = {
+  Map: { [image: string]: string };
+};
+
+export type KwargDependencyValue = 'None' | KwargDependencyList | KwargDependencyMap;
+
+export type ResultDependencySettings = {
+  images?: string[];
+  location?: string;
+  kwarg?: KwargDependencyValue;
+  strategy?: DependencyPassStrategy;
+  names?: string[];
+};
+
+export type GenericCacheDependencySettings = {
+  kwarg?: string;
+  strategy?: DependencyPassStrategy;
+};
+
+export type CacheDependencySettings = {
+  location?: string;
+  generic?: GenericCacheDependencySettings;
+  use_parent_cache?: boolean;
+  enabled?: boolean;
+};
+
+export type Dependencies = {
+  samples?: SampleDependencySettings;
+  ephemeral?: EphemeralDependencySettings;
+  results?: ResultDependencySettings;
+  repos?: RepoDependencySettings;
+  tags?: TagDependencySettings;
+  children?: ChildrenDependencySettings;
+  cache?: CacheDependencySettings;
+};
+
+export type AutoTag = {
+  logic: AutoTagLogicValue;
+  key?: string;
+};
+
+export type FilesHandler = {
+  results?: string;
+  result_files?: string;
+  // Deliberate divergence from the Rust `FilesHandler` (api/src/models/results.rs), which has no
+  // `entities` field. Reserved for a planned future feature; keep until the backend adds it.
+  entities?: string;
+  tags?: string;
+  names?: string[];
+};
+
+// Defined here rather than results.ts so the `OutputHandler` enum value is available without a
+// runtime circular import (results.ts only imports image types, never values).
+/// A blank OutputCollection with all fields defaulted, for initializing image forms.
+export const BlankOutputCollection: OutputCollection = {
+  handler: OutputHandler.Files,
+  files: {},
+  as_filesystem: false,
+  children: '',
+  auto_tag: {},
+  groups: [],
+};
+
+export type ChildFilters = {
+  mime?: string[];
+  file_name?: string[];
+  file_extension?: string[];
+  submit_non_matches?: boolean;
+};
+
+export type Cleanup = {
+  job_id: ArgStrategyValue;
+  results: ArgStrategyValue;
+  result_files_dir: ArgStrategyValue;
+  script: string;
+};
+
+export type Kvm = {
+  xml: string;
+  qcow2: string;
+};
+
+/// List of image names with a cursor (from api/src/models/images.rs)
+export type ImageList = {
+  cursor?: number;
+  names: string[];
+};
+
+/// List of image details with a cursor (from api/src/models/images.rs)
+export type ImageDetailsList = {
+  cursor?: number;
+  details: Image[];
+};
+
+export type ImageRequest = {
+  group: string;
+  name: string;
+  version?: ImageVersion;
+  scaler?: ImageScaler;
+  image?: string;
+  lifetime?: ImageLifetime;
+  timeout?: number;
+  resources?: ResourcesRequest;
+  spawn_limit?: SpawnLimitsValue;
+  volumes?: Volume[];
+  env?: { [key: string]: string | null };
+  args?: ImageArgs;
+  modifiers?: string;
+  description?: string;
+  security_context?: SecurityContext;
+  collect_logs?: boolean;
+  generator?: boolean;
+  dependencies?: Dependencies;
+  display_type?: OutputDisplayType;
+  output_collection?: OutputCollection;
+  child_filters?: ChildFilters;
+  clean_up?: Cleanup;
+  kvm?: Kvm;
+  network_policies?: string[];
+};
+
+export type ImageBanKind =
+  | { Generic: { msg: string } }
+  | { InvalidImageUrl: { url: string } }
+  | { InvalidHostPath: { volume_name: string; host_path: string } };
+
+export type ImageBan = {
+  id: string;
+  time_banned: string;
+  ban_kind: ImageBanKind;
 };
 
 export type Image = {
@@ -32,14 +324,13 @@ export type Image = {
   lifetime?: ImageLifetime;
   /// The timeout for individual jobs
   timeout?: number;
-  /// The resources to required to spawn this image
+  /// The resources required to spawn this image
   resources: Resources;
   /// The limit to use for how many workers of this image type can be spawned
-  spawn_limit: SpawnLimits;
+  spawn_limit: SpawnLimitsValue;
   /// The environment variables to set
-  env: Record<string, string | null>;
-  /// How long this image takes to execute on average in seconds (defaults to
-  /// 10 minutes on image creation).
+  env: { [key: string]: string | null };
+  /// How long this image takes to execute on average in seconds
   runtime: number;
   /// Any volumes to bind in to this container
   volumes: Volume[];
@@ -64,208 +355,13 @@ export type Image = {
   /// The settings for collecting results from this image
   output_collection: OutputCollection;
   /// Any regex filters to match on when uploading children
-  ///
-  /// If no filters are given, all children will be uploaded. Regular expressions
-  /// must conform to standards according to the
-  /// [regex crate](https://docs.rs/regex/latest/regex/) or an error will be
-  /// returned on image creation/update.
   child_filters: ChildFilters;
   /// The settings to use when cleaning up canceled jobs
-  clean_up?: any; //TODO:
+  clean_up?: Cleanup;
   /// The settings to use for Kvm jobs
-  kvm?: any; //TODO:
-  /// A list of reasons an image is banned mapped by ban UUID;
-  /// if the list has any bans, the image cannot be spawned
-  bans: Record<string, ImageBan>;
-  /// A set of the names of network policies to apply to the image when it's spawned
-  ///
-  /// Only applies when scaled with K8's currently
-  network_policies: Set<string>;
-};
-
-export type Resources = {
-  /// The total amount of cpu in millicpu
-  cpu: number;
-  /// The total amount of ram in mebibytes
-  memory: number;
-  /// The total amount of ephemeral storage in mebibytes
-  ephemeral_storage: number;
-  /// The number of available worker slots if its applicable
-  worker_slots: number;
-  /// The total number of Nvidia GPUs
-  nvidia_gpu: number;
-  /// The total number of AMD GPUs
-  amd_gpu: number;
-  /// The amount of resources to allow an image to burst with
-  burstable: BurstableResources;
-};
-
-export type BurstableResources = {
-  /// The total amount of cpu in millicpu
-  cpu: number;
-  /// The total amount of ram in mebibytes
-  memory: number;
-};
-
-export type SpawnLimits = { Basic: number } | 'Unlimited';
-
-type ImageArgs = {
-  /// The entrypoint to force all jobs to use
-  entrypoint?: string[];
-  /// The command to force all jobs to use
-  command?: string[];
-  /// What kwarg to pass the current reaction id in with
-  reaction?: string;
-  /// What kwarg to pass the repo url in as
-  repo?: string;
-  /// What kwarg to pass the repo commit in with
-  commit?: string;
-  /// What kwarg pass the result location as
-  output: ArgStrategy;
-  /// What kwarg pass the result files location as
-  output_files: ArgStrategy;
-};
-
-//FIXME: not sure if this matches. check
-export type ArgStrategy = 'None' | 'Append' | { Kwarg: string };
-
-type SecurityContext = {
-  /// The user to run as
-  user?: number;
-  /// The group to use
-  group: number;
-  /// Allow users to escalate their privileges
-  allow_privilege_escalation: boolean;
-};
-
-type Dependencies = {
-  /// The settings  the agent should use when passing donwloaded samples to tools
-  samples: SampleDependencySettings;
-  /// The settings the agent should use when passing donwloaded ephemeral files to tools
-  ephemeral: EphemeralDependencySettings;
-  /// The settings the agent should use when passing prior results to tools
-  results: ResultDependencySettings;
-  /// The settings the agent should use when passing prior repos to tools
-  repos: RepoDependencySettings;
-  /// The settings the agent should use when passing tags to tools
-  tags: TagDependencySettings;
-  /// The settings the agent should use when passing children files from past tools
-  children: ChildrenDependencySettings;
-  /// The settings to use when getting cache info
-  cache: CacheDependencySettings;
-};
-
-type SampleDependencySettings = {
-  /// Where the agent should store downloaded files
-  location: string;
-  /// The kwarg to pass these samples in with if one is set (otherwise use positional args)
-  kwarg?: string;
-  /// The strategy the agent should use when passing samples downloaded to jobs
-  strategy: DependencyPassStrategy;
-  /// The strategy to when naming any downloaded files
-  naming: FileNamingStrategy;
-};
-
-//FIXME: check
-type DependencyPassStrategy = 'Paths' | 'Names' | 'Directory' | 'Disabled';
-
-type FileNamingStrategy = 'Sha256' | 'MostRecent';
-
-type EphemeralDependencySettings = {
-  /// Where the agent should store downloaded ephemeral files
-  location: string;
-  /// The kwarg to pass these files in with if one is set (otherwise use positional args)
-  kwarg?: string;
-  /// The strategy the agent should use when passing dependencies downloaded to jobs
-  strategy: DependencyPassStrategy;
-  /// Any files to limit this image to downloading
-  names: string[];
-};
-
-type ResultDependencySettings = {
-  /// The prior images to collect results from
-  images: string[];
-  /// Where the agent should store downloaded prior result files
-  location: string;
-  /// The kwarg to pass these files in with if one is set (otherwise use positional args)
-  kwarg: KwargDependency;
-  /// The strategy the agent should use when passing dependencies downloaded to jobs
-  strategy: DependencyPassStrategy;
-  /// Any files to limit this image to downloading
-  names: string[];
-};
-
-type KwargDependency = { List: string } | { Map: Record<string, string> } | 'None';
-
-type RepoDependencySettings = {
-  /// Where the agent should store downloaded repos
-  location: string;
-  /// The kwarg to pass these repos in with if one is set (otherwise use positional args)
-  kwarg?: string;
-  /// The strategy the agent should use when passing repos downloaded to jobs
-  strategy: DependencyPassStrategy;
-};
-
-type TagDependencySettings = {
-  /// Whether this job wants tags to be downloaded or not
-  enabled: boolean;
-  /// Where the agent should store downloaded tags
-  location: string;
-  /// The kwarg to pass these tags in with if one is set (otherwise use positional args)
-  kwarg?: string;
-  /// The strategy the agent should use when passing tags downloaded to jobs
-  strategy: DependencyPassStrategy;
-};
-
-type ChildrenDependencySettings = {
-  //// Whether children dependencies should be enabled or not
-  enabled: boolean;
-  /// The prior images to restrict children collection too
-  images: string[];
-  /// Where the agent should store downloaded childrens
-  location: string;
-  /// The kwarg to pass these childrens in with if one is set (otherwise use positional args)
-  kwarg?: string;
-  /// The strategy the agent should use when passing childrens downloaded to jobs
-  strategy: DependencyPassStrategy;
-};
-
-type CacheDependencySettings = {
-  /// The location to write our generic cache too
-  location: string;
-  /// The settings to use for the generic cache
-  generic: GenericCacheDependencySettings;
-  /// Whether to use our parents cache if we have one or not
-  use_parent_cache: boolean;
-  /// Whether cache is enabled for this image
-  enabled: boolean;
-};
-
-type GenericCacheDependencySettings = {
-  /// The kwarg to pass this cache in with if one is set (otherwise use positional args)
-  kwarg?: string;
-  /// The strategy the agent should use when passing the downloaded cache to jobs
-  strategy: DependencyPassStrategy;
-};
-
-type ChildFilters = {
-  /// Any filters to apply to the MIME type
-  mime: string[];
-  /// Any filters to apply to the file name (including the extension)
-  file_name: string[];
-  /// Any filters to apply to the file extension, not including the dot
-  /// (e.g. "txt", "so", "exe", etc.)
-  file_extension: string[];
-  /// Submit children that do *not* match any of the given filters rather
-  /// than ones that do match
-  submit_non_matches: boolean;
-};
-
-type ImageBan = {
-  /// The unique id for this ban
-  id: string;
-  /// The time in UTC that the ban was made
-  time_banned: any;
-  /// The kind of ban this is
-  ban_kind: any;
+  kvm?: Kvm;
+  /// A list of reasons an image is banned mapped by ban UUID
+  bans: { [uuid: string]: ImageBan };
+  /// The names of network policies to apply to the image when spawned
+  network_policies: string[];
 };

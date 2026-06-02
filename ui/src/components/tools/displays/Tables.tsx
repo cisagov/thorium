@@ -9,14 +9,14 @@ import ChildrenFiles from './files/ChildrenFiles';
 import { ResultRenderProps } from '../props';
 import { Value } from '@models/results';
 
-const JsonTable = ({ results }) => {
+const JsonTable = ({ results }: { results: string }) => {
   if (results && Array.isArray(results)) {
     return (
       <Table striped="row" hover={true} className="mb-4">
         <tbody>
-          {results.map((array, idx) => (
+          {(results as string[][]).map((array: string[], idx: number) => (
             <tr key={'outer_' + idx}>
-              {array.map((entry, innerIdx) =>
+              {array.map((entry: string, innerIdx: number) =>
                 innerIdx == 0 ? (
                   <td key={'inner_' + entry} className="tables-entry-med">
                     {entry}
@@ -39,7 +39,7 @@ const JsonTable = ({ results }) => {
   }
 };
 
-let numLeadHashes = (str) => {
+const numLeadHashes = (str: string) => {
   // Matches one or more # at the start of the string
   const match = str.match(/^#+/);
   // Return the length of the match or 0 if no match
@@ -51,7 +51,7 @@ let numLeadHashes = (str) => {
   };
 };
 
-const CsvTable = ({ data, name }) => {
+const CsvTable = ({ data, name }: { data: string; name: string | number }) => {
   const rows = data.trim().split('\n');
   return (
     <Table striped hover size="sm" className="mb-4 auto-width">
@@ -84,7 +84,7 @@ const CsvTable = ({ data, name }) => {
   );
 };
 
-const HtmlHeading = ({ heading }) => {
+const HtmlHeading = ({ heading }: { heading: string }) => {
   const { count, header } = numLeadHashes(heading);
   if (count == 1) {
     return <h1>{header}</h1>;
@@ -102,9 +102,9 @@ const HtmlHeading = ({ heading }) => {
   return <div>{heading}</div>;
 };
 
-const splitTableSections = (results) => {
+const splitTableSections = (results: string) => {
   const rows = results.trim().split('\n');
-  let htmlSegments: string[] = [];
+  const htmlSegments: string[] = [];
   let tableRows = '';
   rows.map((row) => {
     if (row === '' || row.startsWith('#') || !row.includes(',')) {
@@ -125,7 +125,7 @@ const splitTableSections = (results) => {
   return htmlSegments;
 };
 
-const CsvMultiTable = ({ results }) => {
+const CsvMultiTable = ({ results }: { results: string }) => {
   // split text into rows
   const htmlSegments = splitTableSections(results);
   return (

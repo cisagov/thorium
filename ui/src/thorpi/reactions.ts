@@ -1,20 +1,29 @@
-// import the base client function that loads from the config
-// and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
-import { Reaction, ReactionIdResponse, ReactionRequest } from '@models/reactions';
+
+// project imports
+import { Reaction, ReactionIdResponse, ReactionRequest, StageLogs, StatusUpdate } from '@models/reactions';
 
 // Debugging errors randomly inserted.
 // Valid values 0-100 (percentage chance of error)
 const RANDOM_DEBUG_ERRORS = 0;
 
+interface ReactionListResponse {
+  cursor?: number;
+  names: string[];
+}
+
+interface ReactionDetailsListResponse {
+  cursor?: number;
+  details: Reaction[];
+}
+
 /**
- * Submit reactions for a file.
- * @async
- * @function
- * @param {ReactionRequest} reaction - Reactions to submit
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {Map} tags - An array of tags to add to each reaction in list
- * @returns {object} - promise object representing reaction submission response
+ * Create (launch) a reaction — a run of a pipeline against a target (`POST /reactions/`).
+ *
+ * @param reaction - The reaction request (group, pipeline, target sample(s), args, etc.).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param tags - Optional tags to attach to the reaction; merged into the request when not `null`.
+ * @returns The created reaction's id response, or `null` if the request failed.
  */
 export async function createReaction(
   reaction: ReactionRequest,
@@ -32,136 +41,138 @@ export async function createReaction(
     }
   }
   return client
-    .post(url, reaction)
+    .post<ReactionIdResponse>(url, reaction)
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Create Reaction');
       return null;
     });
 }
 
 /**
- * Get details for a reaction by UUID.
- * @async
- * @function
- * @param {string} group - Group to get details about
- * @param {string} uuid - ID of reaction to get
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {object} - groups details
+ * Fetch a single reaction by id (`GET /reactions/{group}/{uuid}`).
+ *
+ * @param group - The group the reaction belongs to.
+ * @param uuid - The reaction's unique id.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The {@link Reaction}, or `null` if not found or the request failed.
  */
 export async function getReaction(group: string, uuid: string, errorHandler: (error: string) => void): Promise<Reaction | null> {
   const url = '/reactions/' + group + '/' + uuid;
   return client
-    .get(url)
+    .get<Reaction>(url)
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Get Reaction');
       return null;
     });
 }
 
 /**
- * Get logs for a reaction
- * @async
- * @function
- * @param {string} group - Group to get details about
- * @param {string} uuid - ID of reaction to get
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {number} cursor - The number of log lines to skip
- * @param {number} limit - The number of log lines to retrieve
- * @returns {Promise<{logs: string[], cursor?: string} | null>} - reaction logs
+ * Fetch a reaction's status-update log (`GET /reactions/logs/{group}/{uuid}`).
+ *
+ * These are the high-level lifecycle status updates for the reaction (not per-stage stdout —
+ * see {@link getReactionStageLogs} for that).
+ *
+ * @param group - The group the reaction belongs to.
+ * @param uuid - The reaction's unique id.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param cursor - Pagination cursor from a previous call, or `null` for the first page.
+ * @param limit - Maximum number of status updates to return per page (defaults to 100).
+ * @returns An array of {@link StatusUpdate}s, or `null` if the request failed.
  */
 export async function getReactionLogs(
   group: string,
   uuid: string,
   errorHandler: (error: string) => void,
-  cursor = null,
+  cursor: string | null = null,
   limit = 100,
-): Promise<{ logs: string[]; cursor?: string } | null> {
+): Promise<StatusUpdate[] | null> {
   const url = '/reactions/logs/' + group + '/' + uuid;
-  // pass in limit and cursor value
   const params: { cursor?: string; limit?: number } = {};
   if (cursor) {
     params['cursor'] = cursor;
   }
   params['limit'] = limit;
   return client
-    .get(url, { params: params })
+    .get<StatusUpdate[]>(url, { params: params })
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
-      parseRequestError(error, errorHandler, 'Get System Stats');
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Get Reaction Logs');
       return null;
     });
 }
 
 /**
- * Get logs for a reaction stage
- * @async
- * @function
- * @param {string} group - Group to get details about
- * @param {string} uuid - ID of reaction to get
- * @param {string} stage - Name of stage (image) within reaction
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {number} cursor - The number of log lines to skip
- * @param {number} limit - The number of log lines to retrieve
- * @returns {Promise<string[] | null>} - reaction logs
+ * Fetch the captured stdout/stderr log lines for a single stage of a reaction
+ * (`GET /reactions/logs/{group}/{uuid}/{stage}`).
+ *
+ * @param group - The group the reaction belongs to.
+ * @param uuid - The reaction's unique id.
+ * @param stage - The name of the pipeline stage whose logs to fetch.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param cursor - Pagination cursor from a previous call, or `null` for the first page.
+ * @param limit - Maximum number of log lines to return per page (defaults to 100).
+ * @returns The stage's log lines, or `null` if the request failed or no logs exist.
  */
 export const getReactionStageLogs = async (
   group: string,
   uuid: string,
   stage: string,
   errorHandler: (error: string) => void,
-  cursor = null,
+  cursor: string | null = null,
   limit = 100,
 ): Promise<string[] | null> => {
   const url = '/reactions/logs/' + group + '/' + uuid + '/' + stage;
-  // pass in limit and cursor value
   const params: { cursor?: string; limit?: number } = {};
   if (cursor) {
     params['cursor'] = cursor;
   }
   params['limit'] = limit;
   return client
-    .get(url, { params: params })
+    .get<StageLogs>(url, { params: params })
     .then((res) => {
       if (res?.status == 200 && res.data?.logs) {
         return res.data.logs;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Get Reaction Stage Logs');
       return null;
     });
 };
 
 /**
- * Get a list of reactions with optional details.
- * @async
- * @function
- * @param {string} group - group that pipeline is a member of
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {string} [pipeline] - name of pipeline to get reactions for
- * @param {string} [tag] - tag to get reactions for
- * @param {boolean} [details] - whether to return details for listed pipelines
- * @param {string} cursor - the cursor value to continue listing from
- * @param {number} limit - number of reactions to return
- * @returns {Promise<Reaction[] | string[] | null>} - reactions list
+ * List reactions in a group, filtered by pipeline or by tag (`GET /reactions/...`).
+ *
+ * When `tag` is empty the list is scoped by `pipeline` (`/reactions/list/{group}/{pipeline}/`);
+ * when `tag` is provided it takes precedence and the list is scoped by tag
+ * (`/reactions/tag/{group}/{tag}/`).
+ *
+ * @param group - The group whose reactions to list.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param pipeline - Pipeline name to filter by (used only when `tag` is empty).
+ * @param tag - Tag to filter by; when non-empty, overrides the pipeline filter.
+ * @param details - When `true`, return full {@link Reaction} details; when `false`, return ids/names.
+ * @param cursor - Pagination cursor from a previous call, or `null` for the first page.
+ * @param limit - Maximum number of reactions to return per page (defaults to 1000).
+ * @returns The list response (names or details, with a cursor), or `null` if the request failed.
  */
 export async function listReactions(
   group: string,
@@ -169,9 +180,9 @@ export async function listReactions(
   pipeline = '',
   tag = '',
   details = false,
-  cursor = null,
+  cursor: string | null = null,
   limit = 1000,
-): Promise<Reaction[] | string[] | null> {
+): Promise<ReactionDetailsListResponse | ReactionListResponse | null> {
   let url = '/reactions/';
   if (tag == '') {
     url += 'list/' + group + '/' + pipeline + '/';
@@ -181,34 +192,32 @@ export async function listReactions(
   if (details) {
     url += 'details/';
   }
-  // pass in limit and cursor value
   const params: { cursor?: string; limit?: number } = {};
   if (cursor) {
     params['cursor'] = cursor;
   }
   params['limit'] = limit;
   return client
-    .get(url, { params: params })
+    .get<ReactionDetailsListResponse | ReactionListResponse>(url, { params: params })
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'List Reactions');
       return null;
     });
 }
 
 /**
- * Delete reaction by UUID.
- * @async
- * @function
- * @param {string} group - Group to get details about
- * @param {string} uuid - ID of reaction to get
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - promise object representing reaction post response.
+ * Delete a reaction by id (`DELETE /reactions/{group}/{uuid}`).
+ *
+ * @param group - The group the reaction belongs to.
+ * @param uuid - The reaction's unique id.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the reaction was deleted (HTTP 204), otherwise `false`.
  */
 export async function deleteReaction(group: string, uuid: string, errorHandler: (error: string) => void): Promise<boolean> {
   const url = '/reactions/' + group + '/' + uuid;
@@ -220,7 +229,7 @@ export async function deleteReaction(group: string, uuid: string, errorHandler: 
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Delete Reaction');
       return false;
     });

@@ -35,44 +35,49 @@ const getAlerts = (
     isJson = true;
   }
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['errors']) {
-    errors.push(...jsonFormattedResults['errors']);
-    delete jsonFormattedResults['errors'];
-  }
+  // Narrow to record type for bracket access on the json object
+  if (isJson && typeof jsonFormattedResults === 'object' && jsonFormattedResults !== null && !Array.isArray(jsonFormattedResults)) {
+    const obj = jsonFormattedResults as Record<string, Value>;
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['Errors']) {
-    errors.push(...jsonFormattedResults['Errors']);
-    delete jsonFormattedResults['Errors'];
-  }
+    if (obj['errors'] && Array.isArray(obj['errors'])) {
+      errors.push(...(obj['errors'] as string[]));
+      delete obj['errors'];
+    }
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['error']) {
-    errors.push(jsonFormattedResults['error']);
-    delete jsonFormattedResults['error'];
-  }
+    if (obj['Errors'] && Array.isArray(obj['Errors'])) {
+      errors.push(...(obj['Errors'] as string[]));
+      delete obj['Errors'];
+    }
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['Error']) {
-    errors.push(jsonFormattedResults['Error']);
-    delete jsonFormattedResults['Error'];
-  }
+    if (obj['error'] && typeof obj['error'] === 'string') {
+      errors.push(obj['error']);
+      delete obj['error'];
+    }
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['warnings']) {
-    warnings.push(...jsonFormattedResults['warnings']);
-    delete jsonFormattedResults['warnings'];
-  }
+    if (obj['Error'] && typeof obj['Error'] === 'string') {
+      errors.push(obj['Error']);
+      delete obj['Error'];
+    }
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['Warnings']) {
-    warnings.push(...jsonFormattedResults['Warnings']);
-    delete jsonFormattedResults['Warnings'];
-  }
+    if (obj['warnings'] && Array.isArray(obj['warnings'])) {
+      warnings.push(...(obj['warnings'] as string[]));
+      delete obj['warnings'];
+    }
 
-  if (isJson && jsonFormattedResults && jsonFormattedResults['warning']) {
-    warnings.push(jsonFormattedResults['warning']);
-    delete jsonFormattedResults['warning'];
-  }
+    if (obj['Warnings'] && Array.isArray(obj['Warnings'])) {
+      warnings.push(...(obj['Warnings'] as string[]));
+      delete obj['Warnings'];
+    }
 
-  if (jsonFormattedResults && jsonFormattedResults['Warning']) {
-    warnings.push(jsonFormattedResults['Warning']);
-    delete jsonFormattedResults['Warning'];
+    if (obj['warning'] && typeof obj['warning'] === 'string') {
+      warnings.push(obj['warning']);
+      delete obj['warning'];
+    }
+
+    if (obj['Warning'] && typeof obj['Warning'] === 'string') {
+      warnings.push(obj['Warning']);
+      delete obj['Warning'];
+    }
   }
 
   setWarnings(warnings);

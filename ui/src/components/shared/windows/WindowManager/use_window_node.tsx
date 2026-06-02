@@ -3,55 +3,44 @@ import { ReactNode, RefObject, useCallback, useLayoutEffect, useRef, useState } 
 // project imports
 import { useWindowManager } from './use_window_manager';
 
-/**
- * Get window reference and action callbacks for a ref node
- */
+// Per-window hook: registers with the WindowManager and returns refs + callbacks for z-index, click, and close
 export function useWindowNode<N extends HTMLElement>(id?: string) {
   const { canvasMargin, registerWindow, onWindowClick, onWindowClose, zRange: managerZRange, manageWindow } = useWindowManager();
   const nodeRef = useRef<N | null>(null);
-  // We build this wrapper because you can't create
   const storedRef = useRef<RefObject<N> | null>(null);
   const [windowZRange, setWindowZRange] = useState({ start: managerZRange.start, end: managerZRange.start + managerZRange.step, step: 1 });
-  // Create and return a windowRef generation callback
+  const pendingManagedWindow = useRef<{ id: string; window: ReactNode } | null>(null);
+
   const windowRef = useCallback(
     (node: N | null) => {
-      // handle creation of initial node ref
-      if (node && storedRef.current === null) {
+      if (node) {
         nodeRef.current = node;
-        // Register the reference with the window manager
         const { ref: registerRef, windowZRange: registerZRange } = registerWindow(node, id);
         storedRef.current = registerRef;
-        // update ZRange for window
-        setWindowZRange(registerZRange);
-        // handle recreation of the node ref that already exists
-      } else if (node && storedRef.current !== null) {
-        nodeRef.current = node;
-        //onWindowClose(storedRef.current);
-        const { ref: registerRef, windowZRange: registerZRange } = registerWindow(node, id);
-        storedRef.current = registerRef;
-        // update ZRange for window
         setWindowZRange(registerZRange);
       }
     },
     [registerWindow],
   );
 
-  // register and display a new managed window
-  const addManagedWindow = useCallback(
-    (id: string, window: ReactNode) => {
-      useLayoutEffect(() => {
-        manageWindow(id, window, nodeRef);
-      }, []);
-    },
-    [manageWindow],
-  );
+  // Schedule a managed window to be registered on next layout effect
+  const addManagedWindow = useCallback((windowId: string, window: ReactNode) => {
+    pendingManagedWindow.current = { id: windowId, window };
+  }, []);
 
-  // Click window with function generated reference.
+  // Register pending managed windows during layout (hooks must be called at top level)
+  useLayoutEffect(() => {
+    if (pendingManagedWindow.current) {
+      const { id: windowId, window } = pendingManagedWindow.current;
+      manageWindow(windowId, window, nodeRef);
+      pendingManagedWindow.current = null;
+    }
+  });
+
   const handleWindowClick = useCallback(() => {
     if (storedRef.current) onWindowClick(storedRef.current);
   }, [onWindowClick]);
 
-  // Handle removing window from window manager after close
   const handleWindowClose = useCallback(() => {
     if (storedRef.current) onWindowClose(storedRef.current);
   }, [onWindowClose]);
@@ -69,7 +58,7 @@ export function useWindowNode<N extends HTMLElement>(id?: string) {
 
 /*
   Example use of managed windows:
-  
+
   const { addManagedWindow } = useWindowNode();
 
   const uploadRef = useRef(null);
@@ -92,7 +81,7 @@ export function useWindowNode<N extends HTMLElement>(id?: string) {
   <div ref={windowRef}>...</div>
 */
 
-/* 
+/*
 Example of using an unmanaged window:
 
   <OverlayWindow

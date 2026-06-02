@@ -38,7 +38,9 @@ const FileSystemMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
               onChange={(tools) => updatePendingMeta('tools', tools)}
             />
           ) : (
-            entity.metadata.FileSystem.tools.map((tool: string) => <FieldBadge color="Gray" noNull={true} field={tool}></FieldBadge>)
+            entity.metadata.FileSystem.tools.map((tool: string) => (
+              <FieldBadge key={tool} color="Gray" noNull={true} field={tool}></FieldBadge>
+            ))
           )}
         </InfoValue>
       </Row>
@@ -47,12 +49,12 @@ const FileSystemMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
 };
 
 // Get filesystem details from the API
-const getFileSystemDetails = async (vendorID: string, setError: (err: string) => void, updateEntity: (entity: FileSystem) => void) => {
-  getEntity(vendorID, setError).then((data) => {
+const getFileSystemDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (entity: FileSystem) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of FileSystem kind
     if (data && data.kind == Entities.FileSystem) {
       // we know that any entity response with kind=FileSystem is a FileSystem
-      const fs = data as FileSystem;
+      const fs = data;
       updateEntity(fs);
     }
   });

@@ -44,7 +44,7 @@ export type NetworkConnectionMetaFields = {
   /// The state of this connection
   state?: NetConState;
   /// The pid this process is from
-  pid?: BigInt;
+  pid?: bigint;
   /// The name of this process that owns this connection
   process?: string;
   /// When this process was created (not in Thorium but the actually network connection)
@@ -80,6 +80,7 @@ export const BlankNetworkConnection: NetworkConnection = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateNetworkConnection: CreateNetworkConnection = {

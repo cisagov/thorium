@@ -1,5 +1,5 @@
-import { EditorView } from '@codemirror/view';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { EditorView, Decoration, type DecorationSet, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 
 export const thoriumEditorTheme = EditorView.theme({
@@ -112,6 +112,10 @@ export const thoriumEditorTheme = EditorView.theme({
   '.cm-lint-marker-warning': {
     content: '"?"',
   },
+  '.cm-line-strikethrough': {
+    textDecoration: 'line-through',
+    opacity: '0.5',
+  },
 });
 
 const thoriumHighlightStyle = HighlightStyle.define([
@@ -127,6 +131,66 @@ const thoriumHighlightStyle = HighlightStyle.define([
   { tag: tags.atom, color: 'var(--thorium-warning-bg)' },
   { tag: tags.definition(tags.variableName), color: 'var(--thorium-link-text-alt)' },
   { tag: tags.typeName, color: 'var(--thorium-link-text)' },
+  { tag: tags.content, color: 'var(--thorium-ok-bg)' },
+  { tag: tags.separator, color: 'var(--thorium-secondary-text)' },
 ]);
 
 export const thoriumHighlighting = syntaxHighlighting(thoriumHighlightStyle);
+
+// YAML parser treats all unquoted values as Literal/tags.content.
+// This plugin post-processes to apply number/bool/null styling.
+const YAML_NUM_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$|^0x[0-9a-fA-F]+$|^0o[0-7]+$|^[+-]?(\.inf|\.Inf|\.INF)$|^\.nan|\.NaN|\.NAN$/;
+const YAML_BOOL_RE = /^(true|false|True|False|TRUE|FALSE|yes|no|Yes|No|YES|NO|on|off|On|Off|ON|OFF)$/;
+const YAML_NULL_RE = /^(null|Null|NULL|~)$/;
+
+const yamlNumberDeco = Decoration.mark({ class: 'cm-yaml-number' });
+const yamlBoolDeco = Decoration.mark({ class: 'cm-yaml-bool' });
+const yamlNullDeco = Decoration.mark({ class: 'cm-yaml-null' });
+
+function buildYamlValueDecorations(view: EditorView): DecorationSet {
+  const ranges: { from: number; to: number; deco: Decoration }[] = [];
+  const tree = syntaxTree(view.state);
+
+  tree.iterate({
+    enter(node) {
+      if (node.name !== 'Literal') return;
+
+      const parent = node.node.parent;
+      if (parent?.name === 'Key') return;
+
+      const text = view.state.doc.sliceString(node.from, node.to);
+      if (YAML_NULL_RE.test(text)) {
+        ranges.push({ from: node.from, to: node.to, deco: yamlNullDeco });
+      } else if (YAML_BOOL_RE.test(text)) {
+        ranges.push({ from: node.from, to: node.to, deco: yamlBoolDeco });
+      } else if (YAML_NUM_RE.test(text)) {
+        ranges.push({ from: node.from, to: node.to, deco: yamlNumberDeco });
+      }
+    },
+  });
+
+  if (ranges.length === 0) return Decoration.none;
+  ranges.sort((a, b) => a.from - b.from);
+  return Decoration.set(ranges.map((r) => r.deco.range(r.from, r.to)));
+}
+
+export const yamlValueHighlighter = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = buildYamlValueDecorations(view);
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged || syntaxTree(update.state) !== syntaxTree(update.startState)) {
+        this.decorations = buildYamlValueDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations },
+);
+
+export const yamlValueTheme = EditorView.theme({
+  '.cm-yaml-number': { color: 'var(--thorium-warning-bg)' },
+  '.cm-yaml-bool': { color: 'var(--thorium-warning-bg)' },
+  '.cm-yaml-null': { color: 'var(--thorium-secondary-text)' },
+});

@@ -1,58 +1,14 @@
 import { test, expect, Page } from '@playwright/test';
 import path from 'path';
-import { snapshot } from './helpers';
+import {
+  snapshot,
+  setupMockAuth,
+  waitForEditor,
+  waitForLinter,
+  setEditorContent,
+} from './helpers';
 
 const SCREENSHOT_DIR = path.join(import.meta.dirname, 'screenshots');
-
-const MOCK_USER = {
-  username: 'test',
-  role: 'Admin',
-  email: 'test@thorium.dev',
-  groups: ['system'],
-  token: 'mock-token-for-visual-test',
-  token_expiration: '2099-01-01T00:00:00Z',
-  settings: { theme: 'Dark' },
-  local: true,
-  verified: true,
-};
-
-async function setupMockAuth(page: Page) {
-  await page.route('**/api/users/whoami', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USER) }),
-  );
-  await page.route('**/api/**', (route) => {
-    const url = route.request().url();
-    if (url.includes('/users/whoami')) return route.fallback();
-    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  await page.context().addCookies([{
-    name: 'THORIUM_TOKEN',
-    value: MOCK_USER.token,
-    domain: 'localhost',
-    path: '/',
-  }]);
-}
-
-async function waitForEditor(page: Page) {
-  await page.waitForSelector('.cm-editor', { timeout: 10000 });
-  await page.waitForTimeout(500);
-}
-
-async function waitForLinter(page: Page) {
-  await page.waitForTimeout(600);
-}
-
-async function setEditorContent(page: Page, text: string) {
-  await page.evaluate((content) => {
-    const container = document.querySelector('.cm-editor')?.parentElement as HTMLElement & { _cmView?: { state: { doc: { length: number } }; dispatch: (spec: unknown) => void } };
-    const view = container?._cmView;
-    if (view) {
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: content },
-      });
-    }
-  }, text);
-}
 
 const VALID_RULE = `title: Okta User Account Locked Out
 id: 14701da0-4b0f-4ee6-9c95-2ffb4e73bb9a
@@ -124,18 +80,18 @@ status: invalid_status`);
     await snapshot(page, SCREENSHOT_DIR, 'sigma-error-status');
   });
 
-  test('unknown field shows warning with amber tint', async ({ page }) => {
+  test('unknown field shows info diagnostic', async ({ page }) => {
     await setEditorContent(page, VALID_RULE + '\nfoobar: baz');
 
     await waitForLinter(page);
 
-    const warningRanges = page.locator('.cm-lintRange-warning');
-    await expect(warningRanges.first()).toBeVisible({ timeout: 5000 });
+    const infoRanges = page.locator('.cm-lintRange-info');
+    await expect(infoRanges.first()).toBeVisible({ timeout: 5000 });
 
-    await snapshot(page, SCREENSHOT_DIR, 'sigma-warning-unknown-field');
+    await snapshot(page, SCREENSHOT_DIR, 'sigma-info-unknown-field');
   });
 
-  test('overlapping error and warning shows purple tint', async ({ page }) => {
+  test('overlapping error and info shows combined tint', async ({ page }) => {
     await setEditorContent(page, `title: Test Rule
 detection:
     sel:
@@ -145,10 +101,10 @@ foobar: baz`);
 
     await waitForLinter(page);
 
-    const overlap = page.locator('.cm-lintRange-error.cm-lint-has-warning');
+    const overlap = page.locator('.cm-lintRange-error.cm-lint-has-info');
     await expect(overlap.first()).toBeVisible({ timeout: 5000 });
 
-    await snapshot(page, SCREENSHOT_DIR, 'sigma-overlap-error-warning');
+    await snapshot(page, SCREENSHOT_DIR, 'sigma-overlap-error-info');
   });
 
   test('tooltip appears on hover with rounded corners', async ({ page }) => {
@@ -280,3 +236,261 @@ status: badvalue`);
     await snapshot(page, SCREENSHOT_DIR, 'sigma-editor-full');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sigma — Suggestion Click Actions
+// ---------------------------------------------------------------------------
+test.describe('Sigma — Suggestion Click Actions', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMockAuth(page);
+    await page.goto('/test/sigma');
+    await waitForEditor(page);
+  });
+
+  test('click logsource.category chip inserts valid YAML', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    const categoryLabel = page.locator('span[title="logsource.category"]');
+    const categoryRow = categoryLabel.locator('xpath=ancestor::div[1]');
+    await categoryRow.locator('span[title*="process_creation"]').click();
+    await page.waitForTimeout(300);
+
+    const preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+    await preview.locator('button:has-text("Accept")').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    const text = await getEditorText(page);
+    expect(text).toContain('process_creation');
+    expect(text).toContain('product: windows');
+
+    const { parseDocument } = await import('yaml');
+    const doc = parseDocument(text);
+    expect(doc.errors).toHaveLength(0);
+
+    await snapshot(page, SCREENSHOT_DIR, 'sigma-category-chip-click');
+  });
+
+  test('click status value chip inserts valid YAML', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    const statusLabel = page.locator('span[title="status"]');
+    const statusRow = statusLabel.locator('xpath=ancestor::div[1]');
+    await statusRow.locator('span[title*="test"]').click();
+    await page.waitForTimeout(300);
+
+    const preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+    await preview.locator('button:has-text("Accept")').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    const text = await getEditorText(page);
+    expect(text).toContain('status');
+    expect(text).toContain('title: Test Rule');
+
+    const { parseDocument } = await import('yaml');
+    const doc = parseDocument(text);
+    expect(doc.errors).toHaveLength(0);
+  });
+
+  test('add missing field via Add button inserts valid YAML', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    await page.locator(`span[title="Add 'id' field"]`).click();
+    await page.waitForTimeout(300);
+
+    const preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+
+    const input = preview.locator('input').first();
+    await input.fill('929a690e-bef0-4204-a928-ef5e620d6fcc');
+    await input.press('Enter');
+    await page.waitForTimeout(300);
+
+    const text = await getEditorText(page);
+    expect(text).toContain('id:');
+    expect(text).toContain('929a690e');
+
+    const { parseDocument } = await import('yaml');
+    const doc = parseDocument(text);
+    expect(doc.errors).toHaveLength(0);
+  });
+
+  test('add list field via Add button inserts valid YAML', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    await page.locator(`span[title="Add 'tags' field"]`).click();
+    await page.waitForTimeout(300);
+
+    const preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+
+    const input = preview.locator('input').first();
+    await input.fill('attack.t1059');
+    await page.waitForTimeout(200);
+
+    await preview.locator('button:has-text("Accept")').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    const text = await getEditorText(page);
+    expect(text).toContain('tags');
+    expect(text).toContain('attack.t1059');
+
+    const { parseDocument } = await import('yaml');
+    const doc = parseDocument(text);
+    expect(doc.errors).toHaveLength(0);
+  });
+
+  test('click logsource.product chip inserts valid YAML', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    category: process_creation
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    const productLabel = page.locator('span[title="logsource.product"]');
+    const productRow = productLabel.locator('xpath=ancestor::div[1]');
+    await productRow.locator('span[title*="windows"]').click();
+    await page.waitForTimeout(300);
+
+    const preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+    await preview.locator('button:has-text("Accept")').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    const text = await getEditorText(page);
+    expect(text).toContain('windows');
+    expect(text).toContain('category: process_creation');
+
+    const { parseDocument } = await import('yaml');
+    const doc = parseDocument(text);
+    expect(doc.errors).toHaveLength(0);
+  });
+
+  test('sequential: add status then level, both present and valid YAML', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    // Add status
+    const statusLabel = page.locator('span[title="status"]');
+    const statusRow = statusLabel.locator('xpath=ancestor::div[1]');
+    await statusRow.locator('span[title*="test"]').click();
+    await page.waitForTimeout(300);
+
+    let preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+    await preview.locator('button:has-text("Accept")').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    let text = await getEditorText(page);
+    expect(text).toContain('status');
+
+    await waitForLinter(page);
+
+    // Add level
+    const levelLabel = page.locator('span[title="level"]');
+    const levelRow = levelLabel.locator('xpath=ancestor::div[1]');
+    await levelRow.locator('span[title*="medium"]').click();
+    await page.waitForTimeout(300);
+
+    preview = page.locator('.cm-suggestion-preview');
+    await expect(preview).toBeVisible({ timeout: 3000 });
+    await preview.locator('button:has-text("Accept")').click({ timeout: 5000 });
+    await page.waitForTimeout(300);
+
+    text = await getEditorText(page);
+    expect(text).toContain('status');
+    expect(text).toContain('level');
+
+    const { parseDocument } = await import('yaml');
+    const doc = parseDocument(text);
+    expect(doc.errors).toHaveLength(0);
+
+    await snapshot(page, SCREENSHOT_DIR, 'sigma-sequential-suggestions');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sigma — Detection Diagnostics
+// ---------------------------------------------------------------------------
+test.describe('Sigma — Detection Diagnostics', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMockAuth(page);
+    await page.goto('/test/sigma');
+    await waitForEditor(page);
+  });
+
+  test('condition referencing undefined identifier shows warning', async ({ page }) => {
+    const rule = `title: Test Rule
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: undefined_identifier`;
+
+    await setEditorContent(page, rule);
+    await waitForLinter(page);
+
+    const warnings = page.locator('.cm-lintRange-warning');
+    await expect(warnings.first()).toBeVisible({ timeout: 5000 });
+  });
+});
+
+async function getEditorText(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const container = document.querySelector('.cm-editor')?.parentElement as HTMLElement & {
+      _cmView?: { state: { doc: { toString: () => string } } };
+    };
+    return container?._cmView?.state.doc.toString() ?? '';
+  });
+}

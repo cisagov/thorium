@@ -7,7 +7,14 @@ import Page from '@components/pages/Page';
 import Subtitle from '@components/shared/titles/Subtitle';
 import Title from '@components/shared/titles/Title';
 import { getSystemStats } from '@thorpi/system';
-import { GroupsStats, Stats } from '@models/system';
+import { GroupsStats, Stats, UserStageStats } from '@models/system';
+
+interface GroupStatsRow extends UserStageStats {
+  group: string;
+  pipeline: string;
+  stage: string;
+  user: string;
+}
 
 interface GroupStatsProps {
   stats: GroupsStats;
@@ -16,9 +23,9 @@ interface GroupStatsProps {
 const SelectableGroupStats: React.FC<GroupStatsProps> = ({ stats }) => {
   const groups = stats ? Object.keys(stats) : [];
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'group', direction: 'ascending' });
+  const [sortConfig, setSortConfig] = useState<{ key: keyof GroupStatsRow; direction: string }>({ key: 'group', direction: 'ascending' });
 
-  const getSortedData = (data: any) => {
+  const getSortedData = (data: GroupStatsRow[]) => {
     const sortedData = [...data];
     sortedData.sort((a, b) => {
       if (a[sortConfig.key] < b[sortConfig.key]) {
@@ -32,7 +39,7 @@ const SelectableGroupStats: React.FC<GroupStatsProps> = ({ stats }) => {
     return sortedData;
   };
 
-  const handleSort = (key: string) => {
+  const handleSort = (key: keyof GroupStatsRow) => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -40,7 +47,7 @@ const SelectableGroupStats: React.FC<GroupStatsProps> = ({ stats }) => {
     setSortConfig({ key, direction });
   };
 
-  const filteredData: any = [];
+  const filteredData: GroupStatsRow[] = [];
   groups.forEach((group) => {
     const pipelines = stats[group]['pipelines'];
     Object.keys(pipelines).forEach((pipeline) => {
@@ -68,7 +75,7 @@ const SelectableGroupStats: React.FC<GroupStatsProps> = ({ stats }) => {
 
   const sortedData = getSortedData(
     filteredData.filter(
-      (row: any) =>
+      (row) =>
         row.group.toLowerCase().includes(searchQuery.toLowerCase()) ||
         row.pipeline.toLowerCase().includes(searchQuery.toLowerCase()) ||
         row.stage.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -222,11 +229,11 @@ const SystemStats = () => {
 
   // trigger fetch stats on initial page load
   useEffect(() => {
-    fetchStats();
+    void fetchStats();
 
     // set interval to rerun every 5 seconds
     const intervalId = setInterval(() => {
-      fetchStats();
+      void fetchStats();
     }, 10000);
 
     // cleanup interval on component unmount

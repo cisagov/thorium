@@ -61,7 +61,8 @@ export const PopoverBody = styled.div`
 `;
 
 export const ControlRow = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: 120px 1fr;
   align-items: center;
   gap: 8px;
 `;
@@ -70,7 +71,6 @@ export const ControlLabel = styled.label`
   font-size: 0.8rem;
   white-space: nowrap;
   color: var(--thorium-text);
-  min-width: 0;
 `;
 
 export const RangeInput = styled(Form.Range)`
@@ -80,8 +80,8 @@ export const RangeInput = styled(Form.Range)`
 
 export const Divider = styled.hr`
   margin: 2px 0;
-  border-color: var(--thorium-panel-border);
-  opacity: 0.4;
+  border-color: var(--thorium-divider);
+  opacity: 1;
 `;
 
 export const FullWidthDropdown = styled(Dropdown).attrs({ as: ButtonGroup })`
@@ -151,7 +151,7 @@ export const MenuItem = styled.button`
     left: 16px;
     right: 16px;
     height: 1px;
-    background: var(--thorium-panel-border);
+    background: var(--thorium-divider);
     opacity: 0.5;
   }
 `;
@@ -202,7 +202,7 @@ export const MenuDropdown = styled(Dropdown)`
     left: 16px;
     right: 16px;
     height: 1px;
-    background: var(--thorium-panel-border);
+    background: var(--thorium-divider);
     opacity: 0.5;
     pointer-events: none;
   }

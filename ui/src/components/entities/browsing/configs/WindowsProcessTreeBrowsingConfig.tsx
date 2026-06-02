@@ -81,11 +81,9 @@ const ProcessTreeItem: React.FC<WindowsProcessTreeItemProps> = ({ tree }) => {
           </LinkFields>
         </Link>
         {tree.tags != undefined && <hr />}
-        <Row>
-          {tree.tags && Object.keys(tree.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.WindowsProcessTree} tags={tree.tags} />
-          ) : null}
-        </Row>
+        {tree.tags && Object.keys(tree.tags).length > 1 ? (
+          <CondensedEntityTags resource={Entities.WindowsProcessTree} tags={tree.tags} />
+        ) : null}
       </BrowsingContents>
     </BrowsingCard>
   );

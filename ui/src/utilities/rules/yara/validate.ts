@@ -1,3 +1,4 @@
+// Validation spec: see VALIDATION_SPEC.md in this directory
 // project imports
 import { Severity, includes, type Diagnostic } from '../types';
 import type { YaraParseResult } from './parse';
@@ -252,7 +253,7 @@ export function validateYaraRules(result: YaraParseResult): Diagnostic[] {
       if (usesEntrypoint) {
         for (const cl of rule.conditionLines) {
           const epRe = /\bentrypoint\b/g;
-          let m;
+          let m: RegExpExecArray | null;
           while ((m = epRe.exec(cl.text)) !== null) {
             diagnostics.push({
               line: cl.line,

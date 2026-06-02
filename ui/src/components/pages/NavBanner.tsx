@@ -16,6 +16,7 @@ const StyledNavbar = styled.nav`
   background-color: var(--thorium-nav-panel-bg);
   border-bottom: 0.05px groove var(--thorium-panel-border);
   right: 0;
+  top: 0;
   position: fixed;
   width: 100%;
   z-index: 4000;

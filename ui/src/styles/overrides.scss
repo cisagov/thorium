@@ -94,7 +94,7 @@ hr {
   position: relative;
   border: none;
   height: 1px;
-  background: var(--thorium-highlight-panel-border);
+  background: var(--thorium-divider);
 }
 
 hr.tagshr {
@@ -102,7 +102,7 @@ hr.tagshr {
   top: 5px;
   border: none;
   height: 1px;
-  background: var(--thorium-highlight-panel-border);
+  background: var(--thorium-divider);
   margin-bottom: 10px;
 }
 
@@ -233,6 +233,30 @@ a.dropdown-toggle.nav-link {
 }
 
 // -----------------------------------------------------------------------------
+// --------------------------------- Tooltips ----------------------------------
+.tooltip {
+  --bs-tooltip-bg: var(--thorium-secondary-panel-bg);
+  --bs-tooltip-color: var(--thorium-text);
+  border-radius: 8px;
+}
+
+.tooltip.show {
+  --bs-tooltip-bg: var(--thorium-secondary-panel-bg);
+  opacity: 0.97;
+}
+
+// Applied via className="tooltip-wide" in OverlayTip.tsx
+.tooltip-wide > .tooltip-inner {
+  max-width: 800px !important;
+  max-height: 400px !important;
+  text-align: start;
+  overflow-y: scroll;
+  border-color: var(--thorium-highlight-panel-border);
+  border-style: solid;
+  border-width: 1px;
+}
+
+// -----------------------------------------------------------------------------
 // ----------------------------------- Forms -----------------------------------
 .form-label {
   color: var(--thorium-text);
@@ -337,6 +361,25 @@ a.dropdown-toggle.nav-link {
       inset 0 0 1px var(--thorium-panel-border),
       0 0 6px var(--thorium-highlight-panel-border) !important;
     --bs-form-switch-bg: url('data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%27-4 -4 8 8%27><circle r=%273%27 fill=%27%27/></svg>') !important;
+  }
+}
+
+.form-range {
+  &::-webkit-slider-runnable-track {
+    background: var(--thorium-panel-border);
+  }
+
+  &::-moz-range-track {
+    background: var(--thorium-panel-border);
+  }
+
+  &::-webkit-slider-thumb {
+    background: var(--thorium-highlight-text);
+  }
+
+  &::-moz-range-thumb {
+    background: var(--thorium-highlight-text);
+    border: none;
   }
 }
 

@@ -19,6 +19,8 @@ export enum ClauseCondition {
   IsNot = 'is not',
   IsOneOf = 'is one of',
   Are = 'are',
+  /// substring match (e.g. "username includes ali" matches "alice")
+  Includes = 'includes',
 }
 
 //NOTE: add new multi conditions here
@@ -169,6 +171,8 @@ export function GetConditionHelpText(cond: ClauseCondition): string {
       return 'field matches / has one or more selected values';
     case ClauseCondition.Are:
       return 'field matches all selected values';
+    case ClauseCondition.Includes:
+      return 'field contains this value (substring match)';
     default:
       return '';
   }

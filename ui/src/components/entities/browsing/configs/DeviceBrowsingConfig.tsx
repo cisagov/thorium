@@ -9,6 +9,7 @@ import {
   BrowsingContents,
   EntityGroups,
   EntityName,
+  EntityNameWithIcon,
   EntitySecondary,
   EntitySubmitters,
   LinkFields,
@@ -59,7 +60,11 @@ const DeviceItem: React.FC<DeviceItemProps> = ({ device }) => {
       <BrowsingContents>
         <Link to={`${getDetailsBasePathByEntity(Entities.Device)}/${device.id}`} state={{ device: device }} className="no-decoration">
           <LinkFields>
-            <EntityName>{device.name}</EntityName>
+            <EntityName>
+              <EntityNameWithIcon entityId={device.id} hasImage={device.image != null}>
+                {device.name}
+              </EntityNameWithIcon>
+            </EntityName>
             <EntitySecondary>
               {device.metadata.Device.vendors && device.metadata.Device.vendors.length > 0
                 ? device.metadata.Device.vendors.map((vendor: Vendor) => vendor.name).join(', ')
@@ -84,12 +89,12 @@ const DeviceItem: React.FC<DeviceItemProps> = ({ device }) => {
             </EntitySubmitters>
           </LinkFields>
         </Link>
-        {device.tags != undefined && <hr />}
-        <Row>
-          {device.tags && Object.keys(device.tags).length > 1 ? (
+        {device.tags && Object.keys(device.tags).length > 1 && (
+          <>
+            <hr />
             <CondensedEntityTags resource={Entities.Device} tags={device.tags} />
-          ) : null}
-        </Row>
+          </>
+        )}
       </BrowsingContents>
     </BrowsingCard>
   );

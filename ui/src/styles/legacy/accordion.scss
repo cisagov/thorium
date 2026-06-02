@@ -1,19 +1,20 @@
-.accordion-list-buttons {
-  display: flex;
-  justify-content: flex-end;
-  flex-direction: row;
-}
-
 .accordion-item-ownership {
   display: flex;
-  flex: 3;
+  flex: 4;
 }
 
 .accordion-item-name {
-  flex: 3;
+  flex: 4;
 }
 
 // relation gap, for groups this is the role field
 .accordion-item-relation {
-  flex: 5;
+  flex: 3;
+}
+
+.accordion-item-status {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }

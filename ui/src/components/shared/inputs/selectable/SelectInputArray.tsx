@@ -15,7 +15,8 @@ interface SelectOption {
   readonly value: string;
 }
 
-const createSelectOption = (label: string, prefix: string = '', valuesMap?: { [key: string]: string }): SelectOption => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const createSelectOption = (label: string, _prefix: string = '', valuesMap?: { [key: string]: string }): SelectOption => {
   if (valuesMap === undefined || !(label in valuesMap)) {
     return {
       label: `${label}`,
@@ -86,9 +87,9 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
   }, [options, valuesMap]);
 
   // control optional props to prevent menu from opening
-  const selectProps: any = {};
+  const selectProps: { menuIsOpen?: boolean } = {};
   if (valueOptions.length == 0) {
-    selectProps['menuIsOpen'] = false;
+    selectProps.menuIsOpen = false;
   }
 
   // in case values change externally, update them
@@ -101,7 +102,7 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
     if (!inputValue) return;
     switch (event.key) {
       case 'Enter':
-      case 'Tab':
+      case 'Tab': {
         const newValue = createSelectOption(inputValue, `${value.length}`, valuesMap);
         // need to check if newValue is in value or valueOptions and not duplicate
         // if not creatable need to check if value is in options and if not don't add to value
@@ -115,6 +116,8 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
           handleCreateOption(newValue);
         }
         event.preventDefault();
+        break;
+      }
     }
   };
 
@@ -141,9 +144,9 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         styles={selectStyle}
         components={components}
         inputValue={inputValue}
-        onCreate={handleCreateCallback}
-        onChange={(newValue: SelectOption[]) => {
-          setValue(newValue);
+        onCreateOption={handleCreateCallback}
+        onChange={(newValue: readonly SelectOption[]) => {
+          setValue([...newValue]);
           // pass current selected options to parent callback
           const updatedValues = newValue.map((option) => option.value);
           onChange(updatedValues);
@@ -165,8 +168,8 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         styles={selectStyle}
         components={components}
         inputValue={inputValue}
-        onChange={(newValue: SelectOption[]) => {
-          setValue(newValue);
+        onChange={(newValue: readonly SelectOption[]) => {
+          setValue([...newValue]);
           // pass current selected options to parent callback
           const updatedValues = newValue.map((option) => option.value);
           onChange(updatedValues);

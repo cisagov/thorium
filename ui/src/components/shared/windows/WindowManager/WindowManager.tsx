@@ -1,19 +1,14 @@
-import React, { Fragment, JSX, useContext } from 'react';
+import React, { Fragment, JSX } from 'react';
 
 // project imports
 import useWindowManagerProvider, { WindowManagerProviderOptions } from './use_window_manager_provider';
 import { WindowManagerContext } from './WindowManagerContext';
 
-/**
- * Window Manager component properties
- */
 type WindowManagerProps = WindowManagerProviderOptions & {
   children: JSX.Element;
 };
 
-/**
- * Wrap application in a shared window manager provider
- */
+// Wrap application in a shared window manager that tracks z-indices across all overlay windows
 const WindowManager: React.FC<WindowManagerProps> = ({
   children,
   zRange = { start: 1000, end: 4000, step: 5 },
@@ -24,7 +19,6 @@ const WindowManager: React.FC<WindowManagerProps> = ({
   return (
     <WindowManagerContext.Provider value={windows}>
       {children}
-      {/* render any managed windows here */}
       {windows.managedWindows.map((managedWindow) => (
         <Fragment key={managedWindow.id}>{managedWindow.window}</Fragment>
       ))}

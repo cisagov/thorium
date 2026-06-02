@@ -63,6 +63,7 @@ const ResizeButtons: React.FC<{
             position: 'absolute',
             backgroundColor: 'transparent',
             border: 0,
+            padding: 0,
             zIndex,
             cursor: getResizeCursorType(placement, position, size, bounds),
             ...style,

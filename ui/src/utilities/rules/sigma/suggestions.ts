@@ -11,6 +11,9 @@ import {
   COMMON_LOGSOURCE_CATEGORIES,
   COMMON_LOGSOURCE_PRODUCTS,
   COMMON_LOGSOURCE_SERVICES,
+  SIGMA_FIELD_SCHEMAS,
+  SIGMA_SECTION_ORDER,
+  sigmaFieldCategory,
 } from './schema';
 
 function findKeyLine(doc: Document, key: string, lineIndex: LineIndex): number {
@@ -41,6 +44,7 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
         field: 'status',
         message: 'Valid status values',
         values: STATUS_VALUES,
+        schema: SIGMA_FIELD_SCHEMAS['status'],
       });
     }
   }
@@ -53,6 +57,7 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
         field: 'level',
         message: 'Valid level values',
         values: LEVEL_VALUES,
+        schema: SIGMA_FIELD_SCHEMAS['level'],
       });
     }
   }
@@ -67,6 +72,7 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
         field: 'logsource.category',
         message: 'Common logsource categories',
         values: COMMON_LOGSOURCE_CATEGORIES,
+        schema: SIGMA_FIELD_SCHEMAS['logsource.category'],
       });
     }
 
@@ -76,6 +82,7 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
         field: 'logsource.product',
         message: 'Common logsource products',
         values: COMMON_LOGSOURCE_PRODUCTS,
+        schema: SIGMA_FIELD_SCHEMAS['logsource.product'],
       });
     }
 
@@ -85,6 +92,16 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
         field: 'logsource.service',
         message: 'Common logsource services',
         values: COMMON_LOGSOURCE_SERVICES,
+        schema: SIGMA_FIELD_SCHEMAS['logsource.service'],
+      });
+    }
+
+    if (!('definition' in ls) || ls['definition'] === '' || ls['definition'] === null) {
+      suggestions.push({
+        line: logsourceLine,
+        field: 'logsource.definition',
+        message: 'Consider adding a logsource definition',
+        schema: SIGMA_FIELD_SCHEMAS['logsource.definition'],
       });
     }
   }
@@ -100,6 +117,7 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
             field: 'related.type',
             message: 'Valid related type values',
             values: RELATED_TYPES,
+            schema: SIGMA_FIELD_SCHEMAS['related.type'],
           });
         }
       }
@@ -112,6 +130,9 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
   if (!('id' in parsed)) {
     missingOptional.push({ field: 'id', message: 'Consider adding a UUID v4 identifier for tracking' });
   }
+  if (!('name' in parsed)) {
+    missingOptional.push({ field: 'name', message: 'Consider adding a short rule name' });
+  }
   if (!('description' in parsed)) {
     missingOptional.push({ field: 'description', message: 'Consider adding a description of the detection' });
   }
@@ -123,6 +144,12 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
   }
   if (!('modified' in parsed)) {
     missingOptional.push({ field: 'modified', message: 'Consider adding a modification date (YYYY-MM-DD)' });
+  }
+  if (!('taxonomy' in parsed)) {
+    missingOptional.push({ field: 'taxonomy', message: 'Consider adding a taxonomy identifier' });
+  }
+  if (!('license' in parsed)) {
+    missingOptional.push({ field: 'license', message: 'Consider adding a license' });
   }
   if (!('level' in parsed)) {
     missingOptional.push({
@@ -147,6 +174,18 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
   if (!('references' in parsed)) {
     missingOptional.push({ field: 'references', message: 'Consider adding reference URLs for context', isList: true });
   }
+  if (!('fields' in parsed)) {
+    missingOptional.push({ field: 'fields', message: 'Consider adding output fields', isList: true });
+  }
+  if (!('scope' in parsed)) {
+    missingOptional.push({ field: 'scope', message: 'Consider adding a scope', isList: true });
+  }
+  if (!('related' in parsed)) {
+    missingOptional.push({ field: 'related', message: 'Consider adding related rules', isList: true });
+  }
+  if (!('logsource' in parsed)) {
+    missingOptional.push({ field: 'logsource', message: 'Consider adding a logsource section' });
+  }
 
   for (const opt of missingOptional) {
     suggestions.push({
@@ -155,8 +194,21 @@ export function generateSuggestions(doc: Document, text: string, parsed: Record<
       message: opt.message,
       values: opt.values,
       isList: opt.isList,
+      schema: SIGMA_FIELD_SCHEMAS[opt.field],
     });
   }
+
+  for (const s of suggestions) s.category = s.category ?? sigmaFieldCategory(s.field);
+  const sectionIndex = (cat: string) => {
+    const idx = (SIGMA_SECTION_ORDER as readonly string[]).indexOf(cat);
+    return idx >= 0 ? idx : SIGMA_SECTION_ORDER.length;
+  };
+  suggestions.sort((a, b) => {
+    const sa = sectionIndex(a.category!);
+    const sb = sectionIndex(b.category!);
+    if (sa !== sb) return sa - sb;
+    return a.field.localeCompare(b.field);
+  });
 
   return suggestions;
 }

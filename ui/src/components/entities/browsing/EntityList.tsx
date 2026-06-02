@@ -5,7 +5,8 @@ import { Col, Pagination, Row } from 'react-bootstrap';
 import { DEFAULT_LIST_LIMIT } from '../utilities';
 import { LoadingSpinner } from '../../shared/fallback/LoadingSpinner';
 import { Filters, SearchFilters } from '@models/search';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
+import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 
 interface EntityListProps<T> {
   type: string;
@@ -64,7 +65,11 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
 
   useEffect(() => {
     if (isMountingRef.current) {
-      getEntityPage(true);
+      // Skip the initial empty-filter render; fetch only once BrowsingFilters/omnibar
+      // pushes real filters, so the list loads on first paint without a double-fetch.
+      if (filters != null && Object.keys(filters).length > 0 && !loading) {
+        void getEntityPage(true);
+      }
     } else {
       isMountingRef.current = true;
     }
@@ -72,7 +77,7 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
 
   const updatePage = (page: number) => {
     if (page === maxPage && !loading) {
-      getEntityPage(false);
+      void getEntityPage(false);
     }
     setPage(page);
   };
@@ -86,15 +91,13 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
       {!loading &&
         entities.slice(page * limit, page * limit + limit).map((entity, idx) => (
           <Row key={`${type}_entity_${idx}`} className="d-flex justify-content-center">
-            {displayEntity(entity, idx, filters as Filters)}
+            {displayEntity(entity, idx, filters)}
           </Row>
         ))}
       <LoadingSpinner loading={loading} />
       {entities.length === 0 && !loading && isMountingRef.current && (
         <Row>
-          <AlertBanner severity={Severity.Info} className="m-1">
-            {type ? <>No {type} Found</> : <>None Found</>}
-          </AlertBanner>
+          <NoResultsBanner type={type} />
         </Row>
       )}
       {listError != '' && <AlertBanner className="m-1">{listError}</AlertBanner>}

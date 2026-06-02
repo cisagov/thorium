@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import CodeEditor from '@components/shared/inputs/code/CodeEditor';
+import CodeEditor from '@components/shared/inputs/code/CodeEditor/CodeEditor';
 import Page from '@components/pages/Page';
 import { addPreview, clearPreview, acceptPreview } from '@components/shared/inputs/code/CodeEditor/SuggestionPreview';
 import type { RuleChecker, FormatType } from '@utilities/rules/types';

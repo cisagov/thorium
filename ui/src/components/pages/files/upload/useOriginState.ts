@@ -1,7 +1,7 @@
 import { useReducer } from 'react';
 import { CarvedSubType, OriginState, OriginType, DEFAULT_ORIGIN_STATE } from './types';
 
-type OriginAction =
+export type OriginAction =
   | { type: 'SET_ORIGIN_TYPE'; originType: OriginType }
   | { type: 'SET_CARVED_TYPE'; carvedType: CarvedSubType }
   | { type: 'SET_DOWNLOADED_FIELD'; field: 'url' | 'name'; value: string }
@@ -17,7 +17,7 @@ type OriginAction =
   | { type: 'SET_MEMORY_DUMP_FIELD'; field: 'memoryType' | 'parentFile' | 'reconstructed' | 'baseAddress'; value: string }
   | { type: 'RESET' };
 
-function originReducer(state: OriginState, action: OriginAction): OriginState {
+export function originReducer(state: OriginState, action: OriginAction): OriginState {
   switch (action.type) {
     case 'SET_ORIGIN_TYPE':
       return { ...state, originType: action.originType };

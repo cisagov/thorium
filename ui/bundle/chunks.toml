@@ -1,0 +1,61 @@
+# Bundle chunk group definitions for generateBundleChunks.py
+#
+# Each [groups.<name>] section defines a non-default chunk.
+# "patterns" is a list of Python regexes matched against top-level
+# dependency names to seed transitive closure computation.
+#
+# Packages whose closure appears in multiple groups are moved to the
+# default chunk ("vendors").  Packages not matched by any group also
+# land in the default chunk.
+
+default_group = "vendors"
+
+[groups.three]
+patterns = [
+    '^three($|-)',
+    '^3d-force-graph$',
+]
+
+[groups.graph]
+patterns = [
+    '^@headless-tree($|-|/)',
+]
+
+[groups.xyflow]
+patterns = [
+    '^@xyflow($|-|/)',
+]
+
+[groups.react]
+patterns = [
+    '^react$',
+    '^react-dom$',
+    '^react-is$',
+    '^react-router(-dom)?$',
+    '^scheduler$',
+    '^classnames$',
+]
+
+[groups.core-js]
+patterns = [
+    '^core-js$',
+]
+
+[groups.codemirror]
+patterns = [
+    '^@codemirror($|-|/)',
+    '^@lezer($|-|/)',
+]
+
+[groups.vendors-tools]
+patterns = [
+    '^react-xml-viewer$',
+    '^react-json-tree$',
+    '^react-syntax-highlighter$',
+]
+
+[groups.date]
+patterns = [
+    '^react-datepicker$',
+    '^date-fns$',
+]

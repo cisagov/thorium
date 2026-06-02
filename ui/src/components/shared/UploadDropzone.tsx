@@ -3,19 +3,20 @@ import { useDropzone } from 'react-dropzone';
 
 // project imports
 import Subtitle from '@components/shared/titles/Subtitle';
+import { DropzoneFile } from '@components/pages/files/upload/types';
 
 interface DropzoneProperties {
   width: string; // width of dropzone area
-  onChange: (files: any[]) => void;
+  onChange: (files: DropzoneFile[]) => void;
   onError?: (errors: string[]) => void;
-  selectedFiles: any[];
+  selectedFiles: DropzoneFile[];
 }
 
 const UploadDropzone: React.FC<DropzoneProperties> = ({ width, onChange, onError, selectedFiles }) => {
   const baseStyle = {
     flex: 1,
     display: 'flex',
-    flexDirection: 'column' as 'column',
+    flexDirection: 'column' as const,
     alignItems: 'center',
     padding: '20px',
     borderWidth: 2,
@@ -45,7 +46,7 @@ const UploadDropzone: React.FC<DropzoneProperties> = ({ width, onChange, onError
   const { acceptedFiles, fileRejections, getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone({
     maxSize: 10737418240,
     onDrop: (acceptedFiles) => {
-      onChange(acceptedFiles);
+      onChange(acceptedFiles as unknown as DropzoneFile[]);
       if (onError) onError([]);
     },
   });

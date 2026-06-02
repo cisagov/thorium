@@ -1,34 +1,43 @@
+/// A single tag's values and the groups who can see them
 export type Tag = {
-  [value: string]: string[]; // tag values and groups who can see them
+  [value: string]: string[];
 };
 
+/// A map of tags for a specific sample or repo
 export type Tags = {
   [key: string]: {
-    [key: string]: string[];
+    [value: string]: string[];
   };
 };
 
-// create/patch tags structure
+/// Tags in request format (create/patch)
 export type RequestTags = {
   [key: string]: string[];
 };
 
-// used in TagSelect component
-// instead of tag key and list of values each key/value pair has its own entry
+/// A single tag key/value entry used in the TagSelect component
 export type TagEntry = {
+  /// The tag key
   key: string;
+  /// The tag value
   value: string;
 };
 
+/// Tags in tree format (aggregate key/values)
 export type TreeTags = {
+  /// The tags in aggregate
   tags: { [key: string]: string[] };
 };
 
+/// The types of tags
 export enum TagTypes {
+  /// File tags
   Files = 'Files',
+  /// Repo tags
   Repos = 'Repos',
 }
 
+/// The counts for a specific tag key
 export type TagKeyCounts = {
   /// The total number of items with this tag key
   total: number;
@@ -36,6 +45,7 @@ export type TagKeyCounts = {
   values: { [key: string]: number };
 };
 
+/// The result of counting tags
 export type TagCounts = {
   /// The id for this cursor if it can be continued
   cursor?: string;
@@ -47,6 +57,7 @@ export type TagCounts = {
   };
 };
 
+/// Available tag keys and their values for autocomplete
 export type TagOptions = Record<string, string[]>;
 
 export enum TagUpperKeyEnum {

@@ -176,12 +176,7 @@ export function tagIsInvalid(tag: TagEntry, ignore_empty: boolean = false): bool
  * If the 'ignore_empty' parameter is set to true, tags where both key and value are empty are treated as valid.
  * */
 export function hasInvalidTags(tags: TagEntry[], ignore_empty: boolean = true): boolean {
-  tags.forEach((tag) => {
-    if (tagIsInvalid(tag, ignore_empty)) {
-      return true;
-    }
-  });
-  return false;
+  return tags.some((tag) => tagIsInvalid(tag, ignore_empty));
 }
 
 /**

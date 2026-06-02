@@ -43,6 +43,7 @@ export const BlankFolder: Folder = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateFolder: CreateFolder = {

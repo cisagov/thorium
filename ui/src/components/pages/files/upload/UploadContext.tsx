@@ -149,7 +149,6 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
         fn(...args);
         fileUpload.resetStatusMessages();
       },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -174,19 +173,19 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
   };
 
   const retryFileUpload = (fileName: string) => {
-    fileUpload.retryFileUpload(fileName, selectedGroups, associations, reactionsList);
+    void fileUpload.retryFileUpload(fileName, selectedGroups, associations, reactionsList);
   };
 
   const retryAllFileUploads = () => {
-    fileUpload.retryAllFileUploads(selectedGroups, associations, reactionsList);
+    void fileUpload.retryAllFileUploads(selectedGroups, associations, reactionsList);
   };
 
   const retrySubmitReaction = (status: ReactionResultEntry) => {
-    fileUpload.retrySubmitReaction(status, reactionsList);
+    void fileUpload.retrySubmitReaction(status, reactionsList);
   };
 
   const retryAllReactionSubmissions = () => {
-    fileUpload.retryAllReactionSubmissions(reactionsList);
+    void fileUpload.retryAllReactionSubmissions(reactionsList);
   };
 
   const value = useMemo<UploadContextType>(
@@ -233,7 +232,6 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
       retrySubmitReaction,
       retryAllReactionSubmissions,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       filesArray,
       description,

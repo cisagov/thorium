@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Row } from 'react-bootstrap';
+import styled from 'styled-components';
 
 // project imports
 import { EntityBrowseConfig } from './config';
@@ -9,8 +10,8 @@ import {
   BrowsingContents,
   EntityGroups,
   EntityName,
+  EntityNameWithIcon,
   EntitySecondary,
-  EntitySubmitters,
   LinkFields,
 } from '@entities/browsing/shared';
 import CondensedEntityTags from '@components/tags/condensed/CondensedEntityTags';
@@ -18,8 +19,14 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import { listEntities } from '@thorpi/entities';
 import { Filters } from '@models/search';
 import { Entities } from '@models/entities/entities';
-import { Collection, CollectionMeta } from '@models/entities/collections';
+import { Collection } from '@models/entities/collections';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
+
+const TagRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+`;
 
 interface CollectionItemProps {
   collection: Collection;
@@ -27,6 +34,9 @@ interface CollectionItemProps {
 
 const CollectionItem: React.FC<CollectionItemProps> = ({ collection }) => {
   const kind = collection.metadata.Collection.collection_kind ?? '';
+  const collectionTags = collection.metadata.Collection.collection_tags ?? {};
+  const hasCollectionTags = Object.keys(collectionTags).length > 0;
+  const hasEntityTags = collection.tags && Object.keys(collection.tags).length > 0;
   return (
     <BrowsingCard>
       <BrowsingContents>
@@ -36,19 +46,13 @@ const CollectionItem: React.FC<CollectionItemProps> = ({ collection }) => {
           className="no-decoration"
         >
           <LinkFields>
-            <EntityName>{collection.name}</EntityName>
+            <EntityName>
+              <EntityNameWithIcon entityId={collection.id} hasImage={collection.image != null}>
+                {collection.name}
+              </EntityNameWithIcon>
+            </EntityName>
             <EntitySecondary>{kind}</EntitySecondary>
             <EntityGroups>
-              {Object.keys((collection.metadata as CollectionMeta).Collection.collection_tags ?? {})
-                .sort()
-                .map((key) =>
-                  (((collection.metadata as CollectionMeta).Collection.collection_tags ?? {})[key] ?? [])
-                    .slice()
-                    .sort()
-                    .map((value) => <FieldBadge key={`${key}_${value}`} color="Gray" field={`${key}: ${value}`} />),
-                )}
-            </EntityGroups>
-            <EntitySubmitters>
               <small>
                 <i>
                   {collection.groups &&
@@ -57,15 +61,26 @@ const CollectionItem: React.FC<CollectionItemProps> = ({ collection }) => {
                       : collection.groups.toString().replaceAll(',', ', '))}
                 </i>
               </small>
-            </EntitySubmitters>
+            </EntityGroups>
           </LinkFields>
         </Link>
-        {collection.tags != undefined && <hr />}
-        <Row>
-          {collection.tags && Object.keys(collection.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.Collection} tags={collection.tags} />
-          ) : null}
-        </Row>
+        {(hasCollectionTags || hasEntityTags) && (
+          <>
+            <hr />
+            <TagRow>
+              {hasCollectionTags &&
+                Object.keys(collectionTags)
+                  .sort()
+                  .map((key) =>
+                    (collectionTags[key] ?? [])
+                      .slice()
+                      .sort()
+                      .map((value) => <FieldBadge key={`${key}_${value}`} color="Gray" field={`${key}: ${value}`} />),
+                  )}
+              {hasEntityTags && <CondensedEntityTags resource={Entities.Collection} tags={collection.tags} />}
+            </TagRow>
+          </>
+        )}
       </BrowsingContents>
     </BrowsingCard>
   );
@@ -77,8 +92,7 @@ const CollectionListHeaders = () => (
       <Row>
         <EntityName>Name</EntityName>
         <EntitySecondary>Kind</EntitySecondary>
-        <EntityGroups>Tag(s)</EntityGroups>
-        <EntitySubmitters>Groups(s)</EntitySubmitters>
+        <EntityGroups>Group(s)</EntityGroups>
       </Row>
     </BrowsingContents>
   </BrowsingCard>

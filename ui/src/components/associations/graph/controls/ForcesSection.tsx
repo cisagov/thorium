@@ -1,7 +1,8 @@
 import React from 'react';
 import { Dropdown } from 'react-bootstrap';
 
-import type { DagMode, GraphSectionProps } from './types';
+import { DagMode } from './types';
+import type { GraphSectionProps } from './types';
 import { PopoverBody, Divider, MenuList, MenuItem, MenuDropdown } from './Toolbar.styled';
 import LabeledRange from './LabeledRange';
 
@@ -22,6 +23,7 @@ const ForcesSection: React.FC<GraphSectionProps> = ({ controls, updateControls, 
     <LabeledRange
       id="form-charge"
       label="Charge"
+      tooltip="Repulsion strength between nodes"
       value={controls.chargeStrength}
       min={-500}
       max={-10}
@@ -31,6 +33,7 @@ const ForcesSection: React.FC<GraphSectionProps> = ({ controls, updateControls, 
     <LabeledRange
       id="form-velocity-decay"
       label="Friction"
+      tooltip="How quickly nodes slow down"
       value={controls.velocityDecay}
       min={0.1}
       max={1.0}
@@ -40,6 +43,7 @@ const ForcesSection: React.FC<GraphSectionProps> = ({ controls, updateControls, 
     <LabeledRange
       id="form-warmup"
       label="Warmup"
+      tooltip="Pre-simulation ticks before rendering"
       value={controls.warmupTicks}
       min={0}
       max={300}
@@ -49,6 +53,7 @@ const ForcesSection: React.FC<GraphSectionProps> = ({ controls, updateControls, 
     <LabeledRange
       id="form-cooldown"
       label="Cooldown"
+      tooltip="Max simulation run time"
       value={controls.cooldownTime}
       min={1000}
       max={30000}

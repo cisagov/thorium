@@ -32,6 +32,7 @@ const IconTitle = styled.div`
   align-items: center;
   justify-content: center;
   gap: 8px;
+  color: var(--thorium-text);
 `;
 
 const RepoHeader = () => {
@@ -60,7 +61,7 @@ const RepoDetails = () => {
           <Card className="panel">
             <Card.Body>
               <Subtitle className="text-center">Associations</Subtitle>
-              <AssociationGraph inView />
+              <AssociationGraph inView bordered={false} />
             </Card.Body>
           </Card>
         </GraphDataProvider>

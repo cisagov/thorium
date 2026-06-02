@@ -1,70 +1,68 @@
-// import the base client function that loads from the config
-// and injects the token via axios intercepts
 import { Filters } from '@models/search';
 import { EntityTypes } from '@models/entities/entities';
 import client, { parseRequestError } from './client';
 
+interface ApiCursor<T> {
+  cursor?: string;
+  data: T[];
+}
+
 /**
- * Create a new entity instance
- * @async
- * @function
- * @param {FormData} [data] - new entity spec
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<{id: string} | null>} - Promise object representing response data
+ * Create a new entity (`POST /entities/`).
+ *
+ * @param data - Multipart form data describing the entity (type, fields, groups, optional image).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns An object with the new entity's `id`, or `null` if the request failed.
  */
 export const createEntity = async (data: FormData, errorHandler: (error: string) => void): Promise<{ id: string } | null> => {
-  // build url parameters including optional args if specified
   const url = '/entities/';
   return client
-    .post(url, data)
+    .post<{ id: string }>(url, data)
     .then((res) => {
       if (res && res.status && res.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Create Entity');
       return null;
     });
 };
 
 /**
- * Get an existing entity instance
- * @async
- * @function
- * @param {string} [id] - uuid for requested entity
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<EntityTypes | null>} - Promise object representing response data
+ * Fetch a single entity by id (`GET /entities/{id}`).
+ *
+ * @param id - The id of the entity to fetch.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The entity, or `null` if not found or the request failed.
  */
 export const getEntity = async (id: string, errorHandler: (error: string) => void): Promise<EntityTypes | null> => {
-  // build url parameters including optional args if specified
-  let url = `/entities/${id}`;
+  const url = `/entities/${id}`;
   return client
-    .get(url)
+    .get<EntityTypes>(url)
     .then((res) => {
       if (res && res.status && res.status == 200 && res.data) {
         return res.data;
       }
+      return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Get Entity');
       return null;
     });
 };
 
 /**
- * Update an existing entity
- * @async
- * @function
- * @param {FormData} data - update params
- * @param {string} [id] - uuid for requested entity
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - Promise object representing response data
+ * Update an existing entity (`PATCH /entities/{id}`).
+ *
+ * @param id - The id of the entity to update.
+ * @param data - Multipart form data with the fields to change (and optionally a new image).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the update succeeded (HTTP 204), otherwise `false`.
  */
 export const updateEntity = async (id: string, data: FormData, errorHandler: (error: string) => void): Promise<boolean> => {
-  // build url parameters including optional args if specified
-  let url = `/entities/${id}`;
+  const url = `/entities/${id}`;
   return client
     .patch(url, data)
     .then((res) => {
@@ -73,23 +71,21 @@ export const updateEntity = async (id: string, data: FormData, errorHandler: (er
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Update Entity');
       return false;
     });
 };
 
 /**
- * Delete an existing entity
- * @async
- * @function
- * @param {string} [id] - uuid for target entity
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - Promise object representing response data
+ * Delete an entity by id (`DELETE /entities/{id}`).
+ *
+ * @param id - The id of the entity to delete.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the deletion succeeded (HTTP 204), otherwise `false`.
  */
 export const deleteEntity = async (id: string, errorHandler: (error: string) => void): Promise<boolean> => {
-  // build url parameters including optional args if specified
-  let url = `/entities/${id}`;
+  const url = `/entities/${id}`;
   return client
     .delete(url)
     .then((res) => {
@@ -98,25 +94,55 @@ export const deleteEntity = async (id: string, errorHandler: (error: string) => 
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Delete Entity');
       return false;
     });
 };
 
+export interface EntityImage {
+  url: string;
+  isSvg: boolean;
+}
+
 /**
- * Get a list of entities
- * @async
- * @function
- * @param {Filters} [data] - optional filter parameters which includes:
- *   - groups: to which the entities are viewable
- *   - start: start date for search range
- *   - end: end date for search range
- *   - limit:  the max number of submissions to return
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {boolean} details - whether to return details for listed submissions
- * @param {string} cursor - the cursor value to continue listing from
- * @returns {Promise<{entityList: EntityTypes[]: entityCursor} | null>} - Promise object representing a list of file details.
+ * Fetch an entity's image as a browser-displayable object URL (`GET /entities/{id}/image`).
+ *
+ * The blob is wrapped in an object URL via `URL.createObjectURL`; callers are responsible
+ * for revoking it with `URL.revokeObjectURL` when done to avoid leaking memory. This
+ * function intentionally swallows errors (returns `null`) since a missing image is expected.
+ *
+ * @param entityId - The id of the entity whose image to fetch.
+ * @returns An {@link EntityImage} with the object URL and an `isSvg` flag, or `null` if there is no image.
+ */
+export const fetchEntityImage = async (entityId: string): Promise<EntityImage | null> => {
+  return client
+    .get<Blob>(`/entities/${entityId}/image`, { responseType: 'blob' })
+    .then((res) => {
+      if (res?.status === 200 && res.data) {
+        const blob = res.data;
+        return {
+          url: URL.createObjectURL(blob),
+          isSvg: blob.type === 'image/svg+xml',
+        };
+      }
+      return null;
+    })
+    .catch(() => null);
+};
+
+/**
+ * List entities matching the given filters (`GET /entities` or `/entities/details/`).
+ *
+ * Results are paginated via an opaque cursor: pass the returned `entityCursor` back in on the
+ * next call to fetch the following page (`null` cursor means no more pages).
+ *
+ * @param data - Search/filter parameters (groups, tags, time range, limit, etc.).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param details - When `true`, request full entity objects (`/details/`) instead of summaries.
+ * @param cursor - Pagination cursor from a previous call, or `null` for the first page.
+ * @returns The page of entities and the next-page cursor (`entityCursor` is `null` when exhausted).
+ *          On failure, returns an empty list and a `null` cursor.
  */
 export const listEntities = async (
   data: Filters,
@@ -124,26 +150,24 @@ export const listEntities = async (
   details: boolean,
   cursor: string | null,
 ): Promise<{ entityList: EntityTypes[]; entityCursor: string | null }> => {
-  // build url parameters including optional args if specified
   let url = '/entities';
   if (details) {
     url += '/details/';
   }
-  // pass in cursor value
   if (cursor) {
     data.cursor = cursor;
   }
   return client
-    .get(url, { params: data })
+    .get<ApiCursor<EntityTypes>>(url, { params: data })
     .then((res) => {
       if (res?.status && res.status == 200 && res.data) {
-        const cursor = res.data.cursor ? (res.data.cursor as string) : null;
-        return { entityList: res.data.data as any[], entityCursor: cursor };
+        const cursor = res.data.cursor ?? null;
+        return { entityList: res.data.data, entityCursor: cursor };
       }
-      return { entityList: [] as any[], entityCursor: null };
+      return { entityList: [], entityCursor: null };
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'List Entity');
-      return { entityList: [] as any[], entityCursor: null };
+      return { entityList: [], entityCursor: null };
     });
 };

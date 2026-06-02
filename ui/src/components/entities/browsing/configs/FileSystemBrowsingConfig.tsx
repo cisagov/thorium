@@ -115,10 +115,12 @@ const FileSystemItem: React.FC<FileSystemItemProps> = ({ fs }) => {
           </LinkFields>
         </Link>
         <Sha256 className="mt-3 mb-2">{fs.metadata.FileSystem.sha256}</Sha256>
-        {fs.tags != undefined && <hr />}
-        <Row>
-          {fs.tags && Object.keys(fs.tags).length > 1 ? <CondensedEntityTags resource={Entities.FileSystem} tags={fs.tags} /> : null}
-        </Row>
+        {fs.tags && Object.keys(fs.tags).length > 1 && (
+          <>
+            <hr />
+            <CondensedEntityTags resource={Entities.FileSystem} tags={fs.tags} />
+          </>
+        )}
       </BrowsingContents>
     </BrowsingCard>
   );

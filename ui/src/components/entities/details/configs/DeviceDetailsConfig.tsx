@@ -42,7 +42,7 @@ const DeviceMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: Detail
 
   // get vendor map on component load
   useEffect(() => {
-    getAvailableVendors(setVendorsMap);
+    void getAvailableVendors(setVendorsMap);
   }, []);
 
   return (
@@ -60,7 +60,7 @@ const DeviceMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: Detail
               }
               options={Object.keys(vendorsMap)}
               onChange={(vendors) => updatePendingMeta('vendors', stubPendingVendors(vendors, vendorsMap))}
-              onCreate={(name) => console.log('Attempting to create a new vendor: ${}')}
+              onCreate={() => console.log('Attempting to create a new vendor: ${}')}
               valuesMap={vendorsMap}
             />
           ) : (
@@ -157,12 +157,12 @@ const DeviceMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: Detail
   );
 };
 
-const getDeviceDetails = async (vendorID: string, setError: (err: string) => void, updateEntity: (entity: Device) => void) => {
-  getEntity(vendorID, setError).then((data) => {
+const getDeviceDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (entity: Device) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of Device kind
     if (data && data.kind == Entities.Device) {
       // we know that any entity response with kind=Device is a Device
-      const device = data as Device;
+      const device = data;
       // need to add spaces for more human friendly suggestions for Critical Sectors
       if (device.metadata.Device?.critical_sectors) {
         device.metadata.Device.critical_sectors = device.metadata.Device.critical_sectors.map(
@@ -179,6 +179,7 @@ const DeviceDetailsConfig: EntityDetailsConfig<Entities.Device> = {
   EntityMetaInfo: DeviceMetaInfo,
   BlankEntity: BlankDevice,
   icon: (size: number) => <FaHardDrive size={size} />,
+  supportsGraphic: true,
 };
 
 export default DeviceDetailsConfig;

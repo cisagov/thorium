@@ -10,6 +10,8 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import Subtitle from '@components/shared/titles/Subtitle';
 import TagBadge from '@components/tags/TagBadge';
 import { TreeNode } from '@models/trees';
+import { Tags } from '@models/tags';
+import { Entities } from '@models/entities/entities';
 import { Vendor } from '@models/entities/vendors';
 
 type NodeTagsProps = {
@@ -17,7 +19,7 @@ type NodeTagsProps = {
 };
 
 type FilteredTagsProp = {
-  tags: any; // arbitrary tags data
+  tags: Tags;
 };
 
 export const FilteredNodeTags: React.FC<FilteredTagsProp> = ({ tags }) => {
@@ -103,7 +105,13 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
           ) : (
             <div className="d-flex justify-content-start wrap">
               {Object.keys(tags).map((tagKey) => (
-                <TagBadge key={`${tagKey}_${tags[tagKey]}`} tag={tagKey} value={`${tags[tagKey]}`} condensed={true} action={'none'} />
+                <TagBadge
+                  key={`${tagKey}_${String(tags[tagKey])}`}
+                  tag={tagKey}
+                  value={`${String(tags[tagKey])}`}
+                  condensed={true}
+                  action={'none'}
+                />
               ))}
             </div>
           )}
@@ -115,7 +123,7 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
     // add any Entity specific metadata we want to display
     const entity = node.Entity;
     const buildEntitySummary = () => {
-      if (entity?.kind == 'Device') {
+      if (entity?.kind == Entities.Device) {
         return (
           <>
             <Subtitle className="mt-2">Vendor(s)</Subtitle>
@@ -153,7 +161,7 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
             </Subtitle>
           </>
         );
-      } else if (entity?.kind == 'Vendor') {
+      } else if (entity?.kind == Entities.Vendor) {
         return (
           <>
             <Subtitle className="mt-2">Countries</Subtitle>
@@ -171,7 +179,7 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
             )}
           </>
         );
-      } else if (entity?.kind == 'Collection') {
+      } else if (entity?.kind == Entities.Collection) {
         return (
           <>
             <Subtitle className="mt-2">Type</Subtitle>
@@ -196,7 +204,7 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
             <FieldBadge color="Gray" field={entity.metadata.Collection.ignore_groups} />
           </>
         );
-      } else if (entity?.kind == 'FileSystem') {
+      } else if (entity?.kind == Entities.FileSystem) {
         return (
           <>
             <Subtitle className="mt-2">SHA256</Subtitle>
@@ -212,7 +220,7 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
             )}
           </>
         );
-      } else if (entity?.kind == 'Folder') {
+      } else if (entity?.kind == Entities.Folder) {
         return (
           <>
             <Subtitle className="mt-2">SHA256</Subtitle>
@@ -244,7 +252,7 @@ const NodeInfo: React.FC<NodeTagsProps> = ({ node }) => {
       </div>
     );
   } else {
-    <div className="m-2">{JSON.stringify(node, null, 2)}</div>;
+    return <div className="m-2">{JSON.stringify(node, null, 2)}</div>;
   }
 };
 

@@ -58,6 +58,7 @@ export const BlankWindowsProcess: WindowsProcess = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateWindowsProcess: CreateWindowsProcess = {

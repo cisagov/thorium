@@ -1,32 +1,21 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
-import { authenticate, snapshot } from './helpers';
+import { authenticate, snapshot, loginViaUI, TEST_USER, TEST_PASS } from './helpers';
 
 const SCREENSHOT_DIR = path.join(import.meta.dirname, 'screenshots');
-const USER = process.env.THORIUM_USER || 'test';
-const PASS = process.env.THORIUM_PASS || 'INSECURE_DEV_PASSWORD';
-
-async function loginViaUI(page: import('@playwright/test').Page) {
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('input[placeholder="username"]').fill(USER);
-  await page.locator('input[placeholder="password"]').fill(PASS);
-  await page.locator('button:has-text("Login")').click();
-  await page.waitForURL((url) => !url.pathname.includes('/auth'), { timeout: 15000 });
-}
 
 test.describe('File Upload', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with origin, tags, and pipeline reaction', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     await snapshot(page, SCREENSHOT_DIR, 'upload-initial');

@@ -129,7 +129,7 @@ export type SubmissionChunk = {
   /// The name of this sample if one was specified
   name?: string;
   /// A description for this sample
-  description: String;
+  description: string | null;
   /// The groups this submission is in
   groups: string[];
   /// The user who submitted this sample
@@ -138,6 +138,21 @@ export type SubmissionChunk = {
   uploaded: string;
   /// The origin of this sample if one was specified
   origin: Origin;
+};
+
+export type Comment = {
+  /// The groups to share this comment with
+  groups: string[];
+  /// When this comment was uploaded
+  uploaded: string;
+  /// The uuid for this comment
+  id: string;
+  /// The author for this comment
+  author: string;
+  /// The comment for this file
+  comment: string;
+  /// Mappings of file names to their S3 UUID
+  attachments: { [filename: string]: string };
 };
 
 export type Sample = {
@@ -153,6 +168,12 @@ export type Sample = {
   submissions: SubmissionChunk[];
   /// Any comments for this sample
   comments: Comment[];
+};
+
+/** The response from posting a comment */
+export type CommentResponse = {
+  /** The id for this comment */
+  id: string;
 };
 
 /** The response from a file submission (from api/src/models/files.rs) */

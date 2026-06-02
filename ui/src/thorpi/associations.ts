@@ -1,25 +1,26 @@
 import client, { parseRequestError } from './client';
 
+// project imports
+import { AssociationCreate } from '@models/associations';
+
 /**
- * Create a new entity instance
- * @async
- * @function
- * @param {FormData} [data] - new entity spec
- * @param {object} errorHandler - error handler function
- * @returns {object} - Promise object representing response data
+ * Create an association between two entities (`POST /associations/`).
+ *
+ * @param data - The association to create (source/target entities and metadata).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns An object with the new association's `id`, or `null` if the request failed.
  */
-export const createAssociation = async (data: any, errorHandler: (error: string) => void): Promise<{ id: string } | null> => {
-  // build url parameters including optional args if specified
-  let url = '/associations/';
+export const createAssociation = async (data: AssociationCreate, errorHandler: (error: string) => void): Promise<{ id: string } | null> => {
+  const url = '/associations/';
   return client
-    .post(url, data)
+    .post<{ id: string }>(url, data)
     .then((res) => {
       if (res?.status && res.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Create Associations');
       return null;
     });

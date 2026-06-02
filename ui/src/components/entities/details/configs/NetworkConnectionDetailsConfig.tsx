@@ -12,12 +12,7 @@ import { getEntity } from '@thorpi/entities';
 import { Entities } from '@models/entities';
 import { BlankNetworkConnection, NetworkConnection } from '@models/entities/network_connections';
 
-const NetworkConnectionMetaInfo = ({
-  entity,
-  pendingEntity,
-  handleUpdate,
-  editing,
-}: DetailsMetadataProps<Entities.NetworkConnection>): JSX.Element => {
+const NetworkConnectionMetaInfo = ({ entity }: DetailsMetadataProps<Entities.NetworkConnection>): JSX.Element => {
   return (
     <>
       <Row className="mt-3">
@@ -73,16 +68,16 @@ const NetworkConnectionMetaInfo = ({
 };
 
 // Get process tree details from the API
-const getNetworkConnectionDetails = async (
+const getNetworkConnectionDetails = (
   vendorID: string,
   setError: (err: string) => void,
   updateEntity: (entity: NetworkConnection) => void,
 ) => {
-  getEntity(vendorID, setError).then((data) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of Process kind
     if (data && data.kind == Entities.NetworkConnection) {
       // we know that any entity response with kind=Process is a Process
-      const device = data as NetworkConnection;
+      const device = data;
       updateEntity(device);
     }
   });

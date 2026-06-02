@@ -20,21 +20,25 @@ $grid-breakpoints: (
   color: white;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .other-tag {
   background-color: #81b4c2;
   color: white;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .info-tag {
   background-color: #7ba8ec;
   color: white;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .attack-tag {
   background-color: rgb(227, 135, 81);
   color: white;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .mbc-tag {
   background-color: rgb(220, 105, 52);
   color: white;
@@ -44,11 +48,13 @@ $grid-breakpoints: (
   display: none !important;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .warning-tag {
   background-color: rgb(227, 135, 81);
   color: white;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .danger-tag {
   background-color: rgb(184, 77, 77);
   color: white;
@@ -82,19 +88,6 @@ $grid-breakpoints: (
   align-items: center;
   margin-left: 0.5em;
   font-size: 18px;
-}
-
-.tag-input {
-  outline: 0 !important;
-  border: 0 !important;
-  width: 100px !important;
-  background: none !important;
-}
-
-.add-tag-btn {
-  color: white !important;
-  background-color: green !important;
-  border: none !important;
 }
 
 // 1400px

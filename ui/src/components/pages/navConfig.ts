@@ -14,10 +14,11 @@ import {
   FaTools,
   FaUserShield,
   FaCodeBranch,
+  FaTachometerAlt,
+  FaExclamationTriangle,
 } from 'react-icons/fa';
 import { FaHardDrive, FaFolderTree } from 'react-icons/fa6';
 import { MdBusinessCenter } from 'react-icons/md';
-
 // project imports
 import { getBrowsingPathByEntity } from '@components/entities/browsing/EntityBrowsingRoutes';
 import { Entities } from '@models/entities/entities';
@@ -41,7 +42,7 @@ export interface NavCategory {
 
 export const NAV_ITEMS: NavCategory[] = [
   { label: 'Search', icon: FaSearch, path: '/' },
-  { label: 'Analyze', icon: FaUpload, path: '/upload' },
+  { label: 'Analyze', icon: FaUpload, path: '/analyze' },
   {
     label: 'Browse',
     icon: FaLayerGroup,

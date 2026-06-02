@@ -19,7 +19,7 @@ interface TagBadgeProps {
 const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, resource }) => {
   const [showRedirectModal, setShowRedirectModal] = useState(false);
   const badgeClass = getTagColorClass(tag, value);
-  const [_, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
   const tagText = getTagBadgeText(tag, value, condensed);
   const upperTag = tag.toUpperCase() as TagUpperKeyEnum;
 

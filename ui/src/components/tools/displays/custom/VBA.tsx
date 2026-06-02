@@ -1,8 +1,15 @@
 import { Fragment } from 'react';
 import { Row, Col, Card } from 'react-bootstrap';
 
-const VBA = ({ result }) => {
-  const newresult = result.result;
+// project imports
+import { Output, Value } from '@models/results';
+
+interface VBAProps {
+  result: Output;
+}
+
+const VBA: React.FC<VBAProps> = ({ result }) => {
+  const newresult = result.result as { [key: string]: Value };
   return (
     <Fragment>
       <Card className="scroll-log tool-result">
@@ -11,7 +18,7 @@ const VBA = ({ result }) => {
             <Col xs={2}> {'Timestamp:'}</Col>
             <Col>{result.uploaded}</Col>
           </Row>
-          {Object.keys(newresult).map((key, i) => {
+          {Object.keys(newresult).map((key) => {
             if (key != 'analysis' && key != 'form_strings' && key != 'macros') {
               return (
                 <Row key={key}>

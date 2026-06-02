@@ -67,7 +67,7 @@ interface IndexSelectProps {
 const IndexSelect: React.FC<IndexSelectProps> = ({ index, onChange }) => {
   return (
     <OverlayTipTop tip={`Select which index to search (or search all indexes)`}>
-      <IndexDropdown id="dropdown-basic-button" title={index} onSelect={(index) => onChange(index)}>
+      <IndexDropdown id="dropdown-basic-button" title={index} onSelect={(index: string | null) => onChange(index)}>
         <Dropdown.Item eventKey="All">All</Dropdown.Item>
         <Dropdown.Item eventKey="Results">Results</Dropdown.Item>
         <Dropdown.Item eventKey="Tags">Tags</Dropdown.Item>

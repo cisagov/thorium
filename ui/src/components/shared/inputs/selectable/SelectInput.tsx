@@ -95,7 +95,7 @@ const SelectInput: React.FC<SelectInputProps> = ({
       isClearable
       onChange={(newValue) => {
         setSelectValue(newValue);
-        onChange(newValue?.value ? newValue.value : '');
+        onChange(newValue?.value ? String(newValue.value) : '');
       }}
       onCreateOption={(newValue) => handleCreate(newValue)}
       styles={selectStyle}

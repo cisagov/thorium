@@ -56,9 +56,7 @@ const OtherItem: React.FC<OtherItemProps> = ({ entity }) => {
           </LinkFields>
         </Link>
         {entity.tags != undefined && <hr />}
-        <Row>
-          {entity.tags && Object.keys(entity.tags).length > 1 ? <CondensedEntityTags resource={Entities.Other} tags={entity.tags} /> : null}
-        </Row>
+        {entity.tags && Object.keys(entity.tags).length > 1 ? <CondensedEntityTags resource={Entities.Other} tags={entity.tags} /> : null}
       </BrowsingContents>
     </BrowsingCard>
   );

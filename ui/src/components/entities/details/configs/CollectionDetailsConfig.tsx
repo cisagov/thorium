@@ -7,7 +7,7 @@ import { EntityDetailsConfig } from './configs';
 import { DetailsMetadataProps } from '../EntityDetails';
 import InfoValue from '@entities/shared/InfoValue';
 import EntityDetailsLabel from '@entities/details/EntityDetailsLabel';
-import FilterDatePicker from '@entities/browsing/filters/FilterDatePicker';
+import DatePicker from '@components/shared/inputs/DatePicker';
 import { buildCollectionsBrowsingUrl } from '@entities/details/ListCollectionsButton';
 import { TagSelect } from '@components/shared/inputs/tags/TagSelect';
 import FieldBadge from '@components/shared/badges/FieldBadge';
@@ -15,12 +15,11 @@ import { safeDateToStringConversion } from '@utilities/inputs';
 import { requestTagsToTagEntryList, tagEntriesToRequestTags } from '@utilities/tags';
 import { getEntity } from '@thorpi/entities';
 import { Entities } from '@models/entities';
-import { BlankCollection, Collection, CollectionMeta, CollectionMetaFields } from '@models/entities/collections';
+import { BlankCollection, Collection, CollectionMetaFields } from '@models/entities/collections';
 
 const CollectionTips = {
   kind: `The type of items this collection contains`,
-  collectionTags: `The tags on items in this collection; all items in the collection
-    must have at least one of the given tags`,
+  collectionTags: `Tags that define which items belong to this collection. Entity tags (below) help users find the collection itself.`,
   tagsCaseInsensitive: `If true, tags on items can match tags regardless of case`,
   ignoreGroups: `If true, items from all of the user's groups will be included in the collection.
   Otherwise, collection items are restricted to the groups of the collection itself.`,
@@ -47,20 +46,20 @@ const CollectionMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
         </Row>
       )}
       <Row className="mt-3">
-        <EntityDetailsLabel label="Collection Tags" tip={CollectionTips.collectionTags} />
+        <EntityDetailsLabel label="Collection Tags" tip={CollectionTips.collectionTags} bold />
         <InfoValue>
           {editing ? (
             <TagSelect
-              tags={requestTagsToTagEntryList((pendingEntity.metadata as CollectionMeta).Collection.collection_tags ?? {})}
+              tags={requestTagsToTagEntryList(pendingEntity.metadata.Collection.collection_tags ?? {})}
               setTags={(updatedTags) => updatePendingMeta('collection_tags', tagEntriesToRequestTags(updatedTags))}
               placeholderText="Add Tags"
             />
           ) : (
             <>
-              {Object.keys((entity.metadata as CollectionMeta).Collection.collection_tags ?? {})
+              {Object.keys(entity.metadata.Collection.collection_tags ?? {})
                 .sort()
                 .map((key) =>
-                  (((entity.metadata as CollectionMeta).Collection.collection_tags ?? {})[key] ?? [])
+                  ((entity.metadata.Collection.collection_tags ?? {})[key] ?? [])
                     .slice()
                     .sort()
                     .map((value) => <FieldBadge key={`${key}_${value}`} color="Gray" field={`${key}: ${value}`} />),
@@ -92,7 +91,7 @@ const CollectionMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
           {editing ? (
             <Form.Check
               type="switch"
-              id="case-insensitive-toggle"
+              id="ignore-groups-toggle"
               checked={pendingEntity.metadata.Collection.ignore_groups ?? false}
               onChange={(e) => updatePendingMeta('ignore_groups', e.target.checked)}
             />
@@ -107,7 +106,7 @@ const CollectionMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
         <EntityDetailsLabel label="Newest" tip={CollectionTips.start} />
         <InfoValue>
           {editing ? (
-            <FilterDatePicker
+            <DatePicker
               max={maxDate}
               min={pendingEntity.metadata.Collection.end}
               selected={pendingEntity.metadata.Collection.start}
@@ -125,7 +124,7 @@ const CollectionMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
         <EntityDetailsLabel label="Oldest" tip={CollectionTips.end} />
         <InfoValue>
           {editing ? (
-            <FilterDatePicker
+            <DatePicker
               max={pendingEntity.metadata.Collection.start ? pendingEntity.metadata.Collection.start : maxDate}
               selected={pendingEntity.metadata.Collection.end}
               disabled={false}
@@ -148,10 +147,10 @@ const CollectionMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: De
   );
 };
 
-const getCollectionDetails = async (collectionId: string, setError: (e: string) => void, updateEntity: (c: Collection) => void) => {
-  getEntity(collectionId, setError).then((data) => {
+const getCollectionDetails = (collectionId: string, setError: (e: string) => void, updateEntity: (c: Collection) => void) => {
+  void getEntity(collectionId, setError).then((data) => {
     if (data && data.kind === Entities.Collection) {
-      updateEntity(data as Collection);
+      updateEntity(data);
     }
   });
 };
@@ -161,6 +160,7 @@ const CollectionDetailsConfig: EntityDetailsConfig<Entities.Collection> = {
   EntityMetaInfo: CollectionMetaInfo,
   BlankEntity: BlankCollection,
   icon: (size: number) => <FaFolder size={size} />,
+  supportsGraphic: true,
 };
 
 export default CollectionDetailsConfig;

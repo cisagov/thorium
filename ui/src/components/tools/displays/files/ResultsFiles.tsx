@@ -10,10 +10,10 @@ import { ResultRenderProps } from '../../props';
 const ResultsFiles: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
   const { checkCookie } = useAuth();
   const downloadFile = async (sha256: string, tool: string, id: string, fileName: string) => {
-    await getResultsFile(sha256, tool, id, fileName, checkCookie).then((res) => {
-      if (res.data && res.headers) {
-        // turn response data to blob object
-        const blob = new Blob([res.data], { type: res.headers['content-type'] });
+    await getResultsFile(sha256, tool, id, fileName, () => void checkCookie()).then((res) => {
+      if (res?.data && res.headers) {
+        const contentType = res.headers['content-type'] as string | undefined;
+        const blob = new Blob([res.data], { type: contentType });
         // map url to blob in memory
         const url = window.URL.createObjectURL(blob);
         // create anchor tag for blob link
@@ -44,7 +44,7 @@ const ResultsFiles: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => 
           result.files.map((item, idx) => (
             <Row key={idx}>
               <Col className="d-flex justify-content-center">
-                <a key={idx} href={`#results-${tool}`} onClick={() => downloadFile(sha256, tool, result.id, item)}>
+                <a key={idx} href={`#results-${tool}`} onClick={() => void downloadFile(sha256, tool, result.id, item)}>
                   {item}
                 </a>
               </Col>

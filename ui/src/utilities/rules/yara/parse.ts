@@ -131,7 +131,7 @@ function detectStringType(valuePart: string): YaraStringType {
 function parseModifiers(afterValue: string, lineColumn: number): Array<{ modifier: string; column: number }> {
   const results: Array<{ modifier: string; column: number }> = [];
   const modRe = /\b(ascii|wide|xor|base64wide|base64|fullword|nocase|private)\b/g;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = modRe.exec(afterValue)) !== null) {
     results.push({ modifier: m[1], column: lineColumn + m.index });
   }
@@ -142,7 +142,7 @@ function extractConditionRefs(condLines: Array<{ text: string; line: number }>):
   const refs: YaraConditionRef[] = [];
   const refRe = /[$#@!][a-zA-Z_]\w*\*?/g;
   for (const cl of condLines) {
-    let m;
+    let m: RegExpExecArray | null;
     while ((m = refRe.exec(cl.text)) !== null) {
       refs.push({ ref: m[0], line: cl.line, column: m.index + 1 });
     }
@@ -192,7 +192,7 @@ export function parseYaraText(text: string): YaraParseResult {
           const colonIdx = raw.indexOf(':');
           const tagsBase = colonIdx + 1;
           const tagRe = /\S+/g;
-          let tm;
+          let tm: RegExpExecArray | null;
           while ((tm = tagRe.exec(tagsStr)) !== null) {
             const absCol = raw.indexOf(tm[0], tagsBase) + 1;
             tagPositions.push({ tag: tm[0], column: absCol, line: lineNum });
@@ -410,13 +410,13 @@ export function parseYaraText(text: string): YaraParseResult {
           const strType = detectStringType(valuePart);
 
           let afterValue = '';
-          if (strType === 'text') {
+          if (strType === YaraStringType.Text) {
             const closeQuote = valuePart.indexOf('"', 1);
             if (closeQuote >= 0) afterValue = valuePart.slice(closeQuote + 1);
-          } else if (strType === 'regex') {
+          } else if (strType === YaraStringType.Regex) {
             const lastSlash = valuePart.lastIndexOf('/');
             if (lastSlash > 0) afterValue = valuePart.slice(lastSlash + 1);
-          } else if (strType === 'hex') {
+          } else if (strType === YaraStringType.Hex) {
             const closeBrace = valuePart.lastIndexOf('}');
             if (closeBrace >= 0) afterValue = valuePart.slice(closeBrace + 1);
           }

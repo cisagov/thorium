@@ -1,6 +1,6 @@
 import { CreateEntity, Entities, Entity } from './entities';
 
-export type OtherMetaFields = {};
+export type OtherMetaFields = Record<string, never>;
 
 export type OtherCreateMetaFields = OtherMetaFields;
 
@@ -28,6 +28,7 @@ export const BlankOther: Other = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateOther: CreateOther = {

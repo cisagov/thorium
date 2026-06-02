@@ -281,6 +281,7 @@ $snl-black-0: tint($snl-black, 25%);
   // Borders
   --thorium-panel-border: #{$snl-grey-900}; // secondary-panel - 100
   --thorium-highlight-panel-border: #{$snl-grey-800}; // border - 100
+  --thorium-divider: #{$snl-grey-800};
   //Scrollbars
   --thorium-scroll-bar-track-bg: #{$snl-grey-900};
   --thorium-scroll-bar-thumb-bg: #{$snl-grey-700};
@@ -340,6 +341,7 @@ $snl-black-0: tint($snl-black, 25%);
   // Borders
   --thorium-panel-border: #{$snl-grey-300};
   --thorium-highlight-panel-border: #{$snl-grey-100};
+  --thorium-divider: #{$snl-grey-300};
   //Scrollbars
   --thorium-scroll-bar-track-bg: #{$snl-grey-100};
   --thorium-scroll-bar-thumb-bg: #{$snl-grey-300};
@@ -398,6 +400,7 @@ $snl-black-0: tint($snl-black, 25%);
   // Borders
   --thorium-panel-border: #{$snl-dark-blue-500}; // secondary-panel - 100
   --thorium-highlight-panel-border: #{$snl-dark-blue-300}; // border - 100
+  --thorium-divider: #{$snl-dark-blue-400};
   //Scrollbars
   --thorium-scroll-bar-track-bg: #{$snl-dark-blue-500};
   --thorium-scroll-bar-thumb-bg: #{$snl-dark-blue-300};
@@ -439,24 +442,34 @@ $snl-black-0: tint($snl-black, 25%);
 }
 
 [theme='Crab'] {
-  // Body
-  --thorium-body-bg: #fff4d4;
-  // Text
-  --thorium-text: #fff0dd;
-  --thorium-secondary-text: #6f6e6e;
-  --thorium-selected-text: #2b303b;
-  --thorium-highlight-text: #edc28e;
-  --thorium-nav-text: var(--thorium-text);
+  // Body — warm beach sand
+  --thorium-body-bg: #f5e6c8;
+  // Text — dark warm brown for readability on sand/cream backgrounds
+  --thorium-text: #{$snl-warm-grey-900};
+  --thorium-secondary-text: #{$snl-warm-grey-600};
+  --thorium-selected-text: #{$snl-warm-grey-800};
+  --thorium-highlight-text: #{$snl-orange-600};
+  --thorium-nav-text: #{$snl-white};
   --thorium-link-text: #{$snl-medium-blue-600};
   --thorium-link-text-alt: #{$snl-medium-blue-800};
-  // Panels
-  --thorium-panel-bg: #{$snl-orange}; //#e85415
-  --thorium-secondary-panel-bg: #{$snl-orange-300};
-  --thorium-highlight-panel-bg: #{$snl-orange-200};
-  --thorium-nav-panel-bg: var(--thorium-panel-bg);
+  // Panels — warm cream cards on sandy body, muted amber nav
+  --thorium-panel-bg: #faecd4;
+  --thorium-secondary-panel-bg: #eedcb8;
+  --thorium-highlight-panel-bg: #e4cfa6;
+  --thorium-nav-panel-bg: #{$snl-amber};
   // Borders
-  --thorium-panel-border: #{$snl-orange-200};
-  --thorium-highlight-panel-border: #{$snl-orange-100};
+  --thorium-panel-border: #{$snl-warm-grey-200};
+  --thorium-highlight-panel-border: #{$snl-warm-grey-100};
+  --thorium-divider: #{$snl-warm-grey-200};
+  // Scrollbars
+  --thorium-scroll-bar-track-bg: #ecdcc0;
+  --thorium-scroll-bar-thumb-bg: #{$snl-warm-grey-300};
+  --thorium-scroll-bar-thumb-hover-bg: #{$snl-warm-grey-400};
+  // Selectable Buttons
+  --thorium-disabled-brightness: brightness(70%);
+  --thorium-hover-brightness: brightness(100%);
+  --thorium-selected-brightness: brightness(90%);
+  --thorium-active-brightness: brightness(80%);
   // Buttons and Alerts
   //  - Alerts: error, warning, info, default (alert)
   //  - Buttons: danger, warning, info, default (alert)
@@ -465,20 +478,19 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-lint-overlap: #{$snl-purple};
   --thorium-warning-bg: #{$snl-amber-500};
   --thorium-warning-secondary-bg: #{$snl-amber-300};
-  --thorium-info-bg: #{$snl-grey-600};
-  --thorium-info-secondary-bg: lightblue;
-  --thorium-empty-bg: #{$snl-medium-blue-800};
+  --thorium-info-bg: #{$snl-warm-grey-600};
+  --thorium-info-secondary-bg: #{$snl-amber-100};
+  --thorium-empty-bg: #{$snl-light-blue-800};
   --thorium-ok-bg: #{$snl-green-600};
-  --thorium-button-text: var(--thorium-text);
-  --thorium-bs-btn-color: #{$snl-grey-500};
-  --thorium-bs-btn-hover-color: #{$snl-black-300};
+  --thorium-button-text: var(--thorium-nav-text);
+  --thorium-bs-btn-color: #{$snl-warm-grey-500};
+  --thorium-bs-btn-hover-color: #{$snl-warm-grey-800};
   // Progress Bars
   --thorium-bar-bg: var(--thorium-body-bg);
   --thorium-danger-bar-bg: #{$snl-crimson};
   --thorium-warning-bar-bg: #{$snl-amber-500};
   --thorium-ok-bar-bg: #{$snl-green-600};
   --thorium-info-bar-bg: #{$snl-medium-blue};
-
   --thorium-form-select-arrow: url('data:image/svg+xml,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3e%3cpath fill=%27none%27 stroke=%27%23060606%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%272%27 d=%27m2 5 6 6 6-6%27/%3e%3c/svg%3e');
 }
 

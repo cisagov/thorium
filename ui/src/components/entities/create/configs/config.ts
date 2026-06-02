@@ -10,6 +10,7 @@ export type EntityCreateConfig<K extends UISupportedEntityCreateKind> = {
   kind: K;
   EntityMetadata: CreateMetadataComponent<K>;
   BlankCreateEntity: EntityCreateTypeMap[K];
+  supportsGraphic?: boolean;
 };
 
 export type EntityCreateConfigMap = {

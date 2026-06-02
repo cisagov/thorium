@@ -4,21 +4,56 @@ import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import Page from '@components/pages/Page';
+import { OmnibarUsers } from '@components/pages/search/omnibar/Bars';
+import { Clause } from '@components/pages/search/omnibar/ClauseTypes';
+import {
+  getGroupsFromClauses,
+  getStringFieldFromClauses,
+  getStringFieldListFromClauses,
+  matchesStringClauses,
+} from '@components/pages/search/omnibar/utils';
+import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 import Title from '@components/shared/titles/Title';
 import { OverlayTipLeft } from '@components/shared/overlay/tips';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import { useAuth } from '@utilities/auth';
 import { getThoriumRole } from '@utilities/role';
+import { hasOverlap } from '@utilities/groups';
 import { deleteUser, listUsers, updateSingleUser } from '@thorpi/users';
-import { RoleKey, ThoriumRole, UserInfo } from '@models/users';
+import { RoleKey, UserInfo } from '@models/users';
+
+/**
+ * Filter users client-side by the omnibar clauses: username/email (substring for `includes`, exact
+ * for `is`), group membership overlap, Thorium role (the resolved string role from
+ * {@link getThoriumRole}), and the boolean `verified`/`local` flags (clause value `'true'`/`'false'`;
+ * empty means no filter).
+ */
+export const filterUsers = (users: UserInfo[], clauses: Clause[]): UserInfo[] => {
+  const groups = getGroupsFromClauses(clauses);
+  const roles = getStringFieldListFromClauses(clauses, 'role');
+  const verified = getStringFieldFromClauses(clauses, 'verified');
+  const local = getStringFieldFromClauses(clauses, 'local');
+
+  return users.filter((user) => {
+    const usernameFilter = matchesStringClauses(clauses, 'username', user.username);
+    const emailFilter = matchesStringClauses(clauses, 'email', user.email);
+    const groupFilter = groups.length > 0 ? hasOverlap(user.groups, groups) : true;
+    const roleFilter = roles.length > 0 ? roles.includes(getThoriumRole(user.role)) : true;
+    const verifiedFilter = verified === '' ? true : user.verified === (verified === 'true');
+    const localFilter = local === '' ? true : user.local === (local === 'true');
+    return usernameFilter && emailFilter && groupFilter && roleFilter && verifiedFilter && localFilter;
+  });
+};
 
 type SingleUserInfoProps = {
   user: UserInfo;
   impersonate: (userToken: string, tokenExpires: string) => void;
+  // reload the full user list (shows the loading spinner) after an update or delete
+  reloadUsers: () => void;
 };
 
 // component to represent each user's info
-const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate }) => {
+const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate, reloadUsers }) => {
   const [singleUserRole, setSingleUserRole] = useState(getThoriumRole(user.role));
   return (
     <Card key={user.username} className="panel mt-1">
@@ -46,6 +81,7 @@ const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate }) =>
             role={singleUserRole}
             user={user}
             setSingleUserRole={setSingleUserRole}
+            reloadUsers={reloadUsers}
           />
         </Col>
       </Row>
@@ -60,10 +96,19 @@ type ManipulateUserButtonsProps = {
   role: RoleKey;
   user: UserInfo;
   setSingleUserRole: (role: RoleKey) => void;
+  reloadUsers: () => void;
 };
 
 // component for buttons related to each user
-const ManipulateUserButtons: React.FC<ManipulateUserButtonsProps> = ({ impersonate, username, token, role, user, setSingleUserRole }) => {
+const ManipulateUserButtons: React.FC<ManipulateUserButtonsProps> = ({
+  impersonate,
+  username,
+  token,
+  role,
+  user,
+  setSingleUserRole,
+  reloadUsers,
+}) => {
   const [deleteError, setDeleteError] = useState('');
   // Delete user modal state manipulation
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -76,10 +121,10 @@ const ManipulateUserButtons: React.FC<ManipulateUserButtonsProps> = ({ impersona
   return (
     <ButtonGroup>
       <OverlayTipLeft
-        tip={`Admins have the ability to change user's role
-        to Admin, User, or Developer.`}
+        tip={`Admins have the ability to change a user's role
+        to Admin, Analyst, Developer, or User.`}
       >
-        <EditRoles role={role} username={username} user={user} setRole={setSingleUserRole} />
+        <EditRoles role={role} username={username} user={user} setRole={setSingleUserRole} reloadUsers={reloadUsers} />
       </OverlayTipLeft>
       <OverlayTipLeft
         tip={`Masquerade as ${username} after logging out of
@@ -126,11 +171,15 @@ const ManipulateUserButtons: React.FC<ManipulateUserButtonsProps> = ({ impersona
         <Modal.Footer className="d-flex justify-content-center">
           <Button
             className="danger-btn"
-            onClick={async () => {
-              if (await deleteUser(username, setDeleteError)) {
-                handleCloseDeleteModal();
-              }
-            }}
+            onClick={() =>
+              void deleteUser(username, setDeleteError).then((success) => {
+                if (success) {
+                  handleCloseDeleteModal();
+                  // refresh the list so the deleted user is removed (shows the loading spinner)
+                  reloadUsers();
+                }
+              })
+            }
           >
             Confirm
           </Button>
@@ -145,10 +194,11 @@ type EditRolesProps = {
   username: string;
   user: UserInfo;
   setRole: (role: RoleKey) => void;
+  reloadUsers: () => void;
 };
 
 // component to edit role
-const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) => {
+const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole, reloadUsers }) => {
   const [showEditRoleModal, setShowEditRoleModal] = useState(false);
   const [updateRoleError, setUpdateRoleError] = useState('');
   const [editRole, setEditRole] = useState(role);
@@ -180,7 +230,7 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
   const updateRole = async () => {
     let roleInfo = {};
     // if role is developer send configuration changes
-    if (editRole == 'Developer') {
+    if (editRole == RoleKey.Developer) {
       roleInfo = {
         role: {
           Developer: {
@@ -199,6 +249,8 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
       if (response) {
         // close the modal
         handleCloseEditRoleModal(response);
+        // refresh the list so the updated role is reflected (shows the loading spinner)
+        reloadUsers();
       }
     }
   };
@@ -250,7 +302,7 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
                       id="collect-logs"
                       label=""
                       checked={newBareMetal}
-                      onChange={(e) => setNewBareMetal(!newBareMetal)}
+                      onChange={() => setNewBareMetal(!newBareMetal)}
                     />
                   </h6>
                 </Form.Group>
@@ -261,13 +313,7 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
                     <b>Windows</b>
                   </Form.Label>
                   <h6>
-                    <Form.Check
-                      type="switch"
-                      id="collect-logs"
-                      label=""
-                      checked={newWindows}
-                      onChange={(e) => setNewWindows(!newWindows)}
-                    />
+                    <Form.Check type="switch" id="collect-logs" label="" checked={newWindows} onChange={() => setNewWindows(!newWindows)} />
                   </h6>
                 </Form.Group>
               </Col>
@@ -282,7 +328,7 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
                       id="collect-logs"
                       label=""
                       checked={newExternal}
-                      onChange={(e) => setNewExternal(!newExternal)}
+                      onChange={() => setNewExternal(!newExternal)}
                     />
                   </h6>
                 </Form.Group>
@@ -292,7 +338,7 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
           {updateRoleError != '' && updateRoleError != 'Successful' && <AlertBanner>{updateRoleError}</AlertBanner>}
         </Modal.Body>
         <Modal.Footer className="d-flex justify-content-center">
-          <Button className="ok-btn" disabled={role == editRole && role != RoleKey.Developer} onClick={() => updateRole()}>
+          <Button className="ok-btn" disabled={role == editRole && role != RoleKey.Developer} onClick={() => void updateRole()}>
             Update
           </Button>
         </Modal.Footer>
@@ -305,12 +351,15 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole }) 
 const UserBrowsing = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [users, setUsers] = useState<UserInfo[]>([]);
+  const [clauses, setClauses] = useState<Clause[]>([]);
   const { checkCookie, impersonate } = useAuth();
+
+  const filteredUsers = filterUsers(users, clauses);
 
   // get user details
   const getUserInfo = async () => {
     setLoading(true);
-    const reqUsers = await listUsers(checkCookie, true);
+    const reqUsers = (await listUsers(() => void checkCookie(), true)) as UserInfo[] | null;
     if (reqUsers) {
       setUsers(reqUsers);
     }
@@ -319,7 +368,7 @@ const UserBrowsing = () => {
 
   // need user info to validate creator permissions
   useEffect(() => {
-    getUserInfo();
+    void getUserInfo();
   }, []);
 
   return (
@@ -329,12 +378,24 @@ const UserBrowsing = () => {
           <Title>Users</Title>
         </Col>
       </Row>
+      <Row className="d-flex justify-content-center">
+        <OmnibarUsers clauses={clauses} setClauses={setClauses} users={users} />
+      </Row>
       <LoadingSpinner loading={loading}></LoadingSpinner>
+      {!loading && filteredUsers.length === 0 && <NoResultsBanner type="Users" />}
       <Row>
-        {users.length > 0 &&
-          users
+        {!loading &&
+          filteredUsers.length > 0 &&
+          filteredUsers
             .sort((a, b) => a.username.localeCompare(b.username))
-            .map((user) => <SingleUserInfo key={user.username} user={user} impersonate={impersonate} />)}
+            .map((user) => (
+              <SingleUserInfo
+                key={user.username}
+                user={user}
+                impersonate={(token, expires) => void impersonate(token, expires)}
+                reloadUsers={() => void getUserInfo()}
+              />
+            ))}
       </Row>
     </Page>
   );

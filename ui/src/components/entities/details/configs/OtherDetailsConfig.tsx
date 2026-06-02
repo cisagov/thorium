@@ -8,17 +8,18 @@ import { getEntity } from '@thorpi/entities';
 import { Entities } from '@models/entities';
 import { BlankOther, Other } from '@models/entities/other';
 
-const OtherMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: DetailsMetadataProps<Entities.Other>): JSX.Element => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const OtherMetaInfo = (_: DetailsMetadataProps<Entities.Other>): JSX.Element => {
   return <></>;
 };
 
 // Get Other entity details from the API
-const getOtherDetails = async (vendorID: string, setError: (err: string) => void, updateEntity: (entity: Other) => void) => {
-  getEntity(vendorID, setError).then((data) => {
+const getOtherDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (entity: Other) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of Other kind
     if (data && data.kind == Entities.Other) {
       // we know that any entity response with kind=Other is a Other
-      const other = data as Other;
+      const other = data;
       updateEntity(other);
     }
   });

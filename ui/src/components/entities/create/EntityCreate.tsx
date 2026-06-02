@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button, Card, Row, Form } from 'react-bootstrap';
 import styled from 'styled-components';
@@ -7,6 +7,7 @@ import styled from 'styled-components';
 import { EntityCreateConfig } from './configs/config';
 import InfoHeader from '../shared/InfoHeader';
 import InfoValue from '../shared/InfoValue';
+import EntityGraphicUpload from '../shared/EntityGraphicUpload';
 import { buildCreateEntityForm, copyEntityFields } from '../utilities';
 import Page from '@components/pages/Page';
 import Title from '@components/shared/titles/Title';
@@ -32,6 +33,9 @@ type EntityCreateContextType<K extends UISupportedEntityCreateKind> = {
   updatePendingEntity: <F extends keyof EntityCreateTypeMap[K]>(field: F, value: EntityCreateTypeMap[K][F]) => void;
   error: string;
   setError: (error: string) => void;
+  supportsGraphic: boolean;
+  graphicFile: File | null;
+  setGraphicFile: (file: File | null) => void;
 };
 
 export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(config: EntityCreateConfig<K>) {
@@ -45,8 +49,9 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
   };
 
   const EntityInfo = () => {
-    const { entity, Metadata, updatePendingEntity } = useEntityContext();
+    const { entity, Metadata, updatePendingEntity, supportsGraphic, graphicFile, setGraphicFile } = useEntityContext();
     const { userInfo } = useAuth();
+    const handleGraphicChange = useCallback((file: File | null) => setGraphicFile(file), [setGraphicFile]);
     return (
       <Card className="panel">
         <Card.Body>
@@ -89,6 +94,17 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
               </Form.Group>
             </InfoValue>
           </Row>
+          {supportsGraphic && (
+            <>
+              <hr className="my-3" />
+              <Row>
+                <InfoHeader>Graphic</InfoHeader>
+                <InfoValue>
+                  <EntityGraphicUpload file={graphicFile} onChange={handleGraphicChange} />
+                </InfoValue>
+              </Row>
+            </>
+          )}
           <Row className="mt-4">
             <InfoHeader />
             <InfoValue>* Field is required to create a new {entity.kind.toLowerCase()}</InfoValue>
@@ -100,15 +116,15 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
 
   const EntityCreateButton = () => {
     const navigate = useNavigate();
-    const { entity, kind, setError } = useEntityContext();
+    const { entity, kind, setError, graphicFile } = useEntityContext();
     const userCanCreate = true; // TODO grab group membership of selected groups and check roles
     const createEntityMessage = userCanCreate
       ? `Create a new ${kind}. You must be a user, manager, or owner in a selected group to create this ${kind}.`
       : `You must be a user, manager, or owner in a selected group to create this ${kind}.`;
     const handleCreateEntity = (): void => {
-      createEntity(buildCreateEntityForm(entity), setError).then((response) => {
+      void createEntity(buildCreateEntityForm(entity, graphicFile ?? undefined), setError).then((response) => {
         if (response != null) {
-          navigate(`${getDetailsBasePathByEntity(kind)}/${response.id}`);
+          void navigate(`${getDetailsBasePathByEntity(kind)}/${response.id}`);
         }
       });
     };
@@ -131,13 +147,14 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
   `;
 
   const BoundEntityCreatePage = () => {
-    const { state } = useLocation();
+    const { state } = useLocation() as { state: { entity?: EntityTypeMap[K] } | null };
     const initialEntity: EntityCreateTypeMap[K] =
       state?.entity && state.entity.kind === config.kind
-        ? copyEntityFields(state.entity as EntityTypeMap[K], config.BlankCreateEntity)
+        ? (copyEntityFields(state.entity, config.BlankCreateEntity) as EntityCreateTypeMap[K])
         : config.BlankCreateEntity;
     const [entity, setEntity] = useState<EntityCreateTypeMap[K]>(initialEntity);
     const [error, setError] = useState<string>('');
+    const [graphicFile, setGraphicFile] = useState<File | null>(null);
     function updatePendingEntity<F extends keyof EntityCreateTypeMap[K]>(field: F, value: EntityCreateTypeMap[K][F]): void {
       const updates = structuredClone(entity);
       updates[field] = value;
@@ -152,6 +169,9 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
           error,
           setError,
           kind: config.kind,
+          supportsGraphic: config.supportsGraphic ?? false,
+          graphicFile,
+          setGraphicFile,
         }}
       >
         <Page className="full-min-width" title={`Create ${config.kind}`}>

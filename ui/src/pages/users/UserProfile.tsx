@@ -8,9 +8,9 @@ import { FaCircleUser } from 'react-icons/fa6';
 import Page from '@components/pages/Page';
 import Subtitle from '@components/shared/titles/Subtitle';
 import { useAuth } from '@utilities/auth';
-import { getThoriumRole } from '@utilities/role';
+import { getThoriumRoleBadge } from '@utilities/role';
 import { updateUser } from '@thorpi/users';
-import { RoleKey, ThoriumRole } from '@models/users';
+import { ThoriumRole } from '@models/users';
 
 const ProfileCard = styled.div`
   width: 50rem;
@@ -45,14 +45,14 @@ const ProfileCard = styled.div`
   }
 `;
 
-const Themes = ['Dark', 'Light', 'Ocean', 'Automatic'];
+const Themes = ['Dark', 'Light', 'Ocean', 'Crab', 'Automatic'];
 
 type RoleProps = {
   role: ThoriumRole;
 };
 
 const Role: React.FC<RoleProps> = ({ role }) => {
-  const roleString = getThoriumRole(role);
+  const badge = getThoriumRoleBadge(role);
   return (
     <Container>
       <Row>
@@ -60,24 +60,9 @@ const Role: React.FC<RoleProps> = ({ role }) => {
           <Subtitle>Role</Subtitle>
         </Col>
         <Col>
-          {roleString && roleString == RoleKey.Admin && (
-            <Badge pill bg="" className="bg-maroon px-3 py-2">
-              {roleString}
-            </Badge>
-          )}
-          {roleString && roleString == RoleKey.Developer && (
-            <Badge pill bg="" className="bg-corn-flower px-3 py-2">
-              {roleString}
-            </Badge>
-          )}
-          {roleString && roleString == RoleKey.User && (
-            <Badge pill bg="" className="bg-cadet px-3 py-2">
-              {roleString}
-            </Badge>
-          )}
-          {roleString && roleString == RoleKey.Reporter && (
-            <Badge pill bg="" className="bg-grey px-3 py-2">
-              {roleString}
+          {badge && (
+            <Badge pill bg="" className={`${badge.className} px-3 py-2`}>
+              {badge.label}
             </Badge>
           )}
         </Col>
@@ -86,13 +71,13 @@ const Role: React.FC<RoleProps> = ({ role }) => {
   );
 };
 
-const RevokeTokenModal = ({ show, onHide }) => {
+const RevokeTokenModal = ({ show, onHide }: { show: boolean; onHide: () => void }) => {
   const { revoke } = useAuth();
   const navigate = useNavigate();
   // call thorium logout route and then
   const handleRevoke = () => {
-    revoke().then(() => {
-      navigate('/');
+    void revoke().then(() => {
+      void navigate('/');
     });
   };
   return (
@@ -113,7 +98,7 @@ const RevokeTokenModal = ({ show, onHide }) => {
   );
 };
 
-const Groups = ({ groups }) => {
+const Groups = ({ groups }: { groups: string[] | undefined }) => {
   return (
     <Container>
       <Row>
@@ -122,7 +107,7 @@ const Groups = ({ groups }) => {
         </Col>
         <Col>
           {groups &&
-            groups.sort().map((group, idx) => (
+            [...groups].sort().map((group: string, idx: number) => (
               <Badge key={idx} pill bg="" className="bg-blue px-3 py-2 me-1">
                 {group}
               </Badge>
@@ -185,13 +170,13 @@ const Token = () => {
   );
 };
 
-const Theme = ({ theme }) => {
+const Theme = ({ theme }: { theme: string | undefined }) => {
   const { refreshUserInfo } = useAuth();
   // Send API new user theme settings
-  const updateTheme = async (theme) => {
+  const updateTheme = (theme: string) => {
     const settings = { settings: { theme: theme } };
-    updateUser(settings, console.log).then(() => {
-      refreshUserInfo(true);
+    void updateUser(settings, console.log).then(() => {
+      void refreshUserInfo(true);
     });
   };
   return (

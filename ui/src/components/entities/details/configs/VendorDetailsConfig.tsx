@@ -1,7 +1,7 @@
 import { JSX } from 'react';
 import { Row } from 'react-bootstrap';
 import { MdBusinessCenter } from 'react-icons/md';
-import { getNames as getCountryNames, getCode as getCountryCode, Country } from 'country-list';
+import { Country } from 'country-list';
 
 // project imports
 import { EntityDetailsConfig } from './configs';
@@ -10,20 +10,11 @@ import InfoValue from '../../shared/InfoValue';
 import InfoHeader from '../../shared/InfoHeader';
 import FieldBadge from '@components/shared/badges/FieldBadge';
 import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
+import { CountryNames, getCountryCode } from '@entities/shared/countries';
 import { getEntity } from '@thorpi/entities';
 import { Entities } from '@models/entities';
 import { CriticalSector } from '@models/entities/sectors';
 import { BlankVendor, Vendor, VendorMetaFields } from '@models/entities/vendors';
-
-// country names used in SelectInputArray options for vendor country
-const CountryNames = getCountryNames().map((country: string) => {
-  const namePrefix = ' (the)';
-  // strip out (the) as it differs from api country name source
-  if (country.endsWith(namePrefix)) {
-    return country.slice(0, namePrefix.length);
-  }
-  return country;
-});
 
 const VendorMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: DetailsMetadataProps<Entities.Vendor>): JSX.Element => {
   // update metadata and then pass back to entity update
@@ -33,7 +24,7 @@ const VendorMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: Detail
       const countryNames = value as string[];
       updates[field] = countryNames.map((name: string) => {
         return { code: getCountryCode(name), name: name };
-      }) as any;
+      }) as unknown as VendorMetaFields[T];
     } else {
       updates[field] = value;
     }
@@ -86,11 +77,11 @@ const VendorMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: Detail
 };
 
 // Get vendor details from the API
-const getVendorDetails = async (vendorID: string, setError: (err: string) => void, updateEntity: (vendor: Vendor) => void) => {
-  getEntity(vendorID, setError).then((data) => {
+const getVendorDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (vendor: Vendor) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     if (data && data.kind == Entities.Vendor) {
       // we know that any entity response with kind=Vendor is a Vendor
-      const vendor = data as Vendor;
+      const vendor = data;
       // need to add spaces for more human friendly suggestions for Critical Sectors
       if (vendor.metadata.Vendor?.critical_sectors) {
         vendor.metadata.Vendor.critical_sectors = vendor.metadata.Vendor.critical_sectors.map(
@@ -107,6 +98,7 @@ const VendorDetailsConfig: EntityDetailsConfig<Entities.Vendor> = {
   EntityMetaInfo: VendorMetaInfo,
   BlankEntity: BlankVendor,
   icon: (size: number) => <MdBusinessCenter size={size} />,
+  supportsGraphic: true,
 };
 
 export default VendorDetailsConfig;

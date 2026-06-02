@@ -1,40 +1,45 @@
-// import the base client function that loads from the config
-// and injects the token via axios intercepts
 import { Pipeline, PipelineCreate, PipelineUpdate } from '@models/pipelines';
 import client, { parseRequestError } from './client';
 
+interface PipelineListResponse {
+  cursor?: number;
+  names: string[];
+}
+
+interface PipelineDetailsListResponse {
+  cursor?: number;
+  details: Pipeline[];
+}
+
 /**
- * Create a new Thorium pipeline.
- * @async
- * @function
- * @param {PipelineCreate} pipeline - Pipeline details to submit when creating new pipeline
- * @param {(error: string) => void} errorHandler - Error handler function
- * @returns {Promise<boolean>} - Request response
+ * Create a new pipeline (`POST /pipelines/`).
+ *
+ * @param pipeline - The pipeline definition to create (group, name, stage order, triggers, etc.).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the pipeline was created (HTTP 204), otherwise `false`.
  */
 export async function createPipeline(pipeline: PipelineCreate, errorHandler: (error: string) => void): Promise<boolean> {
   return client
     .post('/pipelines/', pipeline)
     .then((res) => {
-      // check for errors in the request response
       if (res?.status == 204) {
         return true;
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Create Pipeline');
       return false;
     });
 }
 
 /**
- * Delete a pipeline by name.
- * @async
- * @function
- * @param {string} group - Group name target pipeline is owned by
- * @param {string} pipeline - Name of pipeline being deleted
- * @param {(error: string) => void} errorHandler - Error handler function
- * @returns {Promise<boolean>} - Request response
+ * Delete a pipeline from a group (`DELETE /pipelines/{group}/{pipeline}`).
+ *
+ * @param group - The group the pipeline belongs to.
+ * @param pipeline - The name of the pipeline to delete.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the pipeline was deleted (HTTP 204), otherwise `false`.
  */
 export async function deletePipeline(group: string, pipeline: string, errorHandler: (error: string) => void): Promise<boolean> {
   const url = '/pipelines/' + group + '/' + pipeline;
@@ -46,91 +51,87 @@ export async function deletePipeline(group: string, pipeline: string, errorHandl
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Delete Pipeline');
       return false;
     });
 }
 
 /**
- * Get details for a pipeline.
- * @async
- * @function
- * @param {string} group - Group of pipeline
- * @param {string} pipeline - Name of pipeline
- * @param {(error: string) => void} errorHandler - Error handler function
- * @returns {Promise<Pipeline | null>} - pipeline details
+ * Fetch a single pipeline by name, scoped to a group (`GET /pipelines/data/{group}/{pipeline}`).
+ *
+ * @param group - The group the pipeline belongs to.
+ * @param pipeline - The name of the pipeline to fetch.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The {@link Pipeline}, or `null` if not found or the request failed.
  */
 export async function getPipeline(group: string, pipeline: string, errorHandler: (error: string) => void): Promise<Pipeline | null> {
   const url = '/pipelines/data/' + group + '/' + pipeline;
   return client
-    .get(url)
+    .get<Pipeline>(url)
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Get Pipeline');
       return null;
     });
 }
 
 /**
- * Get a list of pipelines with optional details for a particular group.
- * @async
- * @function
- * @param {string} group - group name to list owned pipelines for
- * @param {(error: string) => void} errorHandler - Error handler function
- * @param {boolean} details - whether to return details for listed pipelines
- * @param {string} cursor - the cursor value to continue listing from
- * @param {number} limit - number of pipelines to return
- * @returns {Promise<Pipeline[] | string[] | null>} - pipelines list with optional details
+ * List the pipelines in a group, as names or full details (`GET /pipelines/list/{group}/` or `/details/`).
+ *
+ * @param group - The group whose pipelines to list.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param details - When `true`, return full {@link Pipeline} objects; when `false`, return pipeline names.
+ * @param cursor - Pagination cursor from a previous call, or `null` for the first page.
+ * @param limit - Maximum number of pipelines to return per page (defaults to 100).
+ * @returns An array of {@link Pipeline} details (when `details`) or names, or `null` if the request failed.
  */
 export async function listPipelines(
   group: string,
   errorHandler: (error: string) => void,
   details = false,
-  cursor = null,
+  cursor: string | null = null,
   limit = 100,
 ): Promise<Pipeline[] | string[] | null> {
   let url = '/pipelines/list/' + group + '/';
   if (details) {
     url += 'details/';
   }
-  // pass in limit and cursor value
   const params: { limit: number; cursor?: string } = { limit: limit };
   if (cursor) {
     params['cursor'] = cursor;
   }
   return client
-    .get(url, { params: params })
+    .get<PipelineListResponse | PipelineDetailsListResponse>(url, { params: params })
     .then((res) => {
       if (res?.status == 200 && res.data) {
-        if (details && res.data.details) {
+        if (details && 'details' in res.data) {
           return res.data.details;
-        } else if (!details && res.data.names) {
+        } else if (!details && 'names' in res.data) {
           return res.data.names;
         }
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'List Pipelines');
       return null;
     });
 }
 
 /**
- * Update details for a pipeline.
- * @async
- * @function
- * @param {string} group - Group name target pipeline is owned by
- * @param {string} pipeline - Name of pipeline to patch
- * @param {PipelineUpdate} data - Json body to patch pipeline with
- * @param {(error: string) => void} errorHandler - Error handler function
- * @returns {Promise<boolean>} - request response
+ * Update an existing pipeline (`PATCH /pipelines/{group}/{pipeline}`).
+ *
+ * @param group - The group the pipeline belongs to.
+ * @param pipeline - The name of the pipeline to update.
+ * @param data - The pipeline fields to change (stage order, SLA, triggers, description, etc.).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the update succeeded (HTTP 204), otherwise `false`.
  */
 export async function updatePipeline(
   group: string,
@@ -142,13 +143,12 @@ export async function updatePipeline(
   return client
     .patch(url, data)
     .then((res) => {
-      // response was successful, reload pipeline resource
       if (res?.status == 204) {
         return true;
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Update Pipeline');
       return false;
     });

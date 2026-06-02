@@ -8,9 +8,9 @@ import { EntityBrowseConfig } from './config';
 import { BrowsingCard, BrowsingContents, LinkFields } from '@entities/browsing/shared';
 import { listRepos } from '@thorpi/repos';
 import { Filters } from '@models/search';
-import { Repo } from '@models/entities/repos';
 import { Entities } from '@models/entities/entities';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
+import { Repo } from '@models/repos';
 
 // get repos using filters and and an optional cursor
 const getRepos = async (filters: Filters, cursor: string | null) => {
@@ -64,7 +64,7 @@ const RepoListHeaders = () => {
 };
 
 interface RepoItemProp {
-  repo: any; // Repo details
+  repo: Repo;
 }
 
 const RepoItem: React.FC<RepoItemProp> = ({ repo }) => {
