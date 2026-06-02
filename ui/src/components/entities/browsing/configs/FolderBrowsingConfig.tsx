@@ -111,11 +111,7 @@ const FolderItems: React.FC<FolderItemProps> = ({ folder }) => {
         </Link>
         <Sha256 className="mt-3 mb-2">{folder.metadata.Folder.all_sha256}</Sha256>
         {folder.tags != undefined && <hr />}
-        <Row>
-          {folder.tags && Object.keys(folder.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.Folder} tags={folder.tags} />
-          ) : null}
-        </Row>
+        {folder.tags && Object.keys(folder.tags).length > 1 ? <CondensedEntityTags resource={Entities.Folder} tags={folder.tags} /> : null}
       </BrowsingContents>
     </BrowsingCard>
   );

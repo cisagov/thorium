@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ToastContainer } from 'react-toastify';
@@ -26,7 +26,7 @@ const EntityDetails = lazy(async () => await import('./pages/entities/EntityDeta
 const EntityCreate = lazy(async () => await import('./pages/entities/EntityCreate'));
 const CreateImage = lazy(async () => await import('./pages/images/ImageCreate'));
 const GraphBuilder = lazy(async () => await import('./pages/GraphBuilder'));
-const Pipelines = lazy(async () => await import('./pages/Pipelines'));
+const Pipelines = lazy(async () => await import('./pages/pipelines/PipelineBrowsing'));
 const Images = lazy(async () => await import('./pages/images/ImageBrowsing'));
 const Groups = lazy(async () => await import('./pages/users/Groups'));
 const Users = lazy(async () => await import('./pages/users/UserBrowsing'));
@@ -40,6 +40,9 @@ const SystemSettings = lazy(async () => await import('./pages/system/SystemSetti
 const SigmaTest = lazy(() => import('./pages/test/code/SigmaTest'));
 const YaraTest = lazy(() => import('./pages/test/code/YaraTest'));
 const AlertBannerTest = lazy(() => import('./pages/test/AlertBannerTest'));
+const ImagePipelineTest = lazy(() => import('./pages/test/code/ImagePipelineTest'));
+const OverlayWindowTest = lazy(() => import('./pages/test/OverlayWindowTest'));
+const ButtonTest = lazy(() => import('./pages/test/ButtonTest'));
 
 // Data loading ui empty for now
 const FallbackView = <h1 />;
@@ -87,6 +90,9 @@ const Resources = () => (
     <Route path="/test/sigma" element={<PageWrapper Contents={SigmaTest} />} />
     <Route path="/test/yara" element={<PageWrapper Contents={YaraTest} />} />
     <Route path="/test/alerts" element={<PageWrapper Contents={AlertBannerTest} />} />
+    <Route path="/test/image-pipeline" element={<PageWrapper Contents={ImagePipelineTest} />} />
+    <Route path="/test/overlay-window" element={<PageWrapper Contents={OverlayWindowTest} />} />
+    <Route path="/test/buttons" element={<PageWrapper Contents={ButtonTest} />} />
     // Basic
     <Route path="/" element={<PageWrapper Contents={Home} />} />
     <Route path="*" element={<PageWrapper Contents={NotFound} />} />

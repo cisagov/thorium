@@ -80,6 +80,7 @@ export const BlankSigmaRule: SigmaRule = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateSigmaRule: CreateSigmaRule = {

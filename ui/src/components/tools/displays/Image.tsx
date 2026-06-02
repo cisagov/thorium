@@ -31,7 +31,7 @@ const Image: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
         const extension = fileName.split('.').pop();
         if (!SupportedImageFormats.includes(extension ? extension : '')) continue;
         // get images from the API and build a local URL path for display
-        const res = await getResultsFile(sha256, tool, result.id, fileName, checkCookie);
+        const res = await getResultsFile(sha256, tool, result.id, fileName, () => void checkCookie());
         if (res && res.data) {
           const resultFile = new File([res.data], fileName, {
             type: `image/${extension}`,
@@ -42,7 +42,7 @@ const Image: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
       // set the built image URLs into a list
       setImages(fileData);
     };
-    fetchFiles();
+    void fetchFiles();
     // set alerts and process results to json
     getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, false);
   }, [result, sha256, tool]);

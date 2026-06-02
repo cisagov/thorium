@@ -1,42 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import path from 'path';
-import { snapshot } from './helpers';
+import { snapshot, setupMockAuth, MOCK_USER } from './helpers';
 
 const SCREENSHOT_DIR = path.join(import.meta.dirname, 'screenshots');
-
-const MOCK_USER = {
-  username: 'test',
-  role: 'Admin',
-  email: 'test@thorium.dev',
-  groups: ['system'],
-  token: 'mock-token-for-visual-test',
-  token_expiration: '2099-01-01T00:00:00Z',
-  settings: { theme: 'Dark' },
-  local: true,
-  verified: true,
-};
-
-async function setupMockAuth(page: Page) {
-  await page.route('**/api/users/whoami', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USER) }),
-  );
-  await page.route('**/api/search**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [], cursor: null }) }),
-  );
-  await page.route('**/api/**', (route) => {
-    const url = route.request().url();
-    if (url.includes('/users/whoami') || url.includes('/search')) {
-      return route.fallback();
-    }
-    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  await page.context().addCookies([{
-    name: 'THORIUM_TOKEN',
-    value: MOCK_USER.token,
-    domain: 'localhost',
-    path: '/',
-  }]);
-}
 
 test.describe('Sidebar Navigation Visual Validation', () => {
   test('sidebar renders all categories at full width (1400px)', async ({ page }) => {

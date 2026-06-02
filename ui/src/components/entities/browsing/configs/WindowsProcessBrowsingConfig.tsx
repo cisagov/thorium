@@ -95,11 +95,9 @@ const WindowsProcessItem: React.FC<WindowsProcessItemProps> = ({ process }) => {
         </Link>
         {process.metadata.WindowsProcess?.command && <Command className="mt-3 mb-2">{process.metadata.WindowsProcess.command}</Command>}
         {process.tags != undefined && <hr />}
-        <Row>
-          {process.tags && Object.keys(process.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.WindowsProcess} tags={process.tags} />
-          ) : null}
-        </Row>
+        {process.tags && Object.keys(process.tags).length > 1 ? (
+          <CondensedEntityTags resource={Entities.WindowsProcess} tags={process.tags} />
+        ) : null}
       </BrowsingContents>
     </BrowsingCard>
   );

@@ -37,7 +37,9 @@ const Absolute: React.FC<AbsoluteProps> = ({ time, setTime }) => {
         <label>Start:</label>
         <DatePicker
           selected={time.start}
-          onChange={(d) => onChangeStart(d)}
+          onChange={(d) => {
+            if (d instanceof Date) onChangeStart(d);
+          }}
           timeInputLabel="Time:"
           dateFormat="MM/dd/yyyy h:mm aa"
           showTimeSelect={true}
@@ -49,7 +51,9 @@ const Absolute: React.FC<AbsoluteProps> = ({ time, setTime }) => {
         <label>End:</label>
         <DatePicker
           selected={time.end}
-          onChange={(d) => onChangeEnd(d)}
+          onChange={(d) => {
+            if (d instanceof Date) onChangeEnd(d);
+          }}
           timeInputLabel="Time:"
           dateFormat="MM/dd/yyyy h:mm aa"
           showTimeSelect

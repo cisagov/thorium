@@ -6,13 +6,13 @@ import { EntityCreateConfig } from './config';
 import { CreateMetadataProps } from '../EntityCreate';
 import InfoHeader from '@entities/shared/InfoHeader';
 import InfoValue from '@entities/shared/InfoValue';
-import FilterDatePicker from '@entities/browsing/filters/FilterDatePicker';
+import DatePicker from '@components/shared/inputs/DatePicker';
 import { TagSelect } from '@components/shared/inputs/tags/TagSelect';
 import SelectInput from '@components/shared/inputs/selectable/SelectInput';
 import { safeDateToStringConversion } from '@utilities/inputs';
 import { requestTagsToTagEntryList, tagEntriesToRequestTags } from '@utilities/tags';
 import { Entities } from '@models/entities/entities';
-import { BlankCreateCollection, CollectionKind, CollectionMetaFields, CollectionMeta } from '@models/entities/collections';
+import { BlankCreateCollection, CollectionKind, CollectionMetaFields } from '@models/entities/collections';
 
 const CollectionMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.Collection>): JSX.Element => {
   // current date is the latest you can set for start/end
@@ -42,7 +42,7 @@ const CollectionMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.C
         <InfoHeader>Collection Tags</InfoHeader>
         <InfoValue className="mt-2">
           <TagSelect
-            tags={requestTagsToTagEntryList((entity.metadata as CollectionMeta).Collection.collection_tags ?? {})}
+            tags={requestTagsToTagEntryList(entity.metadata.Collection.collection_tags ?? {})}
             setTags={(updatedTags) => updatePendingMeta('collection_tags', tagEntriesToRequestTags(updatedTags))}
             placeholderText="Add Tags"
           />
@@ -73,7 +73,7 @@ const CollectionMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.C
       <Row className="mt-3">
         <InfoHeader>Newest</InfoHeader>
         <InfoValue>
-          <FilterDatePicker
+          <DatePicker
             max={maxDate}
             min={entity.metadata.Collection.end}
             selected={entity.metadata.Collection.start}
@@ -85,7 +85,7 @@ const CollectionMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.C
       <Row className="mt-3">
         <InfoHeader>Oldest</InfoHeader>
         <InfoValue>
-          <FilterDatePicker
+          <DatePicker
             max={entity.metadata.Collection.start ? entity.metadata.Collection.start : maxDate}
             selected={entity.metadata.Collection.end}
             disabled={false}
@@ -101,6 +101,7 @@ const CollectionCreateConfig: EntityCreateConfig<Entities.Collection> = {
   kind: Entities.Collection,
   EntityMetadata: CollectionMetaInfo,
   BlankCreateEntity: BlankCreateCollection,
+  supportsGraphic: true,
 };
 
 export default CollectionCreateConfig;

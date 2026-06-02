@@ -1,8 +1,14 @@
 import styled from 'styled-components';
 
-export const GraphWindow = styled.div`
+export const GraphWindow = styled.div<{ $bordered?: boolean }>`
   position: relative;
   background-color: var(--thorium-panel-bg);
+  ${({ $bordered = true }) =>
+    $bordered &&
+    `
+    border: 1px solid var(--thorium-panel-border);
+    border-radius: 4px;
+  `}
   overflow: hidden;
 `;
 
@@ -74,7 +80,7 @@ export const PreviewContainer = styled.div`
   max-width: min(400px, 35vw);
   max-height: 30vh;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
 `;
 
 export const PreviewHeader = styled.div`

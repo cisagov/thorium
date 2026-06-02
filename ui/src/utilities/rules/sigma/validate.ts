@@ -1,3 +1,4 @@
+// Validation spec: see VALIDATION_SPEC.md in this directory
 import type { Document } from 'yaml';
 import { isMap, isPair, isScalar, isSeq } from 'yaml';
 

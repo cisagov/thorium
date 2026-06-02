@@ -7,13 +7,16 @@ interface TimeProps {
 }
 
 const Time: React.FC<TimeProps> = ({ children, verbose }) => {
-  let date;
-  let fullTime;
-  let time;
+  let date: string;
+  let fullTime: string | undefined;
+  let time: string;
   try {
     [date, fullTime] = children.split('T');
+    if (!fullTime) {
+      return <Fragment>{children}</Fragment>;
+    }
     time = fullTime.split('.')[0];
-  } catch (e) {
+  } catch {
     return <Fragment>{children}</Fragment>;
   }
   if (verbose) {

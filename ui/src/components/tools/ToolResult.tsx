@@ -21,12 +21,23 @@ import Title from '@components/shared/titles/Title';
 import RenderErrorAlert from '@components/shared/alerts/RenderErrorAlert';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import Markdown from './displays/Markdown';
+import { Output, OutputDisplayType } from '@models/results';
+
+interface ToolResultProps {
+  result: Output;
+  type: OutputDisplayType;
+  header: string;
+  sha256: string;
+  tool: string;
+  updateInView: (inView: boolean, tool: string) => void;
+  updateURLSection: (section: string, value: string) => void;
+}
 
 const BtnCol = styled(Col)`
   text-align: right;
 `;
 
-const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateURLSection }) => {
+const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateURLSection }: ToolResultProps) => {
   const [isOpen, setOpened] = useState(false);
   const [scrollRef, setScrollRef] = useState('');
   const [height, setHeight] = useState(0);
@@ -44,7 +55,7 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
     return () => resizeObserver.disconnect(); // clean up
   }, []);
 
-  const scrollToFiles = (value) => {
+  const scrollToFiles = (value: string) => {
     const element = document?.getElementById(value);
     if (element === null) return;
     element.scrollIntoView({ behavior: 'smooth' });
@@ -62,9 +73,9 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
     // update url location with selected results section
     updateURLSection('results', `${tool}`);
     // copy url with updated section to clipboard
-    navigator.clipboard.writeText(window.location.href);
+    void navigator.clipboard.writeText(window.location.href);
     // notify user that url location was copied to clipboard with toast notification
-    const notify = () => toast(`Copied "${window.location}" to clipboard!`);
+    const notify = () => toast(`Copied "${window.location.href}" to clipboard!`);
     notify();
   };
 
@@ -77,7 +88,7 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
         rootMargin="-60px 0px 0px 0px"
         threshold={isOpen ? 0 : 0.33}
         root={document.querySelector('results-tab')}
-        onChange={(inView, entry) => updateInView(inView, tool)}
+        onChange={(inView) => updateInView(inView, tool)}
       >
         <Card className="tool-card mt-2 results-content" ref={resultRef}>
           <Card.Header className="py-2">
@@ -97,7 +108,7 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
                     </div>
                   </OverlayTipRight>
                 )}
-                {result && result.files && type != 'Image' && Object.keys(result.files).length > 0 && (
+                {result && result.files && type != OutputDisplayType.Image && Object.keys(result.files).length > 0 && (
                   <OverlayTipRight tip={`Click to jump to result file(s)`}>
                     <div
                       className="general-tag tag-item clickable mt-2"
@@ -144,22 +155,21 @@ const ToolResult = ({ result, type, header, sha256, tool, updateInView, updateUR
             >
               <div className={isOpen ? '' : 'collapsed'}>
                 <Row className="d-flex justify-content-center">
-                  {type == 'Custom' && (header == 'symantec' || header == 'clamav') && (
+                  {type == OutputDisplayType.Custom && (header == 'symantec' || header == 'clamav') && (
                     <AvMulti result={result} sha256={sha256} tool={tool} />
                   )}
-                  {type == 'Custom' && header == 'vbaextraction' && <VBA result={result} />}
-                  {type == 'Custom' && (header == 'titanium-core2' || header == 'tc2') && (
+                  {type == OutputDisplayType.Custom && header == 'vbaextraction' && <VBA result={result} />}
+                  {type == OutputDisplayType.Custom && (header == 'titanium-core2' || header == 'tc2') && (
                     <TC2 result={result} sha256={sha256} tool={tool} />
                   )}
-                  {type == 'Disassembly' && <Disassembly result={result} sha256={sha256} tool={tool} />}
-                  {type == 'Hidden' && false && <div>Hide this result</div>}
-                  {(type == 'Html' || type == 'HTML') && <SafeHtml result={result} sha256={sha256} tool={tool} />}
-                  {type == 'Image' && <Image result={result} sha256={sha256} tool={tool} />}
-                  {(type == 'Json' || type == 'JSON') && <JSON result={result} sha256={sha256} tool={tool} />}
-                  {type == 'Markdown' && <Markdown result={result} sha256={sha256} tool={tool} />}
-                  {type == 'String' && <String result={result} sha256={sha256} tool={tool} errors={[]} warnings={[]} />}
-                  {type == 'Table' && <Tables result={result} sha256={sha256} tool={tool} />}
-                  {type == 'Xml' || (type == 'XML' && <XML result={result} sha256={sha256} tool={tool} />)}
+                  {type == OutputDisplayType.Disassembly && <Disassembly result={result} sha256={sha256} tool={tool} />}
+                  {type == OutputDisplayType.Html && <SafeHtml result={result} sha256={sha256} tool={tool} />}
+                  {type == OutputDisplayType.Image && <Image result={result} sha256={sha256} tool={tool} />}
+                  {type == OutputDisplayType.Json && <JSON result={result} sha256={sha256} tool={tool} />}
+                  {type == OutputDisplayType.Markdown && <Markdown result={result} sha256={sha256} tool={tool} />}
+                  {type == OutputDisplayType.String && <String result={result} sha256={sha256} tool={tool} errors={[]} warnings={[]} />}
+                  {type == OutputDisplayType.Table && <Tables result={result} sha256={sha256} tool={tool} />}
+                  {type == OutputDisplayType.Xml && <XML result={result} sha256={sha256} tool={tool} />}
                 </Row>
               </div>
             </ErrorBoundary>

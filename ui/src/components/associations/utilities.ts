@@ -1,7 +1,7 @@
 // project imports
 import { RequestTags } from '@models/tags';
 import { SubmissionChunk } from '@models/files';
-import { BranchNode, Graph, TreeNode } from '@models/trees';
+import { BranchNode, Graph, TreeNode, TreeNodeKey } from '@models/trees';
 
 // get the file name from full path
 export const stripFilePath = (filePath: string): string => {
@@ -46,7 +46,7 @@ export const truncateString = (base: string, length: number): string => {
       return base.substring(0, length);
     } else {
       let basePartLength = Math.floor((length - 3) / 2);
-      let newString = base.substring(0, basePartLength) + '...';
+      const newString = base.substring(0, basePartLength) + '...';
       if (basePartLength % 2) {
         basePartLength += 1;
       }
@@ -57,20 +57,20 @@ export const truncateString = (base: string, length: number): string => {
 };
 
 export const getNodeName = (nodeData: TreeNode, maxLength: number): string => {
-  if ('Sample' in nodeData && nodeData.Sample) {
+  if (TreeNodeKey.Sample in nodeData && nodeData.Sample) {
     return truncateString(formatSubmissionNames(nodeData.Sample.submissions), maxLength);
-  } else if ('Repo' in nodeData && nodeData.Repo) {
+  } else if (TreeNodeKey.Repo in nodeData && nodeData.Repo) {
     return truncateString(nodeData.Repo.url, maxLength);
-  } else if ('Tag' in nodeData && nodeData.Tag) {
+  } else if (TreeNodeKey.Tag in nodeData && nodeData.Tag) {
     return truncateString(formatTagNames(nodeData.Tag.tags, true), maxLength);
-  } else if ('Entity' in nodeData && nodeData.Entity) {
+  } else if (TreeNodeKey.Entity in nodeData && nodeData.Entity) {
     return truncateString(nodeData.Entity.name, maxLength);
   }
   return '';
 };
 
 // build edge label string from branch node structure
-export const getEdgeLabel = (target: string, source: string, node: BranchNode, graph: Graph): string => {
+export const getEdgeLabel = (target: string, _source: string, node: BranchNode, graph: Graph): string => {
   if (node.relationship.Origin) {
     const origin = node.relationship.Origin;
     // Downloaded
@@ -114,7 +114,7 @@ export const getEdgeLabel = (target: string, source: string, node: BranchNode, g
         return `${key}: ${value}`;
       });
     });
-    return `${pairs}`;
+    return pairs.flat().join(', ');
   }
   return '→';
 };

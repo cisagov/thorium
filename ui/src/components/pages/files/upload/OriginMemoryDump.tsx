@@ -28,7 +28,7 @@ const OriginMemoryDump: React.FC = () => {
         <Col xs={5}>
           <SelectableArray
             initialEntries={[]}
-            setEntries={(val: string) => origin.setMemoryDumpField('reconstructed', val)}
+            setEntries={(entries: string[]) => origin.setMemoryDumpField('reconstructed', entries.join(','))}
             disabled={false}
             placeholder="optional"
             trim={false}

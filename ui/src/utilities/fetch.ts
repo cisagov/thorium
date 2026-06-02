@@ -1,39 +1,51 @@
 // project imports
 import { getImage, listImages } from '@thorpi/images';
 import { listGroups } from '@thorpi/groups';
+import { Image, ImageList } from '@models/images';
 import { Group } from '@models/groups';
 
 /**
- * Get a single image spec from the Thorium API
- * @param {any} image image object containing a name and group field
- * @param {(image: any) => void} setImage function to set the updated image
- * @param {(loading: boolean) => void} setLoading function to set whether currently making API request
- * @returns {Promise} a promise for the request action
+ * Fetch a single image and push it into component state, toggling a loading flag around the request.
+ *
+ * A no-op (other than the loading toggle) if `group` or `name` is missing, or if the image isn't found.
+ *
+ * @param image - Partial image identity; both `group` and `name` must be present to fetch.
+ * @param setImage - State setter called with the fetched {@link Image} on success.
+ * @param setLoading - State setter toggled `true` before the request and `false` after.
  */
-export async function fetchSingleImage(image: any, setImage: (image: any) => void, setLoading: (loading: boolean) => void) {
+export async function fetchSingleImage(
+  image: { group?: string; name?: string },
+  setImage: (image: Image) => void,
+  setLoading: (loading: boolean) => void,
+) {
   setLoading(true);
   if (image?.group && image?.name) {
     const reqImage = await getImage(image.group, image.name);
     if (reqImage) {
-      setImage(reqImage.data);
+      setImage(reqImage);
     }
   }
   setLoading(false);
 }
 
 /**
- * Get a list of images from a users accessible groups
- * @param {string[]} groups A list of string groups a user can see
- * @param {(images: any[]) => void} setImages useState setter for image details
- * @param {boolean} cancelUpdate boolean indicating do not update if component is mounted
- * @param {(error: string) => void} setError an auth hook for validating cookies when 401s are returned
- * @param {(loading: boolean) => void} setLoading is the fetch function loading new data
- * @param {boolean} details whether to fetch image details or just names
- * @returns {object} async promise for request
+ * Fetch and aggregate the images across multiple groups, then push them into component state.
+ *
+ * Iterates each group, concatenating either full {@link Image} objects (when `details`) or image
+ * names. Detailed results are sorted by `group + name`. The `cancelUpdate` flag lets a caller
+ * (e.g. an unmounting component or a superseded request) skip the final state update to avoid
+ * setting state after the relevant view is gone.
+ *
+ * @param groups - The groups whose images to fetch.
+ * @param setImages - State setter called with the aggregated images (typed by `details`).
+ * @param cancelUpdate - When `true`, skip the final `setImages` call (results are discarded).
+ * @param setError - Error callback forwarded to the underlying list request.
+ * @param setLoading - State setter toggled `true` before the requests and `false` after.
+ * @param details - When `true`, fetch full {@link Image} objects; when `false`, fetch only names.
  */
 export async function fetchImages(
   groups: string[],
-  setImages: (images: any[]) => void,
+  setImages: ((images: Image[]) => void) | ((images: string[]) => void),
   cancelUpdate: boolean,
   setError: (error: string) => void,
   setLoading: (loading: boolean) => void,
@@ -41,41 +53,44 @@ export async function fetchImages(
 ) {
   if (typeof setLoading == 'function') setLoading(true);
 
-  const images: any[] = [];
+  const images: (Image | string)[] = [];
   if (groups && Array.isArray(groups) && groups.length) {
-    // Get image details for each group
     for (const group of groups) {
       const reqImages = await listImages(group, setError, details, null, 1000);
       if (reqImages) {
-        // request successful, pass back image details in a list or just a list of names
-        if (details) images.push(...reqImages);
-        else images.push(...reqImages.names);
+        if (details) {
+          images.push(...(reqImages as Image[]));
+        } else {
+          const nameList = reqImages as ImageList;
+          images.push(...nameList.names);
+        }
       } else {
-        // when request failed, reset images to empty
-        setImages([]);
+        (setImages as (images: never[]) => void)([]);
       }
     }
-    // don't update if component isn't mounted
-    // this occurs on redirect to login page
     if (!cancelUpdate) {
       if (details) {
-        setImages(images.sort((a, b) => (a.group + a.name).localeCompare(b.group + b.name)));
+        const detailImages = images as Image[];
+        (setImages as (images: Image[]) => void)(detailImages.sort((a, b) => (a.group + a.name).localeCompare(b.group + b.name)));
       } else {
-        setImages(images);
+        (setImages as (images: string[]) => void)(images as string[]);
       }
     }
   }
   if (typeof setLoading == 'function') setLoading(false);
 }
 
-// get a list of groups to get group roles
 /**
- * Get details for a users groups
- * @param {(groups: {[name: string]: Group} | Group[] | string[]) => void} setGroups useState setter for group details
- * @param {() => void} checkCookie an auth hook for validating cookies when 401s are returned
- * @param {(isLoading: boolean) => void} setLoading whether there is currently an outstanding API request
- * @param {boolean} details whether to return group details in object or list of group names
- * @returns {object} async promise for request
+ * Fetch the current user's groups and push them into component state, toggling a loading flag.
+ *
+ * When `details` is `true` the groups are returned as a `{ [name]: Group }` map keyed by group
+ * name; otherwise as a sorted array of group names. On failure the empty shape is chosen by
+ * `returnType` (`'Object'` → `{}`, anything else → `[]`).
+ *
+ * @param setGroups - State setter called with the groups as a map, details array, or name array.
+ * @param setLoading - State setter toggled `true` before the request and `false` after.
+ * @param details - When `true`, fetch full {@link Group} objects (returned as a name-keyed map).
+ * @param returnType - Selects the empty value used on failure: `'Object'` for `{}`, otherwise `[]`.
  */
 export async function fetchGroups(
   setGroups: (groups: { [name: string]: Group } | Group[] | string[]) => void,
@@ -83,12 +98,9 @@ export async function fetchGroups(
   details = false,
   returnType = 'Object',
 ) {
-  // set loading when interacting w/ API
   if (typeof setLoading == 'function') setLoading(true);
-  // get groups list from API
   const reqGroups = await listGroups(console.log, details);
   if (reqGroups !== null) {
-    // get group details
     if (details) {
       const groupDetailsList = reqGroups as Group[];
       const allGroups: { [name: string]: Group } = {};
@@ -96,13 +108,11 @@ export async function fetchGroups(
         allGroups[group.name] = group;
       }
       setGroups(allGroups);
-      // set group names list
     } else {
       const groupNameList = reqGroups as string[];
       setGroups([...groupNameList.sort()]);
     }
   } else {
-    // request failed for some reason, reset groups to falsey
     if (returnType == 'Object') {
       setGroups({});
     } else {
@@ -110,6 +120,5 @@ export async function fetchGroups(
     }
   }
 
-  // done interacting w/ API, set loading to false
   if (typeof setLoading == 'function') setLoading(false);
 }

@@ -138,15 +138,16 @@ export type Entity<k extends keyof EntityMetaMap> = {
   groups: string[]; // Groups that have permissions to view this entity
   created: string; // Entity creation date
   tags: Tags; // Key/value tags that have been applied to this entity
+  image: string | null; // S3 path to entity graphic
 };
 
 // Entity Creation type, users don't submit id, submitter or created date.
 //    For tags, the format for entity creation does not include a groups
 //    permissions array (vector in Rust) which is included when getting an
 //    existing entity
-export type CreateEntity<K extends keyof EntityMetaMap & keyof EntityCreateMetaMap> = Omit<
+export type CreateEntity<K extends keyof EntityMetaMap> = Omit<
   Entity<K>,
-  'id' | 'submitter' | 'created' | 'tags' | 'metadata'
+  'id' | 'submitter' | 'created' | 'tags' | 'metadata' | 'image'
 > & {
   tags: RequestTags;
   metadata: EntityCreateMetaMap[K];
@@ -176,10 +177,10 @@ export type UpdateEntityMetadata = {
   clear_collection_end?: boolean;
   add_tools?: string[];
   remove_tools?: string[];
-  name?: String;
-  image_path?: String;
-  command?: String;
-  offset?: BigInt;
+  name?: string;
+  image_path?: string;
+  command?: string;
+  offset?: bigint;
   threads?: number;
   handles?: number;
   is_wow64?: boolean;
@@ -192,10 +193,10 @@ export type UpdateEntityMetadata = {
   destination?: string;
   destination_port?: number;
   state?: NetConState;
-  pid?: BigInt;
-  process?: String;
+  pid?: bigint;
+  process?: string;
   /// A sigma rule in yaml format
-  sigma_rule?: String;
+  sigma_rule?: string;
   /// The new things this sigma rule should apply too
   add_sigma_applies_to?: SigmaRuleAppliesTo[];
   /// The things things sigma rule should no longer apply too

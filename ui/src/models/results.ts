@@ -1,10 +1,10 @@
 // project imports
-import { ImageVersion } from './images';
+// AutoTag/FilesHandler/OutputHandler are canonically defined in ./images; imported as
+// types only here to avoid a runtime circular dependency (images.ts imports from results.ts).
+import type { AutoTag, FilesHandler, ImageVersion, OutputHandler } from './images';
 
 /// Represents any valid JSON value.
-export type Value = null | boolean | number | string | Value[] | { [key: string]: Value } | {};
-
-type OutputHandler = 'Files';
+export type Value = null | boolean | number | string | Value[] | { [key: string]: Value };
 
 /// The type of display class to use in the UI for this output
 export enum OutputDisplayType {
@@ -69,22 +69,7 @@ export type OutputCollection = {
   groups: string[];
 };
 
-type FilesHandler = {
-  /// The location to look for small renderable results at on disk
-  results: string;
-  /// The location to look for files that should be uploaded as result files
-  result_files: string;
-  /// The location to look for entities
-  entities: string;
-  /// The location to load tags to set from
-  tags: string;
-  /// Any file names to restrict our handler to
-  names: string[];
-};
-
-type AutoTag = {
-  /// The logic to use when deciding whether to apply this tag
-  logic: any;
-  /// What to rename this tags key too
-  key?: string;
+/// A map of results grouped by tool name
+export type OutputMap = {
+  results: { [tool: string]: Output[] };
 };

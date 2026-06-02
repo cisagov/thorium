@@ -18,6 +18,7 @@ import { Group, GroupUserCategory } from '@models/groups';
 import { getAllGroupUsers } from '@utilities/groups';
 import { Pipeline } from '@models/pipelines';
 import { Image } from '@models/images';
+import { RoleKey, UserInfo } from '@models/users';
 import SingleTimePicker from './timepicker/SingleTimePicker';
 
 type OmnibarTimeContainerProps = {
@@ -147,9 +148,10 @@ export function OmnibarPipelines({ clauses, setClauses, pipelines }: OmnibarPipe
     dropdownOptions,
     'name',
     pipelines.map((p) => p.name),
-    [ClauseCondition.Is],
+    [ClauseCondition.Includes, ClauseCondition.Is],
   );
   dropdownOptions = addStringOption(dropdownOptions, 'creator', uniqueSort(pipelines.map((pipeline) => pipeline.creator)), [
+    ClauseCondition.Includes,
     ClauseCondition.Is,
   ]);
 
@@ -160,21 +162,65 @@ export function OmnibarPipelines({ clauses, setClauses, pipelines }: OmnibarPipe
   );
 }
 
-interface OmnibarPipelineProps {
+interface OmnibarUserProps {
+  clauses: Clause[];
+  setClauses: (next: Clause[]) => void;
+  users: UserInfo[];
+}
+
+export function OmnibarUsers({ clauses, setClauses, users }: OmnibarUserProps) {
+  let dropdownOptions: OmnibarOptionMap = {};
+  // suggest every group present across the listed users (admins browse users in all groups)
+  dropdownOptions = addGroupOptions(dropdownOptions, uniqueSort(users.flatMap((user) => user.groups)));
+  dropdownOptions = addStringOption(dropdownOptions, 'username', uniqueSort(users.map((user) => user.username)), [
+    ClauseCondition.Includes,
+    ClauseCondition.Is,
+  ]);
+  dropdownOptions = addStringOption(
+    dropdownOptions,
+    'email',
+    uniqueSort(users.map((user) => user.email)),
+    [ClauseCondition.Includes, ClauseCondition.Is],
+    {
+      creatable: true,
+    },
+  );
+  // role values are the fixed set of Thorium roles (Admin/Analyst/Developer/User)
+  dropdownOptions = addStringOption(dropdownOptions, 'role', Object.values(RoleKey), [ClauseCondition.Is, ClauseCondition.IsOneOf], {
+    category: 'role',
+  });
+  // boolean fields: pick true or false
+  dropdownOptions = addStringOption(dropdownOptions, 'verified', ['true', 'false'], [ClauseCondition.Is]);
+  dropdownOptions = addStringOption(dropdownOptions, 'local', ['true', 'false'], [ClauseCondition.Is]);
+
+  return (
+    <OmnibarWrapperContainer>
+      <Omnibar clauses={clauses} dropdownOptions={dropdownOptions} setClauses={setClauses} placeholder="Enter a filter..." />
+    </OmnibarWrapperContainer>
+  );
+}
+
+interface OmnibarImageProps {
   clauses: Clause[];
   setClauses: (next: Clause[]) => void;
   images: Image[];
 }
 
-export function OmnibarImages({ clauses, setClauses, images }: OmnibarPipelineProps) {
+export function OmnibarImages({ clauses, setClauses, images }: OmnibarImageProps) {
   const { userInfo } = useAuth();
   const userInfoGroups = userInfo !== null ? userInfo.groups : [];
 
   let dropdownOptions: OmnibarOptionMap = {};
   dropdownOptions = addGroupOptions(dropdownOptions, userInfoGroups);
   dropdownOptions = addTextOptions(dropdownOptions);
-  dropdownOptions = addStringOption(dropdownOptions, 'creator', uniqueSort(images.map((image) => image.creator)), [ClauseCondition.Is]);
-  dropdownOptions = addStringOption(dropdownOptions, 'name', uniqueSort(images.map((image) => image.name)), [ClauseCondition.Is]);
+  dropdownOptions = addStringOption(dropdownOptions, 'creator', uniqueSort(images.map((image) => image.creator)), [
+    ClauseCondition.Includes,
+    ClauseCondition.Is,
+  ]);
+  dropdownOptions = addStringOption(dropdownOptions, 'name', uniqueSort(images.map((image) => image.name)), [
+    ClauseCondition.Includes,
+    ClauseCondition.Is,
+  ]);
 
   return (
     <OmnibarWrapperContainer>

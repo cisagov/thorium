@@ -2,10 +2,11 @@ import React from 'react';
 import { Dropdown, Form } from 'react-bootstrap';
 
 import type { GraphSectionProps } from './types';
+import { computeSizeDefaults } from './sizeDefaults';
 import { MenuList, MenuItem, MenuDropdown, PopoverBody, Divider } from './Toolbar.styled';
 import LabeledRange from './LabeledRange';
 
-const GraphSection: React.FC<GraphSectionProps> = ({ controls, updateControls, graphInstance }) => (
+const GraphSection: React.FC<GraphSectionProps> = ({ controls, updateControls, graphInstance, nodeCount }) => (
   <PopoverBody>
     <MenuList $inset>
       <MenuDropdown>
@@ -18,6 +19,15 @@ const GraphSection: React.FC<GraphSectionProps> = ({ controls, updateControls, g
         </Dropdown.Menu>
       </MenuDropdown>
       <MenuItem onClick={() => graphInstance?.zoomToFit(1000, 50)}>Fit All</MenuItem>
+      <MenuItem onClick={() => updateControls({ type: 'applySizeDefaults', state: computeSizeDefaults(nodeCount) })}>Optimize</MenuItem>
+      <MenuItem
+        onClick={() => {
+          updateControls({ type: 'resetSizeOverrides' });
+          updateControls({ type: 'applySizeDefaults', state: computeSizeDefaults(nodeCount) });
+        }}
+      >
+        Reset
+      </MenuItem>
     </MenuList>
 
     <Divider />

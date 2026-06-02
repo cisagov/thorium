@@ -10,10 +10,10 @@ import { parseDocument } from 'yaml';
 import { yaraLanguage } from './yara-language';
 import styled from 'styled-components';
 
-import { thoriumEditorTheme, thoriumHighlighting } from './CodeEditorTheme';
+import { thoriumEditorTheme, thoriumHighlighting, yamlValueHighlighter, yamlValueTheme } from './CodeEditorTheme';
 import SuggestionPanel from './SuggestionPanel';
 import { createPreviewExtensions, addPreview } from './SuggestionPreview';
-import { type RuleChecker, FormatType, type Suggestion, Severity } from '@utilities/rules/types';
+import { type RuleChecker, type FieldSchema, FormatType, type Suggestion, Severity } from '@utilities/rules/types';
 
 const EditorContainer = styled.div<{ $height: string }>`
   width: 100%;
@@ -85,6 +85,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, checker, forma
   onChangeRef.current = onChange;
   checkerRef.current = checker;
 
+  const formatRef = useRef(format);
+  formatRef.current = format;
+
   const cursorLineRef = useRef(cursorLine);
   cursorLineRef.current = cursorLine;
 
@@ -103,6 +106,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, checker, forma
           return [];
         }
 
+        currentChecker.format = formatRef.current;
         const result = currentChecker.check(text);
         setAllSuggestions(result.suggestions);
 
@@ -163,6 +167,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, checker, forma
       thoriumEditorTheme,
       thoriumHighlighting,
       getLanguageExtension(format),
+      ...(format === FormatType.YAML ? [yamlValueHighlighter, yamlValueTheme] : []),
       createLinter(),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
@@ -215,11 +220,29 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, checker, forma
   }, [value]);
 
   const handleValueClick = useCallback(
-    (field: string, clickedValue: string, isList?: boolean) => {
+    (
+      field: string,
+      clickedValue: string,
+      isList?: boolean,
+      isMapEntry?: boolean,
+      isRemoval?: boolean,
+      schema?: FieldSchema,
+      isReplace?: boolean,
+    ) => {
       const view = viewRef.current;
       if (!view) return;
       view.dispatch({
-        effects: addPreview.of({ field, value: clickedValue, format, cursorLine: cursorLineRef.current, isList }),
+        effects: addPreview.of({
+          field,
+          value: clickedValue,
+          format,
+          cursorLine: cursorLineRef.current,
+          isList,
+          isMapEntry,
+          isRemoval,
+          isReplace,
+          schema,
+        }),
       });
       view.focus();
     },

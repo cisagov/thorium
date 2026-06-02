@@ -1,4 +1,5 @@
 // project imports
+import { Comment } from '../files';
 import { Tags } from '../tags';
 
 export type PcapNetworkProtocol = {
@@ -129,7 +130,7 @@ export type SubmissionChunk = {
   /// The name of this sample if one was specified
   name?: string;
   /// A description for this sample
-  description: String;
+  description: string | null;
   /// The groups this submission is in
   groups: string[];
   /// The user who submitted this sample

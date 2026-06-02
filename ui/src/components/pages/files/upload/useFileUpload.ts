@@ -16,7 +16,7 @@ import { SampleSubmissionResponse } from '@models/files';
 import { ReactionSelection } from '@models/reactions';
 import { submitReactions } from '../reactions/reactions';
 
-function createSemaphore(limit: number) {
+export function createSemaphore(limit: number) {
   let active = 0;
   const waiting: (() => void)[] = [];
 
@@ -40,7 +40,7 @@ function createSemaphore(limit: number) {
   return { acquire, release };
 }
 
-function uploadReducer(state: UploadState, action: UploadAction): UploadState {
+export function uploadReducer(state: UploadState, action: UploadAction): UploadState {
   switch (action.type) {
     case 'RESET_STATUS':
       return {

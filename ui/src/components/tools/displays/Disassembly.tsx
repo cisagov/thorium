@@ -1,4 +1,4 @@
-import { Card, Col, Row } from 'react-bootstrap';
+import { Card, Row } from 'react-bootstrap';
 import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
@@ -30,6 +30,7 @@ const Disassembly: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
           </AlertBanner>
         </Row>
       ) : null}
+      {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- atomOneDark has mismatched types */}
       <SyntaxHighlighter style={atomOneDark}>{codeString}</SyntaxHighlighter>
       <hr />
       <ResultsFiles result={result} sha256={sha256} tool={tool} />

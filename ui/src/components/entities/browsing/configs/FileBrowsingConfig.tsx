@@ -129,11 +129,9 @@ const FileItem: React.FC<FileItemProps> = ({ file, excludeKeys }) => {
           </LinkFields>
         </Link>
         <Sha256 className="mt-3 mb-2">{file.sha256}</Sha256>
-        <Row>
-          {Object.keys(file.tags).length > 1 || (Object.keys(file.tags).length == 1 && !file.tags.submitter) ? (
-            <CondensedFileTags tags={file.tags} excludeKeys={excludeKeys} />
-          ) : null}
-        </Row>
+        {Object.keys(file.tags).length > 1 || (Object.keys(file.tags).length == 1 && !file.tags.submitter) ? (
+          <CondensedFileTags tags={file.tags} excludeKeys={excludeKeys} />
+        ) : null}
       </BrowsingContents>
     </BrowsingCard>
   );
@@ -146,7 +144,7 @@ const FileBrowsingConfig: EntityBrowseConfig<Entities.File> = {
   kind: Entities.File,
   creatable: true,
   entityHeaders: <FileListHeaders />,
-  renderEntity: (entity, _, filters) => <FileItem file={entity} excludeKeys={filters?.hideTags ?? []} />,
+  renderEntity: (entity, _idx, filters) => <FileItem file={entity} excludeKeys={filters?.hideTags ?? []} />,
   fetchEntities: getFiles,
 };
 

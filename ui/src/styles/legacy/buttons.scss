@@ -221,21 +221,25 @@
   }
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .tlp-red-btn {
   color: colors.$tlp-text-light !important;
   background-color: colors.$tlp-red !important;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .tlp-amber-btn {
   color: colors.$tlp-text-light !important;
   background-color: colors.$tlp-amber !important;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .tlp-green-btn {
   color: colors.$tlp-text-light !important;
   background-color: colors.$tlp-green !important;
 }
 
+// Applied dynamically by getTagColorClass() in components/tags/utilities.ts
 .tlp-clear-btn {
   color: colors.$tlp-text-dark !important;
   background-color: colors.$tlp-clear !important;

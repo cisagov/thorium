@@ -51,6 +51,7 @@ export const BlankVendor: Vendor = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateVendor: CreateVendor = {

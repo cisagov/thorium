@@ -170,3 +170,37 @@ export const VALUE_MODIFIERS = [
   'month',
   'year',
 ] as const;
+
+import { FieldValueType, type FieldSchema } from '../types';
+
+export const SIGMA_FIELD_SCHEMAS: Record<string, FieldSchema> = {
+  title: { type: FieldValueType.String, required: true, placeholder: 'Detection rule title' },
+  id: { type: FieldValueType.String, placeholder: '929a690e-bef0-4204-a928-ef5e620d6fcc' },
+  name: { type: FieldValueType.String, placeholder: 'rule_name' },
+  taxonomy: { type: FieldValueType.String, placeholder: 'taxonomy_identifier' },
+  status: { type: FieldValueType.Enum, enumValues: STATUS_VALUES },
+  description: { type: FieldValueType.String, placeholder: 'Detects ...' },
+  license: { type: FieldValueType.String, placeholder: 'MIT' },
+  author: { type: FieldValueType.String, placeholder: 'Author Name' },
+  references: { type: FieldValueType.StringArray, placeholder: 'https://...' },
+  date: { type: FieldValueType.String, placeholder: 'YYYY-MM-DD' },
+  modified: { type: FieldValueType.String, placeholder: 'YYYY-MM-DD' },
+  level: { type: FieldValueType.Enum, enumValues: LEVEL_VALUES },
+  tags: { type: FieldValueType.StringArray, placeholder: 'attack.t1059' },
+  falsepositives: { type: FieldValueType.StringArray, placeholder: 'Legitimate admin activity' },
+  fields: { type: FieldValueType.StringArray, placeholder: 'FieldName' },
+  scope: { type: FieldValueType.StringArray, placeholder: 'scope entry' },
+  related: { type: FieldValueType.StringArray },
+  'logsource.category': { type: FieldValueType.String, placeholder: 'process_creation' },
+  'logsource.product': { type: FieldValueType.String, placeholder: 'windows' },
+  'logsource.service': { type: FieldValueType.String, placeholder: 'security' },
+  'logsource.definition': { type: FieldValueType.String, placeholder: 'Log source definition' },
+  'related.type': { type: FieldValueType.Enum, enumValues: RELATED_TYPES },
+};
+
+export const SIGMA_SECTION_ORDER = ['Rule Metadata', 'Log Source'] as const;
+
+export function sigmaFieldCategory(field: string): string {
+  if (field.startsWith('logsource')) return 'Log Source';
+  return 'Rule Metadata';
+}

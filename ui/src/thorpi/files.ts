@@ -1,6 +1,6 @@
-// import the base client function that loads from the config
-// and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
+
+// project imports
 import { RequestTags, TagCounts } from '@models/tags';
 import { Sample, SampleSubmissionResponse } from '@models/files';
 import { Filters } from '@models/search';
@@ -9,20 +9,23 @@ import { Filters } from '@models/search';
 // Valid values 0-100 (percentage chance of error)
 const RANDOM_DEBUG_ERRORS = 0;
 
+interface ApiCursor<T> {
+  cursor?: string;
+  data: T[];
+}
+
 /**
- * Get a list of files
- * @async
- * @function
- * @param {object} [data] - optional request parameters which includes:
- *   - groups:  to which the files are viewable
- *   - start: start date for search range
- *   - submission: uuid for previously searched submission
- *   - end: end date for search range
- *   - limit:  the max number of submissions to return
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {boolean} details - whether to return details for listed submissions
- * @param {string} cursor - the cursor value to continue listing from
- * @returns {Promise<{files: Sample[], cursor: string | null}>} - Promise object representing a list of file details.
+ * List files matching the given filters (`GET /files` or `/files/details/`).
+ *
+ * Results are paginated via an opaque cursor: pass the returned `cursor` back in on the next
+ * call to fetch the following page (`null` cursor means no more pages).
+ *
+ * @param data - Search/filter parameters (groups, tags, time range, limit, etc.).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param details - When `true`, request full {@link Sample} objects (`/details/`) instead of summaries.
+ * @param cursor - Pagination cursor from a previous call, or `null`/omitted for the first page.
+ * @returns The page of files and the next-page cursor (`cursor` is `null` when exhausted).
+ *          On failure, returns an empty list and a `null` cursor.
  */
 export async function listFiles(
   data: Filters,
@@ -30,39 +33,40 @@ export async function listFiles(
   details?: boolean | null,
   cursor?: string | null,
 ): Promise<{ files: Sample[]; cursor: string | null }> {
-  // build url parameters including optional args if specified
   let url = '/files';
   if (details) {
     url += '/details/';
   }
-  // pass in limit and cursor value
   if (cursor) {
     data.cursor = cursor;
   }
   return client
-    .get(url, { params: data })
+    .get<ApiCursor<Sample>>(url, { params: data })
     .then((res) => {
       if (res?.status == 200 && res.data) {
-        const cursor = res.data.cursor ? (res.data.cursor as string) : null;
-        return { files: res.data.data as Sample[], cursor: cursor };
+        const cursor = res.data.cursor ?? null;
+        return { files: res.data.data, cursor: cursor };
       }
-      return { files: [] as Sample[], cursor: null };
+      return { files: [], cursor: null };
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'List Files');
-      return { files: [] as Sample[], cursor: null };
+      return { files: [], cursor: null };
     });
 }
 
 /**
- * Upload a file.
- * @async
- * @function
- * @param {FormData} form - form object containing file and submission info
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {(progress: number) => void} progressHandler - progress report handler function
- * @param {AbortController} controller - abort controller
- * @returns {object} - promise object representing file post response
+ * Upload a file to Thorium (`POST /files/`).
+ *
+ * Upload progress is reported through `progressHandler` and the upload can be cancelled via the
+ * supplied `AbortController`. A 409 conflict (file already exists) is treated as success: the
+ * existing file's SHA256 is returned in the response so callers can navigate to it.
+ *
+ * @param form - Multipart form data containing the file bytes plus submission metadata (groups, tags, etc.).
+ * @param errorHandler - Called with a formatted message if the upload fails or is cancelled.
+ * @param progressHandler - Called with upload progress in the range 0–1 as bytes are sent.
+ * @param controller - Abort controller used to cancel the in-flight upload.
+ * @returns The submission response (including the file's SHA256), or `false` if the upload failed or was cancelled.
  */
 export async function uploadFile(
   form: FormData,
@@ -82,26 +86,31 @@ export async function uploadFile(
     }
   }
   return client
-    .post(url, form, config)
+    .post<SampleSubmissionResponse>(url, form, config)
     .then((res) => {
       if (res?.status == 200 && res.data) {
         if ('sha256' in res.data) {
           return res.data;
         } else {
-          // got a valid response but it didn't contain a sha256, probably a proxy error
           errorHandler('Error: file upload response did not contain a hash (proxy error?).');
         }
       }
       if (controller.signal.aborted) {
         errorHandler('Upload cancelled by user');
-        // no message or error returned
       }
       return false;
     })
-    .catch((error) => {
-      // special handler for file already exists
-      if (error?.response?.status == 409 && error?.response?.data?.error) {
-        return { sha256: error.response.data.error } as SampleSubmissionResponse;
+    .catch((error: unknown) => {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as Record<string, unknown>).response === 'object'
+      ) {
+        const axiosError = error as { response: { status: number; data: { error?: string } } };
+        if (axiosError.response?.status == 409 && axiosError.response?.data?.error) {
+          return { sha256: axiosError.response.data.error } as SampleSubmissionResponse;
+        }
       }
       parseRequestError(error, errorHandler, 'Upload File');
       return false;
@@ -109,14 +118,16 @@ export async function uploadFile(
 }
 
 /**
- * Download a file.
- * @async
- * @function
- * @param {string} sha256 - sha256 hash of sample to update
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {string} [archiveFormat=CaRT] - the archive format used for encapsulating the downloaded file
- * @param {string} [archivePassword=infected] - password to unencrypt the downloaded archive
- * @returns {Promise<ArrayBuffer | null>} - promise of the downloaded file
+ * Download a file's bytes as an archive (`GET /files/sample/{sha256}/download`).
+ *
+ * Defaults to Thorium's CaRT format. When `archiveFormat` is `'Encrypted ZIP'` the file is
+ * instead returned as a password-protected zip (the `/zip` endpoint) using `archivePassword`.
+ *
+ * @param sha256 - The SHA256 of the file to download.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param archiveFormat - Archive format to request: `'CaRT'` (default) or `'Encrypted ZIP'`.
+ * @param archivePassword - Password applied to the zip when `archiveFormat` is `'Encrypted ZIP'` (defaults to `'infected'`).
+ * @returns The archived file bytes as an `ArrayBuffer`, or `null` if the request failed.
  */
 export async function getFile(
   sha256: string,
@@ -126,7 +137,6 @@ export async function getFile(
 ): Promise<ArrayBuffer | null> {
   let url = '/files/sample/' + sha256 + '/download';
   const options: { responseType: 'arraybuffer'; params?: { password: string } } = { responseType: 'arraybuffer' };
-  // downloading a zip is a url subpath and can take a password
   if (archiveFormat == 'Encrypted ZIP') {
     url = url + '/zip';
     if (archivePassword) {
@@ -134,52 +144,49 @@ export async function getFile(
     }
   }
   return client
-    .get(url, options)
-    .then((res) => {
-      if (res?.status == 200 && res.data) {
-        // pass back full response because data and content type headers are needed
-        return res.data as ArrayBuffer;
-      }
-      return null;
-    })
-    .catch((error) => {
-      parseRequestError(error, errorHandler, 'Download File');
-      return null;
-    });
-}
-
-/**
- * Get file details
- * @async
- * @function
- * @param {string} sha256 - sha256 hash of sample info to get
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<Sample | null>} - promise of the submission info for a file
- */
-export async function getFileDetails(sha256: string, errorHandler: (error: string) => void): Promise<Sample | null> {
-  const url = '/files/sample/' + sha256;
-  return client
-    .get(url)
+    .get<ArrayBuffer>(url, options)
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Download File');
+      return null;
+    });
+}
+
+/**
+ * Fetch a file's full metadata (`GET /files/sample/{sha256}`).
+ *
+ * @param sha256 - The SHA256 of the file to fetch.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The {@link Sample} details, or `null` if not found or the request failed.
+ */
+export async function getFileDetails(sha256: string, errorHandler: (error: string) => void): Promise<Sample | null> {
+  const url = '/files/sample/' + sha256;
+  return client
+    .get<Sample>(url)
+    .then((res) => {
+      if (res?.status == 200 && res.data) {
+        return res.data;
+      }
+      return null;
+    })
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Get File Details');
       return null;
     });
 }
 
 /**
- * Update file submission details.
- * @async
- * @function
- * @param {string} sha256 - sha256 hash of sample to update
- * @param {RequestTags} tags - tags to add (and optionally groups to add them to)
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - promise object representing tags post response.
+ * Add tags to a file (`POST /files/tags/{sha256}`).
+ *
+ * @param sha256 - The SHA256 of the file to tag.
+ * @param tags - Map of tag keys to value lists to add.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the tags were added (HTTP 204), otherwise `false`.
  */
 export async function uploadTags(sha256: string, tags: RequestTags, errorHandler: (error: string) => void): Promise<boolean> {
   const url = '/files/tags/' + sha256;
@@ -191,20 +198,19 @@ export async function uploadTags(sha256: string, tags: RequestTags, errorHandler
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Create File Tags');
       return false;
     });
 }
 
 /**
- * Delete file tags
- * @async
- * @function
- * @param {string} sha256 - sha256 hash of sample to update
- * @param {RequestTags} tags - tags to delete (and optionally groups to delete them from)
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - promise of delete file tags success boolean
+ * Remove tags from a file (`DELETE /files/tags/{sha256}`).
+ *
+ * @param sha256 - The SHA256 of the file to untag.
+ * @param tags - Map of tag keys to value lists to remove.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the tags were removed (HTTP 204), otherwise `false`.
  */
 export async function deleteTags(sha256: string, tags: RequestTags, errorHandler: (error: string) => void): Promise<boolean> {
   const url = '/files/tags/' + sha256;
@@ -216,21 +222,23 @@ export async function deleteTags(sha256: string, tags: RequestTags, errorHandler
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Delete File Tags');
       return false;
     });
 }
 
 /**
- * Delete a file submission
- * @async
- * @function
- * @param {string} sha256 - sha256 hash of sample to update
- * @param {string} id - submission id to delete
- * @param {string[]} groups - groups to delete from, otherwise ALL of them
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - promise of delete submission success boolean
+ * Delete a single submission of a file (`DELETE /files/sample/{sha256}/{id}`).
+ *
+ * A file can be submitted multiple times (by different users/groups); this removes one
+ * submission scoped to the given groups rather than the underlying sample.
+ *
+ * @param sha256 - The SHA256 of the file the submission belongs to.
+ * @param id - The id of the submission to delete.
+ * @param groups - The groups to remove the submission from.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the submission was deleted (HTTP 204), otherwise `false`.
  */
 export async function deleteSubmission(
   sha256: string,
@@ -248,20 +256,19 @@ export async function deleteSubmission(
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Delete File Submission');
       return false;
     });
 }
 
 /**
- * Update file submission details
- * @async
- * @function
- * @param {string} sha256 - sha256 hash of sample to update
- * @param {object} data - data to update submission with
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<boolean>} - promise of update submission success boolean
+ * Update a file's submission metadata (`PATCH /files/sample/{sha256}`).
+ *
+ * @param sha256 - The SHA256 of the file to update.
+ * @param data - The submission fields to change (e.g. groups, description).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the update succeeded (HTTP 204), otherwise `false`.
  */
 export async function updateFileSubmission(
   sha256: string,
@@ -277,25 +284,21 @@ export async function updateFileSubmission(
       }
       return false;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Update File Submission');
       return false;
     });
 }
 
 /**
- * Get File Tag Counts
- * @async
- * @function
- * @param {object} [data] - optional request parameters which includes:
- *   - groups:  to which the files are viewable
- *   - start: start date for search range
- *   - submission: uuid for previously searched submission
- *   - end: end date for search range
- *   - limit:  the max number of submissions to return
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {string} cursor - the cursor value to continue listing from
- * @returns {Promise<TagCounts | null>} - Promise object representing a list of file details.
+ * Fetch aggregate tag counts across files matching the filters (`GET /files/count/`).
+ *
+ * Used to populate tag autocomplete options with their occurrence counts.
+ *
+ * @param data - Search/filter parameters constraining which files are counted (groups, limit, etc.).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param cursor - Pagination cursor from a previous call, or `null`/omitted for the first page.
+ * @returns The {@link TagCounts} aggregation, or `null` if the request failed.
  */
 export async function countFileTags(
   data: Filters,
@@ -303,20 +306,19 @@ export async function countFileTags(
   cursor?: string | null,
 ): Promise<TagCounts | null> {
   const url = '/files/count/';
-  // pass in limit and cursor value
   if (cursor) {
     data.cursor = cursor;
   }
   return client
-    .get(url, { params: data })
+    .get<TagCounts>(url, { params: data })
     .then((res) => {
       if (res?.status == 200 && res.data) {
-        return res.data as TagCounts;
+        return res.data;
       }
       return null;
     })
-    .catch((error) => {
-      parseRequestError(String(error), errorHandler, 'List Files');
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'List Files');
       return null;
     });
 }

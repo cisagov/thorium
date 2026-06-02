@@ -8,7 +8,7 @@ export function toText(value: unknown, format: FormatType): string {
 
   switch (format) {
     case FormatType.YAML:
-      return yamlStringify(value, { indent: 4, lineWidth: 0 });
+      return yamlStringify(value, { indent: 2, lineWidth: 0 });
     case FormatType.JSON:
       return JSON.stringify(value, null, 2);
     case FormatType.YARA:

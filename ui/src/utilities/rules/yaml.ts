@@ -5,6 +5,15 @@ interface LineIndex {
   offsets: number[];
 }
 
+/**
+ * Build an index of line-start byte offsets for a document.
+ *
+ * Precomputing these offsets lets {@link offsetToLineCol} convert a character offset to a
+ * line/column in O(log n) via binary search instead of rescanning the text each time.
+ *
+ * @param text - The full document text.
+ * @returns A {@link LineIndex} whose `offsets[i]` is the start offset of line `i + 1`.
+ */
 function buildLineIndex(text: string): LineIndex {
   const offsets: number[] = [0];
   for (let i = 0; i < text.length; i++) {
@@ -15,6 +24,13 @@ function buildLineIndex(text: string): LineIndex {
   return { offsets };
 }
 
+/**
+ * Convert a character offset into 1-based line and column numbers using a precomputed line index.
+ *
+ * @param index - The {@link LineIndex} produced by {@link buildLineIndex}.
+ * @param offset - The character offset into the document.
+ * @returns The 1-based `line` and `column` for that offset.
+ */
 function offsetToLineCol(index: LineIndex, offset: number): { line: number; column: number } {
   let low = 0;
   let high = index.offsets.length - 1;
@@ -35,6 +51,16 @@ export interface YamlParseResult {
   diagnostics: Diagnostic[];
 }
 
+/**
+ * Parse a YAML document and collect editor diagnostics (errors, warnings, duplicate keys).
+ *
+ * Parser errors and warnings are mapped to line/column ranges; duplicate keys (which the YAML
+ * spec allows but are almost always mistakes here) are detected separately via
+ * {@link detectDuplicateKeys}. The parsed JS `value` is only populated when there are no parse errors.
+ *
+ * @param text - The YAML source to parse.
+ * @returns A {@link YamlParseResult} with the parsed document, its JS value (or `null`), and diagnostics.
+ */
 export function parseYaml(text: string): YamlParseResult {
   if (!text.trim()) {
     return { doc: null, value: null, diagnostics: [] };
@@ -80,11 +106,31 @@ export function parseYaml(text: string): YamlParseResult {
   return { doc, value, diagnostics };
 }
 
+/**
+ * Detect duplicate mapping keys anywhere in a YAML document, appending diagnostics for each.
+ *
+ * No-op unless the document root is a map; recurses into nested maps/sequences via {@link walkMap}.
+ *
+ * @param doc - The parsed YAML document.
+ * @param lineIndex - Line index for resolving key positions.
+ * @param diagnostics - Diagnostics array that detected duplicates are pushed onto (mutated in place).
+ */
 function detectDuplicateKeys(doc: Document, lineIndex: LineIndex, diagnostics: Diagnostic[]): void {
   if (!isMap(doc.contents)) return;
   walkMap(doc.contents, lineIndex, diagnostics);
 }
 
+/**
+ * Recursively scan a YAML map for duplicate keys, flagging both the original and repeated entries.
+ *
+ * For each key seen more than once at the same level, an error diagnostic is pushed on the first
+ * occurrence (once) and on every subsequent occurrence. Recurses into nested maps and maps inside
+ * sequences.
+ *
+ * @param map - The YAML map node to scan.
+ * @param lineIndex - Line index for resolving key positions.
+ * @param diagnostics - Diagnostics array that duplicate-key errors are pushed onto (mutated in place).
+ */
 function walkMap(map: YAMLMap, lineIndex: LineIndex, diagnostics: Diagnostic[]): void {
   const seen = new Map<string, { line: number; column: number; keyLen: number; flagged: boolean }>();
 

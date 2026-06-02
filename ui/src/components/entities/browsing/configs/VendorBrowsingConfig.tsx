@@ -9,6 +9,7 @@ import {
   BrowsingContents,
   EntityGroups,
   EntityName,
+  EntityNameWithIcon,
   EntitySecondary,
   EntitySubmitters,
   LinkFields,
@@ -59,7 +60,11 @@ const VendorItem: React.FC<VendorItemProps> = ({ vendor }) => {
       <BrowsingContents>
         <Link to={`${getDetailsBasePathByEntity(Entities.Vendor)}/${vendor.id}`} state={{ vendor: vendor }} className="no-decoration">
           <LinkFields>
-            <EntityName>{vendor.name}</EntityName>
+            <EntityName>
+              <EntityNameWithIcon entityId={vendor.id} hasImage={vendor.image != null}>
+                {vendor.name}
+              </EntityNameWithIcon>
+            </EntityName>
             <EntitySecondary>
               {vendor.metadata.Vendor.countries != undefined
                 ? vendor.metadata.Vendor.countries
@@ -86,11 +91,7 @@ const VendorItem: React.FC<VendorItemProps> = ({ vendor }) => {
           </LinkFields>
         </Link>
         {vendor.tags != undefined && <hr />}
-        <Row>
-          {vendor.tags && Object.keys(vendor.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.Vendor} tags={vendor.tags} />
-          ) : null}
-        </Row>
+        {vendor.tags && Object.keys(vendor.tags).length > 1 ? <CondensedEntityTags resource={Entities.Vendor} tags={vendor.tags} /> : null}
       </BrowsingContents>
     </BrowsingCard>
   );

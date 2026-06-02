@@ -7,20 +7,12 @@ import {
   deleteEntity,
   uploadFile,
   snapshot,
+  loginViaUI,
+  TEST_USER,
+  TEST_PASS,
 } from './helpers';
 
 const SCREENSHOT_DIR = path.join(import.meta.dirname, 'screenshots');
-const USER = process.env.THORIUM_USER || 'test';
-const PASS = process.env.THORIUM_PASS || 'INSECURE_DEV_PASSWORD';
-
-async function loginViaUI(page: import('@playwright/test').Page) {
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('input[placeholder="username"]').fill(USER);
-  await page.locator('input[placeholder="password"]').fill(PASS);
-  await page.locator('button:has-text("Login")').click();
-  await page.waitForURL((url) => !url.pathname.includes('/auth'), { timeout: 15000 });
-}
 
 test.describe('3D Graph Visual Validation', () => {
   let token: string;
@@ -29,7 +21,7 @@ test.describe('3D Graph Visual Validation', () => {
   let fileSha256: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
 
     vendorId = await createEntity(token, 'PlaywrightVendor', 'Vendor', ['system']);
     deviceId = await createEntity(token, 'PlaywrightDevice', 'Device', ['system']);

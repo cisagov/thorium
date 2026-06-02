@@ -1,4 +1,15 @@
-import { FaArrowUp19, FaFolderOpen, FaMagnifyingGlass, FaPen, FaPeopleGroup } from 'react-icons/fa6';
+import {
+  FaArrowUp19,
+  FaCircleCheck,
+  FaEnvelope,
+  FaFolderOpen,
+  FaHouse,
+  FaMagnifyingGlass,
+  FaPen,
+  FaPeopleGroup,
+  FaUser,
+  FaUserShield,
+} from 'react-icons/fa6';
 import { FaClock, FaTag } from 'react-icons/fa';
 
 type CategoryLogoProps = {
@@ -9,6 +20,18 @@ export const CategoryLogo: React.FC<CategoryLogoProps> = ({ category }) => {
   switch (category) {
     case 'group':
       return <FaPeopleGroup title={category} />;
+    case 'username':
+      return <FaUser title={category} />;
+    case 'email':
+      return <FaEnvelope title={category} />;
+    case 'role':
+      return <FaUserShield title={category} />;
+    case 'verified':
+      return <FaCircleCheck title={category} />;
+    case 'local':
+      return <FaHouse title={category} />;
+    case 'creator':
+      return <FaUser title={category} />;
     case 'index':
       return <FaFolderOpen title={category} />;
     case 'text':

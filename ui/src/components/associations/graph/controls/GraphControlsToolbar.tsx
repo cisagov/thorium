@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FaCog, FaProjectDiagram, FaBolt, FaCamera, FaArrowRight } from 'react-icons/fa';
 import { FaHexagonNodes } from 'react-icons/fa6';
-import type { ForceGraph3DInstance } from '3d-force-graph';
-
-import type { GraphControls, DisplayAction, SectionKey } from './types';
+import { SectionKey } from './types';
+import type { GraphControls, DisplayAction } from './types';
+import type { GraphInstance } from '../types';
 import { ToolbarContainer, ToolbarIconButton, NodeCount, ToolbarSpinner } from './Toolbar.styled';
 import { OverlayTipTop } from '@components/shared/overlay/tips';
 import ScrollableSelect from '@components/shared/inputs/ScrollableSelect';
@@ -18,7 +18,7 @@ interface GraphControlsToolbarProps {
   graphId: string;
   controls: GraphControls;
   updateControls: React.ActionDispatch<[action: DisplayAction]>;
-  graphInstance: ForceGraph3DInstance | null;
+  graphInstance: GraphInstance | null;
   nodeCount: number;
   loading: boolean;
 }
@@ -33,6 +33,7 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
+  const [depthMenuOpen, setDepthMenuOpen] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const handleToggleSection = (key: SectionKey) => {
@@ -80,27 +81,39 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
       {isOpen && (
         <>
           <ToolbarButton
-            sectionKey="graph"
+            sectionKey={SectionKey.Graph}
             activeSection={activeSection}
             onToggle={handleToggleSection}
             icon={<FaProjectDiagram size={14} />}
             title="View"
           >
-            <GraphSection graphId={graphId} controls={controls} updateControls={updateControls} graphInstance={graphInstance} />
+            <GraphSection
+              graphId={graphId}
+              controls={controls}
+              updateControls={updateControls}
+              graphInstance={graphInstance}
+              nodeCount={nodeCount}
+            />
           </ToolbarButton>
 
           <ToolbarButton
-            sectionKey="forces"
+            sectionKey={SectionKey.Forces}
             activeSection={activeSection}
             onToggle={handleToggleSection}
             icon={<FaBolt size={14} />}
             title="Forces"
           >
-            <ForcesSection graphId={graphId} controls={controls} updateControls={updateControls} graphInstance={graphInstance} />
+            <ForcesSection
+              graphId={graphId}
+              controls={controls}
+              updateControls={updateControls}
+              graphInstance={graphInstance}
+              nodeCount={nodeCount}
+            />
           </ToolbarButton>
 
           <ToolbarButton
-            sectionKey="nodes"
+            sectionKey={SectionKey.Nodes}
             activeSection={activeSection}
             onToggle={handleToggleSection}
             icon={<FaHexagonNodes size={14} />}
@@ -110,7 +123,7 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
           </ToolbarButton>
 
           <ToolbarButton
-            sectionKey="edges"
+            sectionKey={SectionKey.Edges}
             activeSection={activeSection}
             onToggle={handleToggleSection}
             icon={<FaArrowRight size={14} style={{ transform: 'rotate(-45deg)' }} />}
@@ -120,16 +133,30 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
           </ToolbarButton>
 
           <ToolbarButton
-            sectionKey="export"
+            sectionKey={SectionKey.Export}
             activeSection={activeSection}
             onToggle={handleToggleSection}
             icon={<FaCamera size={14} />}
             title="Export"
           >
-            <ExportSection graphId={graphId} controls={controls} updateControls={updateControls} graphInstance={graphInstance} />
+            <ExportSection
+              graphId={graphId}
+              controls={controls}
+              updateControls={updateControls}
+              graphInstance={graphInstance}
+              nodeCount={nodeCount}
+            />
           </ToolbarButton>
 
-          <ScrollableSelect value={controls.depth} onChange={(v) => updateControls({ type: 'depth', state: v })} min={1} windowSize={5} />
+          <OverlayTipTop tip="Depth" disabled={depthMenuOpen}>
+            <ScrollableSelect
+              value={controls.depth}
+              onChange={(v) => updateControls({ type: 'depth', state: v })}
+              min={1}
+              windowSize={5}
+              onOpenChange={setDepthMenuOpen}
+            />
+          </OverlayTipTop>
         </>
       )}
 

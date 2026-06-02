@@ -1,9 +1,12 @@
+// project imports
+import { Direction } from './trees';
+
 /// The different possible associations
 export enum AssociationKind {
   /// This file is associated with something else
   FileFor = 'FileFor',
   /// This is documentation for something else
-  DocumentationFor = 'documentationFor',
+  DocumentationFor = 'DocumentationFor',
   /// This file or repo is or contains firmware for a device
   FirmwareFor = 'FirmwareFor',
   /// This file/repo/entity is associated with something else
@@ -53,13 +56,13 @@ export type Association = {
   /// The other data this directional association is with
   other: AssociationTarget;
   /// The creator of this association
-  submitter?: string;
+  submitter: string;
   /// The groups for this association
   groups: string[];
   /// When this association was created
   created: string;
-  /// Whether this direction is to our source object or away from it
-  to_source: boolean;
+  /// The direction for this association
+  direction: Direction;
 };
 
 export type AssociationCreate = {
@@ -67,10 +70,12 @@ export type AssociationCreate = {
   kind: AssociationKind;
   /// The piece of data this association starts with
   source: AssociationTarget;
-  /// The piece of data this association starts with
+  /// The data this association is with
   targets: AssociationTarget[];
   /// The groups for this association
   groups: string[];
+  /// Whether this is a bidirectional relationship or not
+  is_bidirectional: boolean;
 };
 
 export const BlankAssociationCreate: AssociationCreate = {
@@ -78,4 +83,5 @@ export const BlankAssociationCreate: AssociationCreate = {
   source: {},
   targets: [],
   groups: [],
+  is_bidirectional: false,
 };

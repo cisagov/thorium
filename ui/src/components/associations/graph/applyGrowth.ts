@@ -1,14 +1,12 @@
-import type { ForceGraph3DInstance } from '3d-force-graph';
-
 // project imports
 import { getLinkEndpoints } from './data';
-import type { GraphData } from './types';
+import type { GraphData, GraphInstance } from './types';
 import type { LabelEntry } from './controls/controlsReducer';
 
 export const applyGrowthToInstance = (
   prevData: GraphData,
   newData: GraphData,
-  graphInstanceRef: React.RefObject<ForceGraph3DInstance | null>,
+  graphInstanceRef: React.RefObject<GraphInstance | null>,
   labelSpritesRef: React.RefObject<Map<string, LabelEntry>>,
   graphDataRef: React.RefObject<GraphData>,
   setNodeCount: (count: number) => void,

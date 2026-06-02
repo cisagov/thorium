@@ -1,20 +1,9 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
-import { authenticate, snapshot } from './helpers';
+import { authenticate, snapshot, loginViaUI, TEST_USER, TEST_PASS } from './helpers';
 
 const SCREENSHOT_DIR = path.join(import.meta.dirname, 'screenshots');
-const USER = process.env.THORIUM_USER || 'test';
-const PASS = process.env.THORIUM_PASS || 'INSECURE_DEV_PASSWORD';
-
-async function loginViaUI(page: import('@playwright/test').Page) {
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-  await page.locator('input[placeholder="username"]').fill(USER);
-  await page.locator('input[placeholder="password"]').fill(PASS);
-  await page.locator('button:has-text("Login")').click();
-  await page.waitForURL((url) => !url.pathname.includes('/auth'), { timeout: 15000 });
-}
 
 function createTempFile(suffix: string, content?: string): string {
   const filePath = path.join(import.meta.dirname, `upload-test-${suffix}-${Date.now()}.bin`);
@@ -59,13 +48,13 @@ test.describe('Upload Page — Form Rendering', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('renders upload form with all required sections', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     await expect(page.locator('.title', { hasText: 'Upload' })).toBeVisible();
@@ -94,13 +83,13 @@ test.describe('Upload Page — TLP Selection', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('toggles TLP buttons exclusively', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const clearBtn = page.locator('.tlp-btn', { hasText: 'CLEAR' });
@@ -131,13 +120,13 @@ test.describe('Upload Page — Origin Tabs', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('Downloaded tab — renders URL and Site Name fields', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const downloadedTab = page.locator('[role="tab"]', { hasText: 'Downloaded' });
@@ -158,7 +147,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('Transformed tab — renders Parent, Tool, Flags fields', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const transformedTab = page.locator('[role="tab"]', { hasText: 'Transformed' });
@@ -181,7 +170,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('Unpacked tab — renders same Parent, Tool, Flags fields as Transformed', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const unpackedTab = page.locator('[role="tab"]', { hasText: 'Unpacked' });
@@ -202,7 +191,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('Carved tab — renders Parent, Tool, and PCAP sub-fields', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const carvedTab = page.locator('[role="tab"]', { hasText: 'Carved' });
@@ -238,7 +227,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('Wire tab — renders Sniffer, Source, Destination fields', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const wireTab = page.locator('[role="tab"]', { hasText: 'Wire' });
@@ -265,7 +254,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('Incident tab — renders all 6 incident fields', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const incidentTab = page.locator('[role="tab"]', { hasText: 'Incident' });
@@ -298,7 +287,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('Memory Dump tab — renders Memory Type, Parent, Reconstructed, Base Address', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const memoryDumpTab = page.locator('[role="tab"]', { hasText: 'Memory Dump' });
@@ -321,7 +310,7 @@ test.describe('Upload Page — Origin Tabs', () => {
   test('switching between origin tabs preserves field values', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const urlInput = page.locator('input[placeholder="badsite.xyz"]');
@@ -350,13 +339,13 @@ test.describe('Upload Page — Validation', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('shows error when uploading without selecting a file', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const uploadButton = page.locator('button.ok-btn', { hasText: 'Upload' });
@@ -372,7 +361,7 @@ test.describe('Upload Page — Validation', () => {
   test('shows error when uploading without selecting a group', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('no-group');
@@ -397,13 +386,13 @@ test.describe('Upload Page — Downloaded Origin Full Upload', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with Downloaded origin and verifies success', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('downloaded');
@@ -440,13 +429,13 @@ test.describe('Upload Page — Transformed Origin Upload', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with Transformed origin', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('transformed');
@@ -479,17 +468,60 @@ test.describe('Upload Page — Transformed Origin Upload', () => {
   });
 });
 
+test.describe('Upload Page — Unpacked Origin Upload', () => {
+  let token: string;
+
+  test.beforeAll(async () => {
+    token = await authenticate(TEST_USER, TEST_PASS);
+  });
+
+  test('uploads a file with Unpacked origin', async ({ page }) => {
+    test.setTimeout(120_000);
+    await loginViaUI(page);
+    await page.goto('/analyze');
+    await page.waitForLoadState('networkidle');
+
+    const tmpFile = createTempFile('unpacked');
+    try {
+      await attachFile(page, tmpFile);
+      await selectGroup(page);
+
+      const unpackedTab = page.locator('[role="tab"]', { hasText: 'Unpacked' });
+      await unpackedTab.click();
+      await expect(unpackedTab).toHaveAttribute('aria-selected', 'true');
+
+      const pane = await getTabPane(page, unpackedTab);
+      await pane.locator('input[placeholder="SHA256"]').fill('b'.repeat(64));
+      const optionalInputs = pane.locator('input[placeholder="optional"]');
+      await optionalInputs.nth(0).fill('7z');
+      await optionalInputs.nth(1).fill('-x');
+
+      await snapshot(page, SCREENSHOT_DIR, 'upload-unpacked-filled');
+
+      const uploadButton = page.locator('button.ok-btn', { hasText: 'Upload' });
+      await uploadButton.click();
+
+      const successAlert = page.locator('.alert-success', { hasText: 'File uploaded successfully' });
+      await expect(successAlert).toBeVisible({ timeout: 60000 });
+
+      await snapshot(page, SCREENSHOT_DIR, 'upload-unpacked-success');
+    } finally {
+      cleanupFiles(tmpFile);
+    }
+  });
+});
+
 test.describe('Upload Page — Wire Origin Upload', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with Wire origin', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('wire');
@@ -525,13 +557,13 @@ test.describe('Upload Page — Incident Origin Upload', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with Incident origin', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('incident');
@@ -570,13 +602,13 @@ test.describe('Upload Page — Multi-file Upload with Status Dashboard', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads multiple files and shows the status dashboard', async ({ page }) => {
     test.setTimeout(180_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFiles = [
@@ -628,13 +660,13 @@ test.describe('Upload Page — Carved Origin with PCAP Fields', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with Carved/PCAP origin', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('carved');
@@ -668,13 +700,13 @@ test.describe('Upload Page — Carved Origin Validation', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('shows validation feedback for invalid PCAP IP fields', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const carvedTab = page.locator('[role="tab"]', { hasText: 'Carved' });
@@ -698,13 +730,13 @@ test.describe('Upload Page — Description and Tags', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('can add description and tags to upload form', async ({ page }) => {
     test.setTimeout(60_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const descField = page.locator('textarea[placeholder="Add Description"]');
@@ -736,13 +768,13 @@ test.describe('Upload Page — Memory Dump Origin Upload', () => {
   let token: string;
 
   test.beforeAll(async () => {
-    token = await authenticate(USER, PASS);
+    token = await authenticate(TEST_USER, TEST_PASS);
   });
 
   test('uploads a file with Memory Dump origin', async ({ page }) => {
     test.setTimeout(120_000);
     await loginViaUI(page);
-    await page.goto('/upload');
+    await page.goto('/analyze');
     await page.waitForLoadState('networkidle');
 
     const tmpFile = createTempFile('memdump');

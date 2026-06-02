@@ -9,7 +9,7 @@ import styled from 'styled-components';
 // project imports
 import EntityList from '@entities/browsing/EntityList';
 import { search } from '@thorpi/search';
-import { SearchFilters, ElasticIndex } from '@models/search';
+import { SearchFilters, ElasticIndex, ElasticDoc } from '@models/search';
 import { scaling } from '@styles';
 import { Clause, ClauseCondition } from './omnibar/ClauseTypes';
 import { defaultTimeSelection, TimeSelection, TimeSelectionToStrings } from './omnibar/timepicker/utils';
@@ -101,7 +101,7 @@ const SearchResultsHeaders = () => {
 };
 
 interface SearchResultItemProps {
-  result: any;
+  result: ElasticDoc;
   idx: number;
 }
 
@@ -124,7 +124,7 @@ const SearchResultItem: React.FC<SearchResultItemProps> = ({ result, idx }) => {
               <Row key={`${getSha256(result.id)}_${idx}_${key}`}>
                 <Col>
                   <span>
-                    {key}: {highlightResult(result.highlight[key])}
+                    {key}: {highlightResult(String(result.highlight?.[key]))}
                   </span>
                 </Col>
               </Row>
@@ -141,7 +141,7 @@ const getSearchResults = async (
   omniTime: TimeSelection,
   setSearchError: (error: string) => void,
   cursor: string | null,
-): Promise<{ entitiesList: any[]; entitiesCursor: string | null }> => {
+): Promise<{ entitiesList: ElasticDoc[]; entitiesCursor: string | null }> => {
   if (query !== '') {
     const groups = getGroupsFromClauses(clauses);
     const indexes = getIndexesFromClauses(clauses);
@@ -239,7 +239,7 @@ const Search = () => {
           <EntityList
             type="Results"
             entityHeaders={<SearchResultsHeaders />}
-            displayEntity={(result, idx) => <SearchResultItem result={result} idx={idx} />}
+            displayEntity={(result, idx) => <SearchResultItem result={result as ElasticDoc} idx={idx} />}
             filters={filters}
             fetchEntities={(_, cursor) => getSearchResults(debouncedQuery, omnibarClauses, omniTime, setSearchError, cursor)}
             setLoading={setSearching}

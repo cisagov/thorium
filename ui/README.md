@@ -1,57 +1,103 @@
 # Thorium Frontend
 
-This Readme will help Thorium UI developers get started contributing to Thorium. Thorium's web application is written in Typescript and Javascript using React and Vite.
+Thorium's web application is a React 19 + TypeScript SPA built with Vite and styled-components.
 
 ## Installation
 
-Install the required node packages by running,
+Install the required node packages:
 ```bash
 npm install
 ```
 
-## Running Webapp locally on CLI
-For development, run the webapp locally using,
+## Development
+
+### Running locally
+
+Point the frontend at a Thorium API instance and start the dev server:
 ```bash
-export REACT_APP_API_URL=https://[thorium.DOMAIN]/api
+export THORIUM_API_URL=https://[thorium.DOMAIN]
+npm run dev
+```
+
+The dev server runs on port 8000 by default.
+
+### Local dev environment (minithor)
+
+For a self-contained development cluster, use minithor (see root `CLAUDE.md` for full instructions):
+
+**First-time setup:**
+```bash
+minithor/minithor minikube install  # install minikube and start the k8s cluster
+minithor/minithor deploy            # deploy Thorium services (creates test user test/INSECURE_DEV_PASSWORD)
+minithor/minithor expose            # port-forward API to localhost:8080
+export THORIUM_API_URL=http://localhost:8080
+npm run dev
+```
+
+**After a reboot or `minithor stop`:**
+```bash
+minithor/minithor start             # restart the cluster
+minithor/minithor expose            # re-establish port-forwards
+export THORIUM_API_URL=http://localhost:8080
 npm run dev
 ```
 
 ## Project Structure
 
-- [index.html](./index.html): Entrypoint HTML file for the Thorium web application
-- [public](./public): Files that are hosted from the root path of the site (e.g. `/ferris-scientist.png`)
-- [src/](./src): Project source code and imported assets
-  - [assets](./src/assets): Static assets imported by site components
+- [index.html](./index.html): Entrypoint HTML file
+- [public](./public): Static files served from root path (e.g. `/ferris-scientist.png`)
+- [src/](./src): Project source code
+  - [main.tsx](./src/main.tsx): React entrypoint — loads global styles and mounts `<Thorium/>`
+  - [Thorium.tsx](./src/Thorium.tsx): Root component with routes, error handling, and auth
+  - [assets](./src/assets): Static assets imported by components (icons, banner text)
   - [components](./src/components): All non-page UI components
-  - [main.tsx](./src/main.tsx): Entrypoint for the React app. This loads global styles and an instance of <Thorium/>.
-  - [models](./src/models): Thorium data structures as Typescript interfaces, types, and enums
-  - [pages](./src/pages): Thorium Site pages
-  - [styles](./src/styles): Global styles including theme colors, spacing, and bootstrap component overrides for the theme.
-  - [thorium.tsx](./src/thorium.tsx): Root site component that includes routes, global error handling and auth
-  - [thorpi](./src/thorpi): Thorium API client
-  - [utilities](./src/utilities): Typescript utility functions
-- [vite.config.ts](vite.config.ts): Vite project configuration including import aliases (`@pages`)
-- [mitre_tags](mitre_tags): Static MBC and ATT&CK tags list used for Tag select options dropdowns and associated crawl scripts
+  - [models](./src/models): TypeScript interfaces, types, and enums for API data shapes
+  - [pages](./src/pages): Route-level page components
+  - [styles](./src/styles): Global SCSS styles — theme colors, spacing, and library overrides
+  - [thorpi](./src/thorpi): Thorium API client (axios-based, one module per resource)
+  - [utilities](./src/utilities): Shared TypeScript utility functions
+- [e2e/](./e2e): Playwright E2E tests (see [TESTING.md](e2e/TESTING.md))
+- [vite.config.ts](vite.config.ts): Vite configuration including path aliases (`@pages`, `@components`, etc.)
+- [mitre_tags](mitre_tags): Static MBC and ATT&CK tag data for tag select dropdowns
 
-## Formatting and Testing
+## Formatting and Linting
 
-You should always run the formatter before committing code for final review:
-
-```bash
-npm run format
-```
-
-You can also lint your code to help identify potential issues:
+Run the formatter and linter before committing:
 
 ```bash
-npm run lint
+npm run format             # prettier write
+npm run validate-style     # prettier check (CI-safe)
+npm run lint               # eslint check
+npm run fix                # eslint --fix
 ```
 
-Once you are confident your code works as intended, run the preview version of the UI. This should be much closer to a production release and help identify issues that crop up during the bundling process. Sometimes the dev server will have access to static files and other assets that the final bundle won't. This should catch these types of issues.
+## Building
 
+```bash
+npm run build              # production build (tsc + vite)
+npm run build-check        # full type-check including .jsx checkJs
+```
+
+To verify the production bundle locally:
 ```bash
 npm run build-preview
 npm run preview
 ```
 
+## Testing
 
+### Unit Tests (Vitest)
+
+```bash
+npm run test               # single run
+npm run test:watch         # watch mode
+```
+
+### E2E Tests (Playwright)
+
+E2E tests run against a live Thorium instance. See [e2e/TESTING.md](e2e/TESTING.md) for full details.
+
+```bash
+THORIUM_API_URL=http://localhost:8080 npm run test:e2e           # headless
+THORIUM_API_URL=http://localhost:8080 npm run test:e2e:headed    # visible browser
+```

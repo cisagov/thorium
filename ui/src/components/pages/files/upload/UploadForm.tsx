@@ -96,7 +96,7 @@ const UploadForm: React.FC = () => {
         </Col>
         <Col className={disabledClass + 'upload-field'}>
           <Form.Control
-            className="description-field"
+            style={{ minHeight: '200px' }}
             as="textarea"
             placeholder="Add Description"
             value={description}
@@ -215,7 +215,7 @@ const UploadForm: React.FC = () => {
               <Row className="d-flex justify-content-center upload-btn">
                 <Col className="upload-field">
                   <center>
-                    <Button className="ok-btn" onClick={handleUpload}>
+                    <Button className="ok-btn" onClick={() => void handleUpload()}>
                       Upload
                     </Button>
                   </center>

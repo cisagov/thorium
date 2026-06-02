@@ -77,6 +77,30 @@ export enum ReactionStatus {
   Failed = 'Failed',
 }
 
+/** A status update log entry for a reaction (from api/src/models/logs.rs) */
+export interface StatusUpdate {
+  /** The group the pipeline/reaction this status update is for */
+  group: string;
+  /** The pipeline this status update is for */
+  pipeline: string;
+  /** The reaction this status update is for */
+  reaction: string;
+  /** The action that occurred in this update */
+  action: string;
+  /** The timestamp this occurred */
+  timestamp: string;
+  /** A message or reason why this action occurred */
+  msg?: string;
+  /** The update that occurred */
+  update: Record<string, string>;
+}
+
+/** The stage logs response (from api/src/models/reactions.rs) */
+export interface StageLogs {
+  /** The log lines for a specific stage within a reaction */
+  logs: string[];
+}
+
 /** A response containing the reaction id */
 export interface ReactionIdResponse {
   /** The uuidv4 of a reaction */
@@ -203,4 +227,36 @@ export interface ReactionSelection {
   sla: number;
   /** Optional tags for the reaction */
   tags?: Record<string, string[]>;
+}
+
+/** The result of submitting or deleting a single reaction */
+export interface ReactionRunResult {
+  /** The reaction ID (present on success) */
+  id?: string;
+  /** Error message (empty string on success) */
+  error: string;
+  /** The group this reaction belongs to */
+  group: string;
+  /** The pipeline this reaction was for */
+  pipeline: string;
+}
+
+/** A single entry in a reaction's event log */
+export interface ReactionLogEntry {
+  /** The log entry ID */
+  id: string;
+  /** The type of event */
+  action: 'JobCreated' | 'JobCompleted' | 'JobFailed' | 'JobRunning';
+  /** When this event occurred */
+  timestamp: string;
+  /** Event-specific key/value data */
+  update: Record<string, string>;
+}
+
+/** The response from listing reactions for a group */
+export interface ReactionListResponse {
+  /** The reaction details */
+  details: Reaction[];
+  /** Cursor for pagination (absent when no more results) */
+  cursor?: string;
 }

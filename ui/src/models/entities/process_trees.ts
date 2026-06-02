@@ -34,6 +34,7 @@ export const BlankWindowsProcessTree: WindowsProcessTree = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateWindowsProcessTree: CreateWindowsProcessTree = {

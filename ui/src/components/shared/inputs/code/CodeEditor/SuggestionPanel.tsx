@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import type { Suggestion } from '@utilities/rules/types';
+import type { Suggestion, FieldSchema } from '@utilities/rules/types';
+import { FieldValueType } from '@utilities/rules/types';
 
 const Panel = styled.div`
   background-color: var(--thorium-panel-bg);
@@ -9,8 +10,25 @@ const Panel = styled.div`
   border-radius: 0 0 4px 4px;
   padding: 8px 12px;
   font-size: 12px;
-  max-height: 200px;
+  height: 200px;
+  min-height: 60px;
   overflow-y: auto;
+  resize: vertical;
+`;
+
+const SectionTitle = styled.div`
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--thorium-secondary-text);
+  padding: 6px 0 2px;
+  border-bottom: 1px solid var(--thorium-panel-border);
+  margin-top: 4px;
+
+  &:first-child {
+    margin-top: 0;
+  }
 `;
 
 const SuggestionRow = styled.div`
@@ -83,6 +101,60 @@ const AddButton = styled.span`
   }
 `;
 
+const TypeBadge = styled.span`
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background-color: var(--thorium-highlight-panel-bg);
+  color: var(--thorium-secondary-text);
+  border: 1px solid var(--thorium-panel-border);
+  flex-shrink: 0;
+`;
+
+function typeLabel(schema?: FieldSchema): string | null {
+  if (!schema) return null;
+  if (schema.typeName) return schema.typeName;
+  switch (schema.type) {
+    case FieldValueType.String:
+      return 'string';
+    case FieldValueType.Number:
+      return 'number';
+    case FieldValueType.Boolean:
+      return 'bool';
+    case FieldValueType.Enum:
+      return 'enum';
+    case FieldValueType.Object:
+      return 'object';
+    case FieldValueType.StringArray:
+      return 'list';
+    default:
+      return null;
+  }
+}
+
+function displayFieldName(field: string): string {
+  return field;
+}
+
+function groupByCategory(suggestions: Suggestion[]): { category: string; items: Suggestion[] }[] {
+  const groups: { category: string; items: Suggestion[] }[] = [];
+  let current: { category: string; items: Suggestion[] } | null = null;
+
+  for (const s of suggestions) {
+    const cat = s.category ?? '';
+    if (!current || current.category !== cat) {
+      current = { category: cat, items: [] };
+      groups.push(current);
+    }
+    current.items.push(s);
+  }
+
+  return groups;
+}
+
 const ToggleButton = styled.button`
   background: none;
   border: none;
@@ -108,15 +180,61 @@ const headerLabelStyle: React.CSSProperties = {
   fontWeight: 600,
 };
 
+const RemoveButton = styled.span`
+  display: inline-block;
+  background-color: var(--thorium-danger-bg, #e74c3c);
+  color: var(--thorium-button-text);
+  border: 1px solid var(--thorium-danger-bg, #e74c3c);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin: 1px 3px;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.15);
+  }
+`;
+
+const PopulateButton = styled.span`
+  display: inline-block;
+  background-color: var(--thorium-highlight-panel-bg);
+  color: var(--thorium-text);
+  border: 1px solid var(--thorium-panel-border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin: 1px 3px;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--thorium-info-secondary-bg);
+    color: var(--thorium-text);
+  }
+`;
+
 interface SuggestionPanelProps {
   suggestions: Suggestion[];
-  onValueClick?: (field: string, value: string, isList?: boolean) => void;
+  onValueClick?: (
+    field: string,
+    value: string,
+    isList?: boolean,
+    isMapEntry?: boolean,
+    isRemoval?: boolean,
+    schema?: FieldSchema,
+    isReplace?: boolean,
+  ) => void;
 }
 
 const SuggestionPanel: React.FC<SuggestionPanelProps> = ({ suggestions, onValueClick }) => {
   const [collapsed, setCollapsed] = useState(false);
 
   if (suggestions.length === 0) return null;
+
+  const hasCategories = suggestions.some((s) => s.category);
+  const groups = hasCategories ? groupByCategory(suggestions) : [{ category: '', items: suggestions }];
 
   return (
     <Panel>
@@ -125,28 +243,61 @@ const SuggestionPanel: React.FC<SuggestionPanelProps> = ({ suggestions, onValueC
         <ToggleButton onClick={() => setCollapsed((prev) => !prev)}>{collapsed ? 'Show' : 'Hide'}</ToggleButton>
       </div>
       {!collapsed &&
-        suggestions.map((suggestion, idx) => (
-          <SuggestionRow key={`${suggestion.field}-${idx}`}>
-            <FieldLabel>{suggestion.field}</FieldLabel>
-            <Message>{suggestion.message}</Message>
-            {suggestion.values && suggestion.values.length > 0 ? (
-              <ValuesContainer>
-                {suggestion.values.map((val) => (
-                  <ValueChip
-                    key={val}
-                    onClick={() => onValueClick?.(suggestion.field, val, suggestion.isList)}
-                    title={`Click to use '${val}'`}
-                  >
-                    {val}
-                  </ValueChip>
-                ))}
-              </ValuesContainer>
-            ) : (
-              <AddButton onClick={() => onValueClick?.(suggestion.field, '', suggestion.isList)} title={`Add '${suggestion.field}' field`}>
-                Add
-              </AddButton>
-            )}
-          </SuggestionRow>
+        groups.map((group) => (
+          <React.Fragment key={group.category}>
+            {hasCategories && group.category && <SectionTitle>{group.category}</SectionTitle>}
+            {group.items.map((suggestion, idx) => {
+              const badge = typeLabel(suggestion.schema);
+              const label = displayFieldName(suggestion.field);
+              return (
+                <SuggestionRow key={`${suggestion.field}-${idx}`}>
+                  <FieldLabel title={suggestion.field}>{label}</FieldLabel>
+                  {badge && <TypeBadge>{badge}</TypeBadge>}
+                  <Message>{suggestion.message}</Message>
+                  {suggestion.isRemoval ? (
+                    <RemoveButton
+                      onClick={() => onValueClick?.(suggestion.field, '', undefined, undefined, true, undefined)}
+                      title={`Remove '${suggestion.field}' field and all subkeys`}
+                    >
+                      Remove
+                    </RemoveButton>
+                  ) : suggestion.isReplace ? (
+                    <PopulateButton
+                      onClick={() =>
+                        onValueClick?.(suggestion.field, '', suggestion.isList, suggestion.isMapEntry, undefined, suggestion.schema, true)
+                      }
+                      title={`Populate '${suggestion.field}' with default structure`}
+                    >
+                      Populate
+                    </PopulateButton>
+                  ) : suggestion.values && suggestion.values.length > 0 && !suggestion.schema?.variants ? (
+                    <ValuesContainer>
+                      {suggestion.values.map((val) => (
+                        <ValueChip
+                          key={val}
+                          onClick={() =>
+                            onValueClick?.(suggestion.field, val, suggestion.isList, suggestion.isMapEntry, undefined, suggestion.schema)
+                          }
+                          title={`Click to use '${val}'`}
+                        >
+                          {val}
+                        </ValueChip>
+                      ))}
+                    </ValuesContainer>
+                  ) : (
+                    <AddButton
+                      onClick={() =>
+                        onValueClick?.(suggestion.field, '', suggestion.isList, suggestion.isMapEntry, undefined, suggestion.schema)
+                      }
+                      title={`Add '${suggestion.field}' field`}
+                    >
+                      Add
+                    </AddButton>
+                  )}
+                </SuggestionRow>
+              );
+            })}
+          </React.Fragment>
         ))}
     </Panel>
   );

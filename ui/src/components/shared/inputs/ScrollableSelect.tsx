@@ -9,6 +9,7 @@ interface ScrollableSelectProps {
   max?: number;
   windowSize?: number;
   initialStart?: number;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const toggleStyle: React.CSSProperties = {
@@ -62,10 +63,23 @@ const arrowStyle: React.CSSProperties = {
   opacity: 0.7,
 };
 
-const ScrollableSelect: React.FC<ScrollableSelectProps> = ({ value, onChange, min = 1, max = Infinity, windowSize = 5, initialStart }) => {
+const ScrollableSelect: React.FC<ScrollableSelectProps> = ({
+  value,
+  onChange,
+  min = 1,
+  max = Infinity,
+  windowSize = 5,
+  initialStart,
+  onOpenChange,
+}) => {
   const [windowStart, setWindowStart] = useState(initialStart ?? min);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
 
   useEffect(() => {
     if (value < windowStart) {
@@ -97,7 +111,7 @@ const ScrollableSelect: React.FC<ScrollableSelectProps> = ({ value, onChange, mi
   }
 
   return (
-    <Dropdown show={open} onToggle={setOpen}>
+    <Dropdown show={open} onToggle={handleToggle}>
       <Dropdown.Toggle as="button" style={toggleStyle} id="scrollable-select-toggle">
         {value}
       </Dropdown.Toggle>

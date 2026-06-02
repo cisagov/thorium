@@ -1,5 +1,5 @@
 import React from 'react';
-import { Col, Row } from 'react-bootstrap';
+import styled from 'styled-components';
 import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
@@ -7,6 +7,12 @@ import TagBadge from '../TagBadge';
 import { filterIncludedTags, filterExcludedTags } from '../utilities';
 import { Tags } from '@models/tags';
 import { Entities } from '@models/entities';
+
+const TagContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+`;
 
 interface CondensedEntityTagProps {
   tags: Tags; // tags to display in condensed non-editable view
@@ -27,36 +33,27 @@ const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource
           </AlertBanner>
         </div>
       )}
-      <Row>
-        <Col className="d-flex justify-content-center wrap">
-          {Object.keys(tlpTags).length > 0 &&
-            Object.keys(tlpTags)
-              .sort()
-              .map((tagKey) =>
-                Object.keys(tlpTags[tagKey])
-                  .sort()
-                  .map((tagValue) => (
-                    <TagBadge resource={resource} key={'TLP_' + tagValue} tag={tagKey} value={tagValue} condensed={true} action={'link'} />
-                  )),
-              )}
-          {Object.keys(generalTags)
+      <TagContainer>
+        {Object.keys(tlpTags).length > 0 &&
+          Object.keys(tlpTags)
             .sort()
             .map((tagKey) =>
-              Object.keys(generalTags[tagKey])
+              Object.keys(tlpTags[tagKey])
                 .sort()
                 .map((tagValue) => (
-                  <TagBadge
-                    resource={resource}
-                    key={'General_' + tagValue}
-                    tag={tagKey}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
+                  <TagBadge resource={resource} key={'TLP_' + tagValue} tag={tagKey} value={tagValue} condensed={true} action={'link'} />
                 )),
             )}
-        </Col>
-      </Row>
+        {Object.keys(generalTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(generalTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge resource={resource} key={'General_' + tagValue} tag={tagKey} value={tagValue} condensed={true} action={'link'} />
+              )),
+          )}
+      </TagContainer>
     </>
   );
 };

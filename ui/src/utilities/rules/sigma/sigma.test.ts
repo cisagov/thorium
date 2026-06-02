@@ -1,5 +1,7 @@
 import { describe, test, expect } from 'vitest';
 import { SigmaRuleChecker } from './index';
+import { FieldValueType, Severity } from '../types';
+import { removeLine, removeBlock, replaceLine } from '../test-helpers';
 
 const VALID_OKTA_RULE = `title: Okta User Account Locked Out
 id: 14701da0-4b0f-4ee6-9c95-2ffb4e73bb9a
@@ -27,55 +29,27 @@ level: medium`;
 const checker = new SigmaRuleChecker();
 
 function errors(text: string) {
-  return checker.check(text).diagnostics.filter((d) => d.severity === 'error');
+  return checker.check(text).diagnostics.filter((d) => d.severity === Severity.Error);
 }
 
 function warnings(text: string) {
-  return checker.check(text).diagnostics.filter((d) => d.severity === 'warning');
+  return checker.check(text).diagnostics.filter((d) => d.severity === Severity.Warning);
+}
+
+function infos(text: string) {
+  return checker.check(text).diagnostics.filter((d) => d.severity === Severity.Info);
 }
 
 function suggestions(text: string) {
   return checker.check(text).suggestions;
 }
 
-function removeLine(text: string, prefix: string): string {
-  return text
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith(prefix))
-    .join('\n');
-}
-
-function removeBlock(text: string, key: string): string {
-  const lines = text.split('\n');
-  const result: string[] = [];
-  let skipping = false;
-  for (const line of lines) {
-    if (line.startsWith(`${key}:`)) {
-      skipping = true;
-      continue;
-    }
-    if (skipping && (line.startsWith('    ') || line.startsWith('\t') || line.trim() === '')) {
-      continue;
-    }
-    skipping = false;
-    result.push(line);
-  }
-  return result.join('\n');
-}
-
-function replaceLine(text: string, prefix: string, replacement: string): string {
-  return text
-    .split('\n')
-    .map((line) => (line.trimStart().startsWith(prefix) ? replacement : line))
-    .join('\n');
-}
-
 describe('SigmaRuleChecker', () => {
   describe('valid rule', () => {
     test('produces no errors or warnings for valid Okta rule', () => {
       const result = checker.check(VALID_OKTA_RULE);
-      const errs = result.diagnostics.filter((d) => d.severity === 'error');
-      const warns = result.diagnostics.filter((d) => d.severity === 'warning');
+      const errs = result.diagnostics.filter((d) => d.severity === Severity.Error);
+      const warns = result.diagnostics.filter((d) => d.severity === Severity.Warning);
       expect(errs).toHaveLength(0);
       expect(warns).toHaveLength(0);
     });
@@ -104,13 +78,13 @@ describe('SigmaRuleChecker', () => {
 
     test('invalid YAML syntax returns syntax error', () => {
       const result = checker.check('title: [unclosed');
-      const errs = result.diagnostics.filter((d) => d.severity === 'error');
+      const errs = result.diagnostics.filter((d) => d.severity === Severity.Error);
       expect(errs.length).toBeGreaterThan(0);
     });
 
     test('non-mapping YAML returns error', () => {
       const result = checker.check('- item1\n- item2');
-      const errs = result.diagnostics.filter((d) => d.severity === 'error');
+      const errs = result.diagnostics.filter((d) => d.severity === Severity.Error);
       expect(errs.some((e) => e.message.includes('mapping'))).toBe(true);
     });
   });
@@ -170,15 +144,15 @@ describe('SigmaRuleChecker', () => {
     test('invalid id (not UUID v4)', () => {
       const text = replaceLine(VALID_OKTA_RULE, 'id:', "id: 'not-a-uuid'");
       const warns = warnings(text);
-      expect(warns.some((w) => w.message.includes('UUID v4'))).toBe(true);
+      expect(warns.some((w) => w.message.includes('UUIDv4'))).toBe(true);
     });
   });
 
   describe('unknown fields and tags', () => {
     test('unknown top-level field', () => {
       const text = VALID_OKTA_RULE + '\nfoobar: baz';
-      const warns = warnings(text);
-      expect(warns.some((w) => w.message.includes("Unknown Sigma field: 'foobar'"))).toBe(true);
+      const infs = infos(text);
+      expect(infs.some((w) => w.message.includes("Unknown Sigma field: 'foobar'"))).toBe(true);
     });
 
     test('invalid tag pattern (uppercase)', () => {
@@ -347,5 +321,118 @@ related:
       const dupErrs = errs.filter((e) => e.message.includes('Duplicate key'));
       expect(dupErrs).toHaveLength(0);
     });
+  });
+});
+
+describe('suggestion schemas', () => {
+  test('status suggestion carries enum schema', () => {
+    const text = replaceLine(VALID_OKTA_RULE, 'status:', 'status:');
+    const s = suggestions(text);
+    const statusSugg = s.find((sg) => sg.field === 'status');
+    expect(statusSugg?.schema).toBeDefined();
+    expect(statusSugg!.schema!.type).toBe(FieldValueType.Enum);
+    expect(statusSugg!.schema!.enumValues).toContain('stable');
+  });
+
+  test('level suggestion carries enum schema', () => {
+    const text = replaceLine(VALID_OKTA_RULE, 'level:', 'level:');
+    const s = suggestions(text);
+    const levelSugg = s.find((sg) => sg.field === 'level');
+    expect(levelSugg?.schema).toBeDefined();
+    expect(levelSugg!.schema!.type).toBe(FieldValueType.Enum);
+  });
+
+  test('missing optional field suggestions carry schemas', () => {
+    const ruleNoOptionals = `title: Test
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+    const s = suggestions(ruleNoOptionals);
+
+    const idSugg = s.find((sg) => sg.field === 'id');
+    expect(idSugg?.schema).toBeDefined();
+    expect(idSugg!.schema!.type).toBe(FieldValueType.String);
+
+    const tagsSugg = s.find((sg) => sg.field === 'tags');
+    expect(tagsSugg?.schema).toBeDefined();
+    expect(tagsSugg!.schema!.type).toBe(FieldValueType.StringArray);
+
+    const dateSugg = s.find((sg) => sg.field === 'date');
+    expect(dateSugg?.schema).toBeDefined();
+    expect(dateSugg!.schema!.placeholder).toBe('YYYY-MM-DD');
+  });
+
+  test('logsource sub-field suggestions carry schemas', () => {
+    const s = suggestions(VALID_OKTA_RULE);
+    const catSugg = s.find((sg) => sg.field === 'logsource.category');
+    expect(catSugg?.schema).toBeDefined();
+    expect(catSugg!.schema!.type).toBe(FieldValueType.String);
+  });
+});
+
+describe('missing field coverage', () => {
+  test('name, taxonomy, license, scope, fields, related are suggested when missing', () => {
+    const ruleMinimal = `title: Test
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+    const s = suggestions(ruleMinimal);
+    const fields = s.map((sg) => sg.field);
+    expect(fields).toContain('name');
+    expect(fields).toContain('taxonomy');
+    expect(fields).toContain('license');
+    expect(fields).toContain('scope');
+    expect(fields).toContain('fields');
+    expect(fields).toContain('related');
+  });
+
+  test('logsource.definition is suggested when logsource has no definition', () => {
+    const s = suggestions(VALID_OKTA_RULE);
+    const defSugg = s.find((sg) => sg.field === 'logsource.definition');
+    expect(defSugg).toBeDefined();
+  });
+
+  test('missing logsource is suggested when key absent', () => {
+    const ruleNoLogsource = `title: Test
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+    const s = suggestions(ruleNoLogsource);
+    expect(s.some((sg) => sg.field === 'logsource')).toBe(true);
+  });
+});
+
+describe('suggestion categories', () => {
+  test('suggestions are grouped by category', () => {
+    const s = suggestions(VALID_OKTA_RULE);
+    expect(s.some((sg) => sg.category === 'Rule Metadata')).toBe(true);
+    expect(s.some((sg) => sg.category === 'Log Source')).toBe(true);
+  });
+
+  test('suggestions are sorted by category then alphabetically', () => {
+    const ruleMinimal = `title: Test
+logsource:
+    product: windows
+detection:
+    sel:
+        Image: test
+    condition: sel`;
+    const s = suggestions(ruleMinimal);
+    const categories = s.map((sg) => sg.category!);
+    const uniqueCategories = [...new Set(categories)];
+    expect(uniqueCategories[0]).toBe('Rule Metadata');
+
+    for (const cat of uniqueCategories) {
+      const catFields = s.filter((sg) => sg.category === cat).map((sg) => sg.field);
+      const sorted = [...catFields].sort((a, b) => a.localeCompare(b));
+      expect(catFields).toEqual(sorted);
+    }
   });
 });

@@ -2,7 +2,7 @@ import { ResultRenderProps } from '@components/tools/props';
 import React, { useRef } from 'react';
 import { Col, Row } from 'react-bootstrap';
 
-const ChildrenFiles: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
+const ChildrenFiles: React.FC<ResultRenderProps> = ({ result, tool }) => {
   const childRef = useRef(null);
   if (result && result.children && Object.keys(result.children).length > 0) {
     return (

@@ -1,6 +1,6 @@
-import type { ForceGraph3DInstance } from '3d-force-graph';
+import type { GraphInstance } from './types';
 
-const captureDataUrl = (graphInstance: ForceGraph3DInstance, mimeType: string): string | null => {
+const captureDataUrl = (graphInstance: GraphInstance, mimeType: string): string | null => {
   const renderer = graphInstance.renderer();
   const scene = graphInstance.scene();
   const camera = graphInstance.camera();
@@ -17,13 +17,13 @@ const downloadDataUrl = (dataUrl: string, filename: string) => {
   a.click();
 };
 
-export const exportPNG = (id: string, graphInstance: ForceGraph3DInstance | null) => {
+export const exportPNG = (id: string, graphInstance: GraphInstance | null) => {
   if (!graphInstance) return;
   const dataUrl = captureDataUrl(graphInstance, 'image/png');
   if (dataUrl) downloadDataUrl(dataUrl, `${id}-graph.png`);
 };
 
-export const exportJPEG = (id: string, graphInstance: ForceGraph3DInstance | null) => {
+export const exportJPEG = (id: string, graphInstance: GraphInstance | null) => {
   if (!graphInstance) return;
   const dataUrl = captureDataUrl(graphInstance, 'image/jpeg');
   if (dataUrl) downloadDataUrl(dataUrl, `${id}-graph.jpeg`);

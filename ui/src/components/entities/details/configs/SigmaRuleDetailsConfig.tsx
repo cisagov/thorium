@@ -1,6 +1,5 @@
 import { JSX } from 'react';
 import { Row } from 'react-bootstrap';
-import { MdRule } from 'react-icons/md';
 import styled from 'styled-components';
 
 // project imports
@@ -17,7 +16,6 @@ import { SigmaRuleChecker } from '@utilities/rules/sigma';
 import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
 import NumberInput from '@components/shared/inputs/NumberInput';
 import { ActionsEditor } from '@components/entities/create/configs/SigmaRuleCreateConfig';
-import SigmaSVG from '@assets/icons/sigma.svg?raw';
 import SigmaIcon from '@components/shared/icons/SigmaIcon';
 import { FormatType } from '@utilities/rules/types';
 
@@ -148,10 +146,10 @@ const SigmaRuleMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: Det
   );
 };
 
-const getSigmaRuleDetails = async (collectionId: string, setError: (e: string) => void, updateEntity: (c: SigmaRule) => void) => {
-  getEntity(collectionId, setError).then((data) => {
+const getSigmaRuleDetails = (collectionId: string, setError: (e: string) => void, updateEntity: (c: SigmaRule) => void) => {
+  void getEntity(collectionId, setError).then((data) => {
     if (data && data.kind === Entities.SigmaRule) {
-      updateEntity(data as SigmaRule);
+      updateEntity(data);
     }
   });
 };

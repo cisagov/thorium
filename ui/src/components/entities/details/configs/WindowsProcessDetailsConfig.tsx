@@ -12,12 +12,7 @@ import { getEntity } from '@thorpi/entities';
 import { Entities } from '@models/entities';
 import { BlankWindowsProcess, WindowsProcess } from '@models/entities/processes';
 
-const WindowsProcessMetaInfo = ({
-  entity,
-  pendingEntity,
-  handleUpdate,
-  editing,
-}: DetailsMetadataProps<Entities.WindowsProcess>): JSX.Element => {
+const WindowsProcessMetaInfo = ({ entity }: DetailsMetadataProps<Entities.WindowsProcess>): JSX.Element => {
   return (
     <>
       <Row>
@@ -80,16 +75,12 @@ const WindowsProcessMetaInfo = ({
 };
 
 // Get process tree details from the API
-const getWindowsProcessDetails = async (
-  vendorID: string,
-  setError: (err: string) => void,
-  updateEntity: (entity: WindowsProcess) => void,
-) => {
-  getEntity(vendorID, setError).then((data) => {
+const getWindowsProcessDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (entity: WindowsProcess) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of Process kind
     if (data && data.kind == Entities.WindowsProcess) {
       // we know that any entity response with kind=Process is a Process
-      const device = data as WindowsProcess;
+      const device = data;
       updateEntity(device);
     }
   });

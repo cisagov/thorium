@@ -1,8 +1,15 @@
 import React, { JSX } from 'react';
 import { Badge } from 'react-bootstrap';
+import styled from 'styled-components';
+
+const TagBadge = styled(Badge)`
+  text-wrap: pretty;
+  white-space: break-spaces;
+  max-width: 100%;
+`;
 
 interface FieldBadgeProps {
-  field: Object | Array<string> | string | boolean | null | undefined; // content of the badge
+  field: object | Array<string> | string | number | bigint | boolean | null | undefined; // content of the badge
   color: string; // color of the badge
   className?: string; // custom class name
   noNull?: boolean; // don't return a badge when null
@@ -55,9 +62,9 @@ const FieldBadge: React.FC<FieldBadgeProps> = ({ field, color, className = '', n
       if (Array.isArray(field) && field.length) {
         // returns one badge per item in array
         const badgeArray = field.map((item, idx) => (
-          <Badge key={idx} bg="" className={`me-1 image-tag ${className}`} style={{ backgroundColor: color }}>
+          <TagBadge key={idx} bg="" className={`me-1 ${className}`} style={{ backgroundColor: color }}>
             {typeof item == 'object' && field != null ? JSON.stringify(item) : String(item)}
-          </Badge>
+          </TagBadge>
         ));
         return badgeArray;
       } else if (typeof field == 'object') {
@@ -66,18 +73,18 @@ const FieldBadge: React.FC<FieldBadgeProps> = ({ field, color, className = '', n
         if (field) {
           Object.keys(field).forEach((itemKey: string, index: number) => {
             badgeArray.push(
-              <Badge key={index} className={`me-1 image-tag ${className}`} style={{ backgroundColor: color }}>
-                {`${itemKey}: ${field[itemKey as keyof typeof field]}`}
-              </Badge>,
+              <TagBadge key={index} className={`me-1 ${className}`} style={{ backgroundColor: color }}>
+                {`${itemKey}: ${String(field[itemKey as keyof typeof field])}`}
+              </TagBadge>,
             );
           });
         }
         return badgeArray;
       } else {
         return (
-          <Badge bg="" className={`me-1 image-tag ${className}`} style={{ backgroundColor: color }}>
+          <TagBadge bg="" className={`me-1 ${className}`} style={{ backgroundColor: color }}>
             {String(field)}
-          </Badge>
+          </TagBadge>
         );
       }
   }

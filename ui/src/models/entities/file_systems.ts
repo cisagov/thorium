@@ -37,6 +37,7 @@ export const BlankFileSystem: FileSystem = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateFileSystem: CreateFileSystem = {

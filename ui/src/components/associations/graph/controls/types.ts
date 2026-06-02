@@ -1,7 +1,20 @@
-import type { ForceGraph3DInstance } from '3d-force-graph';
+import type { GraphInstance } from '../types';
 
-export type NodeRenderMode = 'spheres' | 'icons';
-export type DagMode = 'td' | 'bu' | 'lr' | 'rl' | 'zout' | 'zin' | 'radialout' | 'radialin' | null;
+export enum NodeRenderMode {
+  Spheres = 'spheres',
+  Icons = 'icons',
+}
+
+export enum DagMode {
+  TopDown = 'td',
+  BottomUp = 'bu',
+  LeftRight = 'lr',
+  RightLeft = 'rl',
+  ZOut = 'zout',
+  ZIn = 'zin',
+  RadialOut = 'radialout',
+  RadialIn = 'radialin',
+}
 
 export interface GraphControls {
   filterChildless: boolean;
@@ -39,10 +52,12 @@ export interface GraphControls {
   warmupTicks: number;
   cooldownTime: number;
   // layout
-  dagMode: DagMode;
+  dagMode: DagMode | null;
   dagLevelDistance: number | null;
   numDimensions: 2 | 3;
   showGrid: boolean;
+  // size-aware auto-scaling: tracks which keys the user has manually changed
+  userOverrides: Set<string>;
 }
 
 export type SelectedElement = { kind: 'node'; id: string; label: string } | { kind: 'link'; source: string; target: string; label: string };
@@ -82,11 +97,19 @@ export type DisplayAction =
       state: number;
     }
   | { type: 'chargeStrength' | 'velocityDecay' | 'warmupTicks' | 'cooldownTime'; state: number }
-  | { type: 'dagMode'; state: DagMode }
+  | { type: 'dagMode'; state: DagMode | null }
   | { type: 'dagLevelDistance'; state: number | null }
-  | { type: 'numDimensions'; state: 2 | 3 };
+  | { type: 'numDimensions'; state: 2 | 3 }
+  | { type: 'applySizeDefaults'; state: Partial<GraphControls> }
+  | { type: 'resetSizeOverrides' };
 
-export type SectionKey = 'graph' | 'forces' | 'nodes' | 'edges' | 'export';
+export enum SectionKey {
+  Graph = 'graph',
+  Forces = 'forces',
+  Nodes = 'nodes',
+  Edges = 'edges',
+  Export = 'export',
+}
 
 export type SectionProps = {
   controls: GraphControls;
@@ -95,5 +118,6 @@ export type SectionProps = {
 
 export type GraphSectionProps = SectionProps & {
   graphId: string;
-  graphInstance: ForceGraph3DInstance | null;
+  graphInstance: GraphInstance | null;
+  nodeCount: number;
 };

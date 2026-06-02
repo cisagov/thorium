@@ -3,7 +3,8 @@ import styled from 'styled-components';
 import AlertBanner from './AlertBanner';
 
 const PageWrapper = styled.div`
-  top: 60px;
+  /* offset below the fixed nav bar (47px tall); use margin since 'top' has no effect on this static element */
+  margin-top: 60px;
   margin-left: 10rem;
   margin-right: 0.75rem;
   display: flex;

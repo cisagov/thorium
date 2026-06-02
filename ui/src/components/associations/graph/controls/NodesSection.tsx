@@ -1,6 +1,7 @@
 import React from 'react';
 import { Dropdown, Form } from 'react-bootstrap';
 
+import { NodeRenderMode } from './types';
 import type { SectionProps } from './types';
 import { PopoverBody, Divider, MenuList, MenuDropdown } from './Toolbar.styled';
 import LabeledRange from './LabeledRange';
@@ -18,8 +19,8 @@ const NodesSection: React.FC<SectionProps> = ({ controls, updateControls }) => (
           {NODE_STYLE_LABELS[controls.nodeRenderMode]}
         </Dropdown.Toggle>
         <Dropdown.Menu>
-          <Dropdown.Item onClick={() => updateControls({ type: 'nodeRenderMode', state: 'spheres' })}>Spheres</Dropdown.Item>
-          <Dropdown.Item onClick={() => updateControls({ type: 'nodeRenderMode', state: 'icons' })}>Icons</Dropdown.Item>
+          <Dropdown.Item onClick={() => updateControls({ type: 'nodeRenderMode', state: NodeRenderMode.Spheres })}>Spheres</Dropdown.Item>
+          <Dropdown.Item onClick={() => updateControls({ type: 'nodeRenderMode', state: NodeRenderMode.Icons })}>Icons</Dropdown.Item>
         </Dropdown.Menu>
       </MenuDropdown>
     </MenuList>

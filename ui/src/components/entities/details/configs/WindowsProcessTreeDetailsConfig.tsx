@@ -53,16 +53,12 @@ const ProcessTreeMetaInfo = ({
 };
 
 // Get process tree details from the API
-const getProcessTreeDetails = async (
-  vendorID: string,
-  setError: (err: string) => void,
-  updateEntity: (entity: WindowsProcessTree) => void,
-) => {
-  getEntity(vendorID, setError).then((data) => {
+const getProcessTreeDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (entity: WindowsProcessTree) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of ProcessTree kind
     if (data && data.kind == Entities.WindowsProcessTree) {
       // we know that any entity response with kind=ProcessTree is a ProcessTree
-      const tree = data as WindowsProcessTree;
+      const tree = data;
       updateEntity(tree);
     }
   });

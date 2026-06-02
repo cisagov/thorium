@@ -1,6 +1,5 @@
 import { JSX } from 'react';
 import { Row } from 'react-bootstrap';
-import { getNames as getCountryNames, Country } from 'country-list';
 
 // project imports
 import { EntityCreateConfig } from './config';
@@ -8,12 +7,10 @@ import { CreateMetadataProps } from '../EntityCreate';
 import InfoHeader from '@entities/shared/InfoHeader';
 import InfoValue from '@entities/shared/InfoValue';
 import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
+import { CountryNames } from '@entities/shared/countries';
 import { Entities } from '@models/entities/entities';
 import { CriticalSector } from '@models/entities/sectors';
 import { BlankCreateVendor, VendorCreateMetaFields } from '@models/entities/vendors';
-
-// country names used in SelectInputArray options for vendor country
-const CountryNames = getCountryNames();
 
 const VendorMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.Vendor>): JSX.Element => {
   // update metadata and then pass back to entity update
@@ -55,6 +52,7 @@ const VendorCreateConfig: EntityCreateConfig<Entities.Vendor> = {
   kind: Entities.Vendor,
   EntityMetadata: VendorMetaInfo,
   BlankCreateEntity: BlankCreateVendor,
+  supportsGraphic: true,
 };
 
 export default VendorCreateConfig;

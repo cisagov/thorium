@@ -1,7 +1,7 @@
 // project imports
 import { Bounds, CanvasType } from '../bounds';
 
-// window wrapper, we don't use styled components here because of the repetitive setting of element size/width which would result in many style sheets being created
+// Inline styles used instead of styled-components to avoid generating a new stylesheet on every position/size change
 const OverlayWrapper: React.FC<{
   children: any;
   className?: string;

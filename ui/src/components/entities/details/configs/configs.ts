@@ -19,6 +19,7 @@ export type EntityDetailsConfig<T extends keyof EntityTypeMap> = {
   EntityMetaInfo: MetadataComponent<T>;
   BlankEntity: EntityTypeMap[T];
   icon: (size: number) => JSX.Element;
+  supportsGraphic?: boolean;
 };
 
 type EntityConfigMap = {

@@ -1,53 +1,36 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Col, Row } from 'react-bootstrap';
 import { useNavigate } from 'react-router';
 
 // project imports
-import { OverlayTipLeft, OverlayTipRight } from '@components/shared/overlay/tips';
-import Title from '@components/shared/titles/Title';
-import { Entities } from '@models/entities';
-import { Filters, FilterTypes } from '@models/search';
 import { getCreatePathByEntity } from '@components/entities/create/EntityCreateRoutes';
 import { OmnibarStandardTimeFilters } from '@components/pages/search/omnibar/Bars';
 import { Clause, DefaultClausesEntities } from '@components/pages/search/omnibar/ClauseTypes';
 import { TimeSelection } from '@components/pages/search/omnibar/timepicker/utils';
+import { OverlayTipLeft } from '@components/shared/overlay/tips';
+import Title from '@components/shared/titles/Title';
 import { OmniClauseAndTimeToFilter } from '@utilities/search';
-import { OverlayWindow, PositionType } from '@components/shared/windows';
-import { Placement } from '@components/shared/overlay/OverlayTip';
-import FilterFields from './FilterFields';
-import { FaFilter } from 'react-icons/fa6';
+import { Entities } from '@models/entities';
+import { Filters } from '@models/search';
 
 interface BrowsingFiltersProps {
   onChange: (filters: Filters) => void; // call back to change filters
   disabled?: boolean; // whether changes to filters are disabled
   title?: string; // name of entity type being listed
-  groups: Array<string>; // the groups a user can select from
-  exclude?: FilterTypes[];
   creatable?: boolean; // link to create page with button
   kind?: Entities;
 }
 
-const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
-  onChange,
-  groups,
-  disabled = false,
-  title = null,
-  exclude = [],
-  kind,
-  creatable = false,
-}) => {
+const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({ onChange, disabled = false, title = null, kind, creatable = false }) => {
   const navigate = useNavigate();
-  // show filters or don't
   const [clauses, setClauses] = useState<Clause[]>(DefaultClausesEntities());
   const [time, setTime] = useState<TimeSelection>({ mode: 'all' });
-  const [hideFilters, setHideFilters] = useState(true);
-  const filterRef = useRef(null);
 
+  // seed the parent's filters from the default clauses on mount so the initial list loads
   useEffect(() => {
     onChange(OmniClauseAndTimeToFilter(clauses, time));
   }, []);
 
-  // create ref for positioning filter window
   return (
     <>
       <Row className="align-items-center">
@@ -64,7 +47,7 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
                 className="ok-btn my-3"
                 variant=""
                 disabled={disabled}
-                onClick={() => navigate(`${getCreatePathByEntity(kind ? kind : Entities.Other)}`)}
+                onClick={() => void navigate(`${getCreatePathByEntity(kind ? kind : Entities.Other)}`)}
               >
                 <b>+</b>
               </Button>
@@ -82,7 +65,7 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
             }}
             time={time}
             setTime={(next) => {
-              setTime(time);
+              setTime(next);
               onChange(OmniClauseAndTimeToFilter(clauses, next));
             }}
           />

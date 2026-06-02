@@ -56,6 +56,7 @@ export const BlankCollection: Collection = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateCollection: CreateCollection = {

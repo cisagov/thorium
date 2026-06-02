@@ -1,44 +1,49 @@
-// import the base client function that loads from the config
-// and injects the token via axios intercepts
 import client, { parseRequestError } from './client';
+import type { AxiosResponse } from './client';
+
+// project imports
+import { OutputMap } from '@models/results';
 
 /**
- * Get results for a hash.
- * @async
- * @function
- * @param {string} sha256 - hash of sample to get results for
- * @param {(error: string) => void} errorHandler - error handler function
- * @param {object} data - search parameters to retrieve results can include
- *     groups: list of groups results can be member of
- *     tools: list of tools to get results for
- * @returns {Promise<any | null>} - results dict
+ * Fetch all tool results for a file (`GET /files/results/{sha256}`).
+ *
+ * @param sha256 - The SHA256 of the file whose results to fetch.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @param data - Optional axios request config (e.g. `params` to filter by tool/group).
+ * @returns The {@link OutputMap} of tool results keyed by tool, or `null` if the request failed.
  */
-export async function getResults(sha256: string, errorHandler: (error: string) => void, data = {}): Promise<any | null> {
+export async function getResults(
+  sha256: string,
+  errorHandler: (error: string) => void,
+  data: Record<string, unknown> = {},
+): Promise<OutputMap | null> {
   const url = '/files/results/' + sha256;
   return client
-    .get(url, data)
+    .get<OutputMap>(url, data)
     .then((res) => {
       if (res?.status == 200 && res.data) {
         return res.data;
       }
       return null;
     })
-    .catch((error) => {
-      parseRequestError(error, errorHandler, 'Delete User');
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Get Results');
       return null;
     });
 }
 
 /**
- * Get results for a hash.
- * @async
- * @function
- * @param {string} sha256 - hash of sample to get results for
- * @param {string} tool - name of image that created the result
- * @param {string} id - id of the result
- * @param {string} name - name of result file to retrieve
- * @param {(error: string) => void} errorHandler - error handler function
- * @returns {Promise<any | null>} - results dict
+ * Download a single result file produced by a tool run (`GET /files/result-files/{sha256}/{tool}/{id}`).
+ *
+ * The raw axios response is returned (rather than just the body) so callers can read response
+ * headers when saving the file.
+ *
+ * @param sha256 - The SHA256 of the file the result belongs to.
+ * @param tool - The tool that produced the result.
+ * @param id - The id of the specific result/run.
+ * @param name - The name of the result file to download (sent as the `result_file` query param).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The axios response with the result file bytes as an `ArrayBuffer`, or `null` if the request failed.
  */
 export async function getResultsFile(
   sha256: string,
@@ -46,22 +51,20 @@ export async function getResultsFile(
   id: string,
   name: string,
   errorHandler: (error: string) => void,
-): Promise<any | null> {
+): Promise<AxiosResponse<ArrayBuffer> | null> {
   const url = `/files/result-files/${sha256}/${tool}/${id}`;
-  // add the name of the result file to our params
   const data = {
     result_file: name,
   };
   return client
-    .get(url, { params: data, responseType: 'arraybuffer' })
+    .get<ArrayBuffer>(url, { params: data, responseType: 'arraybuffer' })
     .then((res) => {
       if (res?.status == 200) {
-        // return full res, we may need the headers to build out a file object
         return res;
       }
       return null;
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Get Results File');
       return null;
     });

@@ -1,51 +1,60 @@
+import type { CSSObjectWithLabel } from 'react-select';
 import '@styles/main.scss';
 
+/**
+ * Build a react-select `styles` config wired to Thorium's theme CSS variables.
+ *
+ * Most colors are driven by `--thorium-*` variables so the control follows the active theme; the
+ * `color`/`backgroundColor` arguments only customize the multi-value "chip" and option hover.
+ *
+ * @param color - Text color applied to selected multi-value chips.
+ * @param backgroundColor - Background color applied to multi-value chips and option hover.
+ * @returns A styles object suitable for the `styles` prop of a react-select component.
+ */
 export const createReactSelectStyles = (color: string, backgroundColor: string) => {
-  const newStyleTemplate = {
-    input: (base: any) => ({
+  return {
+    input: (base: CSSObjectWithLabel) => ({
       ...base,
       color: 'var(--thorium-secondary-text)',
-      //backgroundColor: 'yellow'
     }),
-    singleValue: (base: any) => ({
+    singleValue: (base: CSSObjectWithLabel) => ({
       ...base,
       color: 'var(--thorium-text)',
     }),
-    control: (base: any, state: any) => ({
+    control: (base: CSSObjectWithLabel, state: { isFocused: boolean }) => ({
       ...base,
       color: 'white',
       background: 'var(--thorium-secondary-panel-bg)',
       borderColor: state.isFocused ? 'var(--thorium-highlight-panel-border)' : 'var(--thorium-panel-border)',
-      boxShadow: state.isFocused ? null : null,
+      boxShadow: 'none',
       '&:hover': {
         borderColor: state.isFocused ? 'var(--thorium-highlight-panel-border)' : 'var(--thorium-panel-border)',
       },
     }),
-    menu: (base: any) => ({
+    menu: (base: CSSObjectWithLabel) => ({
       ...base,
       backgroundColor: 'var(--thorium-secondary-panel-bg)',
     }),
-    menuList: (base: any) => ({
+    menuList: (base: CSSObjectWithLabel) => ({
       ...base,
       backgroundColor: 'var(--thorium-secondary-panel-bg)',
     }),
-    option: (base: any) => ({
+    option: (base: CSSObjectWithLabel) => ({
       ...base,
       background: 'var(--thorium-secondary-panel-bg)',
       '&:hover': {
         background: backgroundColor,
       },
     }),
-    multiValue: (provided: any) => ({
+    multiValue: (provided: CSSObjectWithLabel) => ({
       ...provided,
       color: color,
       backgroundColor: backgroundColor,
     }),
-    multiValueLabel: (provided: any) => ({
+    multiValueLabel: (provided: CSSObjectWithLabel) => ({
       ...provided,
       color: color,
       backgroundColor: backgroundColor,
     }),
   };
-  return newStyleTemplate;
 };

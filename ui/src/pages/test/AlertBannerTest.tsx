@@ -1,3 +1,4 @@
+import { ErrorBoundary } from 'react-error-boundary';
 import { Col, Row } from 'react-bootstrap';
 import styled from 'styled-components';
 
@@ -5,6 +6,12 @@ import Page from '@components/pages/Page';
 import Title from '@components/shared/titles/Title';
 import Subtitle from '@components/shared/titles/Subtitle';
 import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
+import RenderErrorAlert from '@components/shared/alerts/RenderErrorAlert';
+
+// Throws during render to exercise an ErrorBoundary (driven by render-error.spec.ts)
+const Thrower = () => {
+  throw new Error('Intentional render error for verification');
+};
 
 const Section = styled.div`
   margin-bottom: 2rem;
@@ -19,6 +26,23 @@ const SectionLabel = styled.h5`
 `;
 
 const AlertBannerTest = () => {
+  // Query params drive render-error scenarios for render-error.spec.ts
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('crash') === '1') {
+    // page=true: error propagates to the top-level ErrorBoundary in Thorium.tsx
+    return <Thrower />;
+  }
+  if (params.get('inline') === '1') {
+    // page=false: a nested boundary renders the inline alert (as AssociationGraph/Tree do)
+    return (
+      <Page title="Inline Render Error Test">
+        <div data-testid="inline-marker">marker above inline boundary</div>
+        <ErrorBoundary fallback={<RenderErrorAlert page={false} />}>
+          <Thrower />
+        </ErrorBoundary>
+      </Page>
+    );
+  }
   return (
     <Page title="AlertBanner Test">
       <Title>AlertBanner Component Test</Title>

@@ -28,6 +28,7 @@ const EdgesSection: React.FC<SectionProps> = ({ controls, updateControls }) => (
     <LabeledRange
       id="form-link-strength"
       label="Strength"
+      tooltip="How rigidly edges maintain their target length"
       value={controls.edgeLinkStrength}
       min={0.1}
       max={2.0}
@@ -58,6 +59,7 @@ const EdgesSection: React.FC<SectionProps> = ({ controls, updateControls }) => (
     <LabeledRange
       id="form-particles"
       label="Particles"
+      tooltip="Animated dots showing edge direction"
       value={controls.directionalParticles}
       min={0}
       max={10}

@@ -7,11 +7,12 @@ import { OverlayTipBottom } from '@components/shared/overlay/tips';
 type EntityDetailsLabelProps = {
   label: string;
   tip: string;
+  bold?: boolean;
 };
 
-const EntityDetailsLabel: React.FC<EntityDetailsLabelProps> = ({ label, tip }) => {
+const EntityDetailsLabel: React.FC<EntityDetailsLabelProps> = ({ label, tip, bold }) => {
   return (
-    <InfoHeader>
+    <InfoHeader $bold={bold}>
       {label}
       <OverlayTipBottom tip={tip}>
         <FaQuestionCircle />

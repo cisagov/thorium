@@ -1,5 +1,5 @@
 import React, { Fragment } from 'react';
-import { Col, Row } from 'react-bootstrap';
+import styled from 'styled-components';
 
 // project imports
 import TagBadge from '../TagBadge';
@@ -7,6 +7,12 @@ import { DangerTagKeys, MitreTagKeys, FormattedFileInfoTagKeys } from '../tag_gr
 import { filterIncludedTags, filterExcludedTags } from '../utilities';
 import { Tags } from '@models/tags';
 import { Entities } from '@models/entities';
+
+const TagContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+`;
 
 interface CondensedFileTagProps {
   tags: Tags; // tags to display in condensed non-editable view
@@ -32,106 +38,97 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
   return (
     <Fragment>
       {tagCount > 0 && <hr />}
-      <Row>
-        <Col className="d-flex justify-content-center wrap">
-          {Object.keys(generalTags)
-            .sort()
-            .map((tagKey) =>
-              Object.keys(generalTags[tagKey])
-                .sort()
-                .map((tagValue) => (
-                  <TagBadge
-                    resource={Entities.File}
-                    key={'General_' + tagValue}
-                    tag={tagKey}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
-                )),
-            )}
-          {Object.keys(dangerTags)
-            .sort()
-            .map((tagKey) =>
-              Object.keys(dangerTags[tagKey])
-                .sort()
-                .map((tagValue) => (
-                  <TagBadge
-                    resource={Entities.File}
-                    key={'FileInfo_' + tagValue}
-                    tag={tagKey}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
-                )),
-            )}
-          {Object.keys(attackTags)
-            .sort()
-            .map((tagKey) =>
-              Object.keys(attackTags[tagKey])
-                .sort()
-                .map((tagValue) => (
-                  <TagBadge
-                    resource={Entities.File}
-                    key={'Attack_' + tagValue}
-                    tag={'ATT&CK'}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
-                )),
-            )}
-          {Object.keys(mbcTags)
-            .sort()
-            .map((tagKey) =>
-              Object.keys(mbcTags[tagKey])
-                .sort()
-                .map((tagValue) => (
-                  <TagBadge
-                    resource={Entities.File}
-                    key={'MBC_' + tagValue}
-                    tag={'MBC'}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
-                )),
-            )}
-          {Object.keys(fileInfoTags)
-            .sort()
-            .map((tagKey) =>
-              Object.keys(fileInfoTags[tagKey])
-                .sort()
-                .map((tagValue) => (
-                  <TagBadge
-                    resource={Entities.File}
-                    key={'FileInfo_' + tagValue}
-                    tag={tagKey}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
-                )),
-            )}
-          {Object.keys(resultsTags)
-            .sort()
-            .map((tagKey) =>
-              Object.keys(resultsTags[tagKey])
-                .sort()
-                .map((tagValue) => (
-                  <TagBadge
-                    resource={Entities.File}
-                    key={'Results_' + tagValue}
-                    tag={tagKey}
-                    value={tagValue}
-                    condensed={true}
-                    action={'link'}
-                  />
-                )),
-            )}
-        </Col>
-      </Row>
+      <TagContainer>
+        {Object.keys(generalTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(generalTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge
+                  resource={Entities.File}
+                  key={'General_' + tagValue}
+                  tag={tagKey}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
+              )),
+          )}
+        {Object.keys(dangerTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(dangerTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge
+                  resource={Entities.File}
+                  key={'FileInfo_' + tagValue}
+                  tag={tagKey}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
+              )),
+          )}
+        {Object.keys(attackTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(attackTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge
+                  resource={Entities.File}
+                  key={'Attack_' + tagValue}
+                  tag={'ATT&CK'}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
+              )),
+          )}
+        {Object.keys(mbcTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(mbcTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge resource={Entities.File} key={'MBC_' + tagValue} tag={'MBC'} value={tagValue} condensed={true} action={'link'} />
+              )),
+          )}
+        {Object.keys(fileInfoTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(fileInfoTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge
+                  resource={Entities.File}
+                  key={'FileInfo_' + tagValue}
+                  tag={tagKey}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
+              )),
+          )}
+        {Object.keys(resultsTags)
+          .sort()
+          .map((tagKey) =>
+            Object.keys(resultsTags[tagKey])
+              .sort()
+              .map((tagValue) => (
+                <TagBadge
+                  resource={Entities.File}
+                  key={'Results_' + tagValue}
+                  tag={tagKey}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
+              )),
+          )}
+      </TagContainer>
     </Fragment>
   );
 };

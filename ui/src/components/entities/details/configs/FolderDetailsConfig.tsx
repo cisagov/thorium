@@ -12,18 +12,18 @@ import { Entities } from '@models/entities/entities';
 import { BlankFolder, Folder } from '@models/entities/folders';
 
 // Get filesystem details from the API
-const getFolderDetails = async (vendorID: string, setError: (err: string) => void, updateEntity: (entity: Folder) => void) => {
-  getEntity(vendorID, setError).then((data) => {
+const getFolderDetails = (vendorID: string, setError: (err: string) => void, updateEntity: (entity: Folder) => void) => {
+  void getEntity(vendorID, setError).then((data) => {
     // check data is not null and is of Folder kind
     if (data && data.kind == Entities.Folder) {
       // we know that any entity response with kind=Folder is a Folder
-      const folder = data as Folder;
+      const folder = data;
       updateEntity(folder);
     }
   });
 };
 
-const FolderMetaInfo = ({ entity, pendingEntity, handleUpdate, editing }: DetailsMetadataProps<Entities.Folder>): JSX.Element => {
+const FolderMetaInfo = ({ entity }: DetailsMetadataProps<Entities.Folder>): JSX.Element => {
   return (
     <>
       <Row>

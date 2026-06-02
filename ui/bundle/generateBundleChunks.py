@@ -3,19 +3,23 @@
 generateBundleChunks.py  (hybrid: npm-ls universe + node_modules manifest edges)
 
 What this does:
-1) Uses `npm ls --all --json --omit=dev` (unless --include-dev) to get the
+1) Reads chunk group definitions from a TOML config file (default: chunks.toml
+   in the same directory as this script).
+2) Uses `npm ls --all --json --omit=dev` (unless --include-dev) to get the
    *production* universe of installed packages (prevents dev toolchain noise).
-2) Uses package.json top-level deps as seeds for non-default chunk groups.
-3) Computes each group's transitive closure by reading installed manifests:
+3) Uses package.json top-level deps as seeds for non-default chunk groups.
+4) Computes each group's transitive closure by reading installed manifests:
       node_modules/<pkg>/package.json  (dependencies + optional/peer if enabled)
    but ONLY traversing packages that are in the npm-ls universe.
    (This captures hoisted deps accurately while staying in prod universe.)
-4) "vendors" wins on overlap among non-default groups:
+5) "vendors" wins on overlap among non-default groups:
       - pkg in >=2 closures => vendors
       - pkg in exactly 1 closure => assigned to that group
       - vendors = universe - uniquely_assigned
-5) Cycle detection now uses the same manifest-derived dependency edges to build
-   a chunk->chunk graph and find SCC cycles. If a cycle involves any non-vendor
+6) Packages in non-default chunks that are depended upon by vendors packages
+   are promoted to vendors (prevents vendors->chunk edges that cause cycles).
+7) Cycle detection uses manifest-derived dependency edges to build a
+   chunk->chunk graph and find SCC cycles. If a cycle involves any non-vendor
    chunk, those chunks are moved into vendors.
 
 Troubleshooting:
@@ -32,45 +36,31 @@ import argparse
 import json
 import re
 import subprocess
+import tomllib
 from collections import Counter, deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 
-# ---------------- Non-default chunks (only these are specified) --------------
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG = SCRIPT_DIR / "chunks.toml"
 
-NON_DEFAULT_GROUPS: List[Tuple[str, List[str]]] = [
-    ("graph", [
-        r"^cytoscape($|-)",
-        r"^@headless-tree($|-|/)",
-    ]),
-    ("react", [
-        r"^react$",
-        r"^react-dom$",
-        r"^react-is$",
-        r"^react-router(-dom)?$",
-        r"^scheduler$",
-        r"^classnames$",
-    ]),
-    ("core-js", [
-        r"^core-js$",
-    ]),
-    ("vendors-tools", [
-        #r"^remark-gfm$", # used by pipeline descriptions, tools
-        #r"^react-markdown$", # used by pipeline descriptions, tools
-        r"^react-xml-viewer$",
-        r"^react-json-tree$",
-        r"^react-syntax-highlighter$", # has babel handler dep
-        #r"^sanitize-html$", # has overlapping dependency from domhandler
-    ]),
-    ("date", [
-        r"^react-datepicker$",
-        r"^date-fns$",
-    ]),
-]
 
-DEFAULT_GROUP = "vendors"
+# ---------------- Config loading (TOML) ---------------------------------------
+
+def load_config(config_path: Path) -> Tuple[List[Tuple[str, List[str]]], str]:
+    """Load chunk group definitions from a TOML config file."""
+    data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    default_group = data.get("default_group", "vendors")
+    groups_data = data.get("groups", {})
+    groups: List[Tuple[str, List[str]]] = []
+    for name, spec in groups_data.items():
+        patterns = spec.get("patterns", [])
+        if not isinstance(patterns, list):
+            raise ValueError(f"groups.{name}.patterns must be a list of strings")
+        groups.append((name, patterns))
+    return groups, default_group
 
 
 # ---------------- Helpers: package.json + npm ls ----------------------------
@@ -180,6 +170,45 @@ def closure_from_seeds_manifest(
                 q.append(dep)
 
     return seen
+
+
+# ---------------- Vendor promotion (prevent vendors->chunk edges) ----------
+
+def promote_vendor_deps(
+    node_modules: Path,
+    non_default_chunks: Dict[str, Set[str]],
+    assigned_non_default: Set[str],
+    vendors: Set[str],
+    universe: Set[str],
+    include_optional: bool,
+    include_peer: bool,
+) -> Set[str]:
+    """
+    Move non-default packages to vendors if any vendors package depends on them.
+    This prevents vendors->chunk edges that would cause cycles.
+    Iterates to fixpoint since each move can expose new edges.
+    Returns the set of promoted package names.
+    """
+    promoted: Set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for v_pkg in list(vendors):
+            m = read_installed_manifest(node_modules, v_pkg)
+            if not m:
+                continue
+            for dep in manifest_deps(m, include_optional, include_peer):
+                if dep not in universe or dep not in assigned_non_default:
+                    continue
+                for gname in list(non_default_chunks.keys()):
+                    if dep in non_default_chunks[gname]:
+                        non_default_chunks[gname].discard(dep)
+                        vendors.add(dep)
+                        assigned_non_default.discard(dep)
+                        promoted.add(dep)
+                        changed = True
+                        break
+    return promoted
 
 
 # ---------------- Cycle detection on chunk graph (manifest edges) ------------
@@ -305,6 +334,8 @@ def witnesses_for_component_prioritized(
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default=str(DEFAULT_CONFIG),
+                    help="Path to TOML config file defining chunk groups (default: chunks.toml next to this script)")
     ap.add_argument("--project", default=".", help="Project directory containing package.json")
     ap.add_argument("--include-dev", action="store_true",
                     help="Include devDependencies and run npm ls without --omit=dev (usually not desired)")
@@ -321,18 +352,21 @@ def main() -> int:
     ap.add_argument("--cycle-witness-limit", type=int, default=200, help="Max witness edges printed per SCC")
     args = ap.parse_args()
 
+    config_path = Path(args.config)
+    non_default_groups, default_group = load_config(config_path)
+
     project = Path(args.project).resolve()
     pkg = read_json(project / "package.json")
     node_modules = project / "node_modules"
 
-    compiled = compile_groups(NON_DEFAULT_GROUPS)
+    compiled = compile_groups(non_default_groups)
     top = top_level_deps(pkg, include_dev=args.include_dev)
 
     npm_tree = run_npm_ls(project, include_dev=args.include_dev)
     universe = npm_ls_universe(npm_tree)
 
     # Seeds: only top-level deps that match a non-default group pattern AND are in universe.
-    seeds_by_group: Dict[str, Set[str]] = {g: set() for g, _ in NON_DEFAULT_GROUPS}
+    seeds_by_group: Dict[str, Set[str]] = {g: set() for g, _ in non_default_groups}
     for dep in sorted(top):
         if dep not in universe:
             continue
@@ -342,7 +376,7 @@ def main() -> int:
 
     # Closures: manifest traversal restricted to universe (captures hoisting)
     closure_by_group: Dict[str, Set[str]] = {}
-    for gname, _ in NON_DEFAULT_GROUPS:
+    for gname, _ in non_default_groups:
         closure_by_group[gname] = closure_from_seeds_manifest(
             node_modules=node_modules,
             seeds=seeds_by_group[gname],
@@ -357,7 +391,7 @@ def main() -> int:
         counts.update(pkgs)
 
     # Assign uniquely to non-default; shared goes to vendors
-    non_default_chunks: Dict[str, Set[str]] = {g: set() for g, _ in NON_DEFAULT_GROUPS}
+    non_default_chunks: Dict[str, Set[str]] = {g: set() for g, _ in non_default_groups}
     assigned_non_default: Set[str] = set()
     for gname, pkgs in closure_by_group.items():
         for p in pkgs:
@@ -367,9 +401,20 @@ def main() -> int:
 
     vendors: Set[str] = set(p for p in universe if p not in assigned_non_default)
 
+    # Promote non-default packages to vendors if vendors packages depend on them
+    promoted = promote_vendor_deps(
+        node_modules=node_modules,
+        non_default_chunks=non_default_chunks,
+        assigned_non_default=assigned_non_default,
+        vendors=vendors,
+        universe=universe,
+        include_optional=args.include_optional,
+        include_peer=args.include_peer,
+    )
+
     # Cycle detection (manifest-based chunk graph)
     chunks_all: Dict[str, Set[str]] = dict(non_default_chunks)
-    chunks_all[DEFAULT_GROUP] = set(vendors)
+    chunks_all[default_group] = set(vendors)
 
     graph, witnesses = build_chunk_graph_and_witnesses_manifest(
         node_modules=node_modules,
@@ -386,10 +431,10 @@ def main() -> int:
         comp_set = set(comp)
         if len(comp_set) < 2:
             continue
-        if any(c != DEFAULT_GROUP for c in comp_set):
+        if any(c != default_group for c in comp_set):
             cycle_components.append(comp_set)
             cycle_chunks_to_vendor |= comp_set
-    cycle_chunks_to_vendor.discard(DEFAULT_GROUP)
+    cycle_chunks_to_vendor.discard(default_group)
 
     moved_packages: Dict[str, List[str]] = {}
     if cycle_chunks_to_vendor:
@@ -404,14 +449,14 @@ def main() -> int:
 
     # Final mapping
     final: Dict[str, Set[str]] = dict(non_default_chunks)
-    final[DEFAULT_GROUP] = vendors
+    final[default_group] = vendors
 
     # Diagnostics
     if args.print_seeds or args.print_stats or args.print_overlap or args.print_cycles or args.check:
         import sys
 
         if args.print_seeds:
-            for gname, _ in NON_DEFAULT_GROUPS:
+            for gname, _ in non_default_groups:
                 sys.stderr.write(f"{gname} seeds (top-level):\n")
                 for s in sorted(seeds_by_group[gname]):
                     sys.stderr.write(f"  - {s}\n")
@@ -423,13 +468,17 @@ def main() -> int:
             sys.stderr.write(f"top-level deps considered (package.json): {len(top)}\n")
             sys.stderr.write(f"production universe packages (npm ls): {len(universe)}\n\n")
             sys.stderr.write("closure sizes:\n")
-            for gname, _ in NON_DEFAULT_GROUPS:
+            for gname, _ in non_default_groups:
                 sys.stderr.write(
                     f"  - {gname}: seeds={len(seeds_by_group[gname])}, "
                     f"closure={len(closure_by_group[gname])}, unique_assigned={len(non_default_chunks[gname])}\n"
                 )
             sys.stderr.write(f"\nshared packages across non-default closures (count>=2): {len(shared)}\n")
             sys.stderr.write(f"vendors size: {len(vendors)}\n")
+            if promoted:
+                sys.stderr.write(f"promoted to vendors (vendor-depended): {len(promoted)}\n")
+                for p in sorted(promoted):
+                    sys.stderr.write(f"  - {p}\n")
             sys.stderr.write("\n")
 
         if args.print_overlap:
@@ -459,7 +508,7 @@ def main() -> int:
                 for comp_set in cycle_components:
                     sys.stderr.write(f"Cycle component: {', '.join(sorted(comp_set))}\n")
                     ws = witnesses_for_component_prioritized(
-                        comp_set, witnesses, DEFAULT_GROUP, limit=args.cycle_witness_limit
+                        comp_set, witnesses, default_group, limit=args.cycle_witness_limit
                     )
                     if ws:
                         sys.stderr.write("  Witness edges (srcChunk(srcPkg) -> dstChunk(dstPkg)):\n")
@@ -472,9 +521,9 @@ def main() -> int:
                     sys.stderr.write("\n")
 
                 if moved_packages:
-                    sys.stderr.write(f"Moved chunks to {DEFAULT_GROUP} due to cycles:\n")
+                    sys.stderr.write(f"Moved chunks to {default_group} due to cycles:\n")
                     for c in sorted(moved_packages.keys()):
-                        sys.stderr.write(f"  - {c} -> {DEFAULT_GROUP}: moved {len(moved_packages[c])} package(s)\n")
+                        sys.stderr.write(f"  - {c} -> {default_group}: moved {len(moved_packages[c])} package(s)\n")
                     sys.stderr.write("\n")
 
     out = {k: sorted(v) for k, v in final.items()}

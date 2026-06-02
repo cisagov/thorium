@@ -13,6 +13,10 @@ import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import { useAuth } from '../utilities/auth';
 import { getBanner } from '../thorpi/base';
 
+interface LocationState {
+  path?: string;
+}
+
 interface RegisterModalProps {
   show: boolean;
   onHide: () => void;
@@ -29,9 +33,9 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
   const [regWarning, setRegWarning] = useState('');
   const [registering, setRegistering] = useState(false);
   const { register } = useAuth();
-  const { state } = useLocation();
+  const { state } = useLocation() as { state: LocationState | null };
 
-  const handleRegister = async (username, email, pass, verifyPass) => {
+  const handleRegister = async (username: string, email: string, pass: string, verifyPass: string) => {
     // handleRegister is a form submit, we want to clear the warnings
     // related to form entry issues
     setRegWarning('');
@@ -44,15 +48,14 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
         setRegistering(false);
       } else {
         // create the user account
-        register(username, pass, setRegError, email, 'User').then((res) => {
-          // redirect after successful registration of user
-          if (res) {
-            onHide(); // Close modal after successful registration
-            navigate(state?.path || '/');
-          } else {
-            setRegistering(false);
-          }
-        });
+        const res = await register(username, pass, setRegError, email, 'User');
+        // redirect after successful registration of user
+        if (res) {
+          onHide(); // Close modal after successful registration
+          void navigate(state?.path || '/');
+        } else {
+          setRegistering(false);
+        }
       }
     } else {
       setRegWarning('You must specify a username and password!');
@@ -63,10 +66,10 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
   };
 
   // handle all key presses
-  const checkEnterSubmit = async (e) => {
+  const checkEnterSubmit = async (e: React.KeyboardEvent<HTMLElement>) => {
     // key code 13 is enter
     if (e.keyCode === 13) {
-      handleRegister(regUsername, regEmail, regPass, regVerifyPass);
+      await handleRegister(regUsername, regEmail, regPass, regVerifyPass);
     }
   };
 
@@ -89,7 +92,9 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
                   type="text"
                   placeholder="Enter Username"
                   value={regUsername}
-                  onKeyDown={(e) => checkEnterSubmit(e)}
+                  onKeyDown={(e) => {
+                    void checkEnterSubmit(e);
+                  }}
                   onChange={(e) => setRegUsername(String(e.target.value))}
                 />
               </Form.Group>
@@ -105,7 +110,9 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
                   type="text"
                   placeholder="Enter Email"
                   value={regEmail}
-                  onKeyDown={(e) => checkEnterSubmit(e)}
+                  onKeyDown={(e) => {
+                    void checkEnterSubmit(e);
+                  }}
                   onChange={(e) => setRegEmail(String(e.target.value))}
                 />
               </Form.Group>
@@ -121,7 +128,9 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
                   type="password"
                   placeholder="Enter Password"
                   value={regPass}
-                  onKeyDown={(e) => checkEnterSubmit(e)}
+                  onKeyDown={(e) => {
+                    void checkEnterSubmit(e);
+                  }}
                   onChange={(e) => setRegPass(String(e.target.value))}
                 />
                 {localAuth && (
@@ -133,7 +142,9 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
                       type="password"
                       placeholder="Verify Password"
                       value={regVerifyPass}
-                      onKeyDown={(e) => checkEnterSubmit(e)}
+                      onKeyDown={(e) => {
+                        void checkEnterSubmit(e);
+                      }}
                       onChange={(e) => setRegVerifyPass(String(e.target.value))}
                     />
                   </>
@@ -156,7 +167,12 @@ const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
           ) : (
             <Row>
               <Col className="d-flex justify-content-center">
-                <Button className="ok-btn m-2" onClick={() => handleRegister(regUsername, regEmail, regPass, regVerifyPass)}>
+                <Button
+                  className="ok-btn m-2"
+                  onClick={() => {
+                    void handleRegister(regUsername, regEmail, regPass, regVerifyPass);
+                  }}
+                >
                   Submit
                 </Button>
               </Col>
@@ -178,25 +194,25 @@ const Login = () => {
   const [banner, setBanner] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const navigate = useNavigate();
-  const { state } = useLocation();
+  const { state } = useLocation() as { state: LocationState | null };
   const { login } = useAuth();
 
   // login to Thorium and redirect if successful
-  const handleAuthFormSubmit = async (username, password, handleAuthErr) => {
+  const handleAuthFormSubmit = async (username: string, password: string, handleAuthErr: (error: string) => void) => {
     setLoggingIn(true);
     setLoginErr('');
     if (await login(username, password, handleAuthErr)) {
-      navigate(state?.path || '/');
+      void navigate(state?.path || '/');
     } else {
       setLoggingIn(false);
     }
   };
 
   // handle all key presses
-  const handleFormKeyPress = async (e) => {
+  const handleFormKeyPress = async (e: React.KeyboardEvent<HTMLElement>) => {
     // key code 13 is enter
     if (e.keyCode === 13) {
-      handleAuthFormSubmit(username, password, setLoginErr);
+      await handleAuthFormSubmit(username, password, setLoginErr);
     }
   };
 
@@ -210,7 +226,7 @@ const Login = () => {
 
   // async grab banner on page load
   useEffect(() => {
-    fetchBanner();
+    void fetchBanner();
   }, []);
 
   return (
@@ -239,7 +255,9 @@ const Login = () => {
                     value={username}
                     placeholder="username"
                     onChange={(e) => setUsername(String(e.target.value))}
-                    onKeyDown={(e) => handleFormKeyPress(e)}
+                    onKeyDown={(e) => {
+                      void handleFormKeyPress(e);
+                    }}
                   />
                 </Col>
               </Row>
@@ -251,7 +269,9 @@ const Login = () => {
                     value={password}
                     placeholder="password"
                     onChange={(e) => setPassword(String(e.target.value))}
-                    onKeyDown={(e) => handleFormKeyPress(e)}
+                    onKeyDown={(e) => {
+                      void handleFormKeyPress(e);
+                    }}
                   />
                 </Col>
               </Row>
@@ -275,7 +295,9 @@ const Login = () => {
                     <Col className="d-flex justify-content-center">
                       <Button
                         className="primary-btn"
-                        onClick={() => handleAuthFormSubmit(username, password, setLoginErr)}
+                        onClick={() => {
+                          void handleAuthFormSubmit(username, password, setLoginErr);
+                        }}
                         variant="success"
                       >
                         Login

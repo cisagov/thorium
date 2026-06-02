@@ -39,7 +39,12 @@ const ListCollectionButton: React.FC<ListCollectionProps> = ({ collection }) => 
   return (
     <>
       <OverlayTipBottom tip={`View files in collection "${collection.name}"`}>
-        <Button className="icon-btn mx-1" variant="" disabled={false} onClick={() => navigate(buildCollectionsBrowsingUrl(collection))}>
+        <Button
+          className="icon-btn mx-1"
+          variant=""
+          disabled={false}
+          onClick={() => void navigate(buildCollectionsBrowsingUrl(collection))}
+        >
           <FaMagnifyingGlass size={20} />
         </Button>
       </OverlayTipBottom>

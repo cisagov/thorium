@@ -16,7 +16,7 @@ const DeviceMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.Devic
   const [vendorsMap, setVendorsMap] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
-    getAvailableVendors(setVendorsMap);
+    void getAvailableVendors(setVendorsMap);
   }, []);
 
   // update metadata and then pass back to entity update
@@ -106,6 +106,7 @@ const DeviceCreateConfig: EntityCreateConfig<Entities.Device> = {
   kind: Entities.Device,
   EntityMetadata: DeviceMetaInfo,
   BlankCreateEntity: BlankCreateDevice,
+  supportsGraphic: true,
 };
 
 export default DeviceCreateConfig;

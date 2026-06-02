@@ -3,9 +3,71 @@ import type { Page } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 
+export const TEST_USER = process.env.THORIUM_USER || 'test';
+export const TEST_PASS = process.env.THORIUM_PASS || 'INSECURE_DEV_PASSWORD';
+
+export const MOCK_USER = {
+  username: 'test',
+  role: 'Admin',
+  email: 'test@thorium.dev',
+  groups: ['system'],
+  token: 'mock-token-for-visual-test',
+  token_expiration: '2099-01-01T00:00:00Z',
+  settings: { theme: 'Dark' },
+  local: true,
+  verified: true,
+};
+
+export async function loginViaUI(page: Page) {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('input[placeholder="username"]').fill(TEST_USER);
+  await page.locator('input[placeholder="password"]').fill(TEST_PASS);
+  await page.locator('button:has-text("Login")').click();
+  await page.waitForURL((url) => !url.pathname.includes('/auth'), { timeout: 15000 });
+}
+
+export async function setupMockAuth(page: Page) {
+  await page.route('**/api/users/whoami', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USER) }),
+  );
+  await page.route('**/api/**', (route) => {
+    const url = route.request().url();
+    if (url.includes('/users/whoami')) return route.fallback();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.context().addCookies([{
+    name: 'THORIUM_TOKEN',
+    value: MOCK_USER.token,
+    domain: 'localhost',
+    path: '/',
+  }]);
+}
+
+export async function waitForEditor(page: Page) {
+  await page.waitForSelector('.cm-editor', { timeout: 10000 });
+  await page.waitForTimeout(500);
+}
+
+export async function waitForLinter(page: Page) {
+  await page.waitForTimeout(600);
+}
+
+export async function setEditorContent(page: Page, text: string) {
+  await page.evaluate((content) => {
+    const container = document.querySelector('.cm-editor')?.parentElement as HTMLElement & { _cmView?: { state: { doc: { length: number } }; dispatch: (spec: unknown) => void } };
+    const view = container?._cmView;
+    if (view) {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: content },
+      });
+    }
+  }, text);
+}
+
 const API_URL = process.env.THORIUM_API_URL || 'http://localhost:8080';
 
-function buildClient(token?: string): AxiosInstance {
+export function buildClient(token?: string): AxiosInstance {
   const client = axios.create({ baseURL: `${API_URL}/api` });
   if (token) {
     const encoded = Buffer.from(token).toString('base64');
@@ -42,6 +104,25 @@ export async function createEntity(
   for (const group of groups) {
     form.append('groups', group);
   }
+  const res = await client.post('/entities/', form);
+  return res.data.id;
+}
+
+export async function createEntityWithImage(
+  token: string,
+  name: string,
+  kind: string,
+  groups: string[],
+  image: { data: Buffer; filename: string; contentType: string },
+): Promise<string> {
+  const client = buildClient(token);
+  const form = new FormData();
+  form.set('name', name);
+  form.set('kind', kind);
+  for (const group of groups) {
+    form.append('groups', group);
+  }
+  form.set('image', new Blob([image.data], { type: image.contentType }), image.filename);
   const res = await client.post('/entities/', form);
   return res.data.id;
 }
@@ -107,6 +188,102 @@ export async function createAssociation(
 ): Promise<void> {
   const client = buildClient(token);
   await client.post('/associations/', request);
+}
+
+export async function createImageViaAPI(
+  token: string,
+  imageRequest: Record<string, unknown>,
+): Promise<boolean> {
+  const client = buildClient(token);
+  const res = await client.post('/images/', imageRequest);
+  return res.status === 200 || res.status === 204;
+}
+
+export async function getImageViaAPI(
+  token: string,
+  group: string,
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  const client = buildClient(token);
+  try {
+    const res = await client.get(`/images/data/${group}/${name}`);
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateImageViaAPI(
+  token: string,
+  group: string,
+  name: string,
+  update: Record<string, unknown>,
+): Promise<boolean> {
+  const client = buildClient(token);
+  const res = await client.patch(`/images/${group}/${name}`, update);
+  return res.status === 200 || res.status === 204;
+}
+
+export async function deleteImageViaAPI(
+  token: string,
+  group: string,
+  name: string,
+): Promise<boolean> {
+  const client = buildClient(token);
+  try {
+    const res = await client.delete(`/images/${group}/${name}`);
+    return res.status === 200 || res.status === 204;
+  } catch {
+    return false;
+  }
+}
+
+export async function createPipelineViaAPI(
+  token: string,
+  pipelineRequest: Record<string, unknown>,
+): Promise<boolean> {
+  const client = buildClient(token);
+  const res = await client.post('/pipelines/', pipelineRequest);
+  return res.status === 200 || res.status === 204;
+}
+
+export async function getPipelineViaAPI(
+  token: string,
+  group: string,
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  const client = buildClient(token);
+  try {
+    const res = await client.get(`/pipelines/data/${group}/${name}`);
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function updatePipelineViaAPI(
+  token: string,
+  group: string,
+  name: string,
+  update: Record<string, unknown>,
+): Promise<boolean> {
+  const client = buildClient(token);
+  const res = await client.patch(`/pipelines/${group}/${name}`, update);
+  return res.status === 200 || res.status === 204;
+}
+
+export async function deletePipelineViaAPI(
+  token: string,
+  group: string,
+  name: string,
+): Promise<boolean> {
+  const client = buildClient(token);
+  try {
+    const res = await client.delete(`/pipelines/${group}/${name}`);
+    return res.status === 200 || res.status === 204;
+  } catch {
+    return false;
+  }
 }
 
 /**

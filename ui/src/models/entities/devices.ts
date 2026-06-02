@@ -49,6 +49,7 @@ export const BlankDevice: Device = {
   tags: {},
   submitter: '',
   created: '',
+  image: null,
 };
 
 export const BlankCreateDevice: CreateDevice = {

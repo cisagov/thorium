@@ -18,7 +18,7 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import { listEntities } from '@thorpi/entities';
 import { Filters } from '@models/search';
 import { Entities } from '@models/entities/entities';
-import { SigmaRule, SigmaRuleMeta } from '@models/entities/rules/sigma';
+import { SigmaRule } from '@models/entities/rules/sigma';
 import { getDetailsBasePathByEntity } from '../../details/EntityDetailsRoutes';
 
 interface SigmaRuleItemProps {
@@ -33,13 +33,9 @@ const SigmaRuleItem: React.FC<SigmaRuleItemProps> = ({ sigma }) => {
           <LinkFields>
             <EntityName>{sigma.name}</EntityName>
             <EntitySecondary>
-              {Object.keys((sigma.metadata as SigmaRuleMeta).SigmaRule.applies_to ?? {})
-                .sort()
-                .map((key) =>
-                  (sigma.metadata as SigmaRuleMeta).SigmaRule.applies_to.map((target, idx) => (
-                    <FieldBadge key={`${target}_${idx}`} color="gray" field={`${target}`} />
-                  )),
-                )}
+              {sigma.metadata.SigmaRule.applies_to.map((target, idx) => (
+                <FieldBadge key={`${target}_${idx}`} color="gray" field={`${target}`} />
+              ))}
             </EntitySecondary>
             <EntityGroups>
               <small>
@@ -55,11 +51,7 @@ const SigmaRuleItem: React.FC<SigmaRuleItemProps> = ({ sigma }) => {
           </LinkFields>
         </Link>
         {sigma.tags != undefined && <hr />}
-        <Row>
-          {sigma.tags && Object.keys(sigma.tags).length > 1 ? (
-            <CondensedEntityTags resource={Entities.SigmaRule} tags={sigma.tags} />
-          ) : null}
-        </Row>
+        {sigma.tags && Object.keys(sigma.tags).length > 1 ? <CondensedEntityTags resource={Entities.SigmaRule} tags={sigma.tags} /> : null}
       </BrowsingContents>
     </BrowsingCard>
   );

@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv} from 'vite'
+import { defineConfig } from 'vite'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import fs from "node:fs";
@@ -53,8 +53,7 @@ const chunkMap = loadChunkMap("./bundle/chunks.json");
 const chunkPackageMap = invertChunkMap(chunkMap);
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+export default defineConfig(() => {
   return {
     build: {
       sourcemap: false,
@@ -130,8 +129,6 @@ export default defineConfig(({ mode }) => {
         "Access-Control-Allow-Origin": "*",
       },
     },
-    define: {
-      'process.env.REACT_APP_API_URL': env && env.REACT_APP_API_URL ? JSON.stringify(env.REACT_APP_API_URL) : undefined,
-    }
+    envPrefix: ['VITE_', 'THORIUM_'],
   };
 });

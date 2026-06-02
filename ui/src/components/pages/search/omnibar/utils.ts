@@ -1,6 +1,6 @@
 import { ElasticIndex } from '@models/search';
 import { DropdownOption, EditSession, OmnibarEditMode } from './EditingTypes';
-import { Clause, ClauseDraft, ClauseIsMulti, GetConditionHelpText, GetValueString } from './ClauseTypes';
+import { Clause, ClauseCondition, ClauseDraft, ClauseIsMulti, GetConditionHelpText, GetValueString } from './ClauseTypes';
 import { multiCategories, OmnibarOptionMap } from './options';
 import { getTagColorClass } from '@components/tags';
 
@@ -188,6 +188,31 @@ export function getHiddenTagsFromClauses(clauses: Clause[]): string[] {
     }
   });
   return result;
+}
+
+/**
+ * Test whether a string `value` satisfies every clause targeting `field`, honoring each clause's
+ * condition: `includes` is a (case-sensitive) substring match, `is` (or any other single condition)
+ * is an exact match, and a multi-value condition (`is one of`) matches when `value` exactly equals
+ * one of the listed values. Returns `true` when no clause targets the field (i.e. no constraint).
+ *
+ * @param clauses - All active omnibar clauses.
+ * @param field - The clause field to match against (e.g. `'username'`, `'name'`, `'creator'`).
+ * @param value - The candidate value from the item being filtered.
+ * @returns `true` if the value satisfies all clauses for the field.
+ */
+export function matchesStringClauses(clauses: Clause[], field: string, value: string): boolean {
+  return clauses
+    .filter((clause) => clause.field == field)
+    .every((clause) => {
+      if (ClauseIsMulti(clause)) {
+        return clause.value.values.includes(value);
+      }
+      if (clause.condition === ClauseCondition.Includes) {
+        return value.includes(clause.value.value);
+      }
+      return value === clause.value.value;
+    });
 }
 
 export function getStringFieldListFromClauses(clauses: Clause[], field: string): string[] {
