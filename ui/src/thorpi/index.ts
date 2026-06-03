@@ -5,6 +5,7 @@ export * from './entities';
 export * from './files';
 export * from './groups';
 export * from './images';
+export * from './oauth';
 export * from './pipelines';
 export * from './reactions';
 export * from './repos';

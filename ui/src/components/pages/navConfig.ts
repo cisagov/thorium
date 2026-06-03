@@ -14,8 +14,6 @@ import {
   FaTools,
   FaUserShield,
   FaCodeBranch,
-  FaTachometerAlt,
-  FaExclamationTriangle,
 } from 'react-icons/fa';
 import { FaHardDrive, FaFolderTree } from 'react-icons/fa6';
 import { MdBusinessCenter } from 'react-icons/md';

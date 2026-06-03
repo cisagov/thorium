@@ -3,8 +3,6 @@
 use chrono::prelude::*;
 use uuid::Uuid;
 
-use crate::models::AuthResponse;
-
 use super::{UserRole, UserSettings};
 
 #[derive(Deserialize, Debug)]

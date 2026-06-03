@@ -3,11 +3,7 @@
   "description": "Web UI for Thorium 1.x",
   "type": "module",
   "private": true,
-<<<<<<< HEAD
   "version": "1.7.0",
-=======
-  "version": "1.107.0-0.24.0",
->>>>>>> e19fa4ff (feat(ui): Refactored JS components to TS)
   "scripts": {
     "lint": "node_modules/eslint/bin/eslint.js src",
     "fix": "node_modules/eslint/bin/eslint.js src --fix",

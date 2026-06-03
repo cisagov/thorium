@@ -1,8 +1,16 @@
-import { AxiosResponse } from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import client, { parseRequestError } from './client';
 
 // project imports
-import { UserAuthResponse, UserInfo } from '@models/users';
+import {
+  CreateUserResult,
+  EmailVerifyStatus,
+  PasswordAuthResult,
+  RawAuthResponse,
+  ResendVerificationResult,
+  ResendVerificationStatus,
+  UserInfo,
+} from '@models/users';
 
 /**
  * Authenticate with a username and password (`POST /users/auth`).
@@ -12,20 +20,27 @@ import { UserAuthResponse, UserInfo } from '@models/users';
  * @param username - The user's username.
  * @param password - The user's password.
  * @param errorHandler - Called with a formatted message if authentication fails.
- * @returns The {@link UserAuthResponse} (including the session token), or `null` if authentication failed.
+ * @returns A {@link PasswordAuthResult} (`authed` with a token, or `verify_email`), or `null` if
+ *   authentication failed.
  */
 export async function authUserPass(
   username: string,
   password: string,
   errorHandler: (error: string) => void,
-): Promise<UserAuthResponse | null> {
+): Promise<PasswordAuthResult | null> {
   const url = '/users/auth';
   const header = { Authorization: 'basic ' + btoa(username + ':' + password) };
   return client
-    .post<UserAuthResponse>(url, {}, { headers: header })
-    .then((res) => {
+    .post<RawAuthResponse>(url, {}, { headers: header })
+    .then((res): PasswordAuthResult | null => {
       if (res?.status == 200) {
-        return res.data;
+        const data = res.data;
+        // a verified user is authed and carries a token
+        if ('Authed' in data) {
+          return { status: 'authed', token: data.Authed.token, expires: data.Authed.expires };
+        }
+        // the account exists but its email must be verified before login can complete
+        return { status: 'verify_email', email: data.VerifyEmail };
       }
       return null;
     })
@@ -47,10 +62,10 @@ export async function authUserPass(
 export async function authUserToken(token: string): Promise<string | null> {
   const header = { Authorization: 'token ' + btoa(token) };
   return client
-    .post<UserAuthResponse>('/users/auth', {}, { headers: header })
+    .post<RawAuthResponse>('/users/auth', {}, { headers: header })
     .then((res) => {
-      if (res?.status == 200 && res.data?.token) {
-        return res.data.token;
+      if (res?.status == 200 && 'Authed' in res.data) {
+        return res.data.Authed.token;
       }
       return null;
     })
@@ -68,7 +83,9 @@ export async function authUserToken(token: string): Promise<string | null> {
  * @param password - The new user's initial password.
  * @param role - The Thorium role to assign (e.g. `Admin`, `User`).
  * @param errorHandler - Called with a formatted message if the request fails.
- * @returns The created user's {@link UserAuthResponse}, or `null` if the request failed.
+ * @returns The {@link CreateUserResult} — either `authed` (auto-verified, includes a token) or
+ *   `verify_email` (the user must verify their email before logging in) — or `null` if the
+ *   request failed.
  */
 export async function createUser(
   name: string,
@@ -76,20 +93,113 @@ export async function createUser(
   password: string,
   role: string,
   errorHandler: (error: string) => void,
-): Promise<UserAuthResponse | null> {
+): Promise<CreateUserResult | null> {
   const url = '/users/';
   const data = { username: name, email: email, password: password, role: role };
   return client
-    .post<UserAuthResponse>(url, data)
+    .post<RawAuthResponse>(url, data)
     .then((res) => {
       if (res?.status == 200) {
-        return res.data;
+        const body = res.data;
+        // auto-verified deployments return a token the caller can log in with
+        if ('Authed' in body) {
+          return { status: 'authed' as const, token: body.Authed.token, expires: body.Authed.expires };
+        }
+        // otherwise the account was created but the user must verify their email first
+        return { status: 'verify_email' as const, email: body.VerifyEmail };
       }
       return null;
     })
     .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Create User');
       return null;
+    });
+}
+
+/**
+ * Read the `Retry-After` header (in seconds) from an axios headers object.
+ *
+ * Exported for unit testing. Returns `0` when the header is missing or unparseable.
+ *
+ * @param headers - The axios response `headers` object (keys are lower-cased by axios).
+ * @returns The number of seconds to wait, or `0` if not present/invalid.
+ */
+export function parseRetryAfter(headers: unknown): number {
+  if (headers && typeof headers === 'object') {
+    const raw = (headers as Record<string, unknown>)['retry-after'];
+    const secs = typeof raw === 'string' ? parseInt(raw, 10) : typeof raw === 'number' ? raw : NaN;
+    if (!Number.isNaN(secs) && secs > 0) {
+      return secs;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Resend the email-verification message for an unverified user
+ * (`GET /users/resend/verify/email/{username}`).
+ *
+ * The endpoint is rate-limited; both the success (`200`) and rate-limited (`429`) responses carry a
+ * `Retry-After` header (seconds) used to drive a cooldown countdown.
+ *
+ * @param username - The username to resend the verification email for.
+ * @param errorHandler - Called with a formatted message when the email is already verified (`409`) or
+ *   on an unexpected failure (not a `429` cooldown).
+ * @returns A {@link ResendVerificationResult}: `Sent`/`Cooldown` carry `retryAfterSecs`;
+ *   `AlreadyVerified` (the email is already verified); or `Failed`.
+ */
+export async function resendVerificationEmail(username: string, errorHandler: (error: string) => void): Promise<ResendVerificationResult> {
+  const url = `/users/resend/verify/email/${encodeURIComponent(username)}`;
+  return client
+    .get(url)
+    .then((res): ResendVerificationResult => ({ status: ResendVerificationStatus.Sent, retryAfterSecs: parseRetryAfter(res?.headers) }))
+    .catch((error: unknown): ResendVerificationResult => {
+      if (axios.isAxiosError(error)) {
+        // 429 = a verification email was sent too recently; a normal cooldown answer, not an error
+        if (error.response?.status == 429) {
+          return { status: ResendVerificationStatus.Cooldown, retryAfterSecs: parseRetryAfter(error.response.headers) };
+        }
+        // 409 = the email is already verified; surface the message so the caller can stop offering resend
+        if (error.response?.status == 409) {
+          parseRequestError(error, errorHandler, 'Resend Verification Email');
+          return { status: ResendVerificationStatus.AlreadyVerified };
+        }
+      }
+      parseRequestError(error, errorHandler, 'Resend Verification Email');
+      return { status: ResendVerificationStatus.Failed };
+    });
+}
+
+/**
+ * Confirm an emailed account-verification link (`GET /users/verify/{username}/email/{token}`).
+ *
+ * The backend returns `204` on success and a uniform `401` for every failure (wrong/used/expired token,
+ * unknown account) so it never reveals whether an account exists. The `401` is therefore an expected
+ * answer, not an error: it maps to {@link EmailVerifyStatus.Expired} and does NOT call `errorHandler`.
+ * Only unexpected failures (e.g. the network is down) map to {@link EmailVerifyStatus.Error}, so a
+ * transient outage is never misreported as a consumed single-use token.
+ *
+ * @param username - The username from the verification link.
+ * @param token - The single-use verification token from the link.
+ * @param errorHandler - Called with a formatted message only on an unexpected (non-401) failure.
+ * @returns An {@link EmailVerifyStatus}: `Verified` (204), `Expired` (401), or `Error`.
+ */
+export async function verifyEmail(
+  username: string,
+  token: string,
+  errorHandler: (error: string) => void,
+): Promise<EmailVerifyStatus> {
+  const url = `/users/verify/${encodeURIComponent(username)}/email/${encodeURIComponent(token)}`;
+  return client
+    .get(url)
+    .then((res) => (res?.status == 204 ? EmailVerifyStatus.Verified : EmailVerifyStatus.Error))
+    .catch((error: unknown) => {
+      // 401 = invalid/expired/used token (uniform anti-enumeration answer); an expected outcome.
+      if (axios.isAxiosError(error) && error.response?.status == 401) {
+        return EmailVerifyStatus.Expired;
+      }
+      parseRequestError(error, errorHandler, 'Verify Email');
+      return EmailVerifyStatus.Error;
     });
 }
 

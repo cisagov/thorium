@@ -670,8 +670,8 @@ impl User {
         }
         // if they are not yet verified then send the verification email
         if self.verified {
-            // this user is already verified so return an error
-            return bad!(format!(
+            // this user is already verified so return a conflict
+            return conflict!(format!(
                 "{} has already verified their email",
                 &self.username
             ));

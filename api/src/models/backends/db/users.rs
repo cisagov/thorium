@@ -120,7 +120,6 @@ pub async fn create(cast: User, shared: &Shared) -> Result<User, ApiError> {
                     .exec_async(conn!(shared)).await?;
                 // reemit our error
                 Err(error.into())
-                
             }
         }
     } else {

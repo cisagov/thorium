@@ -94,3 +94,51 @@ export type UserAuthResponse = {
   /// The date/time this token expires
   expires: string;
 };
+
+/// The raw wire shape of the API `AuthResponse` enum (serde externally tagged).
+/// Either a successful auth carrying a token, or a prompt to verify the user's email.
+export type RawAuthResponse = { Authed: { token: string; expires: string } } | { VerifyEmail: string };
+
+/// Normalized outcome of a registration attempt.
+///
+/// `authed` is returned when the deployment auto-verifies the account (no email backend
+/// configured, or verification skipped) and the user is immediately logged in. `verify_email`
+/// is returned when the user must verify their email before they can log in.
+export type CreateUserResult = { status: 'authed'; token: string; expires: string } | { status: 'verify_email'; email: string };
+
+/// Normalized outcome of a password authentication attempt. `authed` carries a token; `verify_email`
+/// means the account exists but its email is not yet verified (mirrors the API `AuthResponse` enum).
+export type PasswordAuthResult = { status: 'authed'; token: string; expires: string } | { status: 'verify_email'; email: string };
+
+/// Normalized outcome of a resend-verification-email request.
+export enum ResendVerificationStatus {
+  /// A new verification email was sent (`200`).
+  Sent = 'sent',
+  /// Rate-limited: a verification email was sent too recently (`429`).
+  Cooldown = 'cooldown',
+  /// The account's email is already verified, so resending is not possible (`409`).
+  AlreadyVerified = 'already_verified',
+  /// The request failed for another reason (error already surfaced to the caller).
+  Failed = 'failed',
+}
+
+/// Result of `resendVerificationEmail`. `Sent`/`Cooldown` carry the seconds to wait before retrying.
+export type ResendVerificationResult =
+  | { status: ResendVerificationStatus.Sent; retryAfterSecs: number }
+  | { status: ResendVerificationStatus.Cooldown; retryAfterSecs: number }
+  | { status: ResendVerificationStatus.AlreadyVerified }
+  | { status: ResendVerificationStatus.Failed };
+
+/// The outcome of confirming an emailed verification link (`verifyEmail`). The backend collapses every
+/// failure mode (wrong/used/expired token, unknown account) into a single 401 so the unauthenticated
+/// endpoint never reveals whether an account exists, hence `Expired` covers all of them. `Error` is
+/// reserved for unexpected failures (e.g. the network is down) so we don't falsely claim the single-use
+/// token was consumed.
+export enum EmailVerifyStatus {
+  /// The email was verified (204)
+  Verified = 'verified',
+  /// The verification token is invalid, expired, or already used (uniform 401)
+  Expired = 'expired',
+  /// An unexpected failure occurred (network error, unexpected status)
+  Error = 'error',
+}

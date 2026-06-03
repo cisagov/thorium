@@ -1,10 +1,11 @@
 use axum::Router;
 use axum::extract::{Json, Path, State};
-use axum::http::StatusCode;
-use axum::response::Redirect;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum_extra::TypedHeader;
-use tracing::instrument;
+use chrono::Utc;
+use tracing::{Level, event, instrument};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
@@ -15,7 +16,7 @@ use crate::models::{
     Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::{ApiError, AppState};
-use crate::{is_admin, unauthorized, unavailable};
+use crate::{conflict, is_admin, unauthorized, unavailable};
 
 /// Creates a new user
 ///
@@ -53,6 +54,34 @@ async fn create(
     Ok(Json(resp))
 }
 
+/// The response to a resend-verification-email request.
+///
+/// Both arms carry a `Retry-After` header (in seconds): `Sent` reports the full cooldown window so the
+/// UI can seed its countdown timer, and `Cooldown` reports the time remaining before another resend is
+/// allowed.
+pub(crate) enum ResendVerificationResponse {
+    /// A new verification email was sent; carries the full cooldown window in seconds.
+    Sent { retry_after: u64 },
+    /// Rate-limited: a verification email was sent too recently; carries the remaining cooldown in seconds.
+    Cooldown { retry_after: i64 },
+}
+
+impl IntoResponse for ResendVerificationResponse {
+    fn into_response(self) -> Response {
+        match self {
+            ResendVerificationResponse::Sent { retry_after } => {
+                (StatusCode::OK, [(header::RETRY_AFTER, retry_after.to_string())]).into_response()
+            }
+            ResendVerificationResponse::Cooldown { retry_after } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, retry_after.to_string())],
+                format!("Cannot resend a verification email for another {retry_after} seconds"),
+            )
+                .into_response(),
+        }
+    }
+}
+
 /// Resend our verification email if we are not yet verified
 #[utoipa::path(
     get,
@@ -63,6 +92,7 @@ async fn create(
     responses(
         (status = 200, description = "Verification email resent"),
         (status = 401, description = "This user is not authorized to access this route"),
+        (status = 429, description = "A verification email was sent too recently; see the Retry-After header"),
     ),
     security(
         ("basic" = []),
@@ -76,15 +106,37 @@ async fn create(
 async fn resend_email_verification(
     Path(username): Path<String>,
     State(state): State<AppState>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<ResendVerificationResponse, ApiError> {
     // get the target user
     let mut user = User::force_get(&username, &state.shared).await?;
-    // send a new verification email if we have email an email client
+    // make sure email verification is enabled and grab the resend cooldown window
+    let rate_limit = match &state.shared.config.thorium.auth.email {
+        Some(email_conf) => email_conf.rate_limit,
+        None => return unavailable!("Email verification is not enabled!".to_owned()),
+    };
+    // an already-verified user can't (and doesn't need to) resend — return a clear conflict before
+    // the cooldown check so the response isn't shadowed by a misleading "wait N seconds" message
+    if user.verified {
+        return conflict!(format!("{} has already verified their email", user.username));
+    }
+    // enforce the cooldown here so we can report the remaining time via the Retry-After header; this
+    // lets the UI render an accurate countdown instead of scraping it out of an error message
+    if let Some(sent) = user.verification_sent {
+        let remaining = rate_limit as i64 - (Utc::now() - sent).num_seconds();
+        if remaining > 0 {
+            return Ok(ResendVerificationResponse::Cooldown {
+                retry_after: remaining,
+            });
+        }
+    }
+    // send a new verification email and report the full cooldown window so the UI can seed its timer
     match &state.shared.email {
         Some(client) => {
             // send a verification email to this user
             user.send_verification_email(client, &state.shared).await?;
-            Ok(StatusCode::OK)
+            Ok(ResendVerificationResponse::Sent {
+                retry_after: rate_limit,
+            })
         }
         None => unavailable!("Email verification is not enabled!".to_owned()),
     }
@@ -99,25 +151,32 @@ async fn resend_email_verification(
         ("verification_token" = String, Path, description = "The token to send in the verification email"),
     ),
     responses(
-        (status = 303, description = "Redirect to main page after sending verification email"),
-        (status = 401, description = "This user is not authorized to access this route"),
+        (status = 204, description = "The user's email was verified"),
+        (status = 401, description = "The verification token is invalid, expired, or already used"),
     ),
-    security(
-        ("basic" = []),
-    )
 )]
 #[instrument(name = "routes::users::verify_email", skip_all, err(Debug))]
 async fn verify_email(
     Path((username, verification_token)): Path<(String, String)>,
     State(state): State<AppState>,
-) -> Result<Redirect, ApiError> {
-    // get the target user
-    let mut user = User::force_get(&username, &state.shared).await?;
-    // try to verify this users email
-    user.verify_email(&verification_token, &state.shared)
-        .await?;
-    // redirect back to the webUI
-    Ok(Redirect::to("/"))
+) -> Result<StatusCode, ApiError> {
+    // attempt verification; a wrong/expired token or unknown user all surface uniformly as a 401
+    // so this unauthenticated endpoint never reveals whether an account exists
+    match User::force_get(&username, &state.shared).await {
+        Ok(mut user) => match user.verify_email(&verification_token, &state.shared).await {
+            Ok(()) => Ok(StatusCode::NO_CONTENT),
+            Err(error) => {
+                // log the underlying reason (the client only ever sees the uniform 401)
+                event!(Level::WARN, error = %error, msg = "Email verification token rejected");
+                unauthorized!("This verification link has expired or was already used".to_owned())
+            }
+        },
+        Err(error) => {
+            // log the underlying reason (the client only ever sees the uniform 401)
+            event!(Level::WARN, error = %error, msg = "Email verification could not load user");
+            unauthorized!("This verification link has expired or was already used".to_owned())
+        }
+    }
 }
 
 /// Authenticates a user

@@ -1,198 +1,90 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Button, Col, Card, Form, Modal, Row } from 'react-bootstrap';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import styled from 'styled-components';
 
 // project imports
 import Page from '@components/pages/Page';
-import Title from '@components/shared/titles/Title';
-import Subtitle from '@components/shared/titles/Subtitle';
-import SimpleTitle from '@components/shared/titles/SimpleTitle';
-import SimpleSubtitle from '@components/shared/titles/SimpleSubtitle';
+import AlertBanner from '@components/shared/alerts/AlertBanner';
+import { VerifyEmailNotice } from '@components/shared/auth';
+import Button from '@components/shared/buttons/Button';
+import { ButtonSize, ButtonVariant } from '@components/shared/buttons/types';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
-import { useAuth } from '../utilities/auth';
-import { getBanner } from '../thorpi/base';
+import TextInput from '@components/shared/inputs/TextInput';
+import { OAuthProviderButtons } from '@components/shared/oauth';
+import SimpleSubtitle from '@components/shared/titles/SimpleSubtitle';
+import SimpleTitle from '@components/shared/titles/SimpleTitle';
+import { getBanner } from '@thorpi/base';
+import { buildOAuthAuthUrl, listOAuthProviders } from '@thorpi/oauth';
+import { LoginOutcome, useAuth } from '@utilities/auth';
+import { stashOAuthReturn } from '@utilities/oauthReturn';
 
 interface LocationState {
   path?: string;
 }
 
-interface RegisterModalProps {
-  show: boolean;
-  onHide: () => void;
-}
+const LoginLayout = styled.div`
+  display: flex;
+  justify-content: center;
+  padding-top: 2rem;
+`;
 
-const RegisterModal: React.FC<RegisterModalProps> = ({ show, onHide }) => {
-  const localAuth = false;
-  const navigate = useNavigate();
-  const [regUsername, setRegUsername] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPass, setRegPass] = useState('');
-  const [regVerifyPass, setRegVerifyPass] = useState('');
-  const [regError, setRegError] = useState('');
-  const [regWarning, setRegWarning] = useState('');
-  const [registering, setRegistering] = useState(false);
-  const { register } = useAuth();
-  const { state } = useLocation() as { state: LocationState | null };
+// Sizes to its content so the ASCII banner (up to .banner's 50rem) isn't squished; the interactive
+// controls are constrained separately by FormColumn.
+const LoginCard = styled.div`
+  max-width: 50rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  background-color: var(--thorium-panel-bg);
+  border: 1px solid var(--thorium-panel-border);
+  border-radius: 8px;
+`;
 
-  const handleRegister = async (username: string, email: string, pass: string, verifyPass: string) => {
-    // handleRegister is a form submit, we want to clear the warnings
-    // related to form entry issues
-    setRegWarning('');
-    setRegError('');
-    setRegistering(true);
-    // make sure all required fields are present
-    if (username && pass && (verifyPass || !localAuth)) {
-      if (localAuth && pass != verifyPass) {
-        setRegWarning('The entered passwords do not match');
-        setRegistering(false);
-      } else {
-        // create the user account
-        const res = await register(username, pass, setRegError, email, 'User');
-        // redirect after successful registration of user
-        if (res) {
-          onHide(); // Close modal after successful registration
-          void navigate(state?.path || '/');
-        } else {
-          setRegistering(false);
-        }
-      }
-    } else {
-      setRegWarning('You must specify a username and password!');
-      setRegistering(false);
-    }
-    // registration failed, display error and do not redirect
-    return;
-  };
+// Keeps the inputs/buttons at the legacy login width (.login = 25rem) even when the banner is wider.
+const FormColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 25rem;
+  max-width: 100%;
+`;
 
-  // handle all key presses
-  const checkEnterSubmit = async (e: React.KeyboardEvent<HTMLElement>) => {
-    // key code 13 is enter
-    if (e.keyCode === 13) {
-      await handleRegister(regUsername, regEmail, regPass, regVerifyPass);
-    }
-  };
+const FieldStack = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+`;
 
-  return (
-    <Modal show={show} onHide={onHide}>
-      <Modal.Header closeButton>
-        <Modal.Title>
-          <Title>Register</Title>
-        </Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        <Form>
-          <Row>
-            <Col>
-              <Form.Group>
-                <Form.Label>
-                  <Subtitle>Username</Subtitle>
-                </Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter Username"
-                  value={regUsername}
-                  onKeyDown={(e) => {
-                    void checkEnterSubmit(e);
-                  }}
-                  onChange={(e) => setRegUsername(String(e.target.value))}
-                />
-              </Form.Group>
-            </Col>
-          </Row>
-          <Row>
-            <Col>
-              <Form.Group>
-                <Form.Label>
-                  <Subtitle>Email</Subtitle>
-                </Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter Email"
-                  value={regEmail}
-                  onKeyDown={(e) => {
-                    void checkEnterSubmit(e);
-                  }}
-                  onChange={(e) => setRegEmail(String(e.target.value))}
-                />
-              </Form.Group>
-            </Col>
-          </Row>
-          <Row className="my-3">
-            <Col>
-              <Form.Group>
-                <Form.Label>
-                  <Subtitle>Password</Subtitle>
-                </Form.Label>
-                <Form.Control
-                  type="password"
-                  placeholder="Enter Password"
-                  value={regPass}
-                  onKeyDown={(e) => {
-                    void checkEnterSubmit(e);
-                  }}
-                  onChange={(e) => setRegPass(String(e.target.value))}
-                />
-                {localAuth && (
-                  <>
-                    <Form.Label>
-                      <Subtitle>Verify Password</Subtitle>
-                    </Form.Label>
-                    <Form.Control
-                      type="password"
-                      placeholder="Verify Password"
-                      value={regVerifyPass}
-                      onKeyDown={(e) => {
-                        void checkEnterSubmit(e);
-                      }}
-                      onChange={(e) => setRegVerifyPass(String(e.target.value))}
-                    />
-                  </>
-                )}
-              </Form.Group>
-            </Col>
-          </Row>
-          {regWarning != '' && (
-            <Row>
-              <AlertBanner severity={Severity.Warning}>{regWarning}</AlertBanner>
-            </Row>
-          )}
-          {regError != '' && (
-            <Row>
-              <AlertBanner>{regError}</AlertBanner>
-            </Row>
-          )}
-          {registering ? (
-            <LoadingSpinner loading={registering}></LoadingSpinner>
-          ) : (
-            <Row>
-              <Col className="d-flex justify-content-center">
-                <Button
-                  className="ok-btn m-2"
-                  onClick={() => {
-                    void handleRegister(regUsername, regEmail, regPass, regVerifyPass);
-                  }}
-                >
-                  Submit
-                </Button>
-              </Col>
-            </Row>
-          )}
-        </Form>
-      </Modal.Body>
-    </Modal>
-  );
-};
+const OrDivider = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  color: var(--thorium-secondary-text);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--thorium-panel-border);
+  }
+`;
 
 const Login = () => {
-  const [showRegModal, setShowRegModal] = useState(false);
-  const handleCloseRegModal = () => setShowRegModal(false);
-  const handleShowRegModal = () => setShowRegModal(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginErr, setLoginErr] = useState('');
   const [banner, setBanner] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [providers, setProviders] = useState<string[]>([]);
+  // set to the username once a login is rejected for an unverified email; shows the verify-email notice
+  const [unverifiedUser, setUnverifiedUser] = useState<string | null>(null);
   const navigate = useNavigate();
   const { state } = useLocation() as { state: LocationState | null };
   const { login } = useAuth();
@@ -201,8 +93,13 @@ const Login = () => {
   const handleAuthFormSubmit = async (username: string, password: string, handleAuthErr: (error: string) => void) => {
     setLoggingIn(true);
     setLoginErr('');
-    if (await login(username, password, handleAuthErr)) {
+    const outcome = await login(username, password, handleAuthErr);
+    if (outcome === LoginOutcome.LoggedIn) {
       void navigate(state?.path || '/');
+    } else if (outcome === LoginOutcome.VerifyEmail) {
+      // valid credentials but the email is unverified — surface the verify-email notice (with resend)
+      setUnverifiedUser(username);
+      setLoggingIn(false);
     } else {
       setLoggingIn(false);
     }
@@ -216,6 +113,13 @@ const Login = () => {
     }
   };
 
+  // start an OAuth login: stash where to return, then hand the browser off to the IdP.
+  // Must be a full-page navigation (not an XHR) so the 303 redirect to the provider is followed.
+  const handleOAuthSelect = (provider: string) => {
+    stashOAuthReturn(state?.path);
+    window.location.assign(buildOAuthAuthUrl(provider));
+  };
+
   // fetch banner and set state
   const fetchBanner = async () => {
     const req = await getBanner(setBanner);
@@ -224,93 +128,87 @@ const Login = () => {
     }
   };
 
-  // async grab banner on page load
+  // grab the banner and any configured OAuth providers on page load
   useEffect(() => {
     void fetchBanner();
+    void listOAuthProviders(console.log).then((list) => {
+      if (list) {
+        setProviders(list);
+      }
+    });
   }, []);
 
   return (
     <Page title="Login · Thorium">
-      <Row>
-        <Col className="d-flex justify-content-center align-items-center">
-          <Card className="p-4 d-flex justify-content-center align-items-center panel">
-            <Card.Title>
-              <SimpleTitle>Welcome to Thorium!</SimpleTitle>
-            </Card.Title>
-            <Card.Body>
-              {banner != null && banner != '' && (
-                <Row>
-                  <Col className="d-flex justify-content-center">
-                    <pre className="banner">
-                      <center>{String(banner)}</center>
-                    </pre>
-                  </Col>
-                </Row>
-              )}
-              <Row>
-                <Col className="d-flex justify-content-center">
-                  <Form.Control
-                    className="m-2 login"
+      <LoginLayout>
+        <LoginCard>
+          <SimpleTitle>Welcome to Thorium!</SimpleTitle>
+          {banner != null && banner != '' && (
+            <pre className="banner">
+              <center>{String(banner)}</center>
+            </pre>
+          )}
+          <FormColumn>
+            {unverifiedUser !== null ? (
+              <VerifyEmailNotice username={unverifiedUser} onLogin={() => setUnverifiedUser(null)} />
+            ) : (
+              <>
+                {providers.length > 0 && (
+                  <>
+                    <OAuthProviderButtons providers={providers} onSelect={handleOAuthSelect} disabled={loggingIn} />
+                    <OrDivider>or</OrDivider>
+                  </>
+                )}
+                <FieldStack>
+                  <TextInput
                     type="text"
                     value={username}
                     placeholder="username"
+                    autoComplete="username"
                     onChange={(e) => setUsername(String(e.target.value))}
                     onKeyDown={(e) => {
                       void handleFormKeyPress(e);
                     }}
                   />
-                </Col>
-              </Row>
-              <Row>
-                <Col className="d-flex justify-content-center">
-                  <Form.Control
-                    className="m-2 login"
+                  <TextInput
                     type="password"
                     value={password}
                     placeholder="password"
+                    autoComplete="current-password"
                     onChange={(e) => setPassword(String(e.target.value))}
                     onKeyDown={(e) => {
                       void handleFormKeyPress(e);
                     }}
                   />
-                </Col>
-              </Row>
-              {loggingIn ? (
-                <LoadingSpinner loading={loggingIn}></LoadingSpinner>
-              ) : (
-                <>
-                  <Row className="mt-3">
-                    <Col className="d-flex justify-content-center align-items-center">
-                      <SimpleSubtitle>
-                        New user? Create an&nbsp;
-                        <Link to="/auth" onClick={() => handleShowRegModal()}>
-                          account
-                        </Link>
-                        .
-                      </SimpleSubtitle>
-                    </Col>
-                  </Row>
-                  <Row>{loginErr != '' && <AlertBanner>{loginErr}</AlertBanner>}</Row>
-                  <Row>
-                    <Col className="d-flex justify-content-center">
-                      <Button
-                        className="primary-btn"
-                        onClick={() => {
-                          void handleAuthFormSubmit(username, password, setLoginErr);
-                        }}
-                        variant="success"
-                      >
-                        Login
-                      </Button>
-                    </Col>
-                  </Row>
-                </>
-              )}
-            </Card.Body>
-            <RegisterModal show={showRegModal} onHide={handleCloseRegModal} />
-          </Card>
-        </Col>
-      </Row>
+                </FieldStack>
+                {loggingIn ? (
+                  <LoadingSpinner loading={loggingIn} />
+                ) : (
+                  <>
+                    <SimpleSubtitle>
+                      New user? Create an&nbsp;
+                      <Link to="/register" state={state}>
+                        account
+                      </Link>
+                      .
+                    </SimpleSubtitle>
+                    {loginErr != '' && <AlertBanner>{loginErr}</AlertBanner>}
+                    <Button
+                      variant={ButtonVariant.Primary}
+                      size={ButtonSize.Large}
+                      onClick={() => {
+                        void handleAuthFormSubmit(username, password, setLoginErr);
+                      }}
+                    >
+                      Login
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </FormColumn>
+        </LoginCard>
+      </LoginLayout>
     </Page>
   );
 };

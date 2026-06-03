@@ -3,6 +3,7 @@ export * from './components';
 export * from './entities/index';
 export * from './groups';
 export * from './images';
+export * from './oauth';
 export * from './pipelines';
 export * from './results';
 export * from './search';
