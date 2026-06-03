@@ -6,16 +6,43 @@ import { authUserPass, createUser, logout, whoami } from '@thorpi/users';
 import { UserInfo, RoleKey } from '@models/users';
 import { clearTagDataFromLocalStorage, fetchLocalStorageTags } from './tags';
 
+/// The outcome of a password login attempt.
+export enum LoginOutcome {
+  /// Authenticated; the session token has been stored.
+  LoggedIn = 'logged_in',
+  /// Credentials were valid but the account's email is not yet verified.
+  VerifyEmail = 'verify_email',
+  /// Login failed (bad credentials or request error).
+  Failed = 'failed',
+}
+
+/// The outcome of a registration attempt.
+export enum RegisterOutcome {
+  /// The account was created and the user is logged in (auto-verified deployments).
+  LoggedIn = 'logged_in',
+  /// The account was created but the user must verify their email before they can log in.
+  VerifyEmail = 'verify_email',
+  /// Registration failed.
+  Failed = 'failed',
+}
+
 type AuthContextType = {
   userInfo: UserInfo | null;
   token: string | undefined;
   refreshUserInfo: (force?: boolean) => Promise<void>;
   checkCookie: () => Promise<unknown>;
-  login: (username: string, password: string, handleError: (error: string) => void) => Promise<unknown>;
+  login: (username: string, password: string, handleError: (error: string) => void) => Promise<LoginOutcome>;
   logout: () => Promise<unknown>;
-  register: (username: string, password: string, handleError: (error: string) => void, email?: string, role?: string) => Promise<unknown>;
+  register: (
+    username: string,
+    password: string,
+    handleError: (error: string) => void,
+    email?: string,
+    role?: string,
+  ) => Promise<RegisterOutcome>;
   revoke: () => Promise<unknown>;
   impersonate: (userToken: string, tokenExpires: string) => void;
+  completeOAuth: (token: string, expires: string) => void;
 };
 
 // auth context to store info about auth state across app
@@ -35,9 +62,17 @@ function getCookie(name: string) {
   return undefined;
 }
 
-const REVOKE_TOKEN_COOKIE = 'THORIUM_TOKEN=; max-age=0; path=/; Secure';
-function buildCookie(token: string, expiration: string) {
-  return `THORIUM_TOKEN=${token}; Secure; SameSite=Strict; expires=${expiration}; path=/; domain: ${location.hostname}`;
+// Exported so the cookie contract can be unit-tested. Builds the non-HttpOnly THORIUM_TOKEN
+// cookie the axios interceptor reads on every request.
+export function buildCookie(token: string, expiration: string) {
+  return `THORIUM_TOKEN=${token}; Secure; SameSite=Strict; expires=${expiration}; path=/; domain=${location.hostname}`;
+}
+
+// Clears the THORIUM_TOKEN cookie on logout/revoke. A cookie written with an explicit Domain
+// is a distinct cookie from one without, so the expiring write MUST mirror buildCookie's
+// domain + path or the browser leaves the real cookie in place and the user stays logged in.
+export function buildRevokeCookie() {
+  return `THORIUM_TOKEN=; Secure; SameSite=Strict; max-age=0; path=/; domain=${location.hostname}`;
 }
 
 /*
@@ -61,7 +96,7 @@ function useAuthProvider() {
         void fetchLocalStorageTags();
       } else {
         clearTagDataFromLocalStorage();
-        document.cookie = REVOKE_TOKEN_COOKIE;
+        document.cookie = buildRevokeCookie();
         setToken('');
       }
     }
@@ -112,46 +147,59 @@ function useAuthProvider() {
         setLastUpdateDate(Date.now());
         return response;
       } else {
-        document.cookie = REVOKE_TOKEN_COOKIE;
+        document.cookie = buildRevokeCookie();
         setUserInfo(null);
         setToken(undefined);
         return null;
       }
     },
     // login via password to get Thorium token
-    async login(username: string, password: string, handleError: (error: string) => void) {
-      const authResp = await authUserPass(username, password, handleError);
-      if (authResp) {
-        // set cookie with name THORIUM_TOKEN
-        document.cookie = buildCookie(authResp.token, authResp.expires);
-        // set user's Thorium token
-        setToken(authResp.token);
-        return true;
-      } else {
-        return false;
+    async login(username: string, password: string, handleError: (error: string) => void): Promise<LoginOutcome> {
+      const result = await authUserPass(username, password, handleError);
+      // the request failed (error already surfaced via handleError)
+      if (!result) {
+        return LoginOutcome.Failed;
       }
+      // credentials were valid but the email must be verified before we can issue a session
+      if (result.status === 'verify_email') {
+        return LoginOutcome.VerifyEmail;
+      }
+      // set cookie with name THORIUM_TOKEN and store the user's Thorium token
+      document.cookie = buildCookie(result.token, result.expires);
+      setToken(result.token);
+      return LoginOutcome.LoggedIn;
     },
     // remove token and clear user info on logout
     logout() {
       return new Promise((resolve) => {
         setToken(undefined);
         setUserInfo(null);
-        document.cookie = REVOKE_TOKEN_COOKIE;
+        document.cookie = buildRevokeCookie();
         resolve(true);
       });
     },
     // register with Thorium
-    async register(username: string, password: string, handleError: (error: string) => void, email = 'thorium@sandia.gov', role = 'User') {
-      const authResp = await createUser(username, email, password, role, handleError);
-      if (authResp) {
-        // set cookie with name THORIUM_TOKEN
-        document.cookie = buildCookie(authResp.token, authResp.expires);
-        // set user's Thorium token
-        setToken(authResp.token);
-        return true;
-      } else {
-        return false;
+    async register(
+      username: string,
+      password: string,
+      handleError: (error: string) => void,
+      email = 'thorium@sandia.gov',
+      role = 'User',
+    ): Promise<RegisterOutcome> {
+      const result = await createUser(username, email, password, role, handleError);
+      // the request itself failed (error already surfaced via handleError)
+      if (!result) {
+        return RegisterOutcome.Failed;
       }
+      // account created but the user must verify their email before logging in;
+      // do not set a cookie/token — they must log in again after verifying
+      if (result.status === 'verify_email') {
+        return RegisterOutcome.VerifyEmail;
+      }
+      // auto-verified deployment: log the user in immediately
+      document.cookie = buildCookie(result.token, result.expires);
+      setToken(result.token);
+      return RegisterOutcome.LoggedIn;
     },
     // revoke token and clear cookie user info from session
     async revoke() {
@@ -159,7 +207,7 @@ function useAuthProvider() {
       const result = response?.status == 200 ? true : false;
       setToken(undefined);
       setUserInfo(null);
-      document.cookie = REVOKE_TOKEN_COOKIE;
+      document.cookie = buildRevokeCookie();
       return result;
     },
     // logout of any current session and impersonate a user
@@ -167,6 +215,13 @@ function useAuthProvider() {
       // set cookie with name THORIUM_TOKEN
       document.cookie = buildCookie(userToken, tokenExpires);
       setToken(userToken);
+    },
+    // finalize an OAuth login/registration by storing the issued Thorium token.
+    // Setting the token triggers the whoami effect, so the rest of the app (interceptor,
+    // RequireAuth) behaves exactly as it does after a password login.
+    completeOAuth(token: string, expires: string) {
+      document.cookie = buildCookie(token, expires);
+      setToken(token);
     },
   };
 }

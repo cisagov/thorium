@@ -551,7 +551,7 @@ cfg_if::cfg_if! {
                 let search = SearchBlocking::new(&self.host, &auth_str, &client);
                 let files = FilesBlocking::new(&self.host, &auth_str, &client);
                 let repos = ReposBlocking::new(&self.host, &auth_str, &client);
-                let entities = EntitiesBlocking::new(&self.host, &auth_string, &client);
+                let entities = EntitiesBlocking::new(&self.host, &auth_str, &client);
                 let associations = AssociationsBlocking::new(&self.host, &auth_str, &client);
                 let updates = UpdatesBlocking::new(&self.host, &auth_str, &client);
                 let events = EventsBlocking::new(&self.host, &auth_str, &client);

@@ -33,6 +33,12 @@ const Users = lazy(async () => await import('./pages/users/UserBrowsing'));
 const ReactionStatus = lazy(async () => await import('./pages/reactions/ReactionStatus'));
 const ReactionStageLogs = lazy(async () => await import('./pages/reactions/ReactionStageLogs'));
 const Login = lazy(async () => await import('./pages/Login'));
+const UserRegistration = lazy(async () => await import('./pages/users/UserRegistration'));
+const OAuthCallback = lazy(async () => await import('./pages/oauth/OAuthCallback'));
+const OAuthLink = lazy(async () => await import('./pages/oauth/OAuthLink'));
+const OAuthLinked = lazy(async () => await import('./pages/oauth/OAuthLinked'));
+const EmailVerify = lazy(async () => await import('./pages/users/EmailVerify'));
+const EmailVerified = lazy(async () => await import('./pages/users/EmailVerified'));
 const Profile = lazy(async () => await import('./pages/users/UserProfile'));
 const SystemStats = lazy(async () => await import('./pages/system/SystemStats'));
 const SystemSettings = lazy(async () => await import('./pages/system/SystemSettings'));
@@ -80,6 +86,14 @@ const Resources = () => (
     <Route path="/users" element={<PageWrapper admin Contents={Users} />} />
     <Route path="/groups" element={<PageWrapper Contents={Groups} />} />
     <Route path="/auth" element={<PageWrapper auth={false} Contents={Login} />} />
+    <Route path="/register" element={<PageWrapper auth={false} Contents={UserRegistration} />} />
+    // OAuth (browser-redirect flow): IdP redirects here, then the SPA calls /api/oauth/...
+    <Route path="/oauth/:provider/callback" element={<PageWrapper auth={false} Contents={OAuthCallback} />} />
+    <Route path="/oauth/:provider/link" element={<PageWrapper auth={false} Contents={OAuthLink} />} />
+    <Route path="/oauth/:provider/linked" element={<PageWrapper auth={false} Contents={OAuthLinked} />} />
+    // Account-creation email verification (browser-redirect catch page, like the OAuth link page)
+    <Route path="/users/verify/:username/email/:token" element={<PageWrapper auth={false} Contents={EmailVerify} />} />
+    <Route path="/users/verify/:username/verified" element={<PageWrapper auth={false} Contents={EmailVerified} />} />
     // Pipelines and Image settings
     <Route path="/pipelines" element={<PageWrapper Contents={Pipelines} />} />
     <Route path="/images" element={<PageWrapper Contents={Images} />} />

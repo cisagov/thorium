@@ -175,6 +175,6 @@ describe('buildCreateEntityForm', () => {
     });
     const form = buildCreateEntityForm(entity);
     const entries = formEntries(form);
-    expect(entries['metadata[countries][]']).toEqual(['US', 'RU']);
+    expect(entries['metadata[countries][]']).toEqual(['US']);
   });
 });

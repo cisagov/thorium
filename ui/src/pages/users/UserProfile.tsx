@@ -203,6 +203,59 @@ const Theme = ({ theme }: { theme: string | undefined }) => {
   );
 };
 
+const MethodSection = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 10fr);
+  gap: 1rem;
+  padding: 0 0.75rem;
+  align-items: start;
+`;
+
+const MethodBadges = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+`;
+
+const MethodPill = styled.span<{ $tone: 'ok' | 'warn' | 'muted' }>`
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--thorium-button-text);
+  background-color: ${({ $tone }) =>
+    $tone === 'ok' ? 'var(--thorium-ok-bg)' : $tone === 'warn' ? 'var(--thorium-warning-bg)' : 'var(--thorium-secondary-panel-bg)'};
+`;
+
+const MethodGuidance = styled.p`
+  color: var(--thorium-secondary-text);
+  font-size: 0.9rem;
+  margin: 0;
+`;
+
+// Read-only summary of how this account can sign in. Linked-provider management is not shown
+// because the current API does not expose a user's linked providers on whoami.
+const SignInMethods: React.FC<{ local?: boolean; verified?: boolean }> = ({ local, verified }) => {
+  return (
+    <MethodSection>
+      <Subtitle>Sign-in</Subtitle>
+      <div>
+        <MethodBadges>
+          {/* `local` mirrors the backend ScrubbedUser.local (the account has a password set) */}
+          {local && <MethodPill $tone="ok">Local Login</MethodPill>}
+          <MethodPill $tone={verified ? 'ok' : 'warn'}>{verified ? 'Email verified' : 'Email not verified'}</MethodPill>
+        </MethodBadges>
+        <MethodGuidance>
+          To add a single sign-on provider, sign in with that provider using this same email address. You&apos;ll receive an email to
+          confirm linking it to your account.
+        </MethodGuidance>
+      </div>
+    </MethodSection>
+  );
+};
+
 const UserProfile = () => {
   const { userInfo } = useAuth();
 
@@ -224,6 +277,9 @@ const UserProfile = () => {
         <hr />
         {/* User Token */}
         <Token />
+        <hr />
+        {/* Sign-in methods (local password / SSO + verification status) */}
+        <SignInMethods local={userInfo?.local} verified={userInfo?.verified} />
         <hr />
         {/* UI Theme */}
         <Theme theme={userInfo?.settings?.theme} />

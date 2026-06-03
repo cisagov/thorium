@@ -5,12 +5,11 @@ use axum::http::StatusCode;
 use axum::response::Redirect;
 use axum::routing::{get, post};
 use openidconnect::{AuthorizationCode, CsrfToken};
-use tracing::instrument;
+use tracing::{Level, event, instrument};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
 
-use crate::models::backends::oauth::OAuthedMaybeUser;
 use crate::models::{
     AuthResponse, OAuthCallbackParams, OAuthLinkParams, OAuthMaybeAuthed,
     OAuthRegistrationSessionId, OAuthUserCreate, OAuthUsernameCheck,
@@ -160,13 +159,14 @@ async fn register(
 /// * `provider` - The name of the provider to link against
 /// * `state` - Shared Thorium objects
 #[utoipa::path(
-    post,
+    get,
     path = "/api/oauth/{provider}/link",
     params(
         ("params" = OAuthLinkParams, description = "Query params for linking an existing user to a new OAuth alias"),
     ),
     responses(
-        (status = 204),
+        (status = 204, description = "The OAuth alias was linked to the account"),
+        (status = 401, description = "The link token is invalid, expired, or already used"),
     ),
 )]
 #[instrument(name = "routes::oauth::link", skip(state), err(Debug))]
@@ -175,9 +175,16 @@ async fn link(
     Path(provider): Path<String>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
-    // if this is a valid link token then add an alias to the target user
-    params.link(provider, &state.shared).await?;
-    Ok(StatusCode::NO_CONTENT)
+    // attempt the link; an invalid/expired/used token AND OAuth not being configured all surface
+    // uniformly as a 401 so this unauthenticated endpoint never reveals whether OAuth is enabled
+    match params.link(provider, &state.shared).await {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(error) => {
+            // log the underlying reason (the client only ever sees the uniform 401)
+            event!(Level::WARN, error = %error, msg = "OAuth account link failed");
+            unauthorized!("This account-link has expired or was already used".to_owned())
+        }
+    }
 }
 
 /// Revoke an account linking attempt
