@@ -23,14 +23,32 @@ import { getGroupRole, getThoriumRole } from '@utilities/role';
 import { fetchImages, fetchSingleImage, fetchGroups } from '@utilities/fetch';
 import { useAuth } from '@utilities/auth';
 import { deleteImage, updateImage } from '@thorpi/images';
+import { OmnibarImages } from '@components/pages/search/omnibar/Bars';
+import { getGroupsFromClauses, getSearchTextFromClauses, getStringFieldFromClauses } from '@components/pages/search/omnibar/utils';
 
+const filterImages = (images, clauses) => {
+  const creator = getStringFieldFromClauses(clauses, 'creator');
+  const name = getStringFieldFromClauses(clauses, 'name');
+  const groups = getGroupsFromClauses(clauses);
+  const text = getSearchTextFromClauses(clauses);
+
+  return images.filter((image) => {
+    const groupFilter = groups.length > 0 ? groups.includes(image.group) : true;
+    const creatorFilter = image.creator.includes(creator);
+    const nameFilter = image.name.includes(name);
+    const textFilter = image.name.includes(text) || image.description?.includes(text);
+    return groupFilter && creatorFilter && nameFilter && textFilter;
+  });
+};
 const ImageBrowsing = () => {
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState([]);
   const [groups, setGroups] = useState({});
+  const [clauses, setClauses] = useState([]);
   const { userInfo, checkCookie } = useAuth();
   let cancelUpdate = false;
 
+  const filteredImages = filterImages(images, clauses);
   // need user's group roles to validate permissions to create/edit/delete images
   useEffect(() => {
     fetchGroups(setGroups, null, true);
@@ -93,9 +111,12 @@ const ImageBrowsing = () => {
           <CreateImage />
         </Col>
       </Row>
+      <Row className="d-flex justify-content-center">
+        <OmnibarImages clauses={clauses} setClauses={setClauses} images={images} />
+      </Row>
       <LoadingSpinner loading={loading}></LoadingSpinner>
       <Accordion alwaysOpen>
-        {images.map((image) => (
+        {filteredImages.map((image) => (
           <Accordion.Item key={`${image.name}_${image.group}`} eventKey={`${image.name}_${image.group}`}>
             <Accordion.Header className="d-flex">
               <Col className="accordion-item-name">

@@ -3,6 +3,7 @@ import { countFileTags } from '@thorpi/files';
 import { RequestTags, TagEntry, TagOptions } from '@models/tags';
 import rawAttackTagDefaults from '../../mitre_tags/attackTagsList.tags?raw';
 import rawMbcTagDefaults from '../../mitre_tags/MBCTagsList.tags?raw';
+import { useEffect, useState } from 'react';
 
 //Type for storing TagOptions to local storage with an expiry time.
 type StorageType = {
@@ -15,6 +16,36 @@ const DEFAULT_EXPIRE_TIMEOUT = 1000 * 60 * 60 * 24 * 7; //1 week
 const LIMIT = 10_000;
 const attackTagOptions = String(rawAttackTagDefaults).split('\n');
 const mbcTagOptions = String(rawMbcTagDefaults).split('\n');
+
+/**
+ * Custom hook for using tag counts in a component.
+ */
+export function useTagCount() {
+  const [tags, setTags] = useState<TagOptions>({});
+
+  useEffect(() => {
+    let timeoutFn: ReturnType<typeof setTimeout>;
+    const loadDropdownData = () => {
+      const data = loadTagOptionsFromLocalStorage();
+      if (data) {
+        setTags(data);
+      } else {
+        timeoutFn = setTimeout(() => {
+          loadDropdownData();
+        }, 1000);
+      }
+    };
+    loadDropdownData();
+
+    return () => {
+      if (timeoutFn) {
+        clearTimeout(timeoutFn);
+      }
+    };
+  }, []);
+
+  return tags;
+}
 
 /**
  * Save tag count to local storage.

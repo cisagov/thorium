@@ -146,7 +146,7 @@ const FileBrowsingConfig: EntityBrowseConfig<Entities.File> = {
   kind: Entities.File,
   creatable: true,
   entityHeaders: <FileListHeaders />,
-  renderEntity: (entity, filters) => <FileItem file={entity} excludeKeys={filters['hideTags'] ? filters['hideTags'] : []} />,
+  renderEntity: (entity, _, filters) => <FileItem file={entity} excludeKeys={filters?.hideTags ?? []} />,
   fetchEntities: getFiles,
 };
 

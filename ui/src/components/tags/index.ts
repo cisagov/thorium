@@ -3,4 +3,4 @@ export { default as CondensedEntityTags } from './condensed/CondensedEntityTags'
 export { default as EditableTags } from './EditableTags';
 export { default as TagBadge } from './TagBadge';
 export { FileInfoTagKeys, TLPLevels, DangerTagKeys, MitreTagKeys, FormattedFileInfoTagKeys } from './tag_groups';
-export { getTagBadgeText, getTagColorClass, TagValueEnum, TagUpperKeyEnum, filterIncludedTags, filterExcludedTags } from './utilities';
+export { getTagBadgeText, getTagColorClass, filterIncludedTags, filterExcludedTags } from './utilities';

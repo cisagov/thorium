@@ -46,3 +46,5 @@ export type Group = {
   /// The data that is allowed to be added to this group
   allowed: GroupAllowed;
 };
+
+export type GroupUserCategory = 'owners' | 'managers' | 'users' | 'monitors';

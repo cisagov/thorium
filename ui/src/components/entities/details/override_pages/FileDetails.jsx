@@ -214,7 +214,7 @@ const FileDetails = () => {
           </Nav.Link>
         </Nav>
         <Nav.Item className="details-navitem"></Nav.Item>
-          <GraphDataProvider initial={associationInitial}>
+        <GraphDataProvider initial={associationInitial}>
           <Tab.Content>
             <Tab.Pane eventKey="results" className="mt-4">
               <Results

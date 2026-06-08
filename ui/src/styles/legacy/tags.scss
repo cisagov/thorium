@@ -10,6 +10,11 @@ $grid-breakpoints: (
 );
 */
 
+.basic-clause {
+  background-color: var(--thorium-secondary-panel-bg);
+  color: var(--thorium-text);
+}
+
 .general-tag {
   background-color: rgb(160, 162, 163);
   color: white;
