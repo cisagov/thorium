@@ -1,5 +1,6 @@
 // import the base client function that loads from the config
 // and injects the token via axios intercepts
+import { Image } from '@models/images';
 import client, { parseRequestError } from './client';
 
 /**

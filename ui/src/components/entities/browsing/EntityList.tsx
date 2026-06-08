@@ -39,7 +39,7 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
 
     setListError('');
 
-    const { entitiesList, entitiesCursor } = await fetchEntities(filters as Filters, requestCursor, setListError);
+    const { entitiesList, entitiesCursor } = await fetchEntities(filters, requestCursor, setListError);
 
     setCursor(entitiesCursor);
     setLoading(false);
@@ -64,9 +64,7 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
 
   useEffect(() => {
     if (isMountingRef.current) {
-      if (filters != null && Object.keys(filters).length > 0 && !loading) {
-        getEntityPage(true);
-      }
+      getEntityPage(true);
     } else {
       isMountingRef.current = true;
     }

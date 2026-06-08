@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Card, Col, Form, Row, Stack } from 'react-bootstrap';
+import { Card, Col, Row, Stack } from 'react-bootstrap';
 import DOMPurify from 'dompurify';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
 import parse from 'html-react-parser';
 import styled from 'styled-components';
 
 // project imports
-import IndexSelect from './IndexSelect';
 import EntityList from '@entities/browsing/EntityList';
-import BrowsingFilters from '@entities/browsing/filters/BrowsingFilters';
-import { useAuth } from '@utilities/auth';
 import { search } from '@thorpi/search';
-import { SearchFilters, ElasticIndex, Filters, FilterTypes } from '@models/search';
+import { SearchFilters, ElasticIndex } from '@models/search';
 import { scaling } from '@styles';
+import { Clause, ClauseCondition } from './omnibar/ClauseTypes';
+import { defaultTimeSelection, TimeSelection, TimeSelectionToStrings } from './omnibar/timepicker/utils';
+import { getGroupsFromClauses, getIndexesFromClauses, getLimitFromClauses, getSearchTextFromClauses } from './omnibar/utils';
+import { OmnibarMainSearch } from './omnibar/Bars';
 
 // get hash of a file from result ID
 const getSha256 = (id: string) => {
@@ -44,20 +45,6 @@ const mapFullIndexName = (fullIndexName: string) => {
     return 'Results';
   } else {
     return null;
-  }
-};
-
-// map the selected index to the search indexes to use in our query
-const mapSelectedIndex = (selectedIndex: string) => {
-  switch (selectedIndex) {
-    case 'All':
-      return [ElasticIndex.SampleResults, ElasticIndex.SampleTags];
-    case 'Tags':
-      return [ElasticIndex.SampleTags];
-    case 'Results':
-      return [ElasticIndex.SampleResults];
-    default:
-      return new Array<ElasticIndex>();
   }
 };
 
@@ -150,23 +137,19 @@ const SearchResultItem: React.FC<SearchResultItemProps> = ({ result, idx }) => {
 // get repos using filters and and an optional cursor
 const getSearchResults = async (
   query: string,
-  indexes: ElasticIndex[],
-  filters: Filters,
+  clauses: Clause[],
+  omniTime: TimeSelection,
   setSearchError: (error: string) => void,
   cursor: string | null,
 ): Promise<{ entitiesList: any[]; entitiesCursor: string | null }> => {
   if (query !== '') {
+    const groups = getGroupsFromClauses(clauses);
+    const indexes = getIndexesFromClauses(clauses);
+    const limit = getLimitFromClauses(clauses, 25);
+    const [end, start] = TimeSelectionToStrings(omniTime);
+
     // get files list from API
-    const { entityList, entityCursor } = await search(
-      query.trim(),
-      setSearchError,
-      indexes,
-      filters['groups'],
-      filters['start'],
-      filters['end'],
-      cursor,
-      filters['limit'],
-    );
+    const { entityList, entityCursor } = await search(query.trim(), setSearchError, indexes, groups, start, end, cursor, limit);
     return {
       entitiesList: entityList,
       entitiesCursor: entityCursor,
@@ -178,20 +161,13 @@ const getSearchResults = async (
   };
 };
 
-const SearchForm = styled(Form)`
-  max-width: 800px;
+const SearchBarContainer = styled.div`
+  max-width: 1000px;
   width: 100%;
   display: flex;
   justify-content: center;
   position: relative;
-`;
-
-const SearchInput = styled(Form.Control)`
-  display: flex;
-  justify-content: center;
-  padding-right: 50px;
-  white-space: nowrap;
-  overflow: hidden;
+  margin-bottom: 20px;
 `;
 
 // component containing search bar and related functionality
@@ -199,75 +175,36 @@ const Search = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searching, setSearching] = useState<boolean>(true);
   const [filters, setFilters] = useState<SearchFilters>({ query: '' });
-  const { userInfo } = useAuth();
   // the id of the cursor for paging search results;
   const [searchError, setSearchError] = useState<string>('');
-  const [query, setQuery] = useState<string>('');
   const [debouncedQuery, setDebouncedQuery] = useState<string>('');
-  const [selectedIndex, setSelectedIndex] = useState<string>('All');
-  const [indexes, setIndexes] = useState<ElasticIndex[]>([]);
+  const [omnibarClauses, setOmnibarClauses] = useState<Clause[]>([]);
+  const [omniTime, setOmniTime] = useState<TimeSelection>(defaultTimeSelection());
 
   // read filter values from url search query params
   const readURLSearchParams = () => {
+    const clauses: Clause[] = [];
     const savedIndexes: ElasticIndex[] = searchParams.getAll('indexes').map((index) => ElasticIndex[index as keyof typeof ElasticIndex]);
     // generate default selected groups list with each group set to unselected/false
     if (savedIndexes.length > 0) {
-      setIndexes(savedIndexes);
+      clauses.push({
+        field: 'index',
+        category: 'index',
+        condition: ClauseCondition.IsOneOf,
+        value: { values: savedIndexes },
+      });
     }
     const paramQuery = searchParams.get('query');
+    if (paramQuery) {
+      clauses.push({ category: 'text', field: 'text', condition: ClauseCondition.Is, value: { value: paramQuery } });
+    }
     //setDebouncedQuery(paramQuery ? paramQuery: "");
-    setQuery(paramQuery ? paramQuery : '');
+    setOmnibarClauses(clauses);
   };
 
-  // update the selected index
-  const updateSelectedIndex = (selectedIndex: string | null) => {
-    if (!selectedIndex) {
-      return;
-    }
-    // set string dropdown title
-    setSelectedIndex(selectedIndex);
-    // get indexes array from string key
-    const indexes = mapSelectedIndex(selectedIndex);
-    // set our indexes here and in our filters
-    setIndexes(indexes);
-    const pendingSearchFilters = structuredClone(filters);
-    // when indexes have been set
-    if (indexes && indexes.length > 0) {
-      searchParams.set('indexes', indexes.toString());
-      // set updated index in new search filters
-      pendingSearchFilters['indexes'] = indexes;
-      // when indexes are unset
-    } else {
-      // remove the indexes field from filters
-      delete pendingSearchFilters['indexes'];
-      searchParams.delete('indexes');
-    }
-    // now update searchFilters so page will update
-    setFilters(pendingSearchFilters);
-    // update url params in browser
-    setSearchParams(searchParams);
-  };
-
-  const handleFilterUpdates = (newFilters: Filters) => {
-    const pendingSearchFilters: SearchFilters = structuredClone(filters);
-    if (newFilters.limit) {
-      pendingSearchFilters.limit = newFilters.limit;
-    }
-    if (newFilters.groups) {
-      pendingSearchFilters.groups = newFilters.groups;
-    }
-    if (newFilters.start) {
-      pendingSearchFilters.start = newFilters.start;
-    }
-    if (newFilters.end) {
-      pendingSearchFilters.end = newFilters.end;
-    }
-    setFilters(pendingSearchFilters);
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce: only re-run when query changes
   useEffect(() => {
     const handleSetQuery = setTimeout(() => {
+      const query = getSearchTextFromClauses(omnibarClauses);
       setDebouncedQuery(query);
       // update query in url params
       setSearchError('');
@@ -283,9 +220,8 @@ const Search = () => {
       setFilters(pendingSearchFilters);
     }, 500);
     return () => clearTimeout(handleSetQuery);
-  }, [query]);
+  }, [omnibarClauses, omniTime]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   useEffect(() => {
     readURLSearchParams();
     setSearching(false);
@@ -294,43 +230,24 @@ const Search = () => {
   return (
     <Stack>
       <div className="d-flex flex-row justify-content-center">
-        <SearchForm>
-          <SearchInput
-            type="text"
-            value={query}
-            placeholder="Search data in Thorium"
-            onChange={(e) => {
-              setQuery(String(e.target.value));
-              e.preventDefault();
-            }}
-            onKeyDown={(e) => {
-              e.key === 'Enter' && e.preventDefault();
-            }}
-          />
-          <IndexSelect index={selectedIndex} onChange={updateSelectedIndex} />
-        </SearchForm>
+        <SearchBarContainer>
+          <OmnibarMainSearch clauses={omnibarClauses} setClauses={setOmnibarClauses} time={omniTime} setTime={setOmniTime} />
+        </SearchBarContainer>
       </div>
-      <BrowsingFilters
-        title=""
-        exclude={[FilterTypes.Tags]}
-        onChange={handleFilterUpdates}
-        groups={userInfo ? userInfo.groups : []}
-        disabled={searching}
-      />
-      {query !== '' && searchError === '' && (
+      {omnibarClauses.length > 0 && searchError === '' && (
         <Row>
           <EntityList
             type="Results"
             entityHeaders={<SearchResultsHeaders />}
             displayEntity={(result, idx) => <SearchResultItem result={result} idx={idx} />}
             filters={filters}
-            fetchEntities={(filters, cursor) => getSearchResults(debouncedQuery, indexes, filters, setSearchError, cursor)}
+            fetchEntities={(_, cursor) => getSearchResults(debouncedQuery, omnibarClauses, omniTime, setSearchError, cursor)}
             setLoading={setSearching}
             loading={searching}
           />
         </Row>
       )}
-      {searchError && query !== '' && <AlertBanner className="mt-1 mb-0">{searchError}</AlertBanner>}
+      {searchError && omnibarClauses.length > 0 && <AlertBanner className="mt-1 mb-0">{searchError}</AlertBanner>}
     </Stack>
   );
 };

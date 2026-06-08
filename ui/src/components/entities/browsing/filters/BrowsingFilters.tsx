@@ -1,17 +1,21 @@
-import { useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Button, Col, Row } from 'react-bootstrap';
 import { useNavigate } from 'react-router';
-import { FaFilter } from 'react-icons/fa';
 
 // project imports
-import FilterFields from './FilterFields';
-import { Placement, PositionType } from '@components/shared/windows';
 import { OverlayTipLeft, OverlayTipRight } from '@components/shared/overlay/tips';
-import { OverlayWindow } from '@components/shared/windows/OverlayWindow';
 import Title from '@components/shared/titles/Title';
 import { Entities } from '@models/entities';
 import { Filters, FilterTypes } from '@models/search';
 import { getCreatePathByEntity } from '@components/entities/create/EntityCreateRoutes';
+import { OmnibarStandardTimeFilters } from '@components/pages/search/omnibar/Bars';
+import { Clause, DefaultClausesEntities } from '@components/pages/search/omnibar/ClauseTypes';
+import { TimeSelection } from '@components/pages/search/omnibar/timepicker/utils';
+import { OmniClauseAndTimeToFilter } from '@utilities/search';
+import { OverlayWindow, PositionType } from '@components/shared/windows';
+import { Placement } from '@components/shared/overlay/OverlayTip';
+import FilterFields from './FilterFields';
+import { FaFilter } from 'react-icons/fa6';
 
 interface BrowsingFiltersProps {
   onChange: (filters: Filters) => void; // call back to change filters
@@ -34,10 +38,16 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
 }) => {
   const navigate = useNavigate();
   // show filters or don't
+  const [clauses, setClauses] = useState<Clause[]>(DefaultClausesEntities());
+  const [time, setTime] = useState<TimeSelection>({ mode: 'all' });
   const [hideFilters, setHideFilters] = useState(true);
+  const filterRef = useRef(null);
+
+  useEffect(() => {
+    onChange(OmniClauseAndTimeToFilter(clauses, time));
+  }, []);
 
   // create ref for positioning filter window
-  const filterRef = useRef(null);
   return (
     <>
       <Row className="align-items-center">
@@ -45,11 +55,6 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
         <Col className="text-center">
           <div className="d-inline-flex align-items-center justify-content-center gap-2">
             {title && <Title className="m-0">{title}</Title>}
-            <OverlayTipRight tip={`${hideFilters ? 'Expand' : 'Hide'} filters`}>
-              <Button ref={filterRef} variant="" className="clear-btn p-0 border-0" onClick={() => setHideFilters(!hideFilters)}>
-                <FaFilter size="18" />
-              </Button>
-            </OverlayTipRight>
           </div>
         </Col>
         <Col className="d-flex justify-content-end">
@@ -67,18 +72,22 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({
           )}
         </Col>
       </Row>
-      <OverlayWindow
-        title="Filters"
-        placement={Placement.BottomRight}
-        show={!hideFilters}
-        onHide={() => setHideFilters(true)}
-        width={500}
-        height={460}
-        positioning={PositionType.Fixed}
-        parentRef={filterRef}
-      >
-        <FilterFields show={!hideFilters} disabled={disabled} onChange={onChange} exclude={exclude} groups={groups} />
-      </OverlayWindow>
+      <Row>
+        <Col className="d-flex justify-content-center">
+          <OmnibarStandardTimeFilters
+            clauses={clauses}
+            setClauses={(next) => {
+              setClauses(next);
+              onChange(OmniClauseAndTimeToFilter(next, time));
+            }}
+            time={time}
+            setTime={(next) => {
+              setTime(time);
+              onChange(OmniClauseAndTimeToFilter(clauses, next));
+            }}
+          />
+        </Col>
+      </Row>
     </>
   );
 };

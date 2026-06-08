@@ -17,13 +17,30 @@ import { useAuth } from '@utilities/auth';
 import { getThoriumRole, getGroupRole } from '@utilities/role';
 import { fetchGroups } from '@utilities/fetch';
 import { createPipeline, deletePipeline, listPipelines, updatePipeline } from '@thorpi/pipelines';
+import { OmnibarPipelines } from '@components/pages/search/omnibar/Bars';
+import { getGroupsFromClauses, getStringFieldFromClauses } from '@components/pages/search/omnibar/utils';
+
+const filterPipelines = (pipelines, clauses) => {
+  const searchName = getStringFieldFromClauses(clauses, 'name');
+  const creator = getStringFieldFromClauses(clauses, 'creator');
+  const groups = getGroupsFromClauses(clauses);
+
+  return pipelines.filter((pipeline) => {
+    const nameFilter = pipeline.name.includes(searchName);
+    const creatorFilter = pipeline.creator.includes(creator);
+    const groupFilter = groups.length > 0 ? groups.includes(pipeline.group) : true;
+    return nameFilter && creatorFilter && groupFilter;
+  });
+};
 
 const Pipelines = () => {
   const [loading, setLoading] = useState(false);
   const [pipelines, setPipelines] = useState([]);
   const [groups, setGroups] = useState({});
+  const [clauses, setClauses] = useState([]);
   const { userInfo, checkCookie } = useAuth();
 
+  const filteredPipelines = filterPipelines(pipelines, clauses);
   // get detailed pipeline info for pipelines in each group
   const fetchPipelines = async () => {
     setLoading(true);
@@ -564,9 +581,12 @@ const Pipelines = () => {
   return (
     <Page title="Pipelines · Thorium">
       <PipelineHeader />
+      <div className="d-flex justify-content-center">
+        <OmnibarPipelines clauses={clauses} setClauses={setClauses} pipelines={pipelines} />
+      </div>
       <LoadingSpinner loading={loading}></LoadingSpinner>
       <Accordion alwaysOpen>
-        {pipelines
+        {filteredPipelines
           .sort((a, b) => orderComparePipeline(a, b))
           .map((pipeline) => (
             <Accordion.Item key={`${pipeline.name}_${pipeline.group}`} eventKey={`${pipeline.name}_${pipeline.group}`}>

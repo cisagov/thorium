@@ -17,8 +17,11 @@ import { useAuth } from '@utilities/auth';
 import { createReactSelectStyles } from '@utilities/select';
 import { getGroupRole, isGroupAdmin } from '@utilities/role';
 import { fetchGroups } from '@utilities/fetch';
-import { listUsers } from '@thorpi/users';
+import { getUser, listUsers } from '@thorpi/users';
 import { createGroup, deleteGroup, updateGroup } from '@thorpi/groups';
+import { OmnibarGroups } from '@components/pages/search/omnibar/Bars';
+import { getGroupsFromClauses, getStringFieldListFromClauses } from '@components/pages/search/omnibar/utils';
+import { getAllGroupUsers, hasOverlap } from '@utilities/groups';
 
 // styles for react select badges
 const ownerStyles = createReactSelectStyles('White', 'DarkSlateBlue');
@@ -26,12 +29,35 @@ const managerStyles = createReactSelectStyles('White', 'CornFlowerBlue');
 const userStyles = createReactSelectStyles('White', 'CadetBlue');
 const monitorStyles = createReactSelectStyles('White', 'DimGray');
 
+const filterGroups = (groups, clauses) => {
+  const clauseGroups = getGroupsFromClauses(clauses);
+  const clauseUsers = getStringFieldListFromClauses(clauses, 'Users');
+  const clauseOwners = getStringFieldListFromClauses(clauses, 'Owners');
+  const clauseManagers = getStringFieldListFromClauses(clauses, 'Managers');
+
+  const e = Object.entries(groups).filter(([name, obj]) => {
+    const users = getAllGroupUsers(obj.users);
+    const owners = getAllGroupUsers(obj.owners);
+    const managers = getAllGroupUsers(obj.managers);
+
+    const groupTest = clauseGroups.length > 0 ? clauseGroups.includes(name) : true;
+    const userTest = clauseUsers.length > 0 ? hasOverlap(users, clauseUsers) : true;
+    const ownerTest = clauseOwners.length > 0 ? hasOverlap(owners, clauseOwners) : true;
+    const managerTest = clauseManagers.length > 0 ? hasOverlap(managers, clauseManagers) : true;
+
+    return groupTest && userTest && ownerTest && managerTest;
+  });
+  return Object.fromEntries(e);
+};
+
 const Groups = () => {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState({});
   const [allUsers, setAllUSers] = useState([]);
+  const [clauses, setClauses] = useState([]);
   const { userInfo, checkCookie } = useAuth();
 
+  const filteredGroups = filterGroups(groups, clauses);
   // get a list of all Thorium users
   const fetchAllUsers = async () => {
     const reqUsers = await listUsers(console.log, false);
@@ -1061,10 +1087,13 @@ const Groups = () => {
           </h2>
         </div>
       </div>
+      <div className="d-flex justify-content-center">
+        <OmnibarGroups clauses={clauses} setClauses={setClauses} groups={groups} />
+      </div>
       <LoadingSpinner loading={loading}></LoadingSpinner>
       <Accordion alwaysOpen>
-        {groups &&
-          Object.keys(groups)
+        {filteredGroups &&
+          Object.keys(filteredGroups)
             .sort()
             .map((group) => (
               <Accordion.Item key={group} eventKey={group}>
@@ -1075,16 +1104,16 @@ const Groups = () => {
                   <Col className="accordion-item-relation mt-2">
                     <small>
                       <i>
-                        <GroupMemberCount group={groups[group]} />
+                        <GroupMemberCount group={filteredGroups[group]} />
                       </i>
                     </small>
                   </Col>
                   <Col className="accordion-item-ownership d-flex justify-content-center">
-                    <GroupRoleBadge group={groups[group]} user={userInfo} />
+                    <GroupRoleBadge group={filteredGroups[group]} user={userInfo} />
                   </Col>
                 </Accordion.Header>
                 <Accordion.Body>
-                  <GroupInfo group={groups[group]} allUsers={allUsers} />
+                  <GroupInfo group={filteredGroups[group]} allUsers={allUsers} />
                 </Accordion.Body>
               </Accordion.Item>
             ))}

@@ -3,9 +3,10 @@ import { Button, Modal } from 'react-bootstrap';
 import { useSearchParams } from 'react-router';
 
 // project imports
-import { getTagBadgeText, getTagColorClass, TagUpperKeyEnum } from '@components/tags/utilities';
+import { getTagBadgeText, getTagColorClass } from '@components/tags/utilities';
 import { OverlayTipBottom } from '@components/shared/overlay/tips';
 import { Entities } from '@models/entities';
+import { TagUpperKeyEnum } from '@models/tags';
 
 interface TagBadgeProps {
   tag: string; // tag key string
