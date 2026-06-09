@@ -12,6 +12,7 @@ use super::groups::GroupApiDocs;
 use super::images::ImageApiDocs;
 use super::jobs::JobApiDocs;
 use super::network_policies::NetworkPolicyDocs;
+use super::oauth::OAuthApiDocs;
 use super::pipelines::PipelineApiDocs;
 use super::reactions::ReactionApiDocs;
 use super::repos::RepoApiDocs;
@@ -101,6 +102,7 @@ pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
                 )
                 .url("/stream/openapi.json", StreamApiDocs::openapi())
                 .url("/system/openapi.json", SystemApiDocs::openapi())
-                .url("/users/openapi.json", UserApiDocs::openapi()),
+                .url("/users/openapi.json", UserApiDocs::openapi())
+                .url("/oauth/openapi.json", OAuthApiDocs::openapi()),
         )
 }

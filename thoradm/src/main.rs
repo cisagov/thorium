@@ -9,6 +9,7 @@ mod error;
 mod provision;
 mod settings;
 mod shared;
+mod users;
 
 use clap::Parser;
 
@@ -24,6 +25,7 @@ async fn main() {
         args::SubCommands::Settings(settings_cmd) => settings::handle(settings_cmd, &args).await,
         args::SubCommands::Provision(provision_args) => provision::handle(provision_args).await,
         args::SubCommands::Census(census_cmd) => census::handle(census_cmd, &args).await,
+        args::SubCommands::Users(users_cmd) => users::handle(users_cmd, &args).await,
     } {
         eprintln!("{err}");
         // TODO: return the proper exit code based on the error

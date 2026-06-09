@@ -124,7 +124,7 @@ async fn verify_email(
 ///
 /// # Arguments
 ///
-/// * `user` - The authenticated user
+/// * `resp` - The response to return for this user
 #[utoipa::path(
     post,
     path = "/api/users/auth",
@@ -140,9 +140,8 @@ async fn verify_email(
     )
 )]
 #[instrument(name = "routes::users::auth", skip_all, err(Debug))]
-async fn auth(user: User) -> Result<Json<AuthResponse>, ApiError> {
+async fn auth(resp: AuthResponse) -> Result<Json<AuthResponse>, ApiError> {
     // build auth response
-    let resp = AuthResponse::from(user);
     Ok(Json(resp))
 }
 

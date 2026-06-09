@@ -178,6 +178,12 @@ impl UserCreate {
         self.skip_verification = true;
         self
     }
+
+    /// Force this user to be locally authed
+    pub fn local(mut self) -> Self {
+        self.local = true;
+        self
+    }
 }
 
 /// An update for this user
@@ -557,11 +563,19 @@ impl PartialEq<ScrubbedUser> for ScrubbedUser {
 }
 
 /// Response to a sucessful auth
+///
+/// If email support is configured then users may get a VerifyEmail variant if
+/// their email has not yet been verified.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
-pub struct AuthResponse {
-    /// The token to use to talk to Thorium
-    pub token: String,
-    /// The date/time this token expires
-    pub expires: DateTime<Utc>,
+pub enum AuthResponse {
+    /// This user successfully authenticated and has a verified email
+    Authed {
+        /// The token to use to talk to Thorium
+        token: String,
+        /// The date/time this token expires
+        expires: DateTime<Utc>,
+    },
+    /// This user successfully authenticated but needs to verify their email
+    VerifyEmail(String),
 }

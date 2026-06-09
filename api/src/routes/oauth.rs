@@ -115,12 +115,7 @@ async fn callback(
         .auth_challenge(code, &csrf_token, &state.shared)
         .await?;
     // build the correct auth response based on if this is a authed user or a new user
-    let maybe_authed = match maybe_user {
-        // return the token for this authed user
-        OAuthedMaybeUser::User(user) => OAuthMaybeAuthed::Authed(AuthResponse::from(user)),
-        // return a new user registration token
-        OAuthedMaybeUser::NewUser(session) => OAuthMaybeAuthed::NewUser(session.token),
-    };
+    let maybe_authed = OAuthMaybeAuthed::from(maybe_user);
     // return our json serialized data
     Ok(Json(maybe_authed))
 }
@@ -264,12 +259,12 @@ async fn username_available(
     components(schemas(OAuthCallbackParams, OAuthMaybeAuthed, OAuthUserCreate, AuthResponse, OAuthLinkParams, OAuthUsernameCheck)),
     modifiers(&OpenApiSecurity),
 )]
-pub struct UserApiDocs;
+pub struct OAuthApiDocs;
 
 /// Return the openapi docs for these routes
 #[allow(dead_code)]
 async fn openapi() -> Json<utoipa::openapi::OpenApi> {
-    Json(UserApiDocs::openapi())
+    Json(OAuthApiDocs::openapi())
 }
 
 /// Add the oauth routes to our router

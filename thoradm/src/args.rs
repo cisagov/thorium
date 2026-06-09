@@ -59,6 +59,42 @@ pub enum SubCommands {
     /// Censuse commands in Thorium
     #[clap(subcommand)]
     Census(CensusSubCommands),
+    /// Manage Thorium user accounts
+    #[clap(subcommand)]
+    Users(UsersSubCommands),
+}
+
+/// The user account specific subcommands
+#[derive(Parser, Debug, Clone)]
+pub enum UsersSubCommands {
+    /// Scan for non-system accounts that share a duplicate email address
+    #[clap(version, author)]
+    Scan(ScanEmails),
+    /// Interactively assign unique emails to accounts that share an email address
+    #[clap(version, author)]
+    Dedupe(DedupeEmails),
+}
+
+/// Scan for accounts that share a duplicate email address
+#[derive(Parser, Debug, Clone)]
+pub struct ScanEmails {
+    /// The email used by system accounts which is allowed to be duplicated
+    #[clap(short = 's', long, default_value = "thorium")]
+    pub system_email: String,
+}
+
+/// Interactively resolve accounts that share a duplicate email address
+#[derive(Parser, Debug, Clone)]
+pub struct DedupeEmails {
+    /// The email used by system accounts which is allowed to be duplicated
+    #[clap(short = 's', long, default_value = "thorium")]
+    pub system_email: String,
+    /// Print the planned changes without applying them to Redis
+    #[clap(long)]
+    pub dry_run: bool,
+    /// Skip the confirmation prompt before applying changes
+    #[clap(short = 'y', long)]
+    pub assume_yes: bool,
 }
 
 /// The settings specific subcommands

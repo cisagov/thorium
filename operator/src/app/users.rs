@@ -34,11 +34,13 @@ pub async fn create_or_auth_user(
 ) -> Result<AuthResponse, Error> {
     let client = reqwest::Client::new();
     // build out user request, make user a local auth user with admin role
-    let mut user_req = UserCreate::new(username, password, "thorium").skip_verification();
-    // set local auth to true in case cluster is LDAP enabled
-    user_req.local = true;
-    // we want users created by the operator to be admin
-    user_req.role = UserRole::Admin;
+    let user_req = UserCreate::new(username, password, "thorium")
+        // we want users created by the operator to be admin
+        .role(UserRole::Admin)
+        // always skip email verification for system users
+        .skip_verification()
+        // set local auth to true in case cluster is LDAP enabled
+        .local();
     let settings = client::ClientSettings::default();
     // key is none for non-admin users
     let mut key: Option<String> = None;
@@ -119,7 +121,7 @@ pub async fn create_operator(meta: &ClusterMeta, url: &str) -> Result<String, Er
     match password {
         Some(operator_pass) => {
             println!("Creating operator user");
-            let auth = create_or_auth_user(
+            let maybe_authed = create_or_auth_user(
                 meta,
                 url,
                 "thorium-operator",
@@ -128,8 +130,16 @@ pub async fn create_operator(meta: &ClusterMeta, url: &str) -> Result<String, Er
                 None,
             )
             .await?;
-            // return token so operator user can be used to operate stuff
-            Ok(auth.token)
+            // check if this user has to verify their email for some reason
+            // this should never happen unless the API is broken
+            match maybe_authed {
+                AuthResponse::Authed { token, .. } => Ok(token),
+                AuthResponse::VerifyEmail(_) => {
+                    // return an error saying we have to verify the operator
+                    // email for some reason
+                    Err(Error::new("thorium-operator needs to verify email!?"))
+                }
+            }
         }
         None => Err(Error::new(
             "Could not generate new or get existing operator password",
@@ -166,11 +176,20 @@ pub async fn create(
     match password {
         Some(user_pass) => {
             println!("Creating {} user", username);
-            let auth =
+            // create or authenticate a Thorium admin account
+            let maybe_authed =
                 create_or_auth_user(meta, url, username, user_pass.as_ref(), true, Some(thorium))
                     .await?;
-            // return token so operator user can be used to operate stuff
-            Ok((user_pass, auth.token))
+            // check if this user has to verify their email for some reason
+            // this should never happen unless the API is broken
+            match maybe_authed {
+                AuthResponse::Authed { token, .. } => Ok((user_pass, token)),
+                AuthResponse::VerifyEmail(_) => {
+                    // return an error saying we have to verify the operator
+                    // email for some reason
+                    Err(Error::new("thorium-operator needs to verify email!?"))
+                }
+            }
         }
         None => Err(Error::new(format!(
             "Could not generate new or get existing {username} user password"

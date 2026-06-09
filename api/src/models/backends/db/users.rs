@@ -1,14 +1,15 @@
 use bb8_redis::redis::cmd;
 use chrono::prelude::*;
 use std::collections::{HashMap, HashSet};
-use tracing::instrument;
+use tracing::{Level, event, instrument};
 
 use super::helpers;
 use super::keys::{EventKeys, GroupKeys, SystemKeys, UserKeys};
 use crate::models::{UnixInfo, User, UserRole, UserSettings};
 use crate::utils::{ApiError, Shared};
 use crate::{
-    conn, deserialize_ext, deserialize_opt, extract, not_found, query, serialize, unauthorized,
+    conflict, conn, deserialize_ext, deserialize_opt, extract, not_found, query, serialize,
+    unauthorized,
 };
 
 /// Builds a user creation pipeline for Redis
@@ -19,27 +20,28 @@ use crate::{
 /// # Arguments
 ///
 /// * `pipe` - The redis pipeline to add onto
+/// * `keys` - The redis keys to save this users data too
 /// * `cast` - The user to create in redis
+/// * `set_username` - Wheether to also set a users username
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
 pub fn build(
     pipe: &mut redis::Pipeline,
+    keys: &UserKeys,
     cast: &User,
+    set_username: bool,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // build keys to user data
-    let keys = UserKeys::new(cast, shared);
     // build the key to our event cache status flags
     let cache_status = EventKeys::cache(shared);
     // build pipeline to save a user into redis
-    pipe.cmd("hsetnx").arg(&keys.data).arg("username").arg(&cast.username)
-        .cmd("hsetnx").arg(&keys.data).arg("email").arg(&cast.email)
+    pipe.cmd("hsetnx").arg(&keys.data).arg("email").arg(&cast.email)
         .cmd("hsetnx").arg(&keys.data).arg("role").arg(serialize!(&cast.role))
         .cmd("sadd").arg(&keys.global).arg(&cast.username)
         .cmd("hsetnx").arg(&keys.data).arg("token").arg(&cast.token)
         .cmd("hsetnx").arg(&keys.data).arg("token_expiration")
             .arg(serialize!(&cast.token_expiration))
-        .cmd("hset").arg(&SystemKeys::data(shared)).arg("scaler_cache").arg(true)
+        .cmd("hset").arg(SystemKeys::data(shared)).arg("scaler_cache").arg(true)
         .cmd("hsetnx").arg(&keys.by_token).arg(&cast.token).arg(&cast.username)
         .cmd("hset").arg(cache_status).arg("status").arg(true)
         .cmd("hsetnx").arg(&keys.data).arg("settings").arg(serialize!(&cast.settings))
@@ -47,6 +49,10 @@ pub fn build(
         .cmd("hsetnx").arg(&keys.data).arg("aliases").arg(serialize!(&cast.aliases))
         // add this users email to username map
         .cmd("hsetnx").arg(&keys.by_email).arg(&cast.email).arg(&cast.username);
+    // set a users username if enabled
+    if set_username {
+        pipe.cmd("hsetnx").arg(&keys.data).arg("username").arg(&cast.username);
+    }
     // if password is set then set that in redis
     if let Some(password) = &cast.password {
         pipe.cmd("hsetnx").arg(&keys.data).arg("password").arg(password);
@@ -89,12 +95,38 @@ pub fn build(
 #[rustfmt::skip]
 #[instrument(name = "db::users::create", skip_all, err(Debug))]
 pub async fn create(cast: User, shared: &Shared) -> Result<User, ApiError> {
-    // build pipeline to save a user into redis
-    let mut pipe = redis::pipe();
-    build(&mut pipe, &cast, shared)?;
-    // try to save user into redis
-    let _: () = pipe.atomic().query_async(conn!(shared)).await?;
-    Ok(cast)
+    // build keys to user data
+    let keys = UserKeys::new(&cast, shared);
+    // try to reserve this username
+    let is_new: bool = redis::cmd("hsetnx").arg(&keys.data).arg("username").arg(&cast.username)
+        .query_async(conn!(shared)).await?;
+    // if this username wasn't yet taken then proceed otherwise abort
+    if is_new {
+        // build pipeline to save a user into redis
+        let mut pipe = redis::pipe();
+        // add the commands to create the rest of our user
+        build(&mut pipe, &keys, &cast, false, shared)?;
+        // try to save user into redis
+        match pipe.atomic().exec_async(conn!(shared)).await {
+            // we successfully created this user
+            Ok(()) => Ok(cast),
+            // we ran into a problem creating this user
+            Err(error) => {
+                // log that we are rolling back reserver this username
+                event!(Level::INFO, msg="Rollback username reservation", username=&cast.username);
+                // rollback reserving this username
+                // its likely this will fail since it probably means redis is down
+                pipe.cmd("hdel").arg(&keys.data).arg("username").arg(&cast.username)
+                    .exec_async(conn!(shared)).await?;
+                // reemit our error
+                Err(error.into())
+                
+            }
+        }
+    } else {
+        // this username is already taken so throw a conflict error
+        conflict!(format!("Username {} is already taken", cast.username))
+    }
 }
 
 /// Cast a hashmap and list of groups into a User
@@ -231,10 +263,12 @@ pub async fn restore(users: &[User], shared: &Shared) -> Result<(), ApiError> {
     users
         .iter()
         .map(|user| {
+            // build keys to user data
+            let keys = UserKeys::new(user, shared);
             // restore this users groups
             restore_groups(&mut pipe, user, shared);
             // restore the rest of the users data
-            build(&mut pipe, user, shared)
+            build(&mut pipe, &keys, user, true, shared)
         })
         .collect::<Result<Vec<()>, ApiError>>()?;
     // restore all user data
@@ -274,22 +308,16 @@ pub async fn exists_many(usernames: &HashSet<String>, shared: &Shared) -> Result
 ///
 /// * `usernames` - The usernames to check the existence of
 /// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
 #[instrument(name = "db::users::exists", skip(shared), err(Debug))]
-pub async fn exists(username: &str, shared: &Shared) -> Result<(), ApiError> {
+pub async fn exists(username: &str, shared: &Shared) -> Result<bool, ApiError> {
     // build key to users set
     let key = UserKeys::global(shared);
     // make sure a user exists
-    let check: (bool,) = redis::pipe()
-        .cmd("sismember")
-        .arg(&key)
-        .arg(username)
+    let check: bool = redis::cmd("sismember").arg(&key).arg(username)
         .query_async(conn!(shared))
         .await?;
-    if check.0 {
-        Ok(())
-    } else {
-        not_found!(format!("{} is not a valid user", username))
-    }
+    Ok(check)
 }
 
 /// Gets a list of all valid users
@@ -528,8 +556,16 @@ pub fn build_delete(
     pipe.cmd("srem").arg(&keys.global).arg(&user.username)
         .cmd("del").arg(&keys.data)
         .cmd("del").arg(&keys.groups)
-        .cmd("hdel").arg(&keys.by_token).arg(&user.token);
-    // if this users role is analyst then add them to the analyst set
+        .cmd("hdel").arg(&keys.by_token).arg(&user.token)
+        .cmd("hdel").arg(&keys.by_email).arg(&user.email).arg(&user.username);
+    // remove any aliases for this user
+    for (provider, alias) in &user.aliases {
+        // build the key to this providers alias map
+        let alias_key = super::keys::oauth::alias_to_username(provider, shared);
+        // remove this alias from our alias map
+        pipe.cmd("hdel").arg(alias_key).arg(alias).arg(&user.username);
+    }
+    // if this users role is analyst then remove them from the analyst set
     if user.role == UserRole::Analyst {
         // build the key to the analyst set
         let analyst_key = UserKeys::analysts(shared);

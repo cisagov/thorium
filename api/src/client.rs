@@ -664,8 +664,14 @@ impl Thorium {
         client: &reqwest::Client,
     ) -> Result<(String, Option<DateTime<Utc>>), Error> {
         // create auth handler and get token
-        let resp = Users::auth_basic(host, username, password, client).await?;
-        Ok((resp.token, Some(resp.expires)))
+        match Users::auth_basic(host, username, password, client).await? {
+            AuthResponse::Authed { token, expires } => Ok((token, Some(expires))),
+            AuthResponse::VerifyEmail(email) => {
+                // build an error message telling the user to verify their email
+                let msg = format!("Email Verification required at {email}");
+                Err(Error::new(msg))
+            }
+        }
     }
 
     /// Adds a new admin to Thorium using the secret key
@@ -931,8 +937,14 @@ impl ThoriumBlocking {
         client: &reqwest::Client,
     ) -> Result<(String, Option<DateTime<Utc>>), Error> {
         // create auth handler and get token
-        let resp = UsersBlocking::auth_basic(host, username, password, client)?;
-        Ok((resp.token, Some(resp.expires)))
+        match UsersBlocking::auth_basic(host, username, password, client)? {
+            AuthResponse::Authed { token, expires } => Ok((token, Some(expires))),
+            AuthResponse::VerifyEmail(email) => {
+                // build an error message telling the user to verify their email
+                let msg = format!("Email Verification required at {email}");
+                Err(Error::new(msg))
+            }
+        }
     }
 
     /// Create a blocking Thorium client from a path on disk
