@@ -15,7 +15,9 @@ use tracing::{Level, event};
 use url::Url;
 
 use super::db;
-use crate::models::{Group, OAuthCallbackParams, OAuthLinkParams, OAuthUserCreate, User, UserRole};
+use crate::models::{
+    Group, OAuthCallbackParams, OAuthLinkParams, OAuthMaybeAuthed, OAuthUserCreate, User, UserRole,
+};
 use crate::utils::shared::OAuthClient;
 use crate::utils::{ApiError, Shared};
 use crate::{bad, conflict, token, token_expire, unauthorized, unavailable};
@@ -77,6 +79,28 @@ impl OAuthedMaybeUser {
                 // return our wrapped new user registration session
                 Ok(Self::NewUser(session))
             }
+        }
+    }
+}
+
+impl From<OAuthedMaybeUser> for OAuthMaybeAuthed {
+    fn from(maybe_user: OAuthedMaybeUser) -> Self {
+        // build the correct response on if this is a new or existing user
+        match maybe_user {
+            OAuthedMaybeUser::User(user) => {
+                // check if this user has a verified email or not
+                if user.verified {
+                    // this user has already verified their email
+                    OAuthMaybeAuthed::Authed {
+                        token: user.token,
+                        expires: user.token_expiration,
+                    }
+                } else {
+                    // this user needs to verify their email
+                    OAuthMaybeAuthed::VerifyEmail(user.email)
+                }
+            }
+            OAuthedMaybeUser::NewUser(session) => OAuthMaybeAuthed::NewUser(session.token),
         }
     }
 }
@@ -182,13 +206,8 @@ impl OAuthClient {
         // make sure that this is a valid registration token
         db::oauth::validate_registration_session(&self.name, session_token, shared).await?;
         // now that we have confirmed we have a valid session check if this username is available
-        match User::exists(username, shared).await {
-            Ok(_) => Ok(false),
-            // if this is a 404 then this username is available
-            Err(api_error) if api_error.code == StatusCode::NOT_FOUND => Ok(true),
-            // if this is any other code then something went wrong so reemit this error
-            Err(api_error) => Err(api_error),
-        }
+        // we are inverting this check so we have to unwrap invert then rewrap in Ok
+        Ok(!User::exists(username, shared).await?)
     }
 }
 
@@ -272,6 +291,11 @@ impl OAuthUserCreate {
             // return a 409 and tell the user they already have an account
             return conflict!("A user with this email already exists. Please check your email for a account link email!".to_owned());
         }
+        // also validate that this username is not yet taken
+        if User::exists(&self.username, shared).await? {
+            // This username is already taken so return a conflict error
+            return conflict!("This username is already taken!".to_owned());
+        }
         // add this alias to this user
         aliases.insert(provider.to_owned(), session.alias);
         // this is a valid session so register this user
@@ -326,6 +350,11 @@ impl OAuthLinkParams {
         user.aliases.insert(provider, alias);
         // save this users info
         db::users::save(&user, shared).await?;
+        // since we got this link through email we can also verify their email if its not yet verified
+        if !user.verified {
+            // clear this users verification token and set them as verified in redis
+            db::users::clear_verification_token(&self.username, shared).await?;
+        }
         Ok(())
     }
 

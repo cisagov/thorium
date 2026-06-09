@@ -1,5 +1,6 @@
 //! The models for OAuth based auth
 
+use chrono::prelude::*;
 use uuid::Uuid;
 
 use crate::models::AuthResponse;
@@ -28,8 +29,15 @@ pub struct OAuthLinkParams {
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub enum OAuthMaybeAuthed {
-    /// An authenticated user from oauth
-    Authed(AuthResponse),
+    /// This user successfully authenticated and has a verified email
+    Authed {
+        /// The token to use to talk to Thorium
+        token: String,
+        /// The date/time this token expires
+        expires: DateTime<Utc>,
+    },
+    /// This user successfully authenticated but needs to verify their email
+    VerifyEmail(String),
     /// An Oauth registration session token
     NewUser(String),
 }

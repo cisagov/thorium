@@ -12,7 +12,7 @@ use std::{sync::LazyLock, time::Duration};
 use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 
-use crate::{Conf, Error, Thorium, client::ClientSettings, conf::S3};
+use crate::{Conf, Error, Thorium, client::ClientSettings, conf::S3, models::AuthResponse};
 
 /// The path to a valid Thorium config in the testing directory
 ///
@@ -330,9 +330,16 @@ async fn bootstrap_test_api() -> Result<String, Error> {
             }
         }
     };
+    // get our auth token if we got one
+    let auth_token = match resp {
+        AuthResponse::Authed { token, .. } => token,
+        AuthResponse::VerifyEmail(_) => {
+            return Err(Error::new("Admin client needs to verify email?".to_owned()));
+        }
+    };
     // build our admin client
     let client = Thorium::build(ADDR.clone())
-        .token(&resp.token)
+        .token(&auth_token)
         .build()
         .await
         .map_err(|err| Error::new(format!("Failed to build admin client: {err}")))?;
@@ -342,7 +349,7 @@ async fn bootstrap_test_api() -> Result<String, Error> {
         .init()
         .await
         .map_err(|err| Error::new(format!("Failed to init system: {err}")))?;
-    Ok(resp.token)
+    Ok(auth_token)
 }
 
 /// Get an admin client, bootstrapping the API if needed

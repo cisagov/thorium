@@ -30,7 +30,7 @@ use crate::{bad, conflict, is_admin, ldap, unauthorized, unavailable, update};
 
 /// The header name for our secret key
 static SECRET_KEY_HEADER: HeaderName = HeaderName::from_static("secret-key");
-static SECRET_KEY_HEADER_REF: &'static HeaderName = &SECRET_KEY_HEADER;
+static SECRET_KEY_HEADER_REF: &HeaderName = &SECRET_KEY_HEADER;
 
 /// Return unauthorized if a function return an error
 macro_rules! check_unauth {
@@ -345,9 +345,14 @@ impl AuthMethods {
     ///
     /// # Arguments
     ///
+    /// * `verify_email` - Whether to require a verified email or not
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "User::authenticate", skip_all, err(Debug))]
-    pub async fn authenticate(&self, shared: &Shared) -> Result<User, ApiError> {
+    pub async fn authenticate(
+        &self,
+        verify_email: bool,
+        shared: &Shared,
+    ) -> Result<User, ApiError> {
         // try to authenticate this user
         let user = match self {
             Self::Token(token) => token_auth(token, shared).await,
@@ -355,8 +360,8 @@ impl AuthMethods {
                 password_auth(username, password, shared).await
             }
         }?;
-        // make sure this user has been verified
-        if !user.verified {
+        // make sure this user's email has been verified
+        if verify_email && !user.verified {
             // our user has not been verified yet so reject this request
             return unauthorized!("Email has not been verified".to_owned());
         }
@@ -574,7 +579,7 @@ impl User {
             return bad!("external is a reserved username".to_owned());
         }
         // make sure this user doesn't already exist
-        if User::exists(&req.username, shared).await.is_ok() {
+        if User::exists(&req.username, shared).await? {
             return conflict!(format!("User {} already exists", req.username));
         }
         // only allow users with the secret key to create admins with this route
@@ -776,11 +781,13 @@ impl User {
 
     /// Checks if a user exists
     ///
+    /// Returns true if this user exists.
+    ///
     /// # Arguments
     ///
     /// * `username` - the name of a user to check
     /// * `shared` - Shared Thorium objects
-    pub async fn exists(username: &str, shared: &Shared) -> Result<(), ApiError> {
+    pub async fn exists(username: &str, shared: &Shared) -> Result<bool, ApiError> {
         // check if this user exists
         db::users::exists(username, shared).await
     }
@@ -1033,13 +1040,18 @@ impl User {
     /// # Arguments
     ///
     /// * `auth_header` - The auth header value to pull creds from
+    /// * `verify_email` - Whether to require a verified email or not
     /// * `shared` - Shared objects in Thorium
     #[instrument(name = "User::auth", skip_all, err(Debug))]
-    async fn auth(auth_header: &str, shared: &Shared) -> Result<Self, ApiError> {
+    async fn auth(
+        auth_header: &str,
+        verify_email: bool,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
         // get our auth method
         let method = check_unauth!(AuthMethods::from_str(auth_header));
         // try to authenticate our user
-        match method.authenticate(shared).await {
+        match method.authenticate(verify_email, shared).await {
             Ok(user) => {
                 event!(Level::INFO, user = &user.username);
                 Ok(user)
@@ -1176,7 +1188,8 @@ where
         if let Some(header_val) = parts.headers.get("authorization") {
             // try to cast our authorization header value to a str
             if let Ok(header_str) = header_val.to_str() {
-                if let Ok(user) = User::auth(header_str, &state.shared).await {
+                // authenticate this user and make sure they have verified their email
+                if let Ok(user) = User::auth(header_str, true, &state.shared).await {
                     return Ok(user);
                 }
             }
@@ -1210,9 +1223,57 @@ impl From<User> for AuthResponse {
     ///
     /// * `user` - The user to build an `AuthResponse` from
     fn from(user: User) -> Self {
-        AuthResponse {
-            token: user.token,
-            expires: user.token_expiration,
+        // check if this user has verified their email
+        if user.verified {
+            // this user has
+            AuthResponse::Authed {
+                token: user.token,
+                expires: user.token_expiration,
+            }
+        } else {
+            // This user has not yet verified their email
+            AuthResponse::VerifyEmail(user.email)
         }
+    }
+}
+
+impl<S> FromRequestParts<S> for AuthResponse
+where
+    AppState: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = AuthReject;
+    /// Gets an authenticated user from a request
+    ///
+    /// # Arguments
+    ///
+    /// * `parts` - The request parts to extract our secret key from
+    /// * `state` - Shared Thorium objects
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // get the shared app state
+        let state = AppState::from_ref(state);
+        // extract the authorization headers for this user
+        if let Some(header_val) = parts.headers.get("authorization") {
+            // try to cast our authorization header value to a str
+            if let Ok(header_str) = header_val.to_str() {
+                // authenticate this user but don't require a verified email
+                if let Ok(user) = User::auth(header_str, false, &state.shared).await {
+                    // return the correct auth response based on if we have a verified email or not
+                    let resp = if user.verified {
+                        // this user has a verified email and has authenticated so return their token info
+                        AuthResponse::Authed {
+                            token: user.token,
+                            expires: user.token_expiration,
+                        }
+                    } else {
+                        // this user still needs to verify their email
+                        AuthResponse::VerifyEmail(user.email)
+                    };
+                    return Ok(resp);
+                }
+            }
+        }
+        // we failed to extract our auth info from our headers
+        Err(AuthReject)
     }
 }
