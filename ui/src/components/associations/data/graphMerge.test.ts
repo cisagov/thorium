@@ -71,6 +71,34 @@ describe('mergeGrowthInto', () => {
     expect(result.groups).toEqual(['g1']);
     expect(result.initial).toEqual(['a']);
   });
+
+  it('re-canonicalizes the merged graph so appended branches and merged keys stay id-ordered', () => {
+    // grown adds a branch and a data_map node that sort BEFORE the existing ones by numeric id; the
+    // merge appends/spreads in sequence, so only re-canonicalization keeps the result deterministic
+    const initial = graphWith({
+      data_map: { '50': {} },
+      branches: { '1': [branch('50', 'h50')] },
+    });
+    const grown = graphWith({
+      data_map: { '20': {} },
+      branches: { '1': [branch('20', 'h20')] },
+    });
+    const result = mergeGrowthInto(initial, grown, []);
+    expect(result.branches['1'].map((b) => b.node)).toEqual(['20', '50']);
+    expect(Object.keys(result.data_map)).toEqual(['20', '50']);
+  });
+
+  it('does not mutate the initial graph it merges into', () => {
+    const initial = graphWith({
+      data_map: { '50': {} },
+      branches: { '1': [branch('50', 'h50')] },
+    });
+    const grown = graphWith({ branches: { '1': [branch('20', 'h20')] } });
+    mergeGrowthInto(initial, grown, []);
+    // the source array/keys are untouched even though canonicalization reorders the merged copy
+    expect(initial.branches['1'].map((b) => b.node)).toEqual(['50']);
+    expect(Object.keys(initial.data_map)).toEqual(['50']);
+  });
 });
 
 describe('computeDistances', () => {
@@ -121,5 +149,21 @@ describe('computeDistances', () => {
   it('returns empty map for empty graph', () => {
     const distances = computeDistances(graphWith({}));
     expect(distances.size).toBe(0);
+  });
+
+  it('measures from an explicit seed set instead of graph.initial', () => {
+    // initial is 'a', but seeding from 'b' re-bases distances on the focus root (0 at 'b')
+    const graph = graphWith({
+      initial: ['a'],
+      branches: {
+        a: [branch('b', 'h1')],
+        b: [branch('c', 'h2')],
+      },
+    });
+    const distances = computeDistances(graph, ['b']);
+    expect(distances.get('b')).toBe(0);
+    expect(distances.get('c')).toBe(1);
+    // 'a' is one undirected hop back up from the seed 'b'
+    expect(distances.get('a')).toBe(1);
   });
 });

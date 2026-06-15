@@ -1,9 +1,12 @@
 import React, { Fragment } from 'react';
 
+// spec: ./Time.spec.md
+
 interface TimeProps {
   children: string;
-  className?: string; // custom className pass through
-  verbose?: boolean; // full date string
+  className?: string;
+  /** Renders the long-form "on <date> at <time>" string instead of the compact "<date> <time>". */
+  verbose?: boolean;
 }
 
 const Time: React.FC<TimeProps> = ({ children, verbose }) => {

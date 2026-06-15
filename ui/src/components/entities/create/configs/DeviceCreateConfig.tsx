@@ -83,7 +83,7 @@ const DeviceMetaInfo = ({ entity, onChange }: CreateMetadataProps<Entities.Devic
               id="collect-logs"
               label=""
               checked={entity.metadata.Device.sensitive_location}
-              onChange={(e) => updatePendingMeta('sensitive_location', e.target.value == 'on' ? true : false)}
+              onChange={(e) => updatePendingMeta('sensitive_location', e.target.checked)}
             />
           </Form.Group>
         </Col>
@@ -106,7 +106,6 @@ const DeviceCreateConfig: EntityCreateConfig<Entities.Device> = {
   kind: Entities.Device,
   EntityMetadata: DeviceMetaInfo,
   BlankCreateEntity: BlankCreateDevice,
-  supportsGraphic: true,
 };
 
 export default DeviceCreateConfig;

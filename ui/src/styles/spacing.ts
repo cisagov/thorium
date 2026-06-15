@@ -11,3 +11,10 @@ export enum spacers {
   nine = '6rem',
   ten = '7rem',
 }
+
+/**
+ * Standard gap between adjacent buttons or badges in a row/group. Single source of truth shared by
+ * the accordion header row, profile group badges, and the token controls so they stay visually
+ * consistent.
+ */
+export const BUTTON_BADGE_GAP = '4px';

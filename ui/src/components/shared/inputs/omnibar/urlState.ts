@@ -17,10 +17,16 @@ import { Clause, ClauseCondition, ClauseIsMulti, CondIsMulti, NewTextClause, par
 import { RelativeUnit, TimeSelection } from './timepicker/utils';
 import type { ParamCodec } from '@utilities/url/codecs';
 
+// spec: ./SPEC.md
+
 export type OmniState = { clauses: Clause[]; time: TimeSelection };
 
 // Param keys owned by the clause codec (excluding the dynamic `tags[KEY]` keys). `nohide` is the
 // sentinel marking "hidden tags explicitly cleared" so it can be distinguished from "unset".
+// These are disjoint from the dashboard's own keys — its seed keys (`sample`/`entity`/`repo`/`tag`/`depth`)
+// and its `hidden`/`flagged` state keys — so a dashboard URL can merge omnibar and dashboard params without
+// collision. Note the near-collision: `hide` here holds hidden TAG KEYS (a display filter), whereas the
+// dashboard's `hidden` holds hidden NODE IDS; they are distinct keys and never overlap.
 const CLAUSE_STATIC_KEYS = ['query', 'groups', 'indexes', 'limit', 'hide', 'nohide', 'c'];
 // Param keys owned by the time codec.
 const TIME_KEYS = ['last', 'round', 'start', 'end'];

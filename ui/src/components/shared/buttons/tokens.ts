@@ -1,5 +1,7 @@
 import { ButtonVariant, ButtonSize } from './types';
 
+// spec: ./Button.spec.md
+
 export interface SizeToken {
   padding: string;
   fontSize: string;

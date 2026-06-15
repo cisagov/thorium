@@ -5,6 +5,8 @@ import SelectableArray from '@components/shared/inputs/selectable/SelectableArra
 import { useUpload } from './UploadContext';
 import OriginField from './OriginField';
 
+// spec: ./upload.spec.md
+
 const OriginMemoryDump: React.FC = () => {
   const { originState, origin } = useUpload();
   const { memoryType, parentFile, reconstructed, baseAddress } = originState.memoryDump;

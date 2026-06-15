@@ -1,18 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FaCog, FaProjectDiagram, FaBolt, FaCamera, FaArrowRight } from 'react-icons/fa';
 import { FaHexagonNodes } from 'react-icons/fa6';
+
+// project imports
+import EdgesSection from './EdgesSection';
+import ExportSection from './ExportSection';
+import ForcesSection from './ForcesSection';
+import GraphSection from './GraphSection';
+import NodesSection from './NodesSection';
+import { ToolbarContainer, ToolbarIconButton, NodeCount, ToolbarSpinner } from './Toolbar.styled';
+import ToolbarButton from './ToolbarButton';
 import { SectionKey } from './types';
 import type { GraphControls, DisplayAction } from './types';
 import type { GraphInstance } from '../types';
-import { ToolbarContainer, ToolbarIconButton, NodeCount, ToolbarSpinner } from './Toolbar.styled';
-import { OverlayTipTop } from '@components/shared/overlay/tips';
 import ScrollableSelect from '@components/shared/inputs/ScrollableSelect';
-import ToolbarButton from './ToolbarButton';
-import GraphSection from './GraphSection';
-import ForcesSection from './ForcesSection';
-import NodesSection from './NodesSection';
-import EdgesSection from './EdgesSection';
-import ExportSection from './ExportSection';
+import { OverlayTipTop } from '@components/shared/overlay/tips';
+
+// spec: ./GraphControlsToolbar.spec.md
 
 interface GraphControlsToolbarProps {
   graphId: string;
@@ -21,6 +25,8 @@ interface GraphControlsToolbarProps {
   graphInstance: GraphInstance | null;
   nodeCount: number;
   loading: boolean;
+  /** True while a grow/growToDepth is in flight — the depth control disables so rapid changes don't queue work. */
+  growing: boolean;
 }
 
 const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
@@ -30,6 +36,7 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
   graphInstance,
   nodeCount,
   loading,
+  growing,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
@@ -67,12 +74,12 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
   return (
     <ToolbarContainer ref={toolbarRef}>
       {isOpen ? (
-        <ToolbarIconButton $active onClick={handleGearToggle}>
+        <ToolbarIconButton $active aria-label="Toggle controls" onClick={handleGearToggle}>
           <FaCog size={16} />
         </ToolbarIconButton>
       ) : (
         <OverlayTipTop tip="Controls">
-          <ToolbarIconButton onClick={handleGearToggle}>
+          <ToolbarIconButton aria-label="Toggle controls" onClick={handleGearToggle}>
             <FaCog size={16} />
           </ToolbarIconButton>
         </OverlayTipTop>
@@ -148,13 +155,14 @@ const GraphControlsToolbar: React.FC<GraphControlsToolbarProps> = ({
             />
           </ToolbarButton>
 
-          <OverlayTipTop tip="Depth" disabled={depthMenuOpen}>
+          <OverlayTipTop tip={growing ? 'Growing…' : 'Depth'} disabled={depthMenuOpen}>
             <ScrollableSelect
               value={controls.depth}
               onChange={(v) => updateControls({ type: 'depth', state: v })}
               min={1}
               windowSize={5}
               onOpenChange={setDepthMenuOpen}
+              disabled={growing}
             />
           </OverlayTipTop>
         </>

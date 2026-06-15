@@ -3,6 +3,8 @@ import styled from 'styled-components';
 import type { Suggestion, FieldSchema } from '@utilities/rules/types';
 import { FieldValueType } from '@utilities/rules/types';
 
+// spec: ./CodeEditor.spec.md
+
 const Panel = styled.div`
   background-color: var(--thorium-panel-bg);
   border: 1px solid var(--thorium-panel-border);

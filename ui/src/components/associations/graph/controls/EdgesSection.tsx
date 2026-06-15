@@ -1,9 +1,13 @@
 import React from 'react';
 import { Form } from 'react-bootstrap';
 
+// project imports
 import type { SectionProps } from './types';
 import { PopoverBody, Divider } from './Toolbar.styled';
 import LabeledRange from './LabeledRange';
+import { EDGE_LABEL_MAX_PX, EDGE_LABEL_MIN_PX, EDGE_LABEL_TARGET_PX } from '../labelScale';
+
+// spec: ./GraphControlsToolbar.spec.md
 
 const EdgesSection: React.FC<SectionProps> = ({ controls, updateControls }) => (
   <PopoverBody>
@@ -94,30 +98,21 @@ const EdgesSection: React.FC<SectionProps> = ({ controls, updateControls }) => (
           label="Label Size"
           value={controls.edgeLabelScale}
           min={0.5}
-          max={3}
+          max={2.0}
           step={0.1}
-          formatValue={(v) => `${v.toFixed(1)}x`}
+          formatValue={(v) => `${Math.round(Math.min(EDGE_LABEL_MAX_PX, Math.max(EDGE_LABEL_MIN_PX, v * EDGE_LABEL_TARGET_PX)))}px`}
           onChange={(v) => updateControls({ type: 'edgeLabelScale', state: v })}
         />
         <LabeledRange
           id="form-edge-label-density"
           label="Label Density"
+          tooltip="How many labels are shown before zooming in reveals more"
           value={controls.edgeLabelDensity}
           min={0.1}
           max={1.0}
           step={0.1}
           formatValue={(v) => `${(v * 100).toFixed(0)}%`}
           onChange={(v) => updateControls({ type: 'edgeLabelDensity', state: v })}
-        />
-        <LabeledRange
-          id="form-edge-label-min-size"
-          label="Min Font Size"
-          value={controls.edgeLabelMinSize}
-          min={0.5}
-          max={5}
-          step={0.5}
-          formatValue={(v) => `${v.toFixed(1)}x`}
-          onChange={(v) => updateControls({ type: 'edgeLabelMinSize', state: v })}
         />
       </>
     )}

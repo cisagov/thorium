@@ -4,6 +4,8 @@ import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 // project imports
 import { ReactionRunResult } from '@models/reactions';
 
+// spec: ../files.spec.md
+
 interface RunReactionAlertsProps {
   responses: ReactionRunResult[];
 }

@@ -116,6 +116,7 @@ async fn initial_settings_consistency_scan(
         verification_token: None,
         verification_sent: None,
         aliases: std::collections::HashMap::default(),
+        image: None,
     };
     // do a scan for consistency according to current settings
     settings.consistency_scan(&fake_admin, &shared).await?;

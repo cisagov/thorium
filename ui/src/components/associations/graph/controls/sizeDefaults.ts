@@ -1,5 +1,7 @@
 import type { GraphControls } from './types';
 
+// spec: ./GraphControlsToolbar.spec.md
+
 // Keys managed by auto-scaling — user overrides are tracked per-key
 export const SIZE_SCALED_KEYS: ReadonlyArray<keyof GraphControls> = [
   'chargeStrength',
@@ -12,7 +14,8 @@ export const SIZE_SCALED_KEYS: ReadonlyArray<keyof GraphControls> = [
   'directionalParticles',
   'warmupTicks',
   'cooldownTime',
-  'nodeLabelDensity',
+  'nodeLabelScale',
+  'edgeLabelScale',
 ];
 
 interface ScaleRange {
@@ -30,8 +33,11 @@ const SCALE_RANGES: Record<string, ScaleRange> = {
   arrowLength: { small: 3.5, large: 1.5 },
   directionalParticles: { small: 1, large: 0 },
   warmupTicks: { small: 0, large: 200 },
-  cooldownTime: { small: 15000, large: 5000 },
-  nodeLabelDensity: { small: 0.7, large: 0.3 },
+  cooldownTime: { small: 4000, large: 5000 },
+  // label pixel-size multipliers: 1.0 ≈ 12px node labels on small graphs,
+  // easing down to 0.85 ≈ 10px on large graphs so defaults never drop below ~10px
+  nodeLabelScale: { small: 1.0, large: 0.85 },
+  edgeLabelScale: { small: 1.0, large: 0.85 },
 };
 
 const LOG_SMALL = Math.log10(30);

@@ -6,6 +6,8 @@ import { ButtonVariant, ButtonSize } from '@components/shared/buttons';
 import { SIZE_TOKENS, VARIANT_TOKENS, BUTTON_BAR_GAP } from '@components/shared/buttons/tokens';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
 
+// spec: ./browsing.spec.md
+
 export const HeaderActions = styled.div`
   display: flex;
   align-items: center;

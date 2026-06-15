@@ -87,7 +87,8 @@ export default defineConfig(() => {
         "@models": fileURLToPath(new URL("./src/models", import.meta.url)),
         "@pages": fileURLToPath(new URL("./src/pages", import.meta.url)),
         "@utilities": fileURLToPath(new URL("./src/utilities", import.meta.url)),
-        "@thorpi": fileURLToPath(new URL("./src/thorpi", import.meta.url))
+        "@thorpi": fileURLToPath(new URL("./src/thorpi", import.meta.url)),
+        "@dashboards": fileURLToPath(new URL("./src/dashboards", import.meta.url))
       },
     },
     css: {

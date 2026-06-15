@@ -1,6 +1,8 @@
 // Pure helper functions for pipeline order manipulation.
 // Extracted from PipelineOrderFlow.tsx for testability without DOM dependencies.
 
+// spec: ./PipelineOrderFlow.spec.md
+
 // Horizontal spacing between stage left-edges. Must exceed NODE_MAX_WIDTH (240) by a comfortable
 // margin so a max-width node leaves room for the connecting edge before the next stage (otherwise
 // wide nodes overlap their neighbor). 300 → ~60px edge gap at max node width.

@@ -23,6 +23,8 @@ import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { ImageArgs, ArgStrategyValue } from '@models/images';
 import { ArgStrategy } from '@models/images';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `The command line parameters passed to this image when it is run.`,
   entrypoint: `The entrypoint executable or script that the agent will call to run this image. For images run in K8s, leaving this blank will cause the default container entrypoint to be used.`,

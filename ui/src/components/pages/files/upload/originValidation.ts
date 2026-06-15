@@ -1,8 +1,20 @@
 import { OriginState, TagEntry } from './types';
 import { hasInvalidTags } from '@utilities/tags';
 
+// spec: ./upload.spec.md
+
 type ValidationResult = { success: true } | { success: false; error: string };
 
+/**
+ * Build the base multipart upload form with description, groups, TLP tags, and user tags.
+ *
+ * @param description - The optional file description; omitted from the form when empty.
+ * @param selectedGroups - The groups to upload the file to; at least one is required.
+ * @param tags - User-supplied key/value tags; entries with an empty key or value are skipped.
+ * @param tlpTags - TLP key/value tags; entries with an empty key or value are skipped.
+ * @returns An object with the populated `form` on success, or `errors` listing validation failures
+ *   (no groups selected, or invalid tags present).
+ */
 export function buildUploadFormBase(
   description: string,
   selectedGroups: string[],
@@ -42,6 +54,14 @@ export function buildUploadFormBase(
   return { form };
 }
 
+/**
+ * Append the origin fields to an upload form, dispatching on the selected origin type.
+ *
+ * @param formBase - The form to append origin fields to; mutated in place.
+ * @param origin - The origin state holding the selected type and its per-type field values.
+ * @returns A success result, or a failure result with an error message when a dependent field is
+ *   set without its required field (e.g. a site name without a URL).
+ */
 export function appendOriginToForm(formBase: FormData, origin: OriginState): ValidationResult {
   const { originType } = origin;
 

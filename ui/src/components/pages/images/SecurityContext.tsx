@@ -22,6 +22,8 @@ import ToggleSwitch from '@components/shared/inputs/ToggleSwitch';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { SecurityContext as SecurityContextType } from '@models/images';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `Runtime security context settings. Only admins can adjust these image settings.`,
   user: `The user ID used to run this image. This is an admin only feature.`,

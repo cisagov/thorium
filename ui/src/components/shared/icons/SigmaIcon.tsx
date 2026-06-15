@@ -1,6 +1,8 @@
 import React from 'react';
 import SigmaSVG from '@assets/icons/sigma.svg?raw';
 
+// spec: ./SigmaIcon.spec.md
+
 interface SigmaIconProps {
   size?: number;
   color?: string;

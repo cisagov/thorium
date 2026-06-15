@@ -18,13 +18,37 @@ import {
   NetConState,
 } from './network_connections';
 import { CreateOther, Other, OtherCreateMeta, OtherMeta } from './other';
+import { CreateFlag, Flag, FlagCreateMeta, FlagMeta } from './flag';
+import { CreateIncident, Incident, IncidentCreateMeta, IncidentMeta } from './incident';
+import {
+  CompiledFunction,
+  CompiledFunctionCreateMeta,
+  CompiledFunctionMeta,
+  CompiledInstruction,
+  CreateCompiledFunction,
+  CreateDecompiledFunction,
+  DecompiledFunction,
+  DecompiledFunctionCreateMeta,
+  DecompiledFunctionMeta,
+} from './functions';
+import {
+  CreatePeImport,
+  CreatePeSection,
+  PeImport,
+  PeImportCreateMeta,
+  PeImportMeta,
+  PeSection,
+  PeSectionCreateMeta,
+  PeSectionMeta,
+} from './pe';
 import { CreateSigmaRule, SigmaActionToTake, SigmaRule, SigmaRuleAppliesTo, SigmaRuleCreateMeta, SigmaRuleMeta } from './rules/sigma';
+import { labelWithFallback } from '../labels';
 
 // Entity types
 export enum Entities {
-  // psuedo entity, doesn't follow entity structure
+  /// A pseudo entity that doesn't follow the standard entity structure
   File = 'File',
-  // psuedo entity, doesn't follow entity structure
+  /// A pseudo entity that doesn't follow the standard entity structure
   Repo = 'Repo',
   /// A device entity
   Device = 'Device',
@@ -47,30 +71,91 @@ export enum Entities {
   NetworkConnection = 'NetworkConnection',
   /// A sigma rule to apply to data
   SigmaRule = 'SigmaRule',
+  /// A flag denoting something interesting, odd, or suspicious
+  Flag = 'Flag',
+  /// An incident grouping related activity (teams, networks, machines, locations)
+  Incident = 'Incident',
+  /// A compiled function and its disassembly
+  CompiledFunction = 'CompiledFunction',
+  /// A decompiled function and its decompiled source
+  DecompiledFunction = 'DecompiledFunction',
+  /// A section within a PE/binary (e.g. `.text`)
+  PeSection = 'PeSection',
+  /// A library imported by a PE/binary and the functions imported from it
+  PeImport = 'PeImport',
   /// An entity that can't be described by any of the other variants
   Other = 'Other',
 }
 
+/**
+ * Human-readable display labels for each entity type, colocated with the {@link Entities} enum so the
+ * two can't drift. Typed as an exhaustive `Record<Entities, string>`: adding a new `Entities` member
+ * without a label here is a compile-time error. Use for DISPLAY only — the raw enum value is still the
+ * API/route/key value.
+ */
+export const ENTITY_LABELS: Record<Entities, string> = {
+  [Entities.File]: 'File',
+  [Entities.Repo]: 'Repo',
+  [Entities.Device]: 'Device',
+  [Entities.Vendor]: 'Vendor',
+  [Entities.Collection]: 'Collection',
+  [Entities.FileSystem]: 'File System',
+  [Entities.Folder]: 'Folder',
+  [Entities.WindowsProcessTree]: 'Windows Process Tree',
+  [Entities.WindowsProcess]: 'Windows Process',
+  [Entities.NetworkConnection]: 'Network Connection',
+  [Entities.SigmaRule]: 'Sigma Rule',
+  [Entities.Flag]: 'Flag',
+  [Entities.Incident]: 'Incident',
+  [Entities.CompiledFunction]: 'Compiled Function',
+  [Entities.DecompiledFunction]: 'Decompiled Function',
+  [Entities.PeSection]: 'PE Section',
+  [Entities.PeImport]: 'PE Import',
+  [Entities.Other]: 'Other',
+};
+
+/**
+ * Get the human-readable label for an entity kind.
+ *
+ * @param kind - An {@link Entities} value, or a raw kind string (some call sites carry `string`).
+ * @returns The mapped label, falling back to {@link humanize} for an unknown/unmapped kind.
+ */
+export function entityLabel(kind: Entities | string): string {
+  return labelWithFallback(ENTITY_LABELS, kind);
+}
+
 // pure entities
 export type EntityTypes =
+  | CompiledFunction
+  | DecompiledFunction
   | Device
   | Collection
   | FileSystem
+  | Flag
   | Folder
+  | Incident
   | NetworkConnection
   | Other
+  | PeImport
+  | PeSection
   | SigmaRule
   | Vendor
   | WindowsProcess
   | WindowsProcessTree;
 
 export type EntityMetaTypes =
+  | CompiledFunctionMeta
+  | DecompiledFunctionMeta
   | DeviceMeta
   | CollectionMeta
   | FileSystemMeta
+  | FlagMeta
   | FolderMeta
+  | IncidentMeta
   | NetworkConnectionMeta
   | OtherMeta
+  | PeImportMeta
+  | PeSectionMeta
   | SigmaRuleMeta
   | VendorMeta
   | WindowsProcessMeta
@@ -79,26 +164,58 @@ export type EntityMetaTypes =
 // pure create entities
 export type EntityCreateTypes =
   | CreateCollection
+  | CreateCompiledFunction
+  | CreateDecompiledFunction
   | CreateDevice
   | CreateFileSystem
+  | CreateFlag
   | CreateFolder
+  | CreateIncident
   | CreateNetworkConnection
   | CreateOther
+  | CreatePeImport
+  | CreatePeSection
   | CreateSigmaRule
   | CreateVendor
   | CreateWindowsProcess
   | CreateWindowsProcessTree;
 
-export type UISupportedEntityCreateTypes = CreateDevice | CreateCollection | CreateVendor | CreateSigmaRule;
-export type UISupportedEntityCreateKind = Entities.Collection | Entities.Device | Entities.Vendor | Entities.SigmaRule;
+export type UISupportedEntityCreateTypes =
+  | CreateDevice
+  | CreateCollection
+  | CreateVendor
+  | CreateSigmaRule
+  | CreateFlag
+  | CreateIncident
+  | CreateCompiledFunction
+  | CreateDecompiledFunction
+  | CreatePeSection
+  | CreatePeImport;
+export type UISupportedEntityCreateKind =
+  | Entities.Collection
+  | Entities.Device
+  | Entities.Vendor
+  | Entities.SigmaRule
+  | Entities.Flag
+  | Entities.Incident
+  | Entities.CompiledFunction
+  | Entities.DecompiledFunction
+  | Entities.PeSection
+  | Entities.PeImport;
 
 export type EntityCreateMetaTypes =
+  | CompiledFunctionCreateMeta
+  | DecompiledFunctionCreateMeta
   | DeviceCreateMeta
   | CollectionCreateMeta
   | FileSystemCreateMeta
+  | FlagCreateMeta
   | FolderCreateMeta
+  | IncidentCreateMeta
   | NetworkConnectionCreateMeta
   | OtherCreateMeta
+  | PeImportCreateMeta
+  | PeSectionCreateMeta
   | SigmaRuleCreateMeta
   | VendorCreateMeta
   | WindowsProcessCreateMeta
@@ -207,6 +324,36 @@ export type UpdateEntityMetadata = {
   remove_sigma_actions?: number[];
   /// The score that a rule applies
   score?: number;
+  // ----- Incident -----
+  /// The cover term / codename for an incident
+  cover_term?: string;
+  add_mission_teams?: string[];
+  remove_mission_teams?: string[];
+  add_networks?: string[];
+  remove_networks?: string[];
+  add_machines?: string[];
+  remove_machines?: string[];
+  add_locations?: string[];
+  remove_locations?: string[];
+  // ----- Compiled/Decompiled functions -----
+  /// The virtual address of a function (compiled or decompiled)
+  function_address?: number;
+  /// The full replacement disassembly for a compiled function
+  disassembly?: CompiledInstruction[];
+  /// The replacement decompiled content for a decompiled function
+  decompilation_content?: string;
+  // ----- PE section -----
+  /// The MD5 of a PE section's raw data
+  md5?: string;
+  /// The raw (on disk) size of a PE section in bytes
+  raw_size?: number;
+  /// The virtual (in memory) size of a PE section in bytes
+  virtual_size?: number;
+  /// The Shannon entropy of a PE section's data
+  entropy?: number;
+  // ----- PE import -----
+  /// The full replacement list of functions imported by a PE import
+  functions?: string[];
 };
 
 // entity update format

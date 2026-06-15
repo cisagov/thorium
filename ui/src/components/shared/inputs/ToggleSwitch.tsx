@@ -1,5 +1,7 @@
 import styled from 'styled-components';
 
+// spec: ./ToggleSwitch.spec.md
+
 const ToggleSwitch = styled.input.attrs({ type: 'checkbox', role: 'switch' })`
   appearance: none;
   width: 36px;

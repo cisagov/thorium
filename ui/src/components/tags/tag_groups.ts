@@ -1,3 +1,5 @@
+// spec: ./tags.spec.md
+
 // Lists of preformatted or categorized tags
 export const FileInfoTagKeys = [
   'FileType',

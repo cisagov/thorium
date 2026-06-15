@@ -5,10 +5,13 @@ import styled from 'styled-components';
 // project imports
 import { OverlayTipBottom } from '@components/shared/overlay/tips';
 
+// spec: ./LinkBadge.spec.md
+
 interface LinkBadgeProps {
-  url: string; // redirect url
+  url: string;
   label?: string;
-  internal?: boolean; // whether link is on same site
+  /** When true the url points to this site and opens directly; otherwise a confirm modal gates the redirect. */
+  internal?: boolean;
 }
 
 const BadgeContent = styled.div`

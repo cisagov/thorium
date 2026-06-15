@@ -1,10 +1,13 @@
 // project imports
-import { Graph, BranchNode, Direction, NodeType, TreeNodeKey } from '@models/trees';
-import { Entities } from '@models/entities/entities';
 import { formatSubmissionNames, formatTagNames, getEdgeLabel } from '../utilities';
 import { getNodeSize, scoreNode } from '../shared/scaling';
+import { isValidSha256 } from '@utilities/files';
+import { Graph, BranchNode, Direction, NodeType, TreeNodeKey } from '@models/trees';
+import { Entities, ENTITY_LABELS } from '@models/entities/entities';
 import { VisualState } from './types';
 import type { GraphNode, GraphLink, GraphData } from './types';
+
+// spec: ./AssociationGraph.spec.md
 
 export const getLinkEndpoints = (link: GraphLink): { source: string; target: string } => {
   const source = typeof link.source === 'object' ? (link.source as GraphNode).id : link.source;
@@ -35,7 +38,13 @@ export const classifyNode = (
   } else if (TreeNodeKey.Tag in nodeData) {
     return { nodeType: NodeType.Tag, visualState, label: formatTagNames(nodeData.Tag?.tags ?? {}, true) };
   } else if (nodeData.Entity?.kind && Object.values(Entities).includes(nodeData.Entity.kind)) {
-    return { nodeType: nodeData.Entity.kind, visualState, label: nodeData.Entity.name };
+    let label = nodeData.Entity.name;
+    // Windows process tree names are sha256 hashes, which are meaningless in the graph;
+    // show the readable type label instead when the name is a bare hash.
+    if (nodeData.Entity.kind === Entities.WindowsProcessTree && isValidSha256(label)) {
+      label = ENTITY_LABELS[Entities.WindowsProcessTree];
+    }
+    return { nodeType: nodeData.Entity.kind, visualState, label };
   }
   return { nodeType: NodeType.Other, visualState, label: 'Unknown' };
 };
@@ -91,8 +100,14 @@ export const processInitialGraphData = (graph: Graph): GraphData => {
   const addEdge = (source: string, target: BranchNode) => {
     const targetNode = target.direction === Direction.To ? target.node.toString() : source;
     const sourceNode = target.direction === Direction.To ? source : target.node.toString();
-    const edgeKey = `${sourceNode}-${targetNode}-${target.relationship_hash}`;
-    if (seenEdges.has(edgeKey) && target.direction !== Direction.Bidirectional) return;
+    // A bidirectional association is stored on both endpoints, so it surfaces as two reverse branches
+    // (source->target and target->source) once both nodes are present. Their `relationship_hash` is the
+    // same (hashed direction-independently server-side), so canonicalize the endpoint order for the dedup
+    // key to collapse the reverse pair into a single link instead of drawing it twice.
+    const endpoints =
+      target.direction === Direction.Bidirectional ? [sourceNode, targetNode].sort().join('-') : `${sourceNode}-${targetNode}`;
+    const edgeKey = `${endpoints}-${target.relationship_hash}`;
+    if (seenEdges.has(edgeKey)) return;
     seenEdges.add(edgeKey);
     links.push({
       source: sourceNode,

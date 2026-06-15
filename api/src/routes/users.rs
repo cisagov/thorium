@@ -1,23 +1,33 @@
 use axum::Router;
-use axum::extract::{Json, Path, State};
+use axum::extract::{DefaultBodyLimit, Json, Multipart, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum_extra::TypedHeader;
+use axum_extra::body::AsyncReadBody;
 use chrono::Utc;
 use tracing::{Level, event, instrument};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
+use super::shared::graphics;
 
 // our imports
+use crate::models::backends::GraphicSupport;
 use crate::models::{
     AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, AuthedUser, Key,
     ScopedToken, ScopedTokenRequest, ScopedTokenUpdate, ScrubbedUser, Theme, UnixInfo, User,
     UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::{ApiError, AppState};
-use crate::{conflict, is_admin, unauthorized, unavailable};
+use crate::{bad, conflict, is_admin, not_found, unauthorized, unavailable};
+
+/// The maximum size (bytes) accepted for a profile-icon upload. Static images are client-resized to a small
+/// PNG, but animated GIFs and short video clips (MP4/WebM) are uploaded as-is since they can't be cheaply
+/// downscaled in the browser, so the cap is sized to fit a short clip while still bounding what a user can
+/// stream into the graphics bucket. This is applied only to the icon-upload route; the global body limit
+/// stays disabled so large sample/repo uploads are unaffected.
+const ICON_MAX_BYTES: usize = 10 << 20;
 
 /// Creates a new user
 ///
@@ -725,10 +735,134 @@ async fn delete_scoped_token(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Uploads or replaces the current user's profile icon
+///
+/// # Arguments
+///
+/// * `user` - The user setting their icon
+/// * `state` - Shared Thorium objects
+/// * `form` - The multipart form containing the image in an `image` field
+#[utoipa::path(
+    post,
+    path = "/api/users/image",
+    request_body(
+        content = String,
+        description = "Multipart form with an 'image' field containing the icon",
+        content_type = "multipart/form-data",
+    ),
+    responses(
+        (status = 204, description = "The profile icon was uploaded"),
+        (status = 400, description = "No image field was provided"),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[axum_macros::debug_handler]
+#[instrument(name = "routes::users::upload_image", skip_all, fields(user = user.username), err(Debug))]
+async fn upload_image(
+    user: AuthedUser,
+    State(state): State<AppState>,
+    mut form: Multipart,
+) -> Result<StatusCode, ApiError> {
+    // require a fully authed user
+    let mut user = user.require_full()?;
+    // find the image field in the multipart form and stream it to S3
+    while let Some(field) = form.next_field().await? {
+        if field.name() == Some("image") {
+            user.set_image(field, &state.shared).await?;
+            return Ok(StatusCode::NO_CONTENT);
+        }
+    }
+    // no image field was present in the form
+    bad!("Missing 'image' field in multipart form".to_owned())
+}
+
+/// Removes the current user's profile icon
+///
+/// # Arguments
+///
+/// * `user` - The user removing their icon
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    delete,
+    path = "/api/users/image",
+    responses(
+        (status = 204, description = "The profile icon was removed"),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::delete_image", skip_all, fields(user = user.username), err(Debug))]
+async fn delete_image(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
+    // require a fully authed user
+    let mut user = user.require_full()?;
+    // clear this user's icon from S3 and the user record
+    user.delete_image(&state.shared).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Gets a user's profile icon
+///
+/// Any authenticated user may fetch any user's icon so avatars can be shown next to names.
+///
+/// # Arguments
+///
+/// * `user` - The requesting user (must be authenticated)
+/// * `username` - The user whose icon to fetch
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/users/user/{username}/image",
+    params(
+        ("username" = String, Path, description = "The user whose icon to fetch"),
+    ),
+    responses(
+        (status = 200, description = "The profile icon was retrieved"),
+        (status = 404, description = "The user does not exist or has no icon"),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::get_image", skip(_user, state), err(Debug))]
+async fn get_image(
+    _user: AuthedUser,
+    Path(username): Path<String>,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    // get the target user
+    let target = User::force_get(&username, &state.shared).await?;
+    // stream their icon back if they have one
+    match &target.image {
+        Some(image_path) => {
+            // download the icon from S3 with its metadata; if the referenced object is missing (a dangling
+            // reference) treat it as "no icon" (404) instead of surfacing a 400 with raw S3 internals
+            let get_object = match target.download_graphic(image_path, &state.shared).await {
+                Ok(get_object) => get_object,
+                Err(_) => return not_found!(format!("User '{username}' has no image")),
+            };
+            // build response headers (content-type, disposition, length) from the object
+            let headers = graphics::get_headers(&get_object, image_path);
+            // stream the body back with its headers
+            let body = AsyncReadBody::new(get_object.body.into_async_read());
+            Ok((headers, body))
+        }
+        None => not_found!(format!("User '{username}' has no image")),
+    }
+}
+
 /// The struct containing our openapi docs
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, create, update, resend_email_verification, verify_email, list_details, auth, get_user, update_user, info, logout, logout_user, delete_user, sync_ldap, create_scoped_token, list_scoped_tokens, get_scoped_token, update_scoped_token, delete_scoped_token),
+    paths(list, create, update, resend_email_verification, verify_email, list_details, auth, get_user, update_user, info, logout, logout_user, delete_user, sync_ldap, create_scoped_token, list_scoped_tokens, get_scoped_token, update_scoped_token, delete_scoped_token, upload_image, delete_image, get_image),
     components(schemas(AuthResponse, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate, AiSettings, AiSettingsUpdate, AiEndpoint, AiEndpointUpdate, ScopedToken, ScopedTokenRequest, ScopedTokenUpdate)),
     modifiers(&OpenApiSecurity),
 )]
@@ -770,6 +904,15 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/users/user/{username}", get(get_user).patch(update_user))
         .route("/users/whoami", get(info))
+        // cap the icon upload body only (the global limit is disabled for large file uploads); delete carries
+        // no body so it's left unwrapped
+        .route(
+            "/users/image",
+            post(upload_image)
+                .layer(DefaultBodyLimit::max(ICON_MAX_BYTES))
+                .delete(delete_image),
+        )
+        .route("/users/user/{username}/image", get(get_image))
         .route("/users/logout", post(logout))
         .route("/users/logout/{target}", get(logout_user))
         .route("/users/delete/{target}", delete(delete_user))

@@ -20,6 +20,8 @@ import { Entities } from '@models/entities/entities';
 import { Other } from '@models/entities/other';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
+// spec: ../EntityBrowsing.spec.md
+
 interface OtherItemProps {
   entity: Other;
 }

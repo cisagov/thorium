@@ -15,9 +15,74 @@ import { FileSystem } from '@models/entities/file_systems';
 import { WindowsProcessTree } from '@models/entities/process_trees';
 import { SigmaRule, SigmaRuleMetaFields } from '@models/entities/rules/sigma';
 import { SigmaActionToTake } from '@models/entities/rules/sigma';
+import { Incident, IncidentMetaFields } from '@models/entities/incident';
+import { CompiledFunction, CompiledFunctionMetaFields, DecompiledFunction, DecompiledFunctionMetaFields } from '@models/entities/functions';
+import { PeImport, PeImportMetaFields, PeSection, PeSectionMetaFields } from '@models/entities/pe';
 import { Entities, EntityCreateTypes, EntityTypes, UISupportedEntityCreateTypes } from '@models/entities/entities';
+import { EntityRequest, entityRequestKind } from '@models/entities/requests';
+
+// spec: ./utilities.spec.md
 
 export const DEFAULT_LIST_LIMIT = 25;
+
+/**
+ * Recursively append a value to a `FormData` using PHP/Rails-style bracket keys
+ * (`prefix`, `prefix[]`, `prefix[key]`, `prefix[key][]`).
+ *
+ * Used to serialize an arbitrary, kind-agnostic entity metadata object into the `metadata[...]`
+ * multipart fields the entity create route expects.
+ *
+ * @param form - The form to append to.
+ * @param prefix - The current bracketed key prefix (e.g. `metadata[urls]`).
+ * @param value - The value to encode (scalar, array, or nested object); `null`/`undefined` are skipped.
+ */
+export function appendBracketed(form: FormData, prefix: string, value: unknown): void {
+  if (value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => appendBracketed(form, `${prefix}[]`, item));
+  } else if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([key, child]) => appendBracketed(form, `${prefix}[${key}]`, child));
+  } else if (typeof value === 'string') {
+    form.append(prefix, value);
+  } else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    form.append(prefix, String(value));
+  } else {
+    // any other primitive (symbol/function shouldn't appear in parsed JSON) — serialize defensively
+    form.append(prefix, JSON.stringify(value));
+  }
+}
+
+/**
+ * Build the multipart `FormData` for `createEntity` from a parsed {@link EntityRequest} (as returned
+ * by the per-kind entities result-file).
+ *
+ * Serializes `name`, `kind` (derived from the metadata variant), `groups[]`, `tags[k][]`,
+ * `description`, and the metadata fields via {@link appendBracketed}. Unit-variant metadata (a bare
+ * string kind, e.g. `Other`) contributes only `kind`.
+ *
+ * @param req - The parsed entity request.
+ * @returns The `FormData` to POST to `/entities/`.
+ */
+export function buildEntityRequestForm(req: EntityRequest): FormData {
+  const form = new FormData();
+  form.set('name', req.name);
+  form.set('kind', entityRequestKind(req));
+  (req.groups ?? []).forEach((group) => form.append('groups[]', group));
+  if (req.description) {
+    form.set('description', req.description);
+  }
+  Object.entries(req.tags ?? {}).forEach(([key, values]) => {
+    (values ?? []).forEach((value) => form.append(`tags[${key}][]`, value));
+  });
+  // object-variant metadata carries the kind's fields; serialize them under metadata[...]
+  if (req.metadata && typeof req.metadata === 'object') {
+    const inner = req.metadata[entityRequestKind(req)];
+    if (inner && typeof inner === 'object') {
+      Object.entries(inner as Record<string, unknown>).forEach(([field, value]) => appendBracketed(form, `metadata[${field}]`, value));
+    }
+  }
+  return form;
+}
 
 const reformatCriticalSectors = (sector: string): string => {
   return sector.replaceAll(' and ', '').replaceAll(',', '').replaceAll(' ', '');
@@ -170,6 +235,76 @@ function appendToolsDiffs(form: FormData, currentTools: string[], pendingTools: 
   currentTools.filter((t) => !pendingTools.includes(t)).forEach((t) => form.append('metadata[remove_tools][]', t));
 }
 
+// Generic add/remove diff for a plain string list, appending to the given add/remove form keys.
+function appendStringListDiff(form: FormData, addKey: string, removeKey: string, current: string[], pending: string[]): void {
+  pending.filter((v) => !current.includes(v)).forEach((v) => form.append(addKey, v));
+  current.filter((v) => !pending.includes(v)).forEach((v) => form.append(removeKey, v));
+}
+
+function appendIncidentMetaUpdates(form: FormData, meta: IncidentMetaFields, pending: IncidentMetaFields): void {
+  // the API's incident update has no clear for cover_term, so only send it when set to a new value
+  if (meta.cover_term !== pending.cover_term && pending.cover_term) {
+    form.set('metadata[cover_term]', pending.cover_term);
+  }
+  appendStringListDiff(
+    form,
+    'metadata[add_mission_teams][]',
+    'metadata[remove_mission_teams][]',
+    meta.mission_teams,
+    pending.mission_teams,
+  );
+  appendStringListDiff(form, 'metadata[add_networks][]', 'metadata[remove_networks][]', meta.networks, pending.networks);
+  appendStringListDiff(form, 'metadata[add_machines][]', 'metadata[remove_machines][]', meta.machines, pending.machines);
+  appendStringListDiff(form, 'metadata[add_locations][]', 'metadata[remove_locations][]', meta.locations, pending.locations);
+}
+
+function appendCompiledFunctionMetaUpdates(form: FormData, meta: CompiledFunctionMetaFields, pending: CompiledFunctionMetaFields): void {
+  if (meta.address !== pending.address) {
+    form.set('metadata[function_address]', String(pending.address));
+  }
+  // disassembly is replaced wholesale (the API update takes the full instruction list)
+  if (JSON.stringify(meta.disassembly) !== JSON.stringify(pending.disassembly)) {
+    pending.disassembly.forEach((ins) => form.append('metadata[disassembly][]', JSON.stringify(ins)));
+  }
+}
+
+function appendDecompiledFunctionMetaUpdates(
+  form: FormData,
+  meta: DecompiledFunctionMetaFields,
+  pending: DecompiledFunctionMetaFields,
+): void {
+  if (meta.address !== pending.address) {
+    form.set('metadata[function_address]', String(pending.address));
+  }
+  if (meta.content !== pending.content) {
+    form.set('metadata[decompilation_content]', pending.content);
+  }
+  // NOTE: the API's decompiled-function update form has no `tools` field — tools are set at creation only.
+}
+
+function appendPeSectionMetaUpdates(form: FormData, meta: PeSectionMetaFields, pending: PeSectionMetaFields): void {
+  // scalar set-if-changed; the API update has no clear for these, so undefined is left untouched
+  if (meta.md5 !== pending.md5 && pending.md5 !== undefined) {
+    form.set('metadata[md5]', pending.md5);
+  }
+  if (meta.raw_size !== pending.raw_size && pending.raw_size !== undefined) {
+    form.set('metadata[raw_size]', String(pending.raw_size));
+  }
+  if (meta.virtual_size !== pending.virtual_size && pending.virtual_size !== undefined) {
+    form.set('metadata[virtual_size]', String(pending.virtual_size));
+  }
+  if (meta.entropy !== pending.entropy && pending.entropy !== undefined) {
+    form.set('metadata[entropy]', String(pending.entropy));
+  }
+}
+
+function appendPeImportMetaUpdates(form: FormData, meta: PeImportMetaFields, pending: PeImportMetaFields): void {
+  // functions are replaced wholesale; the API ignores an empty list, so only send when changed and non-empty
+  if (JSON.stringify(meta.functions) !== JSON.stringify(pending.functions)) {
+    pending.functions.forEach((fn) => form.append('metadata[functions][]', fn));
+  }
+}
+
 function appendSigmaRuleMetaUpdates(form: FormData, meta: SigmaRuleMetaFields, pending: SigmaRuleMetaFields): void {
   if (pending.rule !== '') {
     form.append('metadata[sigma_rule]', String(pending.rule));
@@ -241,6 +376,36 @@ export function buildUpdateEntityForm(
       const meta = entity.metadata.SigmaRule;
       const pending = (pendingEntity as SigmaRule).metadata.SigmaRule;
       appendSigmaRuleMetaUpdates(updateForm, meta, pending);
+      break;
+    }
+    case Entities.Incident: {
+      const meta = entity.metadata.Incident;
+      const pending = (pendingEntity as Incident).metadata.Incident;
+      appendIncidentMetaUpdates(updateForm, meta, pending);
+      break;
+    }
+    case Entities.CompiledFunction: {
+      const meta = entity.metadata.CompiledFunction;
+      const pending = (pendingEntity as CompiledFunction).metadata.CompiledFunction;
+      appendCompiledFunctionMetaUpdates(updateForm, meta, pending);
+      break;
+    }
+    case Entities.DecompiledFunction: {
+      const meta = entity.metadata.DecompiledFunction;
+      const pending = (pendingEntity as DecompiledFunction).metadata.DecompiledFunction;
+      appendDecompiledFunctionMetaUpdates(updateForm, meta, pending);
+      break;
+    }
+    case Entities.PeSection: {
+      const meta = entity.metadata.PeSection;
+      const pending = (pendingEntity as PeSection).metadata.PeSection;
+      appendPeSectionMetaUpdates(updateForm, meta, pending);
+      break;
+    }
+    case Entities.PeImport: {
+      const meta = entity.metadata.PeImport;
+      const pending = (pendingEntity as PeImport).metadata.PeImport;
+      appendPeImportMetaUpdates(updateForm, meta, pending);
       break;
     }
     // Folder, WindowsProcess, NetworkConnection, Other: no metadata update logic
@@ -344,6 +509,58 @@ export function buildCreateEntityForm(entity: EntityCreateTypes, imageFile?: Fil
       }
       break;
     }
+    case Entities.Flag: {
+      const meta = entity.metadata.Flag;
+      createForm.set('metadata[suspicion]', String(meta.suspicion));
+      createForm.set('metadata[confidence]', meta.confidence);
+      createForm.set('metadata[reasoning]', meta.reasoning);
+      if (meta.content) {
+        createForm.set('metadata[content]', meta.content);
+      }
+      break;
+    }
+    case Entities.Incident: {
+      const meta = entity.metadata.Incident;
+      if (meta.cover_term) {
+        createForm.set('metadata[cover_term]', meta.cover_term);
+      }
+      // incident lists are plain-text list fields (server pushes each value verbatim)
+      meta.mission_teams.forEach((t) => createForm.append('metadata[mission_teams][]', t));
+      meta.networks.forEach((n) => createForm.append('metadata[networks][]', n));
+      meta.machines.forEach((m) => createForm.append('metadata[machines][]', m));
+      meta.locations.forEach((l) => createForm.append('metadata[locations][]', l));
+      break;
+    }
+    case Entities.CompiledFunction: {
+      const meta = entity.metadata.CompiledFunction;
+      createForm.set('metadata[function_address]', String(meta.address));
+      // each instruction is JSON-serialized (server deserializes each disassembly[] entry)
+      meta.disassembly.forEach((ins) => createForm.append('metadata[disassembly][]', JSON.stringify(ins)));
+      break;
+    }
+    case Entities.DecompiledFunction: {
+      const meta = entity.metadata.DecompiledFunction;
+      createForm.set('metadata[function_address]', String(meta.address));
+      createForm.set('metadata[decompilation_content]', meta.content);
+      // tools are plain-text list entries (server pushes each value verbatim)
+      meta.tools.forEach((t) => createForm.append('metadata[tools][]', t));
+      break;
+    }
+    case Entities.PeSection: {
+      const meta = entity.metadata.PeSection;
+      // all section scalars are optional; only send the ones that were set
+      if (meta.md5 !== undefined) createForm.set('metadata[md5]', meta.md5);
+      if (meta.raw_size !== undefined) createForm.set('metadata[raw_size]', String(meta.raw_size));
+      if (meta.virtual_size !== undefined) createForm.set('metadata[virtual_size]', String(meta.virtual_size));
+      if (meta.entropy !== undefined) createForm.set('metadata[entropy]', String(meta.entropy));
+      break;
+    }
+    case Entities.PeImport: {
+      const meta = entity.metadata.PeImport;
+      // imported functions are plain-text list entries (server pushes each value verbatim)
+      meta.functions.forEach((fn) => createForm.append('metadata[functions][]', fn));
+      break;
+    }
     // Other entity kinds: no special create metadata handling
   }
   return createForm;
@@ -386,6 +603,21 @@ export function copyEntityFields(existingEntity: EntityTypes, blank: UISupported
     case Entities.SigmaRule: {
       const srcMeta = existingEntity.metadata.SigmaRule;
       newEntity.metadata = { SigmaRule: structuredClone(srcMeta) };
+      break;
+    }
+    case Entities.Flag: {
+      const srcMeta = existingEntity.metadata.Flag;
+      newEntity.metadata = { Flag: structuredClone(srcMeta) };
+      break;
+    }
+    case Entities.PeSection: {
+      const srcMeta = existingEntity.metadata.PeSection;
+      newEntity.metadata = { PeSection: structuredClone(srcMeta) };
+      break;
+    }
+    case Entities.PeImport: {
+      const srcMeta = existingEntity.metadata.PeImport;
+      newEntity.metadata = { PeImport: structuredClone(srcMeta) };
       break;
     }
   }

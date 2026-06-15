@@ -16,15 +16,12 @@ import { Entities } from '@models/entities/entities';
 import { scaling } from '@styles';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
-// get files using filters and and an optional cursor
+// spec: ../EntityBrowsing.spec.md
+
+// Fetch files using search filters and an optional pagination cursor.
 const getFiles = async (filters: Filters, existingCursor: string | null) => {
-  // get files list from API
-  const { files, cursor } = await listFiles(
-    filters,
-    console.log,
-    true, // details bool
-    existingCursor,
-  );
+  // request full file details so the listing can render submission metadata
+  const { files, cursor } = await listFiles(filters, console.log, true, existingCursor);
   return {
     entitiesList: files,
     entitiesCursor: cursor,
@@ -94,8 +91,9 @@ const FileListHeaders = () => {
 };
 
 interface FileItemProps {
-  file: Sample; // file details
-  excludeKeys: string[]; // tag keys to exclude when displaying condensed tags
+  file: Sample;
+  // tag keys to exclude when displaying condensed tags
+  excludeKeys: string[];
 }
 
 const FileItem: React.FC<FileItemProps> = ({ file, excludeKeys }) => {

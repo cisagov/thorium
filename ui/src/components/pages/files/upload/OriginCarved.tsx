@@ -5,6 +5,8 @@ import { useUpload } from './UploadContext';
 import { CarvedSubType } from './types';
 import OriginField from './OriginField';
 
+// spec: ./upload.spec.md
+
 const isValidProtocol = (proto: string) => ['TCP', 'Tcp', 'tcp', 'UDP', 'Udp', 'udp'].includes(proto);
 
 const OriginCarved: React.FC = () => {

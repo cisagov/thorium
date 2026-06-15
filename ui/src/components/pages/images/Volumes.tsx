@@ -22,6 +22,8 @@ import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { Volume, ConfigMap, Secret } from '@models/volumes';
 import { VolumeTypes, HostPathTypes } from '@models/volumes';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `Kubernetes volumes to map in during image run. Volumes can be host paths or configuration files.`,
   name: `The name of this volume. Names must be unique and can only contain alphanumeric characters and dashes.`,

@@ -2,6 +2,8 @@ import React, { JSX } from 'react';
 import { Badge } from 'react-bootstrap';
 import styled from 'styled-components';
 
+// spec: ./FieldBadge.spec.md
+
 const TagBadge = styled(Badge)`
   text-wrap: pretty;
   white-space: break-spaces;
@@ -65,7 +67,7 @@ const FieldBadge: React.FC<FieldBadgeProps> = ({ field, color, className = '', n
         // returns one badge per item in array
         const badgeArray = field.map((item, idx) => (
           <TagBadge key={idx} bg="" className={`me-1 ${className}`} style={{ backgroundColor: color }}>
-            {typeof item == 'object' && field != null ? JSON.stringify(item) : String(item)}
+            {typeof item == 'object' && item != null ? JSON.stringify(item) : String(item)}
           </TagBadge>
         ));
         return badgeArray;

@@ -395,6 +395,17 @@ a.dropdown-toggle.nav-link {
 // -----------------------------------------------------------------------------
 // ----------------------------------- Modal -----------------------------------
 
+// Lift the modal layer above the fixed nav (z-index 4000) and sidebar flyout (z-index 5000) so
+// modals (and their backdrop) render over the chrome instead of being clipped by it. Matches the
+// convention used by the app's custom overlays, which sit at 5000+.
+.modal {
+  --bs-modal-zindex: 6010;
+}
+
+.modal-backdrop {
+  --bs-backdrop-zindex: 6000;
+}
+
 // Modal colors
 .modal-content {
   background-color: var(--thorium-panel-bg);

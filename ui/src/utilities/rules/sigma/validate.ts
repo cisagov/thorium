@@ -1,10 +1,10 @@
-// Validation spec: see VALIDATION_SPEC.md in this directory
 import type { Document } from 'yaml';
 import { isMap, isPair, isScalar, isSeq } from 'yaml';
 
 // project imports
+import { findMapKey, findMapValue, nodeLineCol, nodePosition } from '../tools/shared';
 import { Severity, includes, type Diagnostic } from '../types';
-import { buildLineIndex, offsetToLineCol, type LineIndex } from '../yaml';
+import { buildLineIndex } from '../yaml';
 import {
   REQUIRED_FIELDS,
   DETECTION_REQUIRED_FIELDS,
@@ -24,46 +24,20 @@ import {
   KNOWN_TOP_LEVEL_FIELDS,
 } from './schema';
 
-function nodeLineCol(
-  node: { range?: [number, number, number] | [number, number] | null | undefined },
-  lineIndex: LineIndex,
-): { line: number; column: number } {
-  const offset = node.range?.[0] ?? 0;
-  return offsetToLineCol(lineIndex, offset);
-}
+// spec: ./validate.spec.md
 
-function findMapKey(doc: Document, key: string) {
-  const contents = doc.contents;
-  if (!isMap(contents)) return null;
-  for (const item of contents.items) {
-    if (isPair(item) && isScalar(item.key) && item.key.value === key) {
-      return item.key;
-    }
-  }
-  return null;
-}
-
-function findMapValue(doc: Document, key: string) {
-  const contents = doc.contents;
-  if (!isMap(contents)) return null;
-  for (const item of contents.items) {
-    if (isPair(item) && isScalar(item.key) && item.key.value === key) {
-      return item.value;
-    }
-  }
-  return null;
-}
-
-function nodePosition(node: unknown, lineIndex: LineIndex): { line: number; column: number } {
-  if (node && typeof node === 'object' && 'range' in node) {
-    const range = (node as Record<string, unknown>).range;
-    if (Array.isArray(range) && typeof range[0] === 'number') {
-      return offsetToLineCol(lineIndex, range[0]);
-    }
-  }
-  return { line: 1, column: 1 };
-}
-
+/**
+ * Validate a parsed Sigma rule YAML document against the Sigma schema.
+ *
+ * Checks for missing required fields, validates the `detection` block and its condition, and reports
+ * value/format issues (status, level, related types, taxonomy/description lengths, UUID/date/tag
+ * patterns, value modifiers) as line/column-anchored diagnostics.
+ *
+ * @param doc - The parsed YAML document (positional info for diagnostics).
+ * @param text - The raw YAML source, used to map node offsets to line/column.
+ * @param parsed - The plain-object form of `doc` used for value checks.
+ * @returns The list of {@link Diagnostic}s found (empty when the rule is valid).
+ */
 export function validateSigmaRule(doc: Document, text: string, parsed: Record<string, unknown>): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const lineIndex = buildLineIndex(text);
@@ -83,7 +57,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
 
   for (const key of Object.keys(parsed)) {
     if (!includes(KNOWN_TOP_LEVEL_FIELDS, key)) {
-      const node = findMapKey(doc, key);
+      const node = findMapKey(doc.contents, key);
       const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
       diagnostics.push({
         ...pos,
@@ -94,7 +68,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if (typeof parsed['title'] === 'string' && parsed['title'].length > TITLE_MAX_LENGTH) {
-    const node = findMapKey(doc, 'title');
+    const node = findMapKey(doc.contents, 'title');
     const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
     diagnostics.push({
       ...pos,
@@ -104,7 +78,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if (typeof parsed['name'] === 'string' && parsed['name'].length > NAME_MAX_LENGTH) {
-    const node = findMapKey(doc, 'name');
+    const node = findMapKey(doc.contents, 'name');
     const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
     diagnostics.push({
       ...pos,
@@ -114,7 +88,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if (typeof parsed['taxonomy'] === 'string' && parsed['taxonomy'].length > TAXONOMY_MAX_LENGTH) {
-    const node = findMapKey(doc, 'taxonomy');
+    const node = findMapKey(doc.contents, 'taxonomy');
     const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
     diagnostics.push({
       ...pos,
@@ -124,7 +98,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if (typeof parsed['description'] === 'string' && parsed['description'].length > DESCRIPTION_MAX_LENGTH) {
-    const node = findMapKey(doc, 'description');
+    const node = findMapKey(doc.contents, 'description');
     const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
     diagnostics.push({
       ...pos,
@@ -134,7 +108,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('id' in parsed && typeof parsed['id'] === 'string' && !UUID_V4_PATTERN.test(parsed['id'])) {
-    const node = findMapValue(doc, 'id');
+    const node = findMapValue(doc.contents, 'id');
     const pos = nodePosition(node, lineIndex);
     diagnostics.push({
       ...pos,
@@ -145,7 +119,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
 
   if ('status' in parsed && typeof parsed['status'] === 'string') {
     if (!includes(STATUS_VALUES, parsed['status'])) {
-      const node = findMapValue(doc, 'status');
+      const node = findMapValue(doc.contents, 'status');
       const pos = nodePosition(node, lineIndex);
       diagnostics.push({
         ...pos,
@@ -157,7 +131,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
 
   if ('level' in parsed && typeof parsed['level'] === 'string') {
     if (!includes(LEVEL_VALUES, parsed['level'])) {
-      const node = findMapValue(doc, 'level');
+      const node = findMapValue(doc.contents, 'level');
       const pos = nodePosition(node, lineIndex);
       diagnostics.push({
         ...pos,
@@ -175,7 +149,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
     }
     if (typeof rawValue === 'string') {
       if (!DATE_PATTERN.test(rawValue)) {
-        const node = findMapValue(doc, dateField);
+        const node = findMapValue(doc.contents, dateField);
         const pos = nodePosition(node, lineIndex);
         diagnostics.push({
           ...pos,
@@ -184,7 +158,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
         });
       }
     } else {
-      const node = findMapValue(doc, dateField);
+      const node = findMapValue(doc.contents, dateField);
       const pos = nodePosition(node, lineIndex);
       diagnostics.push({
         ...pos,
@@ -195,7 +169,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('tags' in parsed && Array.isArray(parsed['tags'])) {
-    const tagsNode = findMapValue(doc, 'tags');
+    const tagsNode = findMapValue(doc.contents, 'tags');
     if (isSeq(tagsNode)) {
       for (let i = 0; i < tagsNode.items.length; i++) {
         const item = tagsNode.items[i];
@@ -212,7 +186,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('related' in parsed && Array.isArray(parsed['related'])) {
-    const relatedNode = findMapValue(doc, 'related');
+    const relatedNode = findMapValue(doc.contents, 'related');
     if (isSeq(relatedNode)) {
       for (let i = 0; i < relatedNode.items.length; i++) {
         const entry = relatedNode.items[i];
@@ -255,7 +229,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
     const ls = parsed['logsource'] as Record<string, unknown>;
     const hasIdentifier = 'category' in ls || 'product' in ls || 'service' in ls;
     if (!hasIdentifier) {
-      const node = findMapKey(doc, 'logsource');
+      const node = findMapKey(doc.contents, 'logsource');
       const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
       diagnostics.push({
         ...pos,
@@ -270,7 +244,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
 
     for (const field of DETECTION_REQUIRED_FIELDS) {
       if (!(field in det)) {
-        const node = findMapKey(doc, 'detection');
+        const node = findMapKey(doc.contents, 'detection');
         const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
         diagnostics.push({
           ...pos,
@@ -305,7 +279,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
             return pattern.test(id);
           });
           if (!hasWildcardMatch) {
-            const detNode = findMapValue(doc, 'detection');
+            const detNode = findMapValue(doc.contents, 'detection');
             if (isMap(detNode)) {
               for (const pair of detNode.items) {
                 if (isPair(pair) && isScalar(pair.key) && pair.key.value === 'condition') {
@@ -324,7 +298,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
       }
     }
 
-    const detNode = findMapValue(doc, 'detection');
+    const detNode = findMapValue(doc.contents, 'detection');
     if (isMap(detNode)) {
       for (const pair of detNode.items) {
         if (isPair(pair) && isScalar(pair.key) && typeof pair.key.value === 'string' && pair.key.value !== 'condition') {
@@ -355,7 +329,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('falsepositives' in parsed && Array.isArray(parsed['falsepositives'])) {
-    const fpNode = findMapValue(doc, 'falsepositives');
+    const fpNode = findMapValue(doc.contents, 'falsepositives');
     if (isSeq(fpNode)) {
       for (let i = 0; i < fpNode.items.length; i++) {
         const item = fpNode.items[i];
@@ -372,7 +346,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('scope' in parsed && Array.isArray(parsed['scope'])) {
-    const scopeNode = findMapValue(doc, 'scope');
+    const scopeNode = findMapValue(doc.contents, 'scope');
     if (isSeq(scopeNode)) {
       for (let i = 0; i < scopeNode.items.length; i++) {
         const item = scopeNode.items[i];
@@ -389,7 +363,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('references' in parsed && !Array.isArray(parsed['references'])) {
-    const node = findMapKey(doc, 'references');
+    const node = findMapKey(doc.contents, 'references');
     const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
     diagnostics.push({
       ...pos,
@@ -399,7 +373,7 @@ export function validateSigmaRule(doc: Document, text: string, parsed: Record<st
   }
 
   if ('fields' in parsed && !Array.isArray(parsed['fields'])) {
-    const node = findMapKey(doc, 'fields');
+    const node = findMapKey(doc.contents, 'fields');
     const pos = node ? nodeLineCol(node, lineIndex) : { line: 1, column: 1 };
     diagnostics.push({
       ...pos,

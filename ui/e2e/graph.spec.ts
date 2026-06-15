@@ -26,12 +26,7 @@ test.describe('3D Graph Visual Validation', () => {
     vendorId = await createEntity(token, 'PlaywrightVendor', 'Vendor', ['system']);
     deviceId = await createEntity(token, 'PlaywrightDevice', 'Device', ['system']);
 
-    const file = await uploadFile(
-      token,
-      Buffer.from('playwright test file content'),
-      'playwright-test.bin',
-      ['system'],
-    );
+    const file = await uploadFile(token, Buffer.from('playwright test file content'), 'playwright-test.bin', ['system']);
     fileSha256 = file.sha256;
 
     await createAssociation(token, {
@@ -113,19 +108,25 @@ test.describe('3D Graph Visual Validation', () => {
 
     await expect(page.locator('text=Nodes:')).toBeVisible();
 
-    const gearBtn = page.locator('button[title="Toggle controls"]');
+    const gearBtn = page.getByRole('button', { name: 'Toggle controls' });
     await gearBtn.click();
     await page.waitForTimeout(300);
 
-    const graphBtn = page.locator('button[title="Graph"]');
-    await expect(graphBtn).toBeVisible();
-    await graphBtn.click();
+    const viewBtn = page.getByRole('button', { name: 'View' });
+    await expect(viewBtn).toBeVisible();
+    await viewBtn.click();
+    await page.waitForTimeout(300);
+
+    await expect(page.locator('text=Fit All').first()).toBeVisible({ timeout: 5000 });
+
+    const forcesBtn = page.getByRole('button', { name: 'Forces' });
+    await expect(forcesBtn).toBeVisible();
+    await forcesBtn.click();
     await page.waitForTimeout(300);
 
     await expect(page.locator('text=Reheat')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=Fit All')).toBeVisible();
 
-    const exportBtn = page.locator('button[title="Export"]');
+    const exportBtn = page.getByRole('button', { name: 'Export' });
     await expect(exportBtn).toBeVisible();
     await exportBtn.click();
     await page.waitForTimeout(300);
@@ -134,5 +135,26 @@ test.describe('3D Graph Visual Validation', () => {
     await expect(page.locator('text=JPEG')).toBeVisible();
 
     await snapshot(page, SCREENSHOT_DIR, 'graph-with-controls');
+  });
+
+  test('navigation cluster buttons are present and clickable', async ({ page }) => {
+    await loginViaUI(page);
+    await page.goto('/graph');
+    await page.waitForLoadState('networkidle');
+
+    const seedJson = JSON.stringify({ entities: [deviceId] });
+    await page.locator('input.form-control').first().fill(seedJson);
+    await page.waitForSelector('canvas', { timeout: 30000 });
+    await page.waitForTimeout(3000);
+
+    // every nav-cluster camera action is reachable by accessible name and clickable
+    for (const name of ['Zoom in', 'Zoom out', 'Fit all', 'Reset view']) {
+      const button = page.getByRole('button', { name });
+      await expect(button).toBeVisible();
+      await button.click();
+      await page.waitForTimeout(300);
+    }
+
+    await snapshot(page, SCREENSHOT_DIR, 'graph-nav-cluster');
   });
 });

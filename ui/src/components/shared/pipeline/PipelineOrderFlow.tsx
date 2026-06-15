@@ -47,6 +47,8 @@ import {
 import { createReactSelectStyles } from '@utilities/select';
 import { listImages } from '@thorpi/images';
 
+// spec: ./PipelineOrderFlow.spec.md
+
 const TERMINAL_WIDTH = 12;
 const PARALLEL_GAP = 54;
 // The canvas auto-grows with parallel count up to MAX_CANVAS_HEIGHT so it can't balloon for highly

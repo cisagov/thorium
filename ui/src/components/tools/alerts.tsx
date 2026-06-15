@@ -1,6 +1,19 @@
 import { Value } from '@models/results';
 
-// set warnings and errors from results
+/**
+ * Extract error/warning messages from a raw tool-result value and classify it as JSON or string.
+ *
+ * Recognizes errors/Errors/error/Error and warnings/Warnings/warning/Warning keys, stripping them
+ * from a shallow clone of the JSON body (never mutating the shared result object). Empty results
+ * ('', '{}', '[]') are reported as a warning.
+ *
+ * @param result - The raw `Output.result` value.
+ * @param setResults - Receives the display JSON body (called only when the result is JSON).
+ * @param setWarnings - Receives extracted warning strings.
+ * @param setErrors - Receives extracted error strings.
+ * @param setIsJson - Receives whether the result was classified as JSON.
+ * @param ignoreJsonError - When true, suppresses the "could not display as json" warning for strings.
+ */
 const getAlerts = (
   result: Value,
   setResults: (results: Value) => void,
@@ -9,14 +22,14 @@ const getAlerts = (
   setIsJson: (isJson: boolean) => void,
   ignoreJsonError: boolean,
 ) => {
-  // handle empty result
   const jsonFormattedResults = result;
   let isJson = false;
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // check if an empty result was returned by tool run
-  if (result && (result == '' || result == '{}' || result == '[]')) {
+  // check if an empty result was returned by tool run; the empty string must be tested without a
+  // truthiness guard (`'' && ...` short-circuits to false), otherwise '' would never warn
+  if (result === '' || result == '{}' || result == '[]') {
     isJson = true;
     warnings.push(...['Tool did not produce output, check tool logs for more info.']);
   }
@@ -35,9 +48,16 @@ const getAlerts = (
     isJson = true;
   }
 
+  // the object handed to the display body; only differs from the input when we strip
+  // errors/warnings keys out of a json object below
+  let displayJson = jsonFormattedResults;
   // Narrow to record type for bracket access on the json object
   if (isJson && typeof jsonFormattedResults === 'object' && jsonFormattedResults !== null && !Array.isArray(jsonFormattedResults)) {
-    const obj = jsonFormattedResults as Record<string, Value>;
+    // shallow clone so the de-dup deletes below strip errors/warnings from the *displayed*
+    // body only, never from the shared result object (which isEmptyResult and the diff view
+    // also read); mutating it there would retroactively flip results to "empty" on re-render
+    const obj = { ...(jsonFormattedResults as Record<string, Value>) };
+    displayJson = obj;
 
     if (obj['errors'] && Array.isArray(obj['errors'])) {
       errors.push(...(obj['errors'] as string[]));
@@ -84,8 +104,42 @@ const getAlerts = (
   setErrors(errors);
   setIsJson(isJson);
   if (isJson) {
-    setResults(jsonFormattedResults);
+    setResults(displayJson);
   }
 };
 
-export { getAlerts };
+/**
+ * Normalize a raw result string for text display: turn escaped `\n` sequences into real newlines
+ * and remove every double-quote character.
+ *
+ * @param text - The raw result string.
+ * @returns The normalized display text.
+ */
+const normalizeResultText = (text: string): string => text.replace(/\\n/g, '\n').replace(/["]+/g, '');
+
+/**
+ * Format an alert-processed tool result into the string a text-based renderer
+ * (`String`/`Tables`/`Markdown`/`XML`) displays in its body.
+ *
+ * When the result isn't json, the raw string is normalized for display via {@link normalizeResultText};
+ * non-strings yield an empty string.
+ * When it is json, an empty object (`{}`) yields an empty string so nothing is shown, otherwise
+ * the json value is stringified.
+ *
+ * @param result - The raw result value (the `Output.result` field).
+ * @param isJson - Whether `getAlerts` classified the result as json.
+ * @param resultsJson - The json value produced by `getAlerts` (consulted only when `isJson`).
+ * @returns The display string for the renderer body.
+ */
+const formatResultBody = (result: Value, isJson: boolean, resultsJson: Value): string => {
+  if (!isJson) {
+    return typeof result === 'string' ? normalizeResultText(result) : '';
+  }
+  // an empty object carries nothing to show; anything else is dumped as json text
+  if (JSON.stringify(resultsJson) === '{}') {
+    return '';
+  }
+  return JSON.stringify(resultsJson);
+};
+
+export { getAlerts, formatResultBody, normalizeResultText };

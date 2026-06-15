@@ -13,6 +13,8 @@ describe('computeSizeDefaults', () => {
     expect(d1.nodeRelSize).toBe(4);
     expect(d1.directionalParticles).toBe(1);
     expect(d1.warmupTicks).toBe(0);
+    expect(d1.nodeLabelScale).toBe(1);
+    expect(d1.edgeLabelScale).toBe(1);
 
     expect(d30).toEqual(d1);
   });
@@ -48,6 +50,8 @@ describe('computeSizeDefaults', () => {
     expect(d5000.edgeLength!).toBe(80);
     expect(d5000.nodeRelSize!).toBe(2);
     expect(d5000.cooldownTime!).toBe(5000);
+    expect(d5000.nodeLabelScale!).toBe(0.85);
+    expect(d5000.edgeLabelScale!).toBe(0.85);
   });
 
   it('scales monotonically — larger graphs get smaller charge, wider edges', () => {
@@ -58,6 +62,22 @@ describe('computeSizeDefaults', () => {
       expect(results[i].chargeStrength!).toBeGreaterThan(results[i - 1].chargeStrength!);
       expect(results[i].edgeLength!).toBeGreaterThanOrEqual(results[i - 1].edgeLength!);
       expect(results[i].nodeRelSize!).toBeLessThanOrEqual(results[i - 1].nodeRelSize!);
+    }
+  });
+
+  it('label scale shrinks monotonically with node count but never below 0.85', () => {
+    const counts = [10, 30, 50, 100, 200, 500, 1000, 2000, 5000];
+    const results = counts.map((n) => computeSizeDefaults(n));
+
+    for (let i = 1; i < results.length; i++) {
+      expect(results[i].nodeLabelScale!).toBeLessThanOrEqual(results[i - 1].nodeLabelScale!);
+      expect(results[i].edgeLabelScale!).toBeLessThanOrEqual(results[i - 1].edgeLabelScale!);
+    }
+    for (const r of results) {
+      expect(r.nodeLabelScale!).toBeGreaterThanOrEqual(0.85);
+      expect(r.nodeLabelScale!).toBeLessThanOrEqual(1);
+      expect(r.edgeLabelScale!).toBeGreaterThanOrEqual(0.85);
+      expect(r.edgeLabelScale!).toBeLessThanOrEqual(1);
     }
   });
 });

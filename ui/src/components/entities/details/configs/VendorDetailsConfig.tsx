@@ -98,7 +98,6 @@ const VendorDetailsConfig: EntityDetailsConfig<Entities.Vendor> = {
   EntityMetaInfo: VendorMetaInfo,
   BlankEntity: BlankVendor,
   icon: (size: number) => <MdBusinessCenter size={size} />,
-  supportsGraphic: true,
 };
 
 export default VendorDetailsConfig;

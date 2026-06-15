@@ -22,6 +22,8 @@ import ToggleSwitch from '@components/shared/inputs/ToggleSwitch';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { ChildFilters as ChildFiltersType } from '@models/images';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `Regex filters for children produced by this image. If no filters are given, all children will be uploaded. Regular expressions must conform to Rust regex crate standards.`,
   mime: `Regex filters applied to the MIME type of child files (e.g., 'application/pdf', 'image/.*').`,

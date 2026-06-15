@@ -2,6 +2,8 @@ import React, { FocusEvent } from 'react';
 import { styled } from 'styled-components';
 import { FaX, FaAngleDown } from 'react-icons/fa6';
 
+// spec: ./TagSelect.spec.md
+
 const ButtonContainer = styled.div`
   display: flex;
   align-items: center;

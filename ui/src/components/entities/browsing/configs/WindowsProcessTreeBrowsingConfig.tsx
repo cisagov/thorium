@@ -20,10 +20,10 @@ import { Entities } from '@models/entities/entities';
 import { WindowsProcessTree } from '@models/entities/process_trees';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
-// get files using filters and and an optional cursor
+// spec: ../EntityBrowsing.spec.md
+
+// Fetch Windows process trees using search filters and an optional pagination cursor.
 const getWindowsProcessTrees = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {
-  // reset cursor when filters have changed, caller must know this
-  // get files list from API
   const listFilters = structuredClone(filters);
   listFilters.kinds = [Entities.WindowsProcessTree];
   const { entityList, entityCursor } = await listEntities(listFilters, errorHandler, true, cursor);
@@ -49,7 +49,7 @@ const WindowsProcessTreeListHeader = () => {
 };
 
 interface WindowsProcessTreeItemProps {
-  tree: WindowsProcessTree; // Process tree details
+  tree: WindowsProcessTree;
 }
 
 const ProcessTreeItem: React.FC<WindowsProcessTreeItemProps> = ({ tree }) => {

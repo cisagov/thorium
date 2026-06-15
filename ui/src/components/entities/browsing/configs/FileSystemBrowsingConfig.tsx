@@ -14,6 +14,8 @@ import { FileSystem } from '@models/entities/file_systems';
 import { scaling } from '@styles';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
+// spec: ../EntityBrowsing.spec.md
+
 const Name = styled(Col)`
   white-space: pre-wrap;
   word-break: break-all;
@@ -52,10 +54,8 @@ const Sha256 = styled.div`
   font-style: italic;
 `;
 
-// get files using filters and and an optional cursor
+// Fetch filesystems using search filters and an optional pagination cursor.
 const getFileSystems = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {
-  // reset cursor when filters have changed, caller must know this
-  // get files list from API
   const listFilters = structuredClone(filters);
   listFilters.kinds = [Entities.FileSystem];
   const { entityList, entityCursor } = await listEntities(listFilters, errorHandler, true, cursor);
@@ -80,7 +80,7 @@ const FileSystemListHeaders = () => {
 };
 
 interface FileSystemItemProps {
-  fs: FileSystem; // device details
+  fs: FileSystem;
 }
 
 const FileSystemItem: React.FC<FileSystemItemProps> = ({ fs }) => {

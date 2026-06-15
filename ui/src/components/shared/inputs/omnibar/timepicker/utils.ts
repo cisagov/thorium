@@ -1,5 +1,7 @@
 import { safeDateToStringConversion } from '@utilities/inputs';
 
+// spec: ../SPEC.md
+
 export type RelativeUnit = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
 
 export type RelativeSelection = { mode: 'relative'; amount: number; unit: RelativeUnit; round?: boolean };

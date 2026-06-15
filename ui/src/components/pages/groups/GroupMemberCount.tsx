@@ -2,6 +2,8 @@
 import { getGroupMemberCount } from '@utilities/groups';
 import { Group } from '@models/groups';
 
+// spec: ./groups.spec.md
+
 interface GroupMemberCountProps {
   group: Group;
 }

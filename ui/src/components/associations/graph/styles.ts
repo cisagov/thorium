@@ -12,16 +12,28 @@ import FileSystemSVG from '@assets/icons/filesystem.svg?raw';
 import FileSystemGrowableSVG from '@assets/icons/filesystem-add.svg?raw';
 import FolderSVG from '@assets/icons/folder.svg?raw';
 import FolderGrowableSVG from '@assets/icons/folder-add.svg?raw';
+import IncidentSVG from '@assets/icons/incident.svg?raw';
+import IncidentGrowableSVG from '@assets/icons/incident-add.svg?raw';
+import CompiledFunctionSVG from '@assets/icons/compiledfunction.svg?raw';
+import CompiledFunctionGrowableSVG from '@assets/icons/compiledfunction-add.svg?raw';
+import DecompiledFunctionSVG from '@assets/icons/decompiledfunction.svg?raw';
+import DecompiledFunctionGrowableSVG from '@assets/icons/decompiledfunction-add.svg?raw';
+import PeSectionSVG from '@assets/icons/pesection.svg?raw';
+import PeSectionGrowableSVG from '@assets/icons/pesection-add.svg?raw';
+import PeImportSVG from '@assets/icons/peimport.svg?raw';
+import PeImportGrowableSVG from '@assets/icons/peimport-add.svg?raw';
 import RepoSVG from '@assets/icons/git.svg?raw';
 import RepoGrowableSVG from '@assets/icons/git-add.svg?raw';
 import NetworkConnectionSVG from '@assets/icons/network-connection.svg?raw';
 import NetworkConnectionGrowableSVG from '@assets/icons/network-connection-add.svg?raw';
 import OtherSVG from '@assets/icons/other.svg?raw';
 import OtherGrowableSVG from '@assets/icons/other-add.svg?raw';
+import FlagSVG from '@assets/icons/flag.svg?raw';
+import FlagGrowableSVG from '@assets/icons/flag-add.svg?raw';
+import CubeSVG from '@assets/icons/cube.svg?raw';
+import CubeGrowableSVG from '@assets/icons/cube-add.svg?raw';
 import ProcessTreeSVG from '@assets/icons/process-tree.svg?raw';
 import ProcessTreeGrowableSVG from '@assets/icons/process-tree-add.svg?raw';
-import ProcessSVG from '@assets/icons/process.svg?raw';
-import ProcessGrowableSVG from '@assets/icons/process-add.svg?raw';
 import SigmaSVG from '@assets/icons/sigma.svg?raw';
 import SigmaGrowableSVG from '@assets/icons/sigma-add.svg?raw';
 import TagGrowableSVG from '@assets/icons/tag-add.svg?raw';
@@ -30,6 +42,8 @@ import VendorGrowableSVG from '@assets/icons/vendor-add.svg?raw';
 import VendorSVG from '@assets/icons/vendor.svg?raw';
 import { VisualState } from './types';
 import { NodeType } from '@models/trees';
+
+// spec: ./AssociationGraph.spec.md
 
 const LIGHT_DARKEN_FACTOR = 0.5;
 
@@ -61,12 +75,19 @@ const FileSystemColor = '#8f30b8';
 const FolderColor = '#D2B48C';
 const NetworkConnectionColor = '#acc22e';
 const OtherColor = '#cacfca';
+const FlagColor = '#d4453b';
 const RepoColor = '#f03c2e';
 const TagColor = '#427d8c';
 const RuleColor = '#c60d00';
 const VendorColor = '#8f30b8';
-const WindowsProcessColor = '#fa8072';
+const IncidentColor = '#d4453b';
+const CompiledFunctionColor = '#4a90d9';
+const DecompiledFunctionColor = '#2f9e8f';
+const PeSectionColor = '#c77dff';
+const PeImportColor = '#4895ef';
 const WindowsProcessTreeColor = '#808000';
+// grown windows processes share the yellow/olive process-tree color
+const WindowsProcessColor = WindowsProcessTreeColor;
 
 const NODE_COLORS: Record<NodeType, Record<VisualState, string>> = {
   Collection: { basic: CollectionColor, growable: GrowableNodeColor, initial: InitialNodeColor },
@@ -74,6 +95,12 @@ const NODE_COLORS: Record<NodeType, Record<VisualState, string>> = {
   File: { basic: FileColor, growable: GrowableNodeColor, initial: InitialNodeColor },
   FileSystem: { basic: FileSystemColor, growable: GrowableNodeColor, initial: InitialNodeColor },
   Folder: { basic: FolderColor, growable: GrowableNodeColor, initial: InitialNodeColor },
+  Flag: { basic: FlagColor, growable: GrowableNodeColor, initial: InitialNodeColor },
+  Incident: { basic: IncidentColor, growable: GrowableNodeColor, initial: InitialNodeColor },
+  CompiledFunction: { basic: CompiledFunctionColor, growable: GrowableNodeColor, initial: InitialNodeColor },
+  DecompiledFunction: { basic: DecompiledFunctionColor, growable: GrowableNodeColor, initial: InitialNodeColor },
+  PeSection: { basic: PeSectionColor, growable: GrowableNodeColor, initial: InitialNodeColor },
+  PeImport: { basic: PeImportColor, growable: GrowableNodeColor, initial: InitialNodeColor },
   NetworkConnection: { basic: NetworkConnectionColor, growable: GrowableNodeColor, initial: InitialNodeColor },
   Other: { basic: OtherColor, growable: GrowableNodeColor, initial: InitialNodeColor },
   Repo: { basic: RepoColor, growable: GrowableNodeColor, initial: InitialNodeColor },
@@ -96,13 +123,19 @@ const RAW_SVG_MAP: Record<NodeType, Record<VisualState, string>> = {
   File: { basic: FileSVG, growable: FileGrowableSVG, initial: FileSVG },
   FileSystem: { basic: FileSystemSVG, growable: FileSystemGrowableSVG, initial: FileSystemSVG },
   Folder: { basic: FolderSVG, growable: FolderGrowableSVG, initial: FolderSVG },
+  Flag: { basic: FlagSVG, growable: FlagGrowableSVG, initial: FlagSVG },
+  Incident: { basic: IncidentSVG, growable: IncidentGrowableSVG, initial: IncidentSVG },
+  CompiledFunction: { basic: CompiledFunctionSVG, growable: CompiledFunctionGrowableSVG, initial: CompiledFunctionSVG },
+  DecompiledFunction: { basic: DecompiledFunctionSVG, growable: DecompiledFunctionGrowableSVG, initial: DecompiledFunctionSVG },
+  PeSection: { basic: PeSectionSVG, growable: PeSectionGrowableSVG, initial: PeSectionSVG },
+  PeImport: { basic: PeImportSVG, growable: PeImportGrowableSVG, initial: PeImportSVG },
   NetworkConnection: { basic: NetworkConnectionSVG, growable: NetworkConnectionGrowableSVG, initial: NetworkConnectionSVG },
   Other: { basic: OtherSVG, growable: OtherGrowableSVG, initial: OtherSVG },
   Repo: { basic: RepoSVG, growable: RepoGrowableSVG, initial: RepoSVG },
   SigmaRule: { basic: SigmaSVG, growable: SigmaGrowableSVG, initial: SigmaSVG },
   Tag: { basic: TagSVG, growable: TagGrowableSVG, initial: TagSVG },
   Vendor: { basic: VendorSVG, growable: VendorGrowableSVG, initial: VendorSVG },
-  WindowsProcess: { basic: ProcessSVG, growable: ProcessGrowableSVG, initial: ProcessSVG },
+  WindowsProcess: { basic: CubeSVG, growable: CubeGrowableSVG, initial: CubeSVG },
   WindowsProcessTree: { basic: ProcessTreeSVG, growable: ProcessTreeGrowableSVG, initial: ProcessTreeSVG },
 };
 

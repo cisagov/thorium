@@ -21,10 +21,10 @@ import { Entities } from '@models/entities/entities';
 import { WindowsProcess } from '@models/entities/processes';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
-// get files using filters and and an optional cursor
+// spec: ../EntityBrowsing.spec.md
+
+// Fetch Windows processes using search filters and an optional pagination cursor.
 const getWindowsProcesses = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {
-  // reset cursor when filters have changed, caller must know this
-  // get files list from API
   const listFilters = structuredClone(filters);
   listFilters.kinds = [Entities.WindowsProcess];
   const { entityList, entityCursor } = await listEntities(listFilters, errorHandler, true, cursor);
@@ -55,7 +55,7 @@ const Command = styled.div`
 `;
 
 interface WindowsProcessItemProps {
-  process: WindowsProcess; // Processes details
+  process: WindowsProcess;
 }
 
 const WindowsProcessItem: React.FC<WindowsProcessItemProps> = ({ process }) => {

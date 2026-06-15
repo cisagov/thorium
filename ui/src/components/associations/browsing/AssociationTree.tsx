@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Overlay, Popover, Spinner } from 'react-bootstrap';
 import { asyncDataLoaderFeature, hotkeysCoreFeature, selectionFeature } from '@headless-tree/core';
 import { useTree } from '@headless-tree/react';
 import { ErrorBoundary } from 'react-error-boundary';
@@ -9,132 +8,67 @@ import { getNodeName } from '../utilities';
 import { classifyNode } from '../graph/data';
 import { getNodeSvg } from '../graph/styles';
 import { useGraphData, FocusSource } from '../data/GraphDataContext';
-import { PreviewPopover } from './PreviewPopover';
+import { useSharedTreeIndex } from '../data/SharedTreeIndex';
 import { TreeContainer } from './TreeContainer';
-import { findMultiParentNodeIds, buildTreeIndex, TreeIndex, nodeTypeKeyToLabel } from './treeHelpers';
-import NodePreviewContent from './NodePreviewContent';
-import { Graph, TreeNode } from '@models/trees';
+import { findMultiParentNodeIds } from './treeHelpers';
+import {
+  ancestorChain,
+  buildTreeRoots,
+  itemNodeId,
+  overlayChildItemIds,
+  overlayIsFolder,
+  overlayItemPathForNode,
+} from './overlayTreeHelpers';
+import StyledSpinner from '@components/shared/fallback/Spinner.styled';
+import EntitySummaryHover from '@components/shared/info/EntitySummaryHover';
+import { treeNodeToInfo } from '@components/shared/info/info';
+import { entityLabel } from '@models/entities';
+import { TreeNode } from '@models/trees';
 
-function findParentFromIndex(index: TreeIndex, nodeId: string): string | null {
-  const parents = index.parentsOf.get(nodeId);
-  return parents?.[0] ?? null;
-}
-
-function buildTreeRoots(graph: Graph, index: TreeIndex): string[] {
-  const roots: string[] = [];
-  for (const initialId of graph.initial) {
-    let current = initialId;
-    const visited = new Set<string>();
-    visited.add(current);
-    let parent = findParentFromIndex(index, current);
-    while (parent && !visited.has(parent)) {
-      visited.add(parent);
-      current = parent;
-      parent = findParentFromIndex(index, current);
-    }
-    if (!roots.includes(current)) roots.push(current);
-  }
-  return roots;
-}
-
-function getDirectChildren(index: TreeIndex, nodeId: string): string[] {
-  return index.childrenOf.get(nodeId) ?? [];
-}
-
-function hasDirectChildren(index: TreeIndex, nodeId: string): boolean {
-  const children = index.childrenOf.get(nodeId);
-  return children !== undefined && children.length > 0;
-}
+// spec: ./AssociationTree.spec.md
 
 interface TreeItemOverlayProps {
-  nodeId: string;
   nodeData: TreeNode | undefined;
   isDuplicate: boolean;
-  children: React.ReactNode;
+  children: React.ReactElement;
 }
 
-const SHOW_DELAY = 400;
-const HIDE_DELAY = 200;
-
-const TreeItemOverlay: React.FC<TreeItemOverlayProps> = ({ nodeId, nodeData, isDuplicate, children }) => {
-  const [show, setShow] = useState(false);
-  const triggerRef = useRef<HTMLSpanElement>(null);
-  const showTimer = useRef<number | undefined>(undefined);
-  const hideTimer = useRef<number | undefined>(undefined);
-
-  const scheduleShow = () => {
-    window.clearTimeout(hideTimer.current);
-    showTimer.current = window.setTimeout(() => setShow(true), SHOW_DELAY);
-  };
-  const scheduleHide = () => {
-    window.clearTimeout(showTimer.current);
-    hideTimer.current = window.setTimeout(() => setShow(false), HIDE_DELAY);
-  };
-  const cancelHide = () => window.clearTimeout(hideTimer.current);
-
-  useEffect(
-    () => () => {
-      window.clearTimeout(showTimer.current);
-      window.clearTimeout(hideTimer.current);
-    },
-    [],
-  );
-
+/**
+ * Show the shared {@link EntitySummaryHover} preview for a tree row. Falls back to the bare row when the
+ * node has no describable info (matching the graph's behavior of suppressing the hover for such nodes).
+ */
+const TreeItemOverlay: React.FC<TreeItemOverlayProps> = ({ nodeData, isDuplicate, children }) => {
+  const model = nodeData ? treeNodeToInfo(nodeData) : null;
+  if (!model) return children;
   return (
-    <>
-      <span ref={triggerRef} onMouseEnter={scheduleShow} onMouseLeave={scheduleHide} className="overlay-trigger">
-        {children}
-      </span>
-      <Overlay
-        target={triggerRef.current}
-        show={show && !!nodeData}
-        placement="right"
-        container={document.body}
-        popperConfig={{ modifiers: [{ name: 'offset', options: { offset: [0, 8] } }] }}
-      >
-        {(props) => (
-          <PreviewPopover {...props} id={`preview-${nodeId}`} onMouseEnter={cancelHide} onMouseLeave={scheduleHide}>
-            <Popover.Body>{nodeData && <NodePreviewContent nodeData={nodeData} isDuplicate={isDuplicate} />}</Popover.Body>
-          </PreviewPopover>
-        )}
-      </Overlay>
-    </>
+    <EntitySummaryHover model={model} duplicate={isDuplicate} placement="right">
+      {children}
+    </EntitySummaryHover>
   );
 };
 
 const AssociationTreeComponent: React.FC = () => {
   const { graph, graphVersion, grow, growable, getGraph, focusedNodeId, focusSource, setFocusedNode } = useGraphData();
+  // the tree index is derived ONCE in the shared layer (shared with the entity browser); `getIndex()` is the
+  // always-fresh index for async callbacks (grow mutates the graph before the version bump commits a render)
+  const { index: treeIndex, getIndex } = useSharedTreeIndex();
   const [loadingItemData, setLoadingItemData] = useState<string[]>([]);
   const [loadingItemChildrens, setLoadingItemChildrens] = useState<string[]>([]);
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
 
-  const treeIndex = useMemo(() => {
-    if (!graph.id) return buildTreeIndex({ ...graph, branches: {} });
-    return buildTreeIndex(graph);
-  }, [graphVersion]);
-
   const [expandedItems, setExpandedItems] = useState<string[]>(() => {
-    const initIdx = buildTreeIndex(graph);
     const items: string[] = [];
     for (const initialId of graph.initial) {
-      let current = initialId.toString();
-      const chain: string[] = [];
-      const visited = new Set<string>();
-      visited.add(current);
-      let parent = findParentFromIndex(initIdx, current);
-      while (parent && !visited.has(parent)) {
-        chain.push(parent);
-        visited.add(parent);
-        current = parent;
-        parent = findParentFromIndex(initIdx, current);
-      }
-      items.push(...chain, initialId.toString());
+      const s = initialId.toString();
+      items.push(...ancestorChain(treeIndex, s), s);
     }
     return [...new Set(items)];
   });
 
   const grownNodesRef = useRef(new Set<string>());
   const [manuallyGrowing, setManuallyGrowing] = useState<Set<string>>(new Set());
+  // last-known top-level roots; when growth hoists new parents above the seeds these change and we re-root
+  const rootsRef = useRef<string[]>([]);
 
   const multiParentNodes = useMemo(() => {
     if (!graph.id) return new Set<string>();
@@ -148,34 +82,42 @@ const AssociationTreeComponent: React.FC = () => {
     setExpandedItems,
     rootItemId: 'root',
     getItemName: (node) => {
-      const nodeId = node.getId();
+      // item ids are raw node ids on the backbone and composite off it; decode before any node lookup
+      const nodeId = itemNodeId(node.getId());
       const g = getGraph();
       if (g.data_map && nodeId in g.data_map) {
         return getNodeName(g.data_map[nodeId], 100);
       }
-      return node.getItemData();
+      // never leak a composite id string (carries control chars) into the UI
+      return nodeId;
     },
     isItemFolder: (node) => {
-      const nodeId = node.getId();
-      const g = getGraph();
-      return !!(g.growable?.includes(nodeId) || hasDirectChildren(treeIndex, nodeId));
+      const itemId = node.getId();
+      const nodeId = itemNodeId(itemId);
+      // Expandable if it already has display children OR is growable in ANY arrival context. A reverse-reached
+      // node must stay expandable/growable: growing it fetches ITS associations (both directions), which is how
+      // the next reverse hop's edges load (e.g. growing a Flag pulls its SigmaRule). Forward children are still
+      // suppressed at display time by contextualDisplayEdges, so this only surfaces the reverse chain.
+      if (overlayIsFolder(getIndex(), itemId)) return true;
+      return growable.has(nodeId);
     },
     createLoadingItemData: () => 'loading...',
     dataLoader: {
-      getItem: (nodeId) => nodeId,
-      getChildren: async (nodeId) => {
-        if (nodeId === 'root') {
-          return buildTreeRoots(getGraph(), treeIndex);
+      getItem: (itemId) => itemId,
+      getChildren: async (itemId) => {
+        if (itemId === 'root') {
+          return buildTreeRoots(getGraph(), getIndex());
         }
-
-        const existingChildren = getDirectChildren(treeIndex, nodeId);
+        const nodeId = itemNodeId(itemId);
+        // Grow once per node id in ANY arrival context. Growing fetches the node's associations in both
+        // directions, so a reverse-reached node (e.g. a Flag) must grow to load its next reverse hop (its
+        // SigmaRule). Forward children stay suppressed at display time via contextualDisplayEdges; `getIndex()`
+        // rebuilds on graph identity change so a duplicate occurrence still sees children grown via another.
         if (growable.has(nodeId) && !grownNodesRef.current.has(nodeId)) {
           grownNodesRef.current.add(nodeId);
           await grow(nodeId);
-          const freshIndex = buildTreeIndex(getGraph());
-          return getDirectChildren(freshIndex, nodeId);
         }
-        return existingChildren;
+        return overlayChildItemIds(getIndex(), itemId);
       },
     },
     indent: 20,
@@ -189,6 +131,43 @@ const AssociationTreeComponent: React.FC = () => {
     },
     [graphVersion],
   );
+
+  // On every growth (graphVersion bump): refresh loaded occurrences of grown nodes, and re-root when growth
+  // hoists new structural parents above the current top ("amend the top"). headless-tree caches each item's
+  // children, so a node grown via one occurrence — or a newly discovered ancestor of a seed — won't surface
+  // until we explicitly invalidate the affected items' children.
+  useEffect(() => {
+    const index = getIndex();
+    const roots = buildTreeRoots(getGraph(), index);
+    const prev = rootsRef.current;
+    const rootsChanged = roots.length !== prev.length || roots.some((r, i) => r !== prev[i]);
+    // on the first pass rootsRef is empty and the tree is still building its initial roots — nothing loaded
+    const firstRun = prev.length === 0;
+    rootsRef.current = roots;
+    if (firstRun) return;
+    // duplicate-grow freshness: a node grown via one occurrence must refresh its OTHER loaded occurrences
+    // (each occurrence has its own children cache), so invalidate every loaded item of a grown node id
+    for (const item of tree.getItems()) {
+      const id = item.getId();
+      if (id === 'root') continue;
+      if (grownNodesRef.current.has(itemNodeId(id))) {
+        void item.invalidateChildrenIds();
+      }
+    }
+    if (rootsChanged) {
+      // open the full structural ancestor chain (topmost..seed) for every seed so hoisted parents render open
+      setExpandedItems((prevExpanded) => {
+        const next = new Set(prevExpanded);
+        for (const initialId of getGraph().initial) {
+          const s = initialId.toString();
+          for (const anc of ancestorChain(index, s)) next.add(anc);
+          next.add(s);
+        }
+        return [...next];
+      });
+      void tree.getItemInstance('root').invalidateChildrenIds();
+    }
+  }, [graphVersion]);
 
   const pendingFocusRef = useRef<string | null>(null);
   const initialFocusDone = useRef(false);
@@ -217,54 +196,46 @@ const AssociationTreeComponent: React.FC = () => {
     };
   }, [graphVersion]);
 
-  // When graph clicks a node, expand ancestors in tree, select it, and scroll to it
+  // Locate a rendered occurrence of `targetNodeId` (raw on the backbone, composite off it), expand its
+  // ancestor items, and select it. Defers to `pendingFocusRef` (retried on the next graphVersion) when the
+  // occurrence isn't loadable yet or doesn't exist in the tree.
+  const focusNodeInTree = async (targetNodeId: string) => {
+    const index = getIndex();
+    const roots = buildTreeRoots(getGraph(), index);
+    const located = overlayItemPathForNode(index, roots, targetNodeId);
+    if (!located) {
+      pendingFocusRef.current = targetNodeId;
+      return;
+    }
+    // expand each ancestor item (topmost-first), loading children as needed
+    for (const ancestorId of located.expandIds) {
+      try {
+        const item = tree.getItemInstance(ancestorId);
+        if (item.isFolder() && !item.isExpanded()) {
+          item.expand();
+          await tree.loadChildrenIds(ancestorId);
+        }
+      } catch {
+        pendingFocusRef.current = targetNodeId;
+        return;
+      }
+    }
+    // small delay for the tree to rebuild after expansions, then select the located occurrence
+    await new Promise((r) => setTimeout(r, 50));
+    try {
+      tree.getItemInstance(located.itemId).select();
+    } catch {
+      // occurrence not yet visible — will sync when the tree rebuilds
+    }
+  };
+
+  // When the graph focuses a node, expand to and select its occurrence in the tree.
   useEffect(() => {
     if (!focusedNodeId || focusSource !== FocusSource.Graph) return;
-
-    const expandAndSelect = async () => {
-      const g = getGraph();
-      if (!g.branches) return;
-
-      const currentIndex = buildTreeIndex(g);
-
-      const ancestors: string[] = [];
-      let current = focusedNodeId;
-      let parent = findParentFromIndex(currentIndex, current);
-      while (parent) {
-        ancestors.unshift(parent);
-        current = parent;
-        parent = findParentFromIndex(currentIndex, current);
-      }
-
-      // Expand each ancestor sequentially, loading children as needed
-      for (const ancestorId of ancestors) {
-        try {
-          const item = tree.getItemInstance(ancestorId);
-          if (item.isFolder() && !item.isExpanded()) {
-            item.expand();
-            await tree.loadChildrenIds(ancestorId);
-          }
-        } catch {
-          pendingFocusRef.current = focusedNodeId;
-          return;
-        }
-      }
-
-      // Small delay for tree to rebuild after expansions
-      await new Promise((r) => setTimeout(r, 50));
-
-      try {
-        const targetItem = tree.getItemInstance(focusedNodeId);
-        targetItem.select();
-      } catch {
-        // Node not yet visible in tree — will sync when tree rebuilds
-      }
-    };
-
-    void expandAndSelect();
+    void focusNodeInTree(focusedNodeId);
   }, [focusedNodeId, focusSource]);
 
-  // Retry pending focus after graph version changes (tree data updated)
+  // Retry a deferred focus after the graph version changes (tree data updated), re-running the locator.
   useEffect(() => {
     if (!pendingFocusRef.current) return;
     const pending = pendingFocusRef.current;
@@ -272,12 +243,7 @@ const AssociationTreeComponent: React.FC = () => {
 
     const retryFocus = async () => {
       await new Promise((r) => setTimeout(r, 100));
-      try {
-        const item = tree.getItemInstance(pending);
-        item.select();
-      } catch {
-        // Still not available
-      }
+      await focusNodeInTree(pending);
     };
 
     void retryFocus();
@@ -287,14 +253,16 @@ const AssociationTreeComponent: React.FC = () => {
     <TreeContainer>
       <div {...tree.getContainerProps()} className="tree">
         {tree.getItems().map((item) => {
-          const nodeId = item.getId();
+          const itemId = item.getId();
+          // decode the real node id — item ids are raw on the backbone and composite off it
+          const nodeId = itemNodeId(itemId);
           const typeInfo = getNodeTypeInfo(nodeId);
           const isDuplicate = multiParentNodes.has(nodeId);
           const isHighlighted = highlightedNodeId !== null && highlightedNodeId === nodeId;
 
           return (
             <button
-              key={nodeId}
+              key={itemId}
               {...item.getProps()}
               style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}
               onMouseEnter={() => {
@@ -307,6 +275,7 @@ const AssociationTreeComponent: React.FC = () => {
                 const isGrowable = growable.has(nodeId);
                 const isExpanded = item.isExpanded();
 
+                // grow in any arrival context — a reverse-reached node grows to load its next reverse hop
                 if (isGrowable && isExpanded && !grownNodesRef.current.has(nodeId)) {
                   e.stopPropagation();
                   grownNodesRef.current.add(nodeId);
@@ -329,19 +298,15 @@ const AssociationTreeComponent: React.FC = () => {
                 }
               }}
             >
-              <TreeItemOverlay
-                nodeId={nodeId}
-                nodeData={nodeId in graph.data_map ? graph.data_map[nodeId] : undefined}
-                isDuplicate={isDuplicate}
-              >
+              <TreeItemOverlay nodeData={nodeId in graph.data_map ? graph.data_map[nodeId] : undefined} isDuplicate={isDuplicate}>
                 <span
                   className={`treeitem${item.isFocused() ? ' focused' : ''}${item.isExpanded() ? ' expanded' : ''}${item.isSelected() ? ' selected' : ''}${item.isFolder() ? ' folder' : ''}${isDuplicate && isHighlighted ? ' duplicate-highlight' : ''}`}
                 >
                   {typeInfo && (
                     <img
                       className="node-type-icon"
-                      title={nodeTypeKeyToLabel(typeInfo.nodeType)}
-                      alt={nodeTypeKeyToLabel(typeInfo.nodeType)}
+                      title={entityLabel(typeInfo.nodeType)}
+                      alt={entityLabel(typeInfo.nodeType)}
                       src={`data:image/svg+xml;base64,${btoa(getNodeSvg(typeInfo.nodeType, typeInfo.visualState))}`}
                     />
                   )}
@@ -352,12 +317,7 @@ const AssociationTreeComponent: React.FC = () => {
                     </span>
                   )}
                   {(item.isLoading() || manuallyGrowing.has(nodeId)) && (
-                    <Spinner
-                      animation="border"
-                      size="sm"
-                      className="loading"
-                      style={{ width: 14, height: 14, marginLeft: 6, borderWidth: 2 }}
-                    />
+                    <StyledSpinner aria-label="loading" $size={14} style={{ marginLeft: 6 }} />
                   )}
                 </span>
               </TreeItemOverlay>
@@ -373,7 +333,7 @@ export const AssociationTree: React.FC = () => {
   const { graph } = useGraphData();
   return (
     <ErrorBoundary fallback={<RenderErrorAlert page={false} />}>
-      {graph.id ? <AssociationTreeComponent key={graph.id} /> : <Spinner animation="border" />}
+      {graph.id ? <AssociationTreeComponent key={graph.id} /> : <StyledSpinner aria-label="loading" $size={28} />}
     </ErrorBoundary>
   );
 };

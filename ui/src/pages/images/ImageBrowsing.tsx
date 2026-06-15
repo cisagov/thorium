@@ -26,6 +26,8 @@ import { Accordion } from '@components/shared/accordion';
 import { CountBadge, HeaderBar, OmnibarRow } from '@pages/pipelines/PipelineBrowsing.styled';
 import { Button } from '@components/shared/buttons';
 
+// spec: ./SPEC.md
+
 /** Filter images client-side by the omnibar clauses (group, creator, name, free text). */
 const filterImages = (images: Image[], clauses: Clause[]): Image[] => {
   const groups = getGroupsFromClauses(clauses);

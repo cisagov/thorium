@@ -1,7 +1,28 @@
+// spec: ./utilities.spec.md
+
 // project imports
+import { associationKindLabel } from '@models/associations';
 import { RequestTags } from '@models/tags';
 import { SubmissionChunk } from '@models/files';
 import { BranchNode, Graph, TreeNode, TreeNodeKey } from '@models/trees';
+
+/**
+ * Get the value for `key` in `map`, inserting one produced by `factory` when absent. Collapses the recurring
+ * "read, create-and-store if missing, then use" pattern into a single expression for per-key accumulators.
+ *
+ * @param map - The map to read from and, on a miss, insert into.
+ * @param key - The key to look up.
+ * @param factory - Produces the initial value when the key is absent.
+ * @returns The existing or newly-inserted value for `key`.
+ */
+export function getOrCreate<K, V>(map: Map<K, V>, key: K, factory: () => V): V {
+  let value = map.get(key);
+  if (value === undefined) {
+    value = factory();
+    map.set(key, value);
+  }
+  return value;
+}
 
 // get the file name from full path
 export const stripFilePath = (filePath: string): string => {
@@ -71,7 +92,9 @@ export const getNodeName = (nodeData: TreeNode, maxLength: number): string => {
 
 // build edge label string from branch node structure
 export const getEdgeLabel = (target: string, _source: string, node: BranchNode, graph: Graph): string => {
-  if (node.relationship.Origin) {
+  // the `None` origin is the bare string "None" (a unit variant); only struct-variant (object) origins carry a
+  // payload worth labeling, so require an object here
+  if (node.relationship.Origin && typeof node.relationship.Origin === 'object') {
     const origin = node.relationship.Origin;
     // Downloaded
     if (origin.Downloaded) {
@@ -105,7 +128,7 @@ export const getEdgeLabel = (target: string, _source: string, node: BranchNode, 
       return `Commit: ${origin.Source.commit.slice(0, 8)}`;
     }
   } else if (node.relationship.Association) {
-    return `Association: ${node.relationship.Association.kind}`;
+    return `Association: ${associationKindLabel(node.relationship.Association.kind)}`;
   } else if (node.relationship) {
     const tags = graph.data_map[target].Tag?.tags;
     if (tags === undefined) return '';

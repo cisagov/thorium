@@ -3,6 +3,9 @@ import type { FC, ReactNode } from 'react';
 import { FaChevronDown } from 'react-icons/fa';
 import styled from 'styled-components';
 
+// project imports
+import { BUTTON_BADGE_GAP } from '@styles';
+
 // A themed, controlled accordion built with styled-components to replace the legacy react-bootstrap
 // Accordion. The open set is owned by the parent (via `activeKey`/`onSelect`) so callers can expand
 // items programmatically. `alwaysOpen` allows multiple items open at once; otherwise opening one
@@ -50,7 +53,7 @@ const AccordionContainer = styled.div`
 const HeaderRow = styled.div<{ $open: boolean }>`
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: ${BUTTON_BADGE_GAP};
   width: 100%;
   padding: 0.25rem 1.25rem;
   background-color: ${({ $open }) => ($open ? 'var(--thorium-secondary-panel-bg)' : 'var(--thorium-panel-bg)')};

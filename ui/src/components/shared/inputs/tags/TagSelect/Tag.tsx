@@ -8,6 +8,8 @@ import { TagEntry } from '@models/tags';
 import { tagIsInvalid } from '@utilities/tags';
 import { getTagColorClass } from '@components/tags/utilities';
 
+// spec: ./TagSelect.spec.md
+
 type TagFieldProps = {
   value: string;
   isEditing: boolean;

@@ -18,6 +18,8 @@ import { ImageFormMode } from './types';
 import FieldBadge from '@components/shared/badges/FieldBadge';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `Path to the modifier folder for this image. Modifiers allow dynamic customization of image behavior at job execution time.`,
 };

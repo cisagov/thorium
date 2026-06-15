@@ -15,6 +15,9 @@ import {
   pipelineFieldCategory,
 } from './schema';
 
+// spec: ./SPEC.md
+
+// Push a "populate this null field" replace-suggestion when the field is present but set to `null`.
 function suggestNullReplace(
   field: string,
   parsed: Record<string, unknown>,
@@ -35,6 +38,8 @@ function suggestNullReplace(
   return true;
 }
 
+// Resolve a dotted field path (e.g. `triggers.trigger-name`) to its nested schema, descending into
+// object sub-fields; returns undefined if any segment is not an object with the next key.
 function lookupSchema(schemas: Record<string, FieldSchema>, dottedField: string): FieldSchema | undefined {
   const parts = dottedField.split('.');
   let schema = schemas[parts[0]];
@@ -48,6 +53,7 @@ function lookupSchema(schemas: Record<string, FieldSchema>, dottedField: string)
   return schema;
 }
 
+// Find the 1-based source line of a top-level map key, falling back to line 1 when absent.
 function findKeyLine(map: unknown, key: string, lineIndex: LineIndex): number {
   if (!isMap(map)) return 1;
   for (const item of map.items) {
@@ -59,10 +65,25 @@ function findKeyLine(map: unknown, key: string, lineIndex: LineIndex): number {
   return 1;
 }
 
+// Line to anchor "add new field" suggestions on: the last line of the document.
 function lastDocLine(lineIndex: LineIndex): number {
   return lineIndex.offsets.length;
 }
 
+/**
+ * Generate editor autocomplete/populate suggestions for a parsed pipeline-request YAML document.
+ *
+ * Proposes values for unset (`null`) known fields, populate actions for empty structures, trigger
+ * entries, and image-name completions within `order`. When `imageNames` is supplied, image-name
+ * suggestions are drawn from that set.
+ *
+ * @param doc - The parsed YAML document (positional info for suggestion anchors).
+ * @param text - The raw YAML source, used to map node offsets to line/column.
+ * @param parsed - The plain-object form of `doc` used to decide which fields need suggestions.
+ * @param imageNames - Optional set of image names valid for the pipeline's group, used to suggest
+ *   image completions in `order`. Omit or pass `null` to skip image-name suggestions.
+ * @returns The list of {@link Suggestion}s to surface in the editor (empty when nothing applies).
+ */
 export function generatePipelineSuggestions(
   doc: Document,
   text: string,

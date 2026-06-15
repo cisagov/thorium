@@ -8,18 +8,39 @@ import { filterIncludedTags, filterExcludedTags } from '../utilities';
 import { Tags } from '@models/tags';
 import { Entities } from '@models/entities';
 
-const TagContainer = styled.div`
+// spec: ../tags.spec.md
+
+/** How a condensed tag list aligns its badges within the row. */
+export enum TagAlign {
+  Left = 'left',
+  Center = 'center',
+}
+
+const TagContainer = styled.div<{ $align: TagAlign }>`
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: ${({ $align }) => ($align === TagAlign.Left ? 'flex-start' : 'center')};
+
+  /* left variant only: cap the badge width and left-align text so long values wrap within a column
+     instead of stretching the row (the global .tag-item rule already breaks long words) */
+  ${({ $align }) =>
+    $align === TagAlign.Left &&
+    `
+    & .tag-item {
+      max-width: 400px;
+      white-space: normal;
+      text-align: left;
+    }
+  `}
 `;
 
 interface CondensedEntityTagProps {
-  tags: Tags; // tags to display in condensed non-editable view
+  tags: Tags;
   resource?: Entities;
+  align?: TagAlign;
 }
 
-const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource }) => {
+const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource, align = TagAlign.Center }) => {
   const excludeTags: string[] = [];
   const generalTags = filterExcludedTags(tags, excludeTags);
   const tlpTags = filterIncludedTags(tags, ['TLP']);
@@ -33,7 +54,7 @@ const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource
           </AlertBanner>
         </div>
       )}
-      <TagContainer>
+      <TagContainer $align={align}>
         {Object.keys(tlpTags).length > 0 &&
           Object.keys(tlpTags)
             .sort()
@@ -41,7 +62,14 @@ const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource
               Object.keys(tlpTags[tagKey])
                 .sort()
                 .map((tagValue) => (
-                  <TagBadge resource={resource} key={'TLP_' + tagValue} tag={tagKey} value={tagValue} condensed={true} action={'link'} />
+                  <TagBadge
+                    resource={resource}
+                    key={'TLP_' + tagKey + '_' + tagValue}
+                    tag={tagKey}
+                    value={tagValue}
+                    condensed={true}
+                    action={'link'}
+                  />
                 )),
             )}
         {Object.keys(generalTags)
@@ -50,7 +78,14 @@ const CondensedEntityTags: React.FC<CondensedEntityTagProps> = ({ tags, resource
             Object.keys(generalTags[tagKey])
               .sort()
               .map((tagValue) => (
-                <TagBadge resource={resource} key={'General_' + tagValue} tag={tagKey} value={tagValue} condensed={true} action={'link'} />
+                <TagBadge
+                  resource={resource}
+                  key={'General_' + tagKey + '_' + tagValue}
+                  tag={tagKey}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
               )),
           )}
       </TagContainer>

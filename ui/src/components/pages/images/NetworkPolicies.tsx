@@ -8,6 +8,8 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import SelectableArray from '@components/shared/inputs/selectable/SelectableArray';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIP = `Network policies dictate which entities the image can connect to or receive communication from.`;
 
 const KeyCol = styled.div`

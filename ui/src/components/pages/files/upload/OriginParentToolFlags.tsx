@@ -2,6 +2,8 @@ import React from 'react';
 import { useUpload } from './UploadContext';
 import OriginField from './OriginField';
 
+// spec: ./upload.spec.md
+
 interface OriginParentToolFlagsProps {
   variant: 'transformed' | 'unpacked';
 }

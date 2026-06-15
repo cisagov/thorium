@@ -7,6 +7,8 @@ import { ButtonVariant, ButtonSize } from './types';
 import type { ButtonProps } from './types';
 import { ICON_SIZE } from './tokens';
 
+// spec: ./Button.spec.md
+
 const StyledIconButton = styled(Button)<{ $iconSize: string; $round: boolean }>`
   width: ${({ $iconSize }) => $iconSize};
   height: ${({ $iconSize }) => $iconSize};

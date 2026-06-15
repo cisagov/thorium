@@ -5,6 +5,8 @@ import { getTagColorClass } from '@components/tags';
 import { ElasticIndex } from '@models/search';
 import { RequestTags } from '@models/tags';
 
+// spec: ./SPEC.md
+
 function filterOptionsOnText(options: DropdownOption[], text: string): DropdownOption[] {
   if (!text)
     return options.sort((a, b) => {

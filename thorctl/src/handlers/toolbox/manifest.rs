@@ -1466,7 +1466,7 @@ mod tests {
                     ImageManifest {
                         versions: HashMap::from([(
                             "latest".to_string(),
-                            image_version("static-uur", "exiftool", "url-uur"),
+                            image_version("dynamic", "exiftool", "url-uur"),
                         )]),
                     },
                 ),
@@ -1478,7 +1478,7 @@ mod tests {
                 ),
                 (
                     "p-uur",
-                    pipeline("static-uur", "p-uur", json!(["exiftool"]), &["exiftool"]),
+                    pipeline("dynamic", "p-uur", json!(["exiftool"]), &["exiftool"]),
                 ),
             ],
         );
@@ -1492,7 +1492,7 @@ mod tests {
         let uur = collision
             .members
             .iter()
-            .find(|mem| mem.source_group == "static-uur")
+            .find(|mem| mem.source_group == "dynamic")
             .unwrap()
             .clone();
         let new_name = m.suggested_image_rename(&collision, &uur);

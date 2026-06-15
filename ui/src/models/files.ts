@@ -28,7 +28,9 @@ export type CarvedOrigin = {
   Unknown?: 'Unknown';
 };
 
-export type Origin = {
+/// The struct ("payload-carrying") variants of a sample's {@link Origin}. The unit `None` variant is NOT
+/// here — it serializes as a bare string, so it lives on the {@link Origin} union instead.
+export type OriginVariants = {
   /// This sample was downloaded from an external website
   Downloaded?: { url: string; name?: string };
   /// This sample was unpacked from another sample
@@ -119,9 +121,12 @@ export type Origin = {
     /// The type of carved file this is
     carved_origin: CarvedOrigin;
   };
-  /// This sample has no unique origin
-  None?: 'None';
 };
+
+/// How a sample came to exist. A struct variant serializes as `{ Variant: payload }`; the unit `None`
+/// variant (no unique origin) serializes as the **bare string** `"None"` — hence the union rather than a
+/// `None?: 'None'` object field (which would never actually be populated).
+export type Origin = OriginVariants | 'None';
 
 export type SubmissionChunk = {
   /// A UUID for this submission

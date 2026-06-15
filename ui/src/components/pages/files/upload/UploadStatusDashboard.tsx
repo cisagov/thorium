@@ -1,10 +1,15 @@
-import React, { Fragment } from 'react';
+import React, { Fragment, useMemo } from 'react';
 import { Button, Card, Col, Row } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { FaRedo } from 'react-icons/fa';
+import { FaChartColumn } from 'react-icons/fa6';
 import { OverlayTipTop } from '@components/shared/overlay/tips';
 import ProgressBarContainer from './ProgressBarContainer';
 import UploadStatusTable from './UploadStatusTable';
 import { useUpload } from './UploadContext';
+import { encodeSeedParams } from '@dashboards/Dashboard/seedParams';
+
+// spec: ./upload.spec.md
 
 const UploadStatusDashboard: React.FC = () => {
   const {
@@ -21,6 +26,21 @@ const UploadStatusDashboard: React.FC = () => {
     handleBack,
     cancelUpload,
   } = useUpload();
+
+  // the sha256s of files that uploaded successfully, deduped — used to seed a dashboard of this batch
+  const uploadedShas = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          Object.values(uploadStatus)
+            .map((status) => status.sha256)
+            .filter((sha): sha is string => Boolean(sha)),
+        ),
+      ),
+    [uploadStatus],
+  );
+  // link to a dashboard pre-seeded with this upload batch (default crawl depth 2, matching the builder)
+  const dashboardHref = `/dashboard/view?${encodeSeedParams({ samples: uploadedShas }, 2).toString()}`;
 
   return (
     <Fragment>
@@ -69,6 +89,18 @@ const UploadStatusDashboard: React.FC = () => {
             )}
           </Card.Body>
         </Card>
+      )}
+      {!uploadInProgress && uploadedShas.length > 0 && (
+        <Row className="mt-2">
+          <Col className="d-flex justify-content-center">
+            <OverlayTipTop tip="Open a dashboard seeded with the files you just uploaded">
+              <Link to={dashboardHref} className="ok-btn">
+                <FaChartColumn className="me-2" />
+                Open a dashboard to view these items
+              </Link>
+            </OverlayTipTop>
+          </Col>
+        </Row>
       )}
       <UploadStatusTable />
       {!uploadInProgress ? (

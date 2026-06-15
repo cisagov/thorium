@@ -14,6 +14,8 @@ import { listReactions, deleteReaction } from '@thorpi/reactions';
 import { getStatusBadge } from './reactions';
 import type { Reaction, ReactionRunResult } from '@models/reactions';
 
+// spec: ../files.spec.md
+
 interface DeleteReactionAlertsProps {
   responses: ReactionRunResult[];
 }

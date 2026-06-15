@@ -5,6 +5,8 @@ import { BaseEdge, type EdgeProps } from '@xyflow/react';
 import { HANDLE_CENTER_Y } from './order';
 import CrabSVG from '@assets/icons/crab.svg?raw';
 
+// spec: ./PipelineOrderFlow.spec.md
+
 const CRAB_DATA_URI = `data:image/svg+xml;base64,${btoa(CrabSVG)}`;
 const CRAB_SIZE = { w: 14, h: 12 };
 

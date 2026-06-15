@@ -15,9 +15,11 @@ import { OverlayTipBottom } from '@components/shared/overlay/tips';
 import SelectInputArray from '@components/shared/inputs/selectable/SelectInputArray';
 import { createEntity } from '@thorpi/entities';
 import { useAuth } from '@utilities/auth';
-import { EntityCreateTypeMap, EntityTypeMap, UISupportedEntityCreateKind } from '@models/entities/entities';
+import { entityLabel, EntityCreateTypeMap, EntityTypeMap, UISupportedEntityCreateKind } from '@models/entities/entities';
 import { getDetailsBasePathByEntity } from '../details/EntityDetailsRoutes';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
+
+// spec: ./EntityCreate.spec.md
 
 export type CreateMetadataProps<K extends UISupportedEntityCreateKind> = {
   entity: EntityCreateTypeMap[K];
@@ -73,7 +75,7 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
             <InfoValue>
               <SelectInputArray
                 isCreatable={false}
-                options={userInfo?.groups ?? []}
+                options={[...(userInfo?.groups ?? [])].sort((a, b) => a.localeCompare(b))}
                 values={entity.groups}
                 onChange={(groups) => updatePendingEntity('groups', groups)}
               />
@@ -107,7 +109,7 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
           )}
           <Row className="mt-4">
             <InfoHeader />
-            <InfoValue>* Field is required to create a new {entity.kind.toLowerCase()}</InfoValue>
+            <InfoValue>* Field is required to create a new {entityLabel(entity.kind).toLowerCase()}</InfoValue>
           </Row>
         </Card.Body>
       </Card>
@@ -117,10 +119,10 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
   const EntityCreateButton = () => {
     const navigate = useNavigate();
     const { entity, kind, setError, graphicFile } = useEntityContext();
-    const userCanCreate = true; // TODO grab group membership of selected groups and check roles
+    const userCanCreate = true;
     const createEntityMessage = userCanCreate
-      ? `Create a new ${kind}. You must be a user, manager, or owner in a selected group to create this ${kind}.`
-      : `You must be a user, manager, or owner in a selected group to create this ${kind}.`;
+      ? `Create a new ${entityLabel(kind)}. You must be a user, manager, or owner in a selected group to create this ${entityLabel(kind)}.`
+      : `You must be a user, manager, or owner in a selected group to create this ${entityLabel(kind)}.`;
     const handleCreateEntity = (): void => {
       void createEntity(buildCreateEntityForm(entity, graphicFile ?? undefined), setError).then((response) => {
         if (response != null) {
@@ -169,14 +171,14 @@ export function createEntityCreatePage<K extends UISupportedEntityCreateKind>(co
           error,
           setError,
           kind: config.kind,
-          supportsGraphic: config.supportsGraphic ?? false,
+          supportsGraphic: config.supportsGraphic ?? true,
           graphicFile,
           setGraphicFile,
         }}
       >
-        <Page className="full-min-width" title={`Create ${config.kind}`}>
+        <Page className="full-min-width" title={`Create ${entityLabel(config.kind)}`}>
           <CreateEntityTitle>
-            <Title className="title">New {config.kind}</Title>
+            <Title className="title">New {entityLabel(config.kind)}</Title>
           </CreateEntityTitle>
           <EntityInfo />
           {error !== '' && <AlertBanner>{error}</AlertBanner>}

@@ -2,6 +2,8 @@ import React from 'react';
 import { Button, Card } from 'react-bootstrap';
 import { TLP_COLORS, TLPSelection as TLPSelectionState } from './types';
 
+// spec: ./upload.spec.md
+
 interface TLPSelectionProps {
   selectedTLP: TLPSelectionState;
   onTLPChange: (newSelection: TLPSelectionState) => void;

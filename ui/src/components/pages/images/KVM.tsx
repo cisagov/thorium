@@ -20,6 +20,8 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { Kvm } from '@models/images';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `KVM virtual machine configuration for images using the Kvm scaler.`,
   xml: `Path to the golden libvirt XML file defining the VM configuration.`,

@@ -5,6 +5,8 @@ import { FaChevronDown, FaChevronUp, FaRedo } from 'react-icons/fa';
 import Subtitle from '@components/shared/titles/Subtitle';
 import { useUpload } from './UploadContext';
 
+// spec: ./upload.spec.md
+
 const UploadStatusTable: React.FC = () => {
   const {
     uploadStatus,

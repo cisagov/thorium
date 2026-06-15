@@ -1,19 +1,26 @@
 import React, { KeyboardEventHandler, useEffect } from 'react';
 import CreatableSelect from 'react-select/creatable';
-import Select from 'react-select';
+import Select, { SelectComponentsConfig, GroupBase } from 'react-select';
 
 // project imports
 import { createReactSelectStyles } from '@utilities/select';
 
-const components = {
-  //DropdownIndicator: null,
-};
+// spec: ./selectable.spec.md
 
 // Object structure needed for select object values
 interface SelectOption {
   readonly label: string;
   readonly value: string;
 }
+
+// The react-select `components` override shape for this control's option/value objects. Exported so
+// callers (e.g. hiding the dropdown indicator/menu) can supply their own overrides via the
+// `componentsOverride` prop while keeping the default (no override) for existing callers.
+export type SelectInputArrayComponents = SelectComponentsConfig<SelectOption, true, GroupBase<SelectOption>>;
+
+// The default `components` override: an empty object keeps react-select's built-in components,
+// preserving the historical behavior for every caller that does not pass `componentsOverride`.
+const DEFAULT_COMPONENTS: SelectInputArrayComponents = {};
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const createSelectOption = (label: string, _prefix: string = '', valuesMap?: { [key: string]: string }): SelectOption => {
@@ -50,6 +57,11 @@ interface SelectInputProps {
   isCreatable?: boolean;
   defaultMessage?: string; // default field message when no initial value is provided
   error?: boolean; // whether to render the control with a danger outline
+  /**
+   * react-select components override; defaults to no override (existing behavior). A caller can pass
+   * `{ Menu: () => null }` (or similar) to hide the menu when it drives the options list itself.
+   */
+  componentsOverride?: SelectInputArrayComponents;
 }
 
 const DefaultMessage = 'Type each item and press enter...';
@@ -64,29 +76,30 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
   isCreatable = true,
   defaultMessage = DefaultMessage,
   error = false,
+  componentsOverride = DEFAULT_COMPONENTS,
 }) => {
   const [inputValue, setInputValue] = React.useState('');
   const [value, setValue] = React.useState<SelectOption[]>(formatInitialValues(values, valuesMap));
-  const [valueOptions, setValueOptions] = React.useState<SelectOption[]>(formatInitialValues(options ? options : [], valuesMap));
+  // prop-driven options (rebuilt whenever `options`/`valuesMap` change so shrinking the prop drops
+  // stale entries) kept separate from values the user creates in the creatable variant, which must
+  // survive prop-identity churn (callers pass fresh array identities every render)
+  const [propOptions, setPropOptions] = React.useState<SelectOption[]>(formatInitialValues(options ? options : [], valuesMap));
+  const [created, setCreated] = React.useState<SelectOption[]>([]);
   const selectStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)', error);
 
-  // update internal options if prop options change
+  // Rebuild the prop-driven options directly from the `options` prop so it is effectively controlled:
+  // shrinking `options` removes entries (the old accumulate-only merge could never drop a stale
+  // option). User-created values live in `created` and are merged below so they are not wiped here.
   useEffect(() => {
-    const initialOptionValues = formatInitialValues(options ? options : [], valuesMap);
-    setValueOptions((prev) => {
-      const seen = new Set<string>();
-      return [...prev, ...initialOptionValues].filter((entry: SelectOption) => {
-        const key = `${entry.value}||${entry.label}`;
-        // already seen in label/value pair, filter out
-        if (seen.has(key)) {
-          return false;
-        }
-        // add it to our set and ensure its not filtered out
-        seen.add(key);
-        return true;
-      });
-    });
+    setPropOptions(formatInitialValues(options ? options : [], valuesMap));
   }, [options, valuesMap]);
+
+  // the rendered options: prop-driven entries plus any user-created values, deduped by value so a
+  // created value that later appears in `options` doesn't render twice
+  const valueOptions = React.useMemo<SelectOption[]>(() => {
+    const seen = new Set(propOptions.map((option) => option.value));
+    return [...propOptions, ...created.filter((option) => !seen.has(option.value))];
+  }, [propOptions, created]);
 
   // control optional props to prevent menu from opening
   const selectProps: { menuIsOpen?: boolean } = {};
@@ -94,10 +107,12 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
     selectProps.menuIsOpen = false;
   }
 
-  // in case values change externally, update them
+  // in case values (or the id->label map that renders them) change externally, resync the chips.
+  // valuesMap is a dep so labels refresh when the map resolves after the values (the builder case,
+  // where selected ids arrive before their human-readable labels).
   useEffect(() => {
     setValue(formatInitialValues(values, valuesMap));
-  }, [values]);
+  }, [values, valuesMap]);
 
   // control updates to the select component through key presses
   const handleKeyDown: KeyboardEventHandler = (event) => {
@@ -115,7 +130,12 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
           setValue((prev) => [...prev, newValue]);
           onChange([...value.map((option) => option.value), inputValue]);
           setInputValue('');
-          handleCreateOption(newValue);
+          // Only the creatable variant grows the options list with newly typed values. For the
+          // non-creatable variant the typed value already exists in `options` (it must, to be
+          // accepted above), so pushing it back would duplicate a controlled option.
+          if (isCreatable) {
+            handleCreateOption(newValue);
+          }
         }
         event.preventDefault();
         break;
@@ -127,7 +147,9 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
     if (valueOptions.some((option) => option.value == value.value)) {
       return;
     }
-    setValueOptions((prev) => [...prev, value]);
+    // persist created values separately so a parent re-render (which rebuilds propOptions from a
+    // fresh array identity) can't drop them from the menu
+    setCreated((prev) => [...prev, value]);
   };
 
   const handleCreateCallback = (value: any) => {
@@ -144,7 +166,7 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         isMulti
         isClearable
         styles={selectStyle}
-        components={components}
+        components={componentsOverride}
         inputValue={inputValue}
         onCreateOption={handleCreateCallback}
         onChange={(newValue: readonly SelectOption[]) => {
@@ -168,7 +190,7 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
         isMulti
         isClearable
         styles={selectStyle}
-        components={components}
+        components={componentsOverride}
         inputValue={inputValue}
         onChange={(newValue: readonly SelectOption[]) => {
           setValue([...newValue]);

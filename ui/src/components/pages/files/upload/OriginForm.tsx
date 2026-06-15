@@ -9,6 +9,8 @@ import OriginWire from './OriginWire';
 import OriginIncident from './OriginIncident';
 import OriginMemoryDump from './OriginMemoryDump';
 
+// spec: ./upload.spec.md
+
 const OriginForm: React.FC = () => {
   const { originState, origin } = useUpload();
 

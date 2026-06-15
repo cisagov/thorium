@@ -3,6 +3,8 @@ import { ReactNode, RefObject, useCallback, useLayoutEffect, useRef, useState } 
 // project imports
 import { useWindowManager } from './use_window_manager';
 
+// spec: ./WindowManager.spec.md
+
 // Per-window hook: registers with the WindowManager and returns refs + callbacks for z-index, click, and close
 export function useWindowNode<N extends HTMLElement>(id?: string) {
   const { canvasMargin, registerWindow, onWindowClick, onWindowClose, zRange: managerZRange, manageWindow } = useWindowManager();

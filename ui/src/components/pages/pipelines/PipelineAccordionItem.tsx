@@ -17,6 +17,8 @@ import { FaLink } from 'react-icons/fa';
 import { updateURLSection } from '@utilities/url';
 import { toast } from 'react-toastify';
 
+// spec: ./PipelineInfo.spec.md
+
 interface PipelineAccordionItemProps {
   pipeline: Pipeline;
   groups: Record<string, Group>;

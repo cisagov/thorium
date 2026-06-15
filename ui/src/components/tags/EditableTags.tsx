@@ -20,6 +20,8 @@ import { Entities } from '@models/entities/entities';
 import rawAttackTagDefaults from '../../../mitre_tags/attackTagsList.tags?raw';
 import rawMbcTagDefaults from '../../../mitre_tags/MBCTagsList.tags?raw';
 
+// spec: ./tags.spec.md
+
 interface ThoriumTagSelectOption {
   value: string;
   label: string;
@@ -31,7 +33,6 @@ interface EditableTagsProps {
   tags: Tags;
   setDetails: (details: Sample) => void;
   setUpdateError?: (error: string) => void;
-  screenWidth: number;
 }
 
 interface EditTagButtonProps {
@@ -48,8 +49,7 @@ const generalTagStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)');
 const fileInfoTagStyles = createReactSelectStyles('White', '#7ba8ec');
 const mitreTagStyles = createReactSelectStyles('White', 'rgb(227, 135, 81)');
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth }: EditableTagsProps) => {
+const EditableTags = ({ sha256, tags, setDetails, setUpdateError }: EditableTagsProps) => {
   const [editing, setEditing] = useState(false);
   const [pendingTags, setPendingTags] = useState<Record<string, string[]>>({});
   const [deletedTags, setDeletedTags] = useState<Record<string, string[]>>({});
@@ -68,18 +68,6 @@ const EditableTags = ({ sha256, tags, setDetails, setUpdateError, screenWidth }:
 
   // build a list of tags for non-general tag sections
   const excludeTags = [...FormattedFileInfoTagKeys, 'TLP', 'RESULTS', 'ATT&CK', 'MBC'];
-
-  // calculate the number of tags using unique values
-  /* eslint-disable @typescript-eslint/no-unused-vars */
-  let _tagsCount = 0;
-  if (tags && Object.keys(tags).length > 0) {
-    for (const tag in tags) {
-      if (Object.prototype.hasOwnProperty.call(tags, tag)) {
-        _tagsCount += Object.keys(tags[tag]).length;
-      }
-    }
-  }
-  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // get TLP tags and React Select formatted options
   const tlpTagOptions: ThoriumTagSelectOption[] = TLPLevels.sort().map((tagValue) => ({

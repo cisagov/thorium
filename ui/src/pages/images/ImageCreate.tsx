@@ -50,6 +50,8 @@ import { RoleKey } from '@models/users';
 import { getThoriumRole } from '@utilities/role';
 import { FormatType } from '@utilities/rules/types';
 
+// spec: ./SPEC.md
+
 const imageChecker = new ImageChecker();
 
 const IMAGE_CREATE_TEMPLATE: Record<string, unknown> = {

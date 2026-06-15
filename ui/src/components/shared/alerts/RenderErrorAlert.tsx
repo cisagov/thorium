@@ -2,6 +2,8 @@ import React from 'react';
 import styled from 'styled-components';
 import AlertBanner from './AlertBanner';
 
+// spec: ./AlertBanner.spec.md
+
 const PageWrapper = styled.div`
   /* offset below the fixed nav bar (47px tall); use margin since 'top' has no effect on this static element */
   margin-top: 60px;

@@ -4,6 +4,7 @@
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Version};
+use axum::extract::multipart::Field;
 use axum::extract::{FromRef, FromRequestParts};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
@@ -14,10 +15,12 @@ use headers::{Header, HeaderName, HeaderValue};
 use ldap3::{Scope, SearchEntry};
 use rand::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::str;
 use tracing::{Level, Span, event, instrument};
 
 use super::db;
+use crate::models::backends::GraphicSupport;
 use crate::conf::Ldap;
 use crate::models::{
     AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, AuthedUser, Group,
@@ -702,6 +705,7 @@ impl User {
             verification_token: None,
             verification_sent: None,
             aliases: HashMap::default(),
+            image: None,
         };
         // send a verification email if needed
         match (req.skip_verification, &shared.email) {
@@ -880,9 +884,58 @@ impl User {
             // we aren't an admin and were aren't deleting ourselves
             _ => return unauthorized!(),
         };
-
+        // grab any profile icon path so we can clean it out of S3 after the user is gone
+        let image = target.image.clone();
         // delete user in the background
-        db::users::delete(&target, shared).await
+        db::users::delete(&target, shared).await?;
+        // remove this user's profile icon from S3 if they had one
+        if let Some(image_path) = image {
+            Self::delete_graphic(&image_path, shared).await?;
+        }
+        Ok(())
+    }
+
+    /// Upload (or replace) this user's profile icon
+    ///
+    /// Streams the image to the shared graphics S3 bucket via [`GraphicSupport`], stores the
+    /// resulting path on the user, and removes any previously-stored icon at a different path.
+    ///
+    /// # Arguments
+    ///
+    /// * `field` - The multipart field containing the image data
+    /// * `shared` - Shared Thorium objects
+    pub async fn set_image(&mut self, field: Field<'_>, shared: &Shared) -> Result<(), ApiError> {
+        // build the base S3 path for this user's icon (keyed by username)
+        let base_path = Self::build_graphic_base_path(&self.username);
+        // stream the image to S3 under a fixed name; the extension comes from the content type
+        let new_path =
+            Self::upload_graphic(base_path, field, Some("icon".to_owned()), shared).await?;
+        // swap in the new path, keeping the old one (if any) so we can clean it up
+        let old = self.image.replace(new_path.clone());
+        // persist the new icon path on the user
+        db::users::save(self, shared).await?;
+        // delete the previous icon only if it lived at a different path (e.g. a different extension)
+        if let Some(old_path) = old {
+            if old_path != new_path {
+                Self::delete_graphic(&old_path, shared).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Remove this user's profile icon, if one is set
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    pub async fn delete_image(&mut self, shared: &Shared) -> Result<(), ApiError> {
+        // take the existing path; nothing to do if there is no icon
+        if let Some(old_path) = self.image.take() {
+            // persist the cleared icon first, then remove the bytes from S3
+            db::users::save(self, shared).await?;
+            Self::delete_graphic(&old_path, shared).await?;
+        }
+        Ok(())
     }
 
     /// Checks if a user is an admin
@@ -1640,7 +1693,27 @@ impl From<User> for ScrubbedUser {
             settings: user.settings,
             local: user.password.is_some(),
             verified: user.verified,
+            has_image: user.image.is_some(),
         }
+    }
+}
+
+// Add graphic support for users so profile icons reuse the shared S3 graphic pipeline
+impl GraphicSupport for User {
+    /// Users key their icon off their (immutable) username
+    type GraphicKey<'a> = &'a str;
+
+    /// Build the base path for this user's graphic
+    fn build_graphic_base_path<'a>(key: Self::GraphicKey<'a>) -> PathBuf {
+        // namespace user icons under `users/` so a username that happens to be a UUID can't collide with an
+        // entity graphic (entities key off their UUID at the graphics-bucket root)
+        PathBuf::from("users").join(key)
+    }
+
+    /// Build the base path for this user's graphic
+    fn build_graphic_base_path_from_self(&self) -> PathBuf {
+        // call our base path builder
+        Self::build_graphic_base_path(&self.username)
     }
 }
 

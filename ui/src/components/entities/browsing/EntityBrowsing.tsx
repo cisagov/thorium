@@ -7,6 +7,8 @@ import { Filters } from '@models/search';
 import { ExtendedTypeMap } from '@models/entities/entities';
 import { EntityBrowseConfig } from './configs/config';
 
+// spec: ./EntityBrowsing.spec.md
+
 export function createEntityBrowsingPage<T extends keyof ExtendedTypeMap>(config: EntityBrowseConfig<T>) {
   const BoundEntityBrowsingPage = () => {
     const [loading, setLoading] = useState(false);

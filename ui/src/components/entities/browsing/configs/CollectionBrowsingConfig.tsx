@@ -22,6 +22,8 @@ import { Entities } from '@models/entities/entities';
 import { Collection } from '@models/entities/collections';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
+// spec: ../EntityBrowsing.spec.md
+
 const TagRow = styled.div`
   display: flex;
   flex-wrap: wrap;

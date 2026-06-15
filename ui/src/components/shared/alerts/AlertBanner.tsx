@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 
+// spec: ./AlertBanner.spec.md
+
 export enum Severity {
   Error = 'error',
   Warning = 'warning',
@@ -13,6 +15,11 @@ interface AlertBannerProps {
   dismissible?: boolean;
   className?: string;
   children: React.ReactNode;
+  /**
+   * Called when the user dismisses the banner (only meaningful with `dismissible`). Lets a caller
+   * persist the dismissal (e.g. to localStorage) in addition to the banner hiding itself.
+   */
+  onDismiss?: () => void;
 }
 
 const SEVERITY_TOKENS: Record<Severity, { bg: string; border: string; text: string }> = {
@@ -75,14 +82,19 @@ const DismissButton = styled.button`
   }
 `;
 
-const AlertBanner: React.FC<AlertBannerProps> = ({ severity = Severity.Error, dismissible = false, className, children }) => {
+const AlertBanner: React.FC<AlertBannerProps> = ({ severity = Severity.Error, dismissible = false, className, children, onDismiss }) => {
   const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
 
+  const handleDismiss = () => {
+    setVisible(false);
+    onDismiss?.();
+  };
+
   return (
     <Banner $severity={severity} className={className}>
-      {dismissible ? <DismissButton onClick={() => setVisible(false)}>&times;</DismissButton> : null}
+      {dismissible ? <DismissButton onClick={handleDismiss}>&times;</DismissButton> : null}
       {children}
     </Banner>
   );

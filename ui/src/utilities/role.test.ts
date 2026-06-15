@@ -47,6 +47,7 @@ function makeUser(username: string, role: ThoriumRole): UserInfo {
     settings: { theme: 'Dark' },
     local: true,
     verified: true,
+    has_image: false,
   };
 }
 

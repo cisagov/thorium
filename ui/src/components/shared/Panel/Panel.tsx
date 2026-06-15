@@ -2,6 +2,7 @@ import { forwardRef } from 'react';
 import styled from 'styled-components';
 
 // project imports
+// spec: ./Panel.spec.md
 import { PanelVariant } from './types';
 import type { PanelProps } from './types';
 import { VARIANT_TOKENS } from './tokens';

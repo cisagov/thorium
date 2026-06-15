@@ -24,8 +24,8 @@ pub(crate) trait GraphicSupport {
     ///
     /// # Arguments
     ///
-    /// * `key` - The unique key for the Thorium object
-    /// * `field` - The multipart form field containing the image data
+    /// * `s3_path` - The base S3 path (the object's graphic key) to upload this graphic under
+    /// * `field` - The multipart form field containing the graphic data
     /// * `name_override` - The name to override this fields original name with without the extension
     /// * `shared` - Shared Thorium objects
     async fn upload_graphic(
@@ -34,8 +34,6 @@ pub(crate) trait GraphicSupport {
         name_override: Option<String>,
         shared: &Shared,
     ) -> Result<String, ApiError> {
-        // start building the path to upload this graphic too
-        //let mut s3_path = self.build_graphic_base_path();
         // add the name for this path
         match (&name_override, field.file_name()) {
             (Some(name_override), _) => s3_path.push(name_override),
@@ -46,25 +44,27 @@ pub(crate) trait GraphicSupport {
         // make sure our extension is correct
         let content_type = match field.content_type() {
             Some(unparsed) => {
-                // parse our ctype
-                let ctype = unparsed.parse::<Mime>().unwrap();
-                // make sure this is an image
-                if ctype.type_() != mime::IMAGE {
-                    // tell they user they gave us a bad content type
-                    return bad!(format!("Graphics must be an image not a {ctype}"));
-                }
-                // parse our
-                // set our extension correctly
-                match unparsed.parse::<Mime>().unwrap().essence_str() {
+                // parse the field's declared content type once; a malformed value is a client error (400),
+                // never a panic — any authenticated user can hit this route
+                let ctype: Mime = match unparsed.parse() {
+                    Ok(ctype) => ctype,
+                    Err(_) => return bad!(format!("Invalid content type: {unparsed}")),
+                };
+                // set our extension from the parsed content type; the explicit allowlist is the only
+                // gate (animated GIF and short video clips are valid graphics alongside static images),
+                // so anything not matched here is rejected as an unsupported type
+                match ctype.essence_str() {
                     "image/bmp" => s3_path.set_extension("bmp"),
                     "image/gif" => s3_path.set_extension("gif"),
                     "image/jpeg" => s3_path.set_extension("jpeg"),
                     "image/png" => s3_path.set_extension("png"),
                     "image/svg+xml" => s3_path.set_extension("svg"),
-                    // don't allow arbitrary image content types
+                    "video/mp4" => s3_path.set_extension("mp4"),
+                    "video/webm" => s3_path.set_extension("webm"),
+                    // don't allow arbitrary content types
                     _ => {
                         return bad!(
-                            "Only BMP, GIF, JPEG, PNG, and SVGs are supported graphic types"
+                            "Only BMP, GIF, JPEG, PNG, SVG, MP4, and WebM graphics are supported"
                                 .to_owned()
                         );
                     }
@@ -109,13 +109,11 @@ pub(crate) trait GraphicSupport {
         shared.s3.graphics.download_with_metadata(s3_path).await
     }
 
-    /// Delete the graphic associated with the given key
-    ///
-    /// Returns `true` if anything was deleted
+    /// Delete the graphic at the given S3 key
     ///
     /// # Arguments
     ///
-    /// * `key` - The unique key for the Thorium object
+    /// * `key` - The S3 key of the graphic to delete
     /// * `shared` - Shared Thorium objects
     async fn delete_graphic(key: &str, shared: &Shared) -> Result<(), ApiError> {
         // delete our object

@@ -6,6 +6,7 @@ export default defineConfig({
     extensions: ['.js', '.ts', '.tsx', '.jsx'],
     alias: {
       '@assets': fileURLToPath(new URL('./src/assets', import.meta.url)),
+      '@dashboards': fileURLToPath(new URL('./src/dashboards', import.meta.url)),
       '@entities': fileURLToPath(new URL('./src/components/entities', import.meta.url)),
       '@styles': fileURLToPath(new URL('./src/styles', import.meta.url)),
       '@components': fileURLToPath(new URL('./src/components', import.meta.url)),

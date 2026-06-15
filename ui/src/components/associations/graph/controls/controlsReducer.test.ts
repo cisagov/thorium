@@ -12,12 +12,10 @@ function defaultControls(): GraphControls {
     showEdgeLabels: false,
     showNodeLabels: true,
     selectedElement: null,
-    showNodeInfo: true,
     nodeRenderMode: NodeRenderMode.Icons,
     focusOnClick: true,
-    adjustDistanceOnFocus: false,
+    fitNeighborhoodOnFocus: true,
     refitOnGrow: false,
-    focusDistanceRatio: 1,
     nodeLabelScale: 1,
     edgeLabelScale: 1,
     edgeWidth: 1,
@@ -30,14 +28,12 @@ function defaultControls(): GraphControls {
     nodeRelSize: 4,
     nodeOpacity: 0.75,
     enableNodeDrag: true,
-    nodeLabelDensity: 0.7,
-    nodeLabelMinSize: 1,
-    edgeLabelDensity: 0.7,
-    edgeLabelMinSize: 1,
+    nodeLabelDensity: 0.5,
+    edgeLabelDensity: 0.5,
     chargeStrength: -200,
     velocityDecay: 0.4,
     warmupTicks: 0,
-    cooldownTime: 15000,
+    cooldownTime: 4000,
     dagMode: null,
     dagLevelDistance: null,
     numDimensions: 3,
@@ -54,6 +50,11 @@ function createTestReducer() {
   return createControlsReducer(nullRef, labelMapRef, edgeLabelMapRef);
 }
 
+// Variant with a camera-distance ref so tests can observe the -1 invalidation sentinel
+function createTestReducerWithCamRef(camDistRef: { current: number }) {
+  return createControlsReducer(nullRef, labelMapRef, edgeLabelMapRef, camDistRef);
+}
+
 describe('controlsReducer', () => {
   it('toggles showEdgeLabels', () => {
     const reducer = createTestReducer();
@@ -67,13 +68,6 @@ describe('controlsReducer', () => {
     const state = defaultControls();
     const result = reducer(state, { type: 'showNodeLabels', state: false });
     expect(result.showNodeLabels).toBe(false);
-  });
-
-  it('toggles showNodeInfo', () => {
-    const reducer = createTestReducer();
-    const state = defaultControls();
-    const result = reducer(state, { type: 'showNodeInfo', state: false });
-    expect(result.showNodeInfo).toBe(false);
   });
 
   it('sets selected element', () => {
@@ -109,10 +103,12 @@ describe('controlsReducer', () => {
     expect(result.focusOnClick).toBe(false);
   });
 
-  it('sets focusDistanceRatio', () => {
+  it('toggles fitNeighborhoodOnFocus off from its default of true', () => {
     const reducer = createTestReducer();
-    const result = reducer(defaultControls(), { type: 'focusDistanceRatio', state: 2.5 });
-    expect(result.focusDistanceRatio).toBe(2.5);
+    const state = defaultControls();
+    expect(state.fitNeighborhoodOnFocus).toBe(true);
+    const result = reducer(state, { type: 'fitNeighborhoodOnFocus', state: false });
+    expect(result.fitNeighborhoodOnFocus).toBe(false);
   });
 
   it('sets edgeWidth and marks user override', () => {
@@ -210,10 +206,60 @@ describe('controlsReducer', () => {
     expect(result.userOverrides.size).toBe(0);
   });
 
-  it('sets nodeLabelDensity and marks user override', () => {
+  it('sets nodeLabelDensity without marking a user override', () => {
     const reducer = createTestReducer();
-    const result = reducer(defaultControls(), { type: 'nodeLabelDensity', state: 0.5 });
-    expect(result.nodeLabelDensity).toBe(0.5);
-    expect(result.userOverrides.has('nodeLabelDensity')).toBe(true);
+    const result = reducer(defaultControls(), { type: 'nodeLabelDensity', state: 0.3 });
+    expect(result.nodeLabelDensity).toBe(0.3);
+    expect(result.userOverrides.has('nodeLabelDensity')).toBe(false);
+  });
+
+  it('nodeLabelScale updates state, marks a user override, and invalidates the camera cache without a graph instance', () => {
+    const camDistRef = { current: 250 };
+    const reducer = createTestReducerWithCamRef(camDistRef);
+    const result = reducer(defaultControls(), { type: 'nodeLabelScale', state: 1.5 });
+    expect(result.nodeLabelScale).toBe(1.5);
+    expect(result.userOverrides.has('nodeLabelScale')).toBe(true);
+    expect(camDistRef.current).toBe(-1);
+  });
+
+  it('edgeLabelScale updates state, marks a user override, and invalidates the camera cache without a graph instance', () => {
+    const camDistRef = { current: 250 };
+    const reducer = createTestReducerWithCamRef(camDistRef);
+    const result = reducer(defaultControls(), { type: 'edgeLabelScale', state: 0.7 });
+    expect(result.edgeLabelScale).toBe(0.7);
+    expect(result.userOverrides.has('edgeLabelScale')).toBe(true);
+    expect(camDistRef.current).toBe(-1);
+  });
+
+  it('applySizeDefaults skips an overridden nodeLabelScale', () => {
+    const reducer = createTestReducer();
+    const state = { ...defaultControls(), nodeLabelScale: 1.8, userOverrides: new Set(['nodeLabelScale']) };
+    const result = reducer(state, {
+      type: 'applySizeDefaults',
+      state: { nodeLabelScale: 0.85, edgeLabelScale: 0.85 },
+    });
+    expect(result.nodeLabelScale).toBe(1.8);
+    expect(result.edgeLabelScale).toBe(0.85);
+  });
+
+  it('selected invalidates the camera cache so label pin changes apply next frame', () => {
+    const camDistRef = { current: 250 };
+    const reducer = createTestReducerWithCamRef(camDistRef);
+    const selected = { kind: 'node' as const, id: 'n1', label: 'Test' };
+    const result = reducer(defaultControls(), { type: 'selected', state: selected });
+    expect(result.selectedElement).toEqual(selected);
+    expect(camDistRef.current).toBe(-1);
+  });
+
+  it('applySizeDefaults applies label scales and invalidates the camera cache without a graph instance', () => {
+    const camDistRef = { current: 250 };
+    const reducer = createTestReducerWithCamRef(camDistRef);
+    const result = reducer(defaultControls(), {
+      type: 'applySizeDefaults',
+      state: { nodeLabelScale: 0.9, edgeLabelScale: 0.9 },
+    });
+    expect(result.nodeLabelScale).toBe(0.9);
+    expect(result.edgeLabelScale).toBe(0.9);
+    expect(camDistRef.current).toBe(-1);
   });
 });

@@ -65,6 +65,10 @@ $grid-breakpoints: (
   border-radius: 6px;
   font-size: 12px;
   padding: 0.1rem 0.4rem 0.1rem 0.4rem;
+  // break long tag values by character (not whole words) so tags pack tightly with less whitespace,
+  // especially when wrapping in a block (node-info summary, condensed lists)
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .tag-item.clickable {

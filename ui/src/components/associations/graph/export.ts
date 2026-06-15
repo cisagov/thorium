@@ -1,5 +1,7 @@
 import type { GraphInstance } from './types';
 
+// spec: ./AssociationGraph.spec.md
+
 const captureDataUrl = (graphInstance: GraphInstance, mimeType: string): string | null => {
   const renderer = graphInstance.renderer();
   const scene = graphInstance.scene();

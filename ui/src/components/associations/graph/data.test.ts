@@ -79,6 +79,24 @@ describe('classifyNode', () => {
     expect(result.label).toBe('MyDevice');
   });
 
+  it('renames a Windows process tree label when the name is a sha256 hash', () => {
+    const graph = graphWith({
+      data_map: { n1: { Entity: { kind: Entities.WindowsProcessTree, name: 'a'.repeat(64) } as unknown as EntityTypes } },
+      initial: [],
+      growable: [],
+    });
+    expect(classifyNode('n1', graph).label).toBe('Windows Process Tree');
+  });
+
+  it('keeps a Windows process tree label when the name is not a sha256 hash', () => {
+    const graph = graphWith({
+      data_map: { n1: { Entity: { kind: Entities.WindowsProcessTree, name: 'explorer.exe tree' } as unknown as EntityTypes } },
+      initial: [],
+      growable: [],
+    });
+    expect(classifyNode('n1', graph).label).toBe('explorer.exe tree');
+  });
+
   it('returns Growable visual state for growable nodes', () => {
     const graph = graphWith({
       data_map: { n1: { Sample: { submissions: [{ name: 'a.bin' }] } as unknown as Sample } },

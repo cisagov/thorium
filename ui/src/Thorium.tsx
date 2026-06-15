@@ -50,6 +50,10 @@ const AlertBannerTest = lazy(() => import('./pages/test/AlertBannerTest'));
 const ImagePipelineTest = lazy(() => import('./pages/test/code/ImagePipelineTest'));
 const OverlayWindowTest = lazy(() => import('./pages/test/OverlayWindowTest'));
 const ButtonTest = lazy(() => import('./pages/test/ButtonTest'));
+// dashboards
+const IncidentSummary = lazy(() => import('./dashboards/IncidentSummary'));
+const Dashboard = lazy(() => import('./dashboards/Dashboard'));
+const DashboardBuilder = lazy(() => import('./dashboards/DashboardBuilder').then((m) => ({ default: m.DashboardBuilder })));
 
 // Data loading ui empty for now
 const FallbackView = <h1 />;
@@ -74,6 +78,10 @@ const Resources = () => (
         element={<PageWrapper Contents={EntityCreateRoutes[path].override_page ? EntityCreateRoutes[path].override_page : EntityCreate} />}
       />
     ))}
+    // Dashboards
+    <Route path="/dashboard/incident" element={<PageWrapper Contents={IncidentSummary} />} />
+    <Route path="/dashboard/view" element={<PageWrapper Contents={Dashboard} />} />
+    <Route path="/dashboard/build" element={<PageWrapper Contents={DashboardBuilder} />} />
     // Graph Builder
     <Route path="/graph" element={<PageWrapper Contents={GraphBuilder} />} />
     // Reactions

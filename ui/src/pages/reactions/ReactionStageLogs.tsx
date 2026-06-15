@@ -10,6 +10,8 @@ import { useAuth } from '@utilities/auth';
 import { getReactionStageLogs } from '@thorpi/reactions';
 import { AnsiText } from './AnsiText';
 
+// spec: ./ReactionStatus.spec.md
+
 const ReactionStageLogs = () => {
   const { reactionID, group, stage } = useParams<{ reactionID: string; group: string; stage: string }>();
   const [cursor, setCursor] = useState(0);

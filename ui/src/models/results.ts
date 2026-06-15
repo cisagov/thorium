@@ -28,6 +28,10 @@ export enum OutputDisplayType {
   Hidden = 'Hidden',
   /// Result to render is XML formatted
   Xml = 'XML',
+  /// Result to render is YAML formatted
+  Yaml = 'YAML',
+  /// Result to render is a decompilation, shown with the shared decomp syntax renderer
+  Decomposition = 'Decomposition',
 }
 
 /// A single result for a single run of a tool with a specific command
@@ -52,6 +56,12 @@ export type Output = {
   display_type: OutputDisplayType;
   /// The children that were found when generating this result
   children: { [child: string]: string };
+  /// A map of entity type -> count derived from this result.
+  ///
+  /// Frontend-only: there is no equivalent on the Rust `Output` model
+  /// (`api/src/models/results.rs`). Optional because the API never populates it; the UI hides
+  /// the Entities tab when it is absent or empty.
+  entities?: { [entityType: string]: number };
 };
 
 export type OutputCollection = {

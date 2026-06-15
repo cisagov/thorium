@@ -8,6 +8,8 @@ import { filterIncludedTags, filterExcludedTags } from '../utilities';
 import { Tags } from '@models/tags';
 import { Entities } from '@models/entities';
 
+// spec: ../tags.spec.md
+
 const TagContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -15,8 +17,8 @@ const TagContainer = styled.div`
 `;
 
 interface CondensedFileTagProps {
-  tags: Tags; // tags to display in condensed non-editable view
-  excludeKeys: string[]; // tag keys to exclude when displaying tags
+  tags: Tags;
+  excludeKeys: string[];
 }
 
 const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys }) => {
@@ -47,7 +49,7 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
               .map((tagValue) => (
                 <TagBadge
                   resource={Entities.File}
-                  key={'General_' + tagValue}
+                  key={'General_' + tagKey + '_' + tagValue}
                   tag={tagKey}
                   value={tagValue}
                   condensed={true}
@@ -63,7 +65,7 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
               .map((tagValue) => (
                 <TagBadge
                   resource={Entities.File}
-                  key={'FileInfo_' + tagValue}
+                  key={'Danger_' + tagKey + '_' + tagValue}
                   tag={tagKey}
                   value={tagValue}
                   condensed={true}
@@ -79,7 +81,7 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
               .map((tagValue) => (
                 <TagBadge
                   resource={Entities.File}
-                  key={'Attack_' + tagValue}
+                  key={'Attack_' + tagKey + '_' + tagValue}
                   tag={'ATT&CK'}
                   value={tagValue}
                   condensed={true}
@@ -93,7 +95,14 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
             Object.keys(mbcTags[tagKey])
               .sort()
               .map((tagValue) => (
-                <TagBadge resource={Entities.File} key={'MBC_' + tagValue} tag={'MBC'} value={tagValue} condensed={true} action={'link'} />
+                <TagBadge
+                  resource={Entities.File}
+                  key={'MBC_' + tagKey + '_' + tagValue}
+                  tag={'MBC'}
+                  value={tagValue}
+                  condensed={true}
+                  action={'link'}
+                />
               )),
           )}
         {Object.keys(fileInfoTags)
@@ -104,7 +113,7 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
               .map((tagValue) => (
                 <TagBadge
                   resource={Entities.File}
-                  key={'FileInfo_' + tagValue}
+                  key={'FileInfo_' + tagKey + '_' + tagValue}
                   tag={tagKey}
                   value={tagValue}
                   condensed={true}
@@ -120,7 +129,7 @@ const CondensedFileTags: React.FC<CondensedFileTagProps> = ({ tags, excludeKeys 
               .map((tagValue) => (
                 <TagBadge
                   resource={Entities.File}
-                  key={'Results_' + tagValue}
+                  key={'Results_' + tagKey + '_' + tagValue}
                   tag={tagKey}
                   value={tagValue}
                   condensed={true}

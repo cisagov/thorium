@@ -25,7 +25,8 @@
       "@thorpi/*": ["./src/thorpi/*"],
       "@utilities/*": ["./src/utilities/*"],
       "@entities/*": ["./src/components/entities/*"],
-      "@pages/*": ["./src/pages/*"]
+      "@pages/*": ["./src/pages/*"],
+      "@dashboards/*": ["./src/dashboards/*"]
     }
   },
   "include": ["src/**/*", "vite.config.ts"],
