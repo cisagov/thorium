@@ -11,19 +11,14 @@ import { createScopedToken, deleteScopedToken, listScopedTokens, updateScopedTok
 import { ScopedToken, ScopedTokenRole, ScopedTokenRoleKey, ScopedTokenUpdate, UserInfo } from '@models/users';
 import { ScopedTokenForm } from './ScopedTokenForm';
 import styles from './TokenViewStyles.module.scss';
-import { FaQuestionCircle } from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaQuestionCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
+import { BUTTON_BADGE_GAP } from '@styles';
+import { OverlayTipTop } from '@components/shared/overlay/tips';
+import { ButtonSize, ButtonVariant, IconButton } from '@components/shared/buttons';
+import { MdDelete } from 'react-icons/md';
 
 // ─── styled helpers ───────────────────────────────────────────────────────────
-
-const HiddenToken = styled.p`
-  color: var(--thorium-secondary-text);
-  overflow-wrap: anywhere;
-`;
-
-const WrapToken = styled.p`
-  overflow-wrap: anywhere;
-`;
 
 const ScopedSection = styled.div`
   margin-top: 1.5rem;
@@ -58,6 +53,41 @@ const RevokeTokenModal = ({ show, onHide }: { show: boolean; onHide: () => void 
   );
 };
 
+// Token value with the inline show/hide and revoke controls at the end; the token text takes the
+// available width and wraps, keeping the controls at the end of the row.
+const TokenLine = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${BUTTON_BADGE_GAP};
+
+  .wrap-token {
+    flex: 1;
+    min-width: 0;
+  }
+
+  p {
+    margin: 0;
+  }
+`;
+
+// Red trash control (next to the show/hide eye) that opens the revoke-token confirmation.
+const RevokeTokenButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--thorium-danger-bg);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.15);
+  }
+`;
+
 const RootToken = () => {
   const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [tokenShowing, setTokenShowing] = useState(false);
@@ -70,28 +100,38 @@ const RootToken = () => {
           <Subtitle>Token</Subtitle>
         </Col>
         <Col xs={10}>
-          <Row>
-            <Col>
-              <div>
-                {tokenShowing ? (
-                  <WrapToken>{userInfo?.token}</WrapToken>
-                ) : (
-                  <HiddenToken>****************************************************************</HiddenToken>
-                )}
-              </div>
-            </Col>
-          </Row>
-        </Col>
-      </Row>
-      <Row>
-        <Col className={styles.button_row}>
-          {scopedToken && <Button onClick={() => clearScopedToken()}>Use Root Token</Button>}
-          <Button className="primary-btn" onClick={() => setTokenShowing(!tokenShowing)}>
-            {tokenShowing ? 'Hide' : 'Show'}
-          </Button>
-          <Button className="danger-btn" onClick={() => setShowRevokeModal(true)}>
-            Revoke
-          </Button>
+          <TokenLine>
+            <div className="wrap-token">
+              {tokenShowing ? (
+                <p>{userInfo?.token}</p>
+              ) : (
+                <p className="hidden">****************************************************************</p>
+              )}
+            </div>
+            {scopedToken && <Button onClick={() => clearScopedToken()}>Use Root Token</Button>}
+            {/* eye toggle reveals/masks the token in place */}
+            <OverlayTipTop tip={tokenShowing ? 'Hide' : 'Show'}>
+              <IconButton
+                variant={ButtonVariant.Icon}
+                size={ButtonSize.Small}
+                onClick={() => setTokenShowing((prev) => !prev)}
+                aria-label={tokenShowing ? 'Hide token' : 'Show token'}
+              >
+                {tokenShowing ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+              </IconButton>
+            </OverlayTipTop>
+            {/* red trash opens the revoke-token confirmation */}
+            <OverlayTipTop tip={scopedToken !== undefined ? 'Disabled Scoped Token to revoke root token' : 'Revoke Token'}>
+              <RevokeTokenButton
+                type="button"
+                onClick={() => setShowRevokeModal(true)}
+                aria-label="Revoke Token"
+                disabled={scopedToken !== undefined}
+              >
+                <MdDelete size={22} />
+              </RevokeTokenButton>
+            </OverlayTipTop>
+          </TokenLine>
         </Col>
       </Row>
       <Row className="pt-3">

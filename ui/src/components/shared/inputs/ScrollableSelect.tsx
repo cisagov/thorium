@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Dropdown } from 'react-bootstrap';
 import { FaChevronUp, FaChevronDown } from 'react-icons/fa';
+
+// spec: ./ScrollableSelect.spec.md
 
 interface ScrollableSelectProps {
   value: number;
@@ -10,6 +12,8 @@ interface ScrollableSelectProps {
   windowSize?: number;
   initialStart?: number;
   onOpenChange?: (open: boolean) => void;
+  /** When true, the control can't be opened/changed (e.g. while a grow is in flight). */
+  disabled?: boolean;
 }
 
 const toggleStyle: React.CSSProperties = {
@@ -71,12 +75,17 @@ const ScrollableSelect: React.FC<ScrollableSelectProps> = ({
   windowSize = 5,
   initialStart,
   onOpenChange,
+  disabled = false,
 }) => {
   const [windowStart, setWindowStart] = useState(initialStart ?? min);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // unique per instance so multiple mounted ScrollableSelects don't collide on a shared DOM id
+  const toggleId = useId();
 
   const handleToggle = (nextOpen: boolean) => {
+    // don't open while disabled (e.g. a grow is in flight)
+    if (disabled) return;
     setOpen(nextOpen);
     onOpenChange?.(nextOpen);
   };
@@ -112,7 +121,12 @@ const ScrollableSelect: React.FC<ScrollableSelectProps> = ({
 
   return (
     <Dropdown show={open} onToggle={handleToggle}>
-      <Dropdown.Toggle as="button" style={toggleStyle} id="scrollable-select-toggle">
+      <Dropdown.Toggle
+        as="button"
+        disabled={disabled}
+        style={{ ...toggleStyle, ...(disabled ? { filter: 'var(--thorium-disabled-brightness)', cursor: 'not-allowed' } : {}) }}
+        id={toggleId}
+      >
         {value}
       </Dropdown.Toggle>
       <Dropdown.Menu ref={menuRef} style={menuStyle} renderOnMount>
@@ -128,7 +142,8 @@ const ScrollableSelect: React.FC<ScrollableSelectProps> = ({
             style={n === value ? activeItemStyle : itemStyle}
             onClick={() => {
               onChange(n);
-              setOpen(false);
+              // Route close through handleToggle so onOpenChange fires (spec: closing notifies the caller)
+              handleToggle(false);
             }}
           >
             {n}

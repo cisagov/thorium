@@ -3,6 +3,12 @@ import { Card, Row, Col } from 'react-bootstrap';
 // project imports
 import { ResultRenderProps } from '@components/tools/props';
 
+// spec: ../../ToolResult.spec.md
+
+/**
+ * Custom display for antivirus tools (symantec/clamav): shows the scan timestamp, engine version,
+ * verdict, and any engine errors from the structured result.
+ */
 const AvMulti: React.FC<ResultRenderProps> = ({ result }) => {
   const avResult = result.result != null && typeof result.result == 'object' ? result.result : {};
 

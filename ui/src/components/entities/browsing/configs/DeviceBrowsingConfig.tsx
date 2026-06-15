@@ -22,10 +22,10 @@ import { Vendor } from '@models/entities/vendors';
 import { Device } from '@models/entities/devices';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
-// get files using filters and and an optional cursor
+// spec: ../EntityBrowsing.spec.md
+
+// Fetch devices using search filters and an optional pagination cursor.
 const getDevices = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {
-  // reset cursor when filters have changed, caller must know this
-  // get files list from API
   const listFilters = structuredClone(filters);
   listFilters.kinds = [Entities.Device];
   const { entityList, entityCursor } = await listEntities(listFilters, errorHandler, true, cursor);
@@ -51,7 +51,7 @@ const DeviceListHeaders = () => {
 };
 
 interface DeviceItemProps {
-  device: Device; // device details
+  device: Device;
 }
 
 const DeviceItem: React.FC<DeviceItemProps> = ({ device }) => {

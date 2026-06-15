@@ -37,13 +37,17 @@ import SimpleSubtitle from '@components/shared/titles/SimpleSubtitle';
 import { listImages } from '@thorpi/images';
 import { updatePipeline } from '@thorpi/pipelines';
 import { useAuth } from '@utilities/auth';
+import { cleanDescription } from '@utilities/description';
 import { canModifyPipeline } from '@utilities/permissions';
 import { FormatType } from '@utilities/rules/types';
+import { useDebouncedValue } from '@utilities/useDebouncedValue';
 import { pipelineToEditorObject } from '@utilities/transforms/pipeline';
 import type { Group } from '@models/groups';
 import type { EventTrigger, Pipeline, PipelineBan, PipelineUpdate } from '@models/pipelines';
 
-/// Top-level editor keys managed by the Fields form
+// spec: ./PipelineInfo.spec.md
+
+// Top-level editor keys managed by the Fields form
 const FIELDS_KEYS = new Set(['name', 'group', 'description', 'sla']);
 
 export interface PipelineInfoHandle {
@@ -112,18 +116,20 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
   }, [inEditMode]);
 
   const editorGroup = typeof editorObj?.group === 'string' ? editorObj.group : '';
+  // Debounce so we don't refetch the image list on every keystroke while the group is edited.
+  const debouncedEditorGroup = useDebouncedValue(editorGroup, 400);
 
   useEffect(() => {
-    if (!editorGroup) return;
+    if (!debouncedEditorGroup) return;
     let cancelled = false;
-    void listImages(editorGroup, () => {}, false, null, 1000).then((result) => {
+    void listImages(debouncedEditorGroup, () => {}, false, null, 1000).then((result) => {
       if (cancelled) return;
-      if (result && 'names' in result) pipelineChecker.setValidImageNames(editorGroup, result.names);
+      if (result && 'names' in result) pipelineChecker.setValidImageNames(debouncedEditorGroup, result.names);
     });
     return () => {
       cancelled = true;
     };
-  }, [editorGroup]);
+  }, [debouncedEditorGroup]);
 
   const handleOrderApply = async () => {
     if (!pendingOrder) return;
@@ -289,7 +295,7 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
               </SimpleSubtitle>
             </HeaderCol>
             <DetailCol>
-              <Markdown>{pipeline.description ?? ''}</Markdown>
+              <Markdown>{cleanDescription(pipeline.description)}</Markdown>
             </DetailCol>
           </SpacedInfoRow>
           <SpacedInfoRow>

@@ -6,6 +6,8 @@ import Page from '@components/pages/Page';
 import Title from '@components/shared/titles/Title';
 import type { EntityTypes } from '@models/entities/entities';
 
+// spec: ../EntityCreate.spec.md
+
 const UploadContent: React.FC = () => {
   const { showUploadStatus } = useUpload();
   return showUploadStatus ? <UploadStatusDashboard /> : <UploadForm />;

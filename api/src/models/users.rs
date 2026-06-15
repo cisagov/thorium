@@ -507,6 +507,8 @@ pub struct User {
     pub verification_sent: Option<DateTime<Utc>>,
     /// The different auth provider aliases by their provider
     pub aliases: HashMap<String, String>,
+    /// The S3 path to this user's profile icon, if one has been set
+    pub image: Option<String>,
 }
 
 /// A user within Thorium that does not have its password
@@ -537,6 +539,11 @@ pub struct ScrubbedUser {
     pub local: bool,
     /// Whether this user has been verified already or not
     pub verified: bool,
+    /// Whether this user has a profile icon set
+    ///
+    /// The icon itself is fetched lazily from `GET /users/user/{username}/image` rather than
+    /// embedded here, so cheap/frequent calls like `whoami` don't ship the image bytes.
+    pub has_image: bool,
 }
 
 impl PartialEq<ScrubbedUser> for ScrubbedUser {
@@ -563,6 +570,8 @@ impl PartialEq<ScrubbedUser> for ScrubbedUser {
         same!(self.local, request.local);
         // make sure our verification is the same
         same!(self.verified, request.verified);
+        // make sure our profile icon presence is the same
+        same!(self.has_image, request.has_image);
         true
     }
 }

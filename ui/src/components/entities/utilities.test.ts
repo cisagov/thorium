@@ -5,10 +5,14 @@ vi.mock('@thorpi/entities', () => ({
 }));
 
 // project imports
-import { buildUpdateEntityForm, buildCreateEntityForm, DEFAULT_LIST_LIMIT } from './utilities';
+import { buildUpdateEntityForm, buildCreateEntityForm, copyEntityFields, DEFAULT_LIST_LIMIT } from './utilities';
 import { Entities, EntityCreateTypes, EntityTypes } from '@models/entities/entities';
 import { BlankDevice } from '@models/entities/devices';
 import { BlankCreateVendor, CreateVendor } from '@models/entities/vendors';
+import { BlankCreateFlag, BlankFlag, Confidence } from '@models/entities/flag';
+import { BlankCreateIncident, BlankIncident } from '@models/entities/incident';
+import { BlankCreateCompiledFunction, BlankCreateDecompiledFunction, BlankDecompiledFunction } from '@models/entities/functions';
+import { BlankCreatePeImport, BlankCreatePeSection, BlankPeImport, BlankPeSection } from '@models/entities/pe';
 
 function formEntries(form: FormData): Record<string, string[]> {
   const result: Record<string, string[]> = {};
@@ -176,5 +180,183 @@ describe('buildCreateEntityForm', () => {
     const form = buildCreateEntityForm(entity);
     const entries = formEntries(form);
     expect(entries['metadata[countries][]']).toEqual(['US']);
+  });
+});
+
+describe('buildCreateEntityForm per-kind metadata', () => {
+  it('emits Flag scalars and omits empty content', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreateFlag);
+    entity.metadata.Flag.suspicion = 7;
+    entity.metadata.Flag.confidence = Confidence.Likely;
+    entity.metadata.Flag.reasoning = 'looks odd';
+    const form = buildCreateEntityForm(entity);
+    expect(form.get('metadata[suspicion]')).toBe('7');
+    expect(form.get('metadata[confidence]')).toBe(Confidence.Likely);
+    expect(form.get('metadata[reasoning]')).toBe('looks odd');
+    expect(form.has('metadata[content]')).toBe(false);
+  });
+
+  it('emits Flag content when set', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreateFlag);
+    entity.metadata.Flag.content = 'suspicious string';
+    const form = buildCreateEntityForm(entity);
+    expect(form.get('metadata[content]')).toBe('suspicious string');
+  });
+
+  it('emits Incident lists and only sends cover_term when set', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreateIncident);
+    entity.metadata.Incident.mission_teams = ['red', 'blue'];
+    entity.metadata.Incident.networks = ['net1'];
+    const form = buildCreateEntityForm(entity);
+    const entries = formEntries(form);
+    expect(entries['metadata[mission_teams][]']).toEqual(['red', 'blue']);
+    expect(entries['metadata[networks][]']).toEqual(['net1']);
+    expect(form.has('metadata[cover_term]')).toBe(false);
+    entity.metadata.Incident.cover_term = 'NIGHTFALL';
+    expect(buildCreateEntityForm(entity).get('metadata[cover_term]')).toBe('NIGHTFALL');
+  });
+
+  it('JSON-serializes each CompiledFunction disassembly instruction', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreateCompiledFunction);
+    entity.metadata.CompiledFunction.address = 4096;
+    entity.metadata.CompiledFunction.disassembly = [
+      { address: 4096, instruction: 'push rbp' },
+      { address: 4097, instruction: 'mov rbp, rsp' },
+    ];
+    const form = buildCreateEntityForm(entity);
+    expect(form.get('metadata[function_address]')).toBe('4096');
+    const entries = formEntries(form);
+    expect(entries['metadata[disassembly][]']).toEqual([
+      JSON.stringify({ address: 4096, instruction: 'push rbp' }),
+      JSON.stringify({ address: 4097, instruction: 'mov rbp, rsp' }),
+    ]);
+  });
+
+  it('emits DecompiledFunction content and tools as plain list entries', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreateDecompiledFunction);
+    entity.metadata.DecompiledFunction.address = 8;
+    entity.metadata.DecompiledFunction.content = 'int main() {}';
+    entity.metadata.DecompiledFunction.tools = ['ghidra', 'ida'];
+    const form = buildCreateEntityForm(entity);
+    expect(form.get('metadata[decompilation_content]')).toBe('int main() {}');
+    expect(formEntries(form)['metadata[tools][]']).toEqual(['ghidra', 'ida']);
+  });
+
+  it('only emits PeSection scalars that were set', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreatePeSection);
+    entity.metadata.PeSection.md5 = 'abc';
+    entity.metadata.PeSection.raw_size = 512;
+    const form = buildCreateEntityForm(entity);
+    expect(form.get('metadata[md5]')).toBe('abc');
+    expect(form.get('metadata[raw_size]')).toBe('512');
+    expect(form.has('metadata[virtual_size]')).toBe(false);
+    expect(form.has('metadata[entropy]')).toBe(false);
+  });
+
+  it('emits PeImport functions as plain list entries', () => {
+    const entity: EntityCreateTypes = structuredClone(BlankCreatePeImport);
+    entity.metadata.PeImport.functions = ['CreateFileA', 'ReadFile'];
+    const form = buildCreateEntityForm(entity);
+    expect(formEntries(form)['metadata[functions][]']).toEqual(['CreateFileA', 'ReadFile']);
+  });
+});
+
+describe('buildUpdateEntityForm per-kind metadata', () => {
+  it('sends Incident cover_term only when changed to a non-empty value', () => {
+    const entity = structuredClone(BlankIncident);
+    const pending = structuredClone(BlankIncident);
+    pending.metadata.Incident.cover_term = 'DAWN';
+    expect(buildUpdateEntityForm(entity, pending).get('metadata[cover_term]')).toBe('DAWN');
+    // clearing an existing cover_term is dropped (the API has no clear)
+    const set = structuredClone(BlankIncident);
+    set.metadata.Incident.cover_term = 'DAWN';
+    const cleared = structuredClone(set);
+    cleared.metadata.Incident.cover_term = null;
+    expect(buildUpdateEntityForm(set, cleared).has('metadata[cover_term]')).toBe(false);
+  });
+
+  it('diffs Incident list fields into add/remove keys', () => {
+    const entity = structuredClone(BlankIncident);
+    entity.metadata.Incident.networks = ['a', 'b'];
+    const pending = structuredClone(entity);
+    pending.metadata.Incident.networks = ['a', 'c'];
+    const entries = formEntries(buildUpdateEntityForm(entity, pending));
+    expect(entries['metadata[add_networks][]']).toEqual(['c']);
+    expect(entries['metadata[remove_networks][]']).toEqual(['b']);
+  });
+
+  it('never sends DecompiledFunction tools (create-only), but does send changed content', () => {
+    const entity = structuredClone(BlankDecompiledFunction);
+    entity.metadata.DecompiledFunction.tools = ['ghidra'];
+    entity.metadata.DecompiledFunction.content = 'old';
+    const pending = structuredClone(entity);
+    pending.metadata.DecompiledFunction.tools = ['ghidra', 'ida'];
+    pending.metadata.DecompiledFunction.content = 'new';
+    const form = buildUpdateEntityForm(entity, pending);
+    expect(form.has('metadata[add_tools][]')).toBe(false);
+    expect(form.has('metadata[remove_tools][]')).toBe(false);
+    expect(form.has('metadata[tools][]')).toBe(false);
+    expect(form.get('metadata[decompilation_content]')).toBe('new');
+  });
+
+  it('replaces PeImport functions wholesale and skips an unchanged list', () => {
+    const entity = structuredClone(BlankPeImport);
+    entity.metadata.PeImport.functions = ['a'];
+    const same = structuredClone(entity);
+    expect(buildUpdateEntityForm(entity, same).has('metadata[functions][]')).toBe(false);
+    const changed = structuredClone(entity);
+    changed.metadata.PeImport.functions = ['a', 'b'];
+    expect(formEntries(buildUpdateEntityForm(entity, changed))['metadata[functions][]']).toEqual(['a', 'b']);
+  });
+
+  it('only sends changed PeSection scalars and never clears them', () => {
+    const entity = structuredClone(BlankPeSection);
+    entity.metadata.PeSection.md5 = 'old';
+    entity.metadata.PeSection.raw_size = 10;
+    const pending = structuredClone(entity);
+    pending.metadata.PeSection.raw_size = 20;
+    const form = buildUpdateEntityForm(entity, pending);
+    expect(form.get('metadata[raw_size]')).toBe('20');
+    expect(form.has('metadata[md5]')).toBe(false);
+    // clearing md5 back to undefined is dropped
+    const cleared = structuredClone(entity);
+    cleared.metadata.PeSection.md5 = undefined;
+    expect(buildUpdateEntityForm(entity, cleared).has('metadata[md5]')).toBe(false);
+  });
+});
+
+describe('copyEntityFields', () => {
+  it('clones Flag metadata as-is and appends " - copy" to the name', () => {
+    const src = structuredClone(BlankFlag);
+    src.name = 'MyFlag';
+    src.metadata.Flag.suspicion = 3;
+    src.metadata.Flag.reasoning = 'because';
+    const copy = copyEntityFields(src, structuredClone(BlankCreateFlag));
+    expect(copy.name).toBe('MyFlag - copy');
+    expect(copy.kind).toBe(Entities.Flag);
+    if (copy.kind === Entities.Flag) {
+      expect(copy.metadata.Flag.suspicion).toBe(3);
+      expect(copy.metadata.Flag.reasoning).toBe('because');
+    }
+  });
+
+  it('clones PeSection metadata as-is', () => {
+    const src = structuredClone(BlankPeSection);
+    src.metadata.PeSection.md5 = 'deadbeef';
+    src.metadata.PeSection.entropy = 6.5;
+    const copy = copyEntityFields(src, structuredClone(BlankCreatePeSection));
+    if (copy.kind === Entities.PeSection) {
+      expect(copy.metadata.PeSection.md5).toBe('deadbeef');
+      expect(copy.metadata.PeSection.entropy).toBe(6.5);
+    }
+  });
+
+  it('clones PeImport functions', () => {
+    const src = structuredClone(BlankPeImport);
+    src.metadata.PeImport.functions = ['CreateFileA'];
+    const copy = copyEntityFields(src, structuredClone(BlankCreatePeImport));
+    if (copy.kind === Entities.PeImport) {
+      expect(copy.metadata.PeImport.functions).toEqual(['CreateFileA']);
+    }
   });
 });

@@ -52,7 +52,6 @@ const VendorCreateConfig: EntityCreateConfig<Entities.Vendor> = {
   kind: Entities.Vendor,
   EntityMetadata: VendorMetaInfo,
   BlankCreateEntity: BlankCreateVendor,
-  supportsGraphic: true,
 };
 
 export default VendorCreateConfig;

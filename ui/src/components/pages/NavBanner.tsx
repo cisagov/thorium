@@ -5,10 +5,13 @@ import styled from 'styled-components';
 
 // project imports
 import { OverlayTipRight } from '@components/shared/overlay/tips';
+import UserAvatar from '@components/shared/UserAvatar';
 import { clearTagDataFromLocalStorage } from '@utilities/tags';
 import { useAuth } from '@utilities/auth';
 import { getApiUrl } from '@utilities/url';
 import { Badge } from 'react-bootstrap';
+
+// spec: ./Page.spec.md
 
 const StyledNavbar = styled.nav`
   display: flex;
@@ -66,9 +69,13 @@ const DropdownContainer = styled.div`
 `;
 
 const DropdownToggle = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   color: var(--thorium-nav-text);
   background-color: var(--thorium-nav-panel-bg);
-  padding: 0.25rem 0.5rem;
+  /* minimal vertical padding so the enlarged avatar drives the toggle height without growing the nav */
+  padding: 0.1rem 0.5rem;
   border-radius: 10px;
   border: none;
   cursor: pointer;
@@ -178,7 +185,10 @@ const NavBanner = () => {
         </DocsLink>
         {userInfo && userInfo.username && (
           <DropdownContainer ref={dropdownRef}>
-            <DropdownToggle onClick={() => setDropdownOpen((prev) => !prev)}>@{userInfo.username}</DropdownToggle>
+            <DropdownToggle onClick={() => setDropdownOpen((prev) => !prev)}>
+              {/* only shown when the user has set an icon — no placeholder in the nav */}
+              {userInfo.has_image && <UserAvatar username={userInfo.username} hasImage size={34} alt="" />}@{userInfo.username}
+            </DropdownToggle>
             <DropdownMenu $open={dropdownOpen}>
               <DropdownLink to="/profile" onClick={() => setDropdownOpen(false)}>
                 Profile

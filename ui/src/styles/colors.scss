@@ -299,6 +299,8 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-lint-overlap: #{$snl-purple};
   --thorium-warning-bg: #{$snl-amber-500};
   --thorium-warning-secondary-bg: #{$snl-amber-300};
+  // dark amber for high-contrast text on the light amber warning backgrounds
+  --thorium-warning-text: #{$snl-amber-900};
   --thorium-info-bg: #{$snl-grey-600};
   --thorium-info-secondary-bg: #{$snl-medium-blue};
   --thorium-empty-bg: #{$snl-light-blue-800};
@@ -359,6 +361,8 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-lint-overlap: #{$snl-purple};
   --thorium-warning-bg: #{$snl-amber-500};
   --thorium-warning-secondary-bg: #{$snl-amber-300};
+  // dark amber for high-contrast text on the light amber warning backgrounds
+  --thorium-warning-text: #{$snl-amber-900};
   --thorium-info-bg: #{$snl-grey-500};
   --thorium-info-secondary-bg: #{$snl-grey-800};
   --thorium-empty-bg: #{$snl-light-blue-800};
@@ -418,6 +422,8 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-lint-overlap: #{$snl-purple};
   --thorium-warning-bg: #{$snl-amber-500};
   --thorium-warning-secondary-bg: #{$snl-amber-300};
+  // dark amber for high-contrast text on the light amber warning backgrounds
+  --thorium-warning-text: #{$snl-amber-900};
   --thorium-info-bg: #{$snl-medium-blue};
   --thorium-info-secondary-bg: #{$snl-light-blue-300};
   --thorium-empty-bg: #{$snl-medium-blue-800};
@@ -461,6 +467,12 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-panel-border: #{$snl-warm-grey-200};
   --thorium-highlight-panel-border: #{$snl-warm-grey-100};
   --thorium-divider: #{$snl-warm-grey-200};
+  // Omnibar
+  --thorium-omnibar-bg: #f9f0de;
+  --thorium-omnibar-border: #{$snl-warm-grey-400};
+  --thorium-omnibar-placeholder: var(--thorium-secondary-text);
+  --thorium-omnibar-dropdown-highlight: var(--thorium-highlight-panel-bg);
+  --thorium-omnibar-dropdown-shadow: rgba(0, 0, 0, 0.16);
   // Scrollbars
   --thorium-scroll-bar-track-bg: #ecdcc0;
   --thorium-scroll-bar-thumb-bg: #{$snl-warm-grey-300};
@@ -478,6 +490,8 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-lint-overlap: #{$snl-purple};
   --thorium-warning-bg: #{$snl-amber-500};
   --thorium-warning-secondary-bg: #{$snl-amber-300};
+  // dark amber for high-contrast text on the light amber warning backgrounds
+  --thorium-warning-text: #{$snl-amber-900};
   --thorium-info-bg: #{$snl-warm-grey-600};
   --thorium-info-secondary-bg: #{$snl-amber-100};
   --thorium-empty-bg: #{$snl-light-blue-800};

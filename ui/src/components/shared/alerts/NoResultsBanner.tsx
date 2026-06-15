@@ -1,6 +1,8 @@
 // project imports
 import AlertBanner, { Severity } from './AlertBanner';
 
+// spec: ./AlertBanner.spec.md
+
 interface NoResultsBannerProps {
   type?: string; // resource label, e.g. "Images"; omit for a generic "None Found"
   className?: string; // defaults to 'm-1' to match the entity browsing list

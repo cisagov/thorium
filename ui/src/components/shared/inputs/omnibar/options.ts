@@ -1,6 +1,8 @@
 import { TagOptions } from '@models/tags';
 import { ClauseCondition } from './ClauseTypes';
 
+// spec: ./SPEC.md
+
 export type OmnibarOptionMap = Record<string, OmnibarCategoryOption>;
 
 export type OmnibarCategoryOption = {
@@ -19,7 +21,66 @@ export type OmnibarFieldOption = {
 };
 
 //list of fields that can have multiple entries
-export const multiCategories = new Set(['tag', 'text', 'time']);
+export const multiCategories = new Set(['tag', 'text', 'time', 'Show', 'Hide', 'Exclude', 'Include']);
+
+/** The entity-layer action categories (a lexicon for controlling which entity types render/traverse). */
+export const ENTITY_LAYER_CATEGORIES = ['Show', 'Hide', 'Exclude', 'Include'] as const;
+
+/**
+ * Add the four entity-layer action categories (`Show`/`Hide`/`Exclude`/`Include`) to an option map, each
+ * offering the given entity-type values (raw enum values so clause values round-trip to policy keys).
+ * These replace per-kind visibility toggles: Show=render+explore, Hide=pass-through, Exclude=prune,
+ * Include=whitelist.
+ *
+ * @param optMap - The option map to extend.
+ * @param kinds - Entity-type enum values present in the tree.
+ * @returns The extended option map (unchanged when there are no kinds).
+ */
+export function addEntityLayerOptions(optMap: OmnibarOptionMap, kinds: string[]): OmnibarOptionMap {
+  if (kinds.length === 0) return optMap;
+  const next = { ...optMap };
+  for (const category of ENTITY_LAYER_CATEGORIES) {
+    next[category] = {
+      fields: {
+        [category]: {
+          values: kinds,
+          conditions: [ClauseCondition.Is, ClauseCondition.IsOneOf],
+          creatable: false,
+          category,
+          helpText: `${category} these entity types`,
+        },
+      },
+      helpText: `${category} entity types`,
+    };
+  }
+  return next;
+}
+
+/**
+ * Add a traversal-`depth` category (replaces the API `limit` field for the graph browser). The value is the
+ * current depth being searched/filtered; raising it additively grows the shared graph.
+ *
+ * @param optMap - The option map to extend.
+ * @param maxDepth - The largest selectable depth.
+ * @returns The extended option map.
+ */
+export function addDepthOptions(optMap: OmnibarOptionMap, maxDepth: number = 10): OmnibarOptionMap {
+  return {
+    ...optMap,
+    depth: {
+      fields: {
+        depth: {
+          values: Array.from({ length: maxDepth }, (_, i) => String(i + 1)),
+          conditions: [ClauseCondition.Is],
+          creatable: true,
+          category: 'depth',
+          helpText: 'Traversal depth to search/filter',
+        },
+      },
+      helpText: 'Traversal depth',
+    },
+  };
+}
 
 export function addGroupOptions(optMap: OmnibarOptionMap, groups: string[]): OmnibarOptionMap {
   return {
@@ -86,8 +147,9 @@ export function addTagOptions(optMap: OmnibarOptionMap, tagOpts: TagOptions): Om
     .sort()
     .forEach((key) => {
       newMap.tag.fields[key] = {
+        // IsOneOf lets is-one-of tag clauses (merged same-key dashboard filters) render/edit in the omnibar
         values: tagOpts[key],
-        conditions: [ClauseCondition.Is],
+        conditions: [ClauseCondition.Is, ClauseCondition.IsOneOf],
         creatable: true,
         category: 'tag',
       };

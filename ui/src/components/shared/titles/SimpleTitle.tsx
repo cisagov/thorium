@@ -3,6 +3,8 @@ import React from 'react';
 // project imports
 import { TitleProps } from './props';
 
+// spec: ./titles.spec.md
+
 const SimpleTitle: React.FC<TitleProps> = ({ children, className = '', ref }) => {
   return (
     <div ref={ref} className={`simple-title ${className ? className : ''}`}>

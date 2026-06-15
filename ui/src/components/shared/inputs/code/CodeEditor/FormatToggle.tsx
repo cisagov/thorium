@@ -5,6 +5,8 @@ import styled from 'styled-components';
 import { BUTTON_BAR_GAP } from '@components/shared/buttons/tokens';
 import { FormatType } from '@utilities/rules/types';
 
+// spec: ./CodeEditor.spec.md
+
 const Wrapper = styled.div`
   display: flex;
   gap: ${BUTTON_BAR_GAP};

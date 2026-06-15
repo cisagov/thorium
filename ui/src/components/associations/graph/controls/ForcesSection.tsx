@@ -1,10 +1,13 @@
 import React from 'react';
 import { Dropdown } from 'react-bootstrap';
 
+// project imports
 import { DagMode } from './types';
 import type { GraphSectionProps } from './types';
 import { PopoverBody, Divider, MenuList, MenuItem, MenuDropdown } from './Toolbar.styled';
 import LabeledRange from './LabeledRange';
+
+// spec: ./GraphControlsToolbar.spec.md
 
 const DAG_MODE_LABELS: Record<string, string> = {
   none: 'None',

@@ -51,6 +51,8 @@ type OmnibarEntryFieldProps = {
   blankPlaceholder: string;
   dropdownVisible: boolean;
   timepickerVisible: boolean;
+  /** Extra removable tiles rendered after the clause chips, before the new-clause input. */
+  extraChips?: React.ReactNode;
 };
 
 const OmnibarEntryField: React.FC<OmnibarEntryFieldProps> = ({
@@ -63,6 +65,7 @@ const OmnibarEntryField: React.FC<OmnibarEntryFieldProps> = ({
   blankPlaceholder,
   dropdownVisible,
   timepickerVisible,
+  extraChips,
 }) => {
   const beginEdit = (idx: number) => {
     const clause = clauses[idx];
@@ -180,6 +183,7 @@ const OmnibarEntryField: React.FC<OmnibarEntryFieldProps> = ({
     <OmnibarEntryFieldDiv $dropdownVisible={dropdownVisible} $timepickerVisible={timepickerVisible}>
       <ClauseContainer onClick={onContainerClick}>
         {clauseItems}
+        {extraChips}
         <OmnibarNewClause
           editingState={editingState}
           setEditingState={setEditingState}

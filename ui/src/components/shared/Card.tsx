@@ -1,10 +1,13 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
 
+// spec: ./Card.spec.md
+
 interface CardProps {
   children: React.ReactNode;
-  className?: string; // custom className pass through
-  panel?: boolean; // whether to treat card as a panel
+  className?: string;
+  /** Renders the card with panel styling instead of the default body styling. */
+  panel?: boolean;
 }
 
 const ThoriumCard: React.FC<CardProps> = ({ children, className = '', panel = false }) => {

@@ -92,6 +92,11 @@ export type UserInfo = {
   local: boolean;
   /// Whether this user has been verified already or not
   verified: boolean;
+  /// Whether this user has a profile icon set
+  ///
+  /// The icon itself is fetched lazily from `GET /users/user/{username}/image` rather than
+  /// embedded here, so frequent calls like `whoami` don't ship the image bytes.
+  has_image: boolean;
 };
 
 /// Response to a successful auth

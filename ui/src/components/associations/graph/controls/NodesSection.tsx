@@ -1,10 +1,14 @@
 import React from 'react';
 import { Dropdown, Form } from 'react-bootstrap';
 
+// project imports
 import { NodeRenderMode } from './types';
 import type { SectionProps } from './types';
 import { PopoverBody, Divider, MenuList, MenuDropdown } from './Toolbar.styled';
 import LabeledRange from './LabeledRange';
+import { LABEL_MAX_PX, LABEL_MIN_PX, LABEL_TARGET_PX } from '../labelScale';
+
+// spec: ./GraphControlsToolbar.spec.md
 
 const NODE_STYLE_LABELS: Record<string, string> = {
   spheres: 'Spheres',
@@ -60,30 +64,21 @@ const NodesSection: React.FC<SectionProps> = ({ controls, updateControls }) => (
           label="Label Size"
           value={controls.nodeLabelScale}
           min={0.5}
-          max={3}
+          max={2.0}
           step={0.1}
-          formatValue={(v) => `${v.toFixed(1)}x`}
+          formatValue={(v) => `${Math.round(Math.min(LABEL_MAX_PX, Math.max(LABEL_MIN_PX, v * LABEL_TARGET_PX)))}px`}
           onChange={(v) => updateControls({ type: 'nodeLabelScale', state: v })}
         />
         <LabeledRange
           id="form-node-label-density"
           label="Label Density"
+          tooltip="How many labels are shown before zooming in reveals more"
           value={controls.nodeLabelDensity}
           min={0.1}
           max={1.0}
           step={0.1}
           formatValue={(v) => `${(v * 100).toFixed(0)}%`}
           onChange={(v) => updateControls({ type: 'nodeLabelDensity', state: v })}
-        />
-        <LabeledRange
-          id="form-node-label-min-size"
-          label="Min Font Size"
-          value={controls.nodeLabelMinSize}
-          min={0.5}
-          max={5}
-          step={0.5}
-          formatValue={(v) => `${v.toFixed(1)}x`}
-          onChange={(v) => updateControls({ type: 'nodeLabelMinSize', state: v })}
         />
       </>
     )}

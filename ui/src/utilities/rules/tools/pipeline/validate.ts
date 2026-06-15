@@ -1,6 +1,7 @@
-// Validation spec: see VALIDATION_SPEC.md in this directory
 import type { Document } from 'yaml';
 import { isSeq } from 'yaml';
+
+// project imports
 import { Severity, type Diagnostic } from '../../types';
 import { buildLineIndex } from '../../yaml';
 import {
@@ -13,6 +14,23 @@ import {
 } from '../shared';
 import { REQUIRED_PIPELINE_FIELDS, KNOWN_PIPELINE_FIELDS } from './schema';
 
+// spec: ./validate.spec.md
+
+/**
+ * Validate a parsed pipeline-request YAML document against the pipeline schema.
+ *
+ * Reports missing required fields, unknown top-level fields, and per-field type errors, then checks
+ * the `order` and `triggers` structures. When `validImageNames` is supplied, each image referenced
+ * in `order` (either a bare stage entry or a nested parallel group) is verified against that set and
+ * flagged if unknown.
+ *
+ * @param doc - The parsed YAML document (positional info for diagnostics).
+ * @param text - The raw YAML source, used to map node offsets to line/column.
+ * @param parsed - The plain-object form of `doc` used for value checks.
+ * @param validImageNames - Optional set of image names valid for the pipeline's group; when given,
+ *   unknown image references in `order` are reported. Omit or pass `null` to skip the check.
+ * @returns The list of {@link Diagnostic}s found (empty when the document is valid).
+ */
 export function validatePipelineRequest(
   doc: Document,
   text: string,

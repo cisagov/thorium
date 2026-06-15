@@ -8,6 +8,8 @@ import SimpleSubtitle from '@components/shared/titles/SimpleSubtitle';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { EventTrigger, TagTrigger } from '@models/pipelines';
 
+// spec: ./PipelineInfo.spec.md
+
 interface TriggerDisplayProps {
   triggers: Record<string, EventTrigger>;
 }

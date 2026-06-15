@@ -51,3 +51,44 @@ export function listCodec(key: string): ParamCodec<string[]> {
     },
   };
 }
+
+/**
+ * A boolean flag, e.g. `?flagged=1` ↔ `true`. `false` is treated as absent (not written); a
+ * `1`-valued param decodes to `true`, anything else (including a missing key) decodes to
+ * `undefined`.
+ *
+ * @param key - The single param key this codec owns.
+ * @returns A {@link ParamCodec} binding a boolean flag to `key`.
+ */
+export function boolCodec(key: string): ParamCodec<boolean> {
+  return {
+    keys: () => [key],
+    encode: (value, params) => {
+      if (value) {
+        params.set(key, '1');
+      }
+    },
+    decode: (params) => (params.get(key) === '1' ? true : undefined),
+  };
+}
+
+/**
+ * A repeated param as an unordered {@link Set}, e.g. `?hidden=a&hidden=b` ↔ `Set(['a', 'b'])`,
+ * preserving insertion order. An empty set is treated as absent (decodes to `undefined`, encodes to
+ * nothing). Duplicate URL occurrences collapse into the set naturally.
+ *
+ * @param key - The single param key this codec owns.
+ * @returns A {@link ParamCodec} binding a set of strings to repeated `key` params.
+ */
+export function setCodec(key: string): ParamCodec<Set<string>> {
+  return {
+    keys: () => [key],
+    encode: (value, params) => {
+      value.forEach((item) => params.append(key, item));
+    },
+    decode: (params) => {
+      const all = params.getAll(key);
+      return all.length > 0 ? new Set(all) : undefined;
+    },
+  };
+}

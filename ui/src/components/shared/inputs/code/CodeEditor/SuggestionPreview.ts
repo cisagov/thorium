@@ -2,6 +2,8 @@ import { EditorView, Decoration, type DecorationSet, WidgetType } from '@codemir
 import { EditorState, StateField, StateEffect } from '@codemirror/state';
 import { FormatType, FieldValueType, type FieldSchema } from '@utilities/rules/types';
 
+// spec: ./CodeEditor.spec.md
+
 export interface PreviewProposal {
   field: string;
   value: string;

@@ -6,6 +6,8 @@ import { ButtonVariant, ButtonSize } from './types';
 import type { ButtonProps } from './types';
 import { SIZE_TOKENS, VARIANT_TOKENS } from './tokens';
 
+// spec: ./Button.spec.md
+
 const filledHoverCss = css`
   filter: brightness(85%);
 `;

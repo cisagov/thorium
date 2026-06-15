@@ -1,3 +1,5 @@
+// spec: ./Button.spec.md
+
 export enum ButtonVariant {
   Primary = 'primary',
   Secondary = 'secondary',

@@ -4,6 +4,8 @@ import { clausesCodec, OmniState, timeCodec } from './urlState';
 import { TimeSelection } from './timepicker/utils';
 import { useUrlState } from '@utilities/url/useUrlState';
 
+// spec: ./SPEC.md
+
 export type OmnibarUrlState = {
   clauses: Clause[];
   setClauses: (next: Clause[]) => void;

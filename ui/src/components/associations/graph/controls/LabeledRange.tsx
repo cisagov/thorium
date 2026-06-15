@@ -1,7 +1,10 @@
 import React from 'react';
 
+// project imports
 import { ControlRow, ControlLabel, RangeInput } from './Toolbar.styled';
 import { OverlayTipTop } from '@components/shared/overlay/tips';
+
+// spec: ./GraphControlsToolbar.spec.md
 
 interface LabeledRangeProps {
   id: string;

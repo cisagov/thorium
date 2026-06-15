@@ -22,10 +22,10 @@ import { Filters } from '@models/search';
 import { listEntities } from '@thorpi/entities';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
-// get files using filters and and an optional cursor
+// spec: ../EntityBrowsing.spec.md
+
+// Fetch vendors using search filters and an optional pagination cursor.
 const getVendors = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {
-  // reset cursor when filters have changed, caller must know this
-  // get files list from API
   const listFilters = structuredClone(filters);
   listFilters.kinds = [Entities.Vendor];
   const { entityList, entityCursor } = await listEntities(listFilters, errorHandler, true, cursor);
@@ -51,7 +51,7 @@ const VendorListHeaders = () => {
 };
 
 interface VendorItemProps {
-  vendor: Vendor; // Vendor details
+  vendor: Vendor;
 }
 
 const VendorItem: React.FC<VendorItemProps> = ({ vendor }) => {

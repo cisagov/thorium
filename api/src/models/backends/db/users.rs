@@ -73,6 +73,10 @@ pub fn build(
         pipe.cmd("hsetnx").arg(&keys.data).arg("verification_token")
             .arg(verification_token);
     }
+    // if a profile icon has been set then set that in redis
+    if let Some(image) = &cast.image {
+        pipe.cmd("hsetnx").arg(&keys.data).arg("image").arg(image);
+    }
     // add any aliases for this user
     for (provider, alias) in &cast.aliases {
         // build the key to this providers alias map
@@ -161,6 +165,7 @@ pub(super) fn cast(
         verification_token: helpers::extract_opt(&mut raw, "verification_token"),
         verification_sent: deserialize_opt!(&mut raw, "verification_sent"),
         aliases: deserialize_ext!(raw, "aliases", HashMap::default()),
+        image: helpers::extract_opt(&mut raw, "image"),
     };
     Ok(user)
 }
@@ -622,6 +627,12 @@ pub async fn save(user: &User, shared: &Shared) -> Result<(), ApiError> {
     // save this users unix info if it is set
     if let Some(unix) = &user.unix {
         pipe.cmd("hset").arg(&data_key).arg("unix").arg(serialize!(unix));
+    }
+    // save this users profile icon if set, otherwise remove any existing one
+    if let Some(image) = &user.image {
+        pipe.cmd("hset").arg(&data_key).arg("image").arg(image);
+    } else {
+        pipe.cmd("hdel").arg(&data_key).arg("image");
     }
     // build the key to the analyst set
     let analyst_key = UserKeys::analysts(shared);

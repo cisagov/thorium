@@ -10,6 +10,8 @@ import { scrollToSection } from '@utilities/interactions';
 import { getResults } from '@thorpi/results';
 import { OutputDisplayType, type Output } from '@models/results';
 
+// spec: ./files.spec.md
+
 type ParsedResults = Record<string, Output[]>;
 
 interface ResultsTableOfContentsProps {
@@ -118,12 +120,11 @@ const Results = ({ sha256, results, setResults, numResults, setNumResults }: Res
                 <ToolResult
                   key={image}
                   header={image}
-                  type={parsedResults[image][0]['display_type'] ? parsedResults[image][0]['display_type'] : OutputDisplayType.Json}
                   tool={image}
                   sha256={sha256}
                   updateInView={updateInView}
                   updateURLSection={updateURLSection}
-                  result={parsedResults[image][0]}
+                  results={parsedResults[image]}
                 />
               ))}
           </div>

@@ -12,6 +12,7 @@ import OverlayBody from './OverlayBody';
 import OverlayHeader from './OverlayHeader';
 import OverlayWrapper from './OverlayWrapper';
 import ResizeButtons from './ResizeButtons';
+// spec: ./OverlayWindow.spec.md
 
 // Floating close button for headerless windows
 const FloatingCloseButton = styled(CloseButton)<{ $zindex: number }>`
@@ -28,6 +29,10 @@ const FloatingCloseButton = styled(CloseButton)<{ $zindex: number }>`
 
 const DEFAULT_EDGE_PADDING: Padding = { start: 4, end: 4, top: 4, bottom: 4 };
 
+/**
+ * Draggable, resizable floating window coordinated by WindowManager for cross-window z-index.
+ * See OverlayWindow.spec.md for the full prop/behavior contract.
+ */
 const OverlayWindow: React.FC<{
   className?: string;
   children: React.ReactNode;
@@ -37,6 +42,10 @@ const OverlayWindow: React.FC<{
   locked?: boolean;
   width?: number;
   height?: number;
+  /** Minimum size the user can resize down to. Defaults small so it is decoupled from the
+   *  initial `width`/`height` (which otherwise doubled as the resize floor). */
+  minWidth?: number;
+  minHeight?: number;
   positioning?: PositionType;
   customPosition?: ElementPosition;
   onHide?: () => void;
@@ -51,6 +60,8 @@ const OverlayWindow: React.FC<{
   title,
   width = 500,
   height = 500,
+  minWidth = 320,
+  minHeight = 240,
   locked = false,
   positioning = PositionType.Absolute,
   placement = Placement.Bottom,
@@ -111,7 +122,8 @@ const OverlayWindow: React.FC<{
     };
   }, [show, onClose]);
 
-  // Reposition after parentRef.current is set on initial render (custom placement uses explicit coordinates)
+  // Runs once on mount only (empty deps intentional): reposition after parentRef.current is
+  // populated on the initial render. Custom placement uses explicit coordinates and is skipped.
   useLayoutEffect(() => {
     if (placement === Placement.Custom && customPosition) return;
     setPosition(getInitialPosition({ width, height }, placement, bounds, padding, usesReferenceElement, parentRef, nodeRef));
@@ -176,7 +188,9 @@ const OverlayWindow: React.FC<{
         position: updatedPosition,
         size: updatedSize,
         resized,
-      } = calculateWindowResizeState(start, { width, height }, dx, dy, currentBounds, clickedLocation);
+        // use the explicit minimum (not the initial size) as the resize floor so a window can be
+        // shrunk below the size it opened at
+      } = calculateWindowResizeState(start, { width: minWidth, height: minHeight }, dx, dy, currentBounds, clickedLocation);
       windowStateRef.current.resized = resized;
       setPosition(updatedPosition);
       setSize(updatedSize);
@@ -187,7 +201,7 @@ const OverlayWindow: React.FC<{
         marginRatio: getMarginRatios(updatedPosition, updatedSize),
       };
     },
-    [width, height],
+    [width, height, minWidth, minHeight],
   );
 
   const handleMouseMove = useCallback(

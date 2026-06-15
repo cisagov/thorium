@@ -3,6 +3,8 @@ import { getLinkEndpoints } from './data';
 import type { GraphData, GraphInstance } from './types';
 import type { LabelEntry } from './controls/controlsReducer';
 
+// spec: ./AssociationGraph.spec.md
+
 export const applyGrowthToInstance = (
   prevData: GraphData,
   newData: GraphData,

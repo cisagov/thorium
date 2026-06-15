@@ -1,21 +1,20 @@
+import DOMPurify from 'dompurify';
 import React, { useState, useEffect } from 'react';
 import { Card } from 'react-bootstrap';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
-import DOMPurify from 'dompurify';
 
 // project imports
 import { getAlerts } from './alerts';
-import ResultsFiles from './displays/files/ResultsFiles';
-import ChildrenFiles from './displays/files/ChildrenFiles';
-import '@styles/main.scss';
 import { ResultRenderProps } from './props';
-import { Value } from '@models/results';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
+import '@styles/main.scss';
 
-const SanitizeHTML = ({ html }: { html: Value }) => (
-  <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(typeof html === 'string' ? html : '') }} />
-);
+// spec: ./ToolResult.spec.md
 
-const SafeHtml: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
+/**
+ * Render a tool result's HTML output safely: extracts alerts via {@link getAlerts}, sanitizes the
+ * HTML with DOMPurify, and injects it via dangerouslySetInnerHTML.
+ */
+const SafeHtml: React.FC<ResultRenderProps> = ({ result }) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   useEffect(() => {
@@ -41,9 +40,11 @@ const SafeHtml: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
               {warn}
             </AlertBanner>
           ))}
-          <SanitizeHTML html={result.result} />
-          <ResultsFiles result={result} sha256={sha256} tool={tool} />
-          <ChildrenFiles result={result} sha256={sha256} tool={tool} />
+          <div
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(typeof result.result === 'string' ? result.result : ''),
+            }}
+          />
         </Card.Body>
       </Card>
     </>

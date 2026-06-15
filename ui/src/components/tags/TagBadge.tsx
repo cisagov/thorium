@@ -1,29 +1,60 @@
 import React, { useState } from 'react';
 import { Button, Modal } from 'react-bootstrap';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 // project imports
-import { getTagBadgeText, getTagColorClass } from '@components/tags/utilities';
+import { getBrowsingPathByEntity } from '@components/entities/browsing/EntityBrowsingRoutes';
+import { buildTagBrowseHref, getTagBadgeText, getTagColorClass } from '@components/tags/utilities';
 import { OverlayTipBottom } from '@components/shared/overlay/tips';
-import { Entities } from '@models/entities';
+import { Entities, entityLabel } from '@models/entities';
 import { TagUpperKeyEnum } from '@models/tags';
 
+// spec: ./tags.spec.md
+
 interface TagBadgeProps {
-  tag: string; // tag key string
-  value: string; // key value
-  condensed: boolean; // show condensed view of TLP tag that hides the key "TLP"
-  action: string; // onclick action keyword
+  tag: string;
+  value: string;
+  condensed: boolean;
+  /** Which onclick behavior to render: 'scroll' (jump to results), 'docs' (mitre links), or 'link' (browse by tag). */
+  action: string;
   resource?: Entities;
 }
+
+/** Truncate badge text to a fixed width with an ellipsis for the compact ("short-tag") badge variant. */
+export const truncateBadgeText = (text: string): string => (text.length > 30 ? `${text.substring(0, 30)}...` : text);
+
+/**
+ * Render the paired full-width + compact badge divs shared by every TagBadge branch. The full-width
+ * div (`tags-hide`) and the compact div (`short-tag`) are swapped by responsive CSS; the compact one
+ * always shows the truncated text. `clickable` toggles the shared clickable styling/onClick.
+ */
+const BadgePair: React.FC<{ badgeClass: string; text: string; clickable: boolean; onClick?: () => void }> = ({
+  badgeClass,
+  text,
+  clickable,
+  onClick,
+}) => {
+  const clickableClass = clickable ? ' clickable' : '';
+  return (
+    <>
+      <div className={`${badgeClass} ms-1 mb-1 tag-item${clickableClass} tags-hide`} onClick={onClick}>
+        {text}
+      </div>
+      <div className={`${badgeClass} ms-1 mb-1 tag-item${clickableClass} short-tag`} onClick={onClick}>
+        {truncateBadgeText(text)}
+      </div>
+    </>
+  );
+};
 
 const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, resource }) => {
   const [showRedirectModal, setShowRedirectModal] = useState(false);
   const badgeClass = getTagColorClass(tag, value);
   const [, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const tagText = getTagBadgeText(tag, value, condensed);
   const upperTag = tag.toUpperCase() as TagUpperKeyEnum;
 
-  // returned rendered component
   if (action == 'scroll') {
     const scrollToResult = (value: string) => {
       const element = document.getElementById(`results-tab-${value}`);
@@ -33,12 +64,7 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
     };
     return (
       <OverlayTipBottom tip={`Click to jump to ${value} results`}>
-        <div className={`${badgeClass} ms-1 mb-1 tag-item clickable tags-hide`} onClick={() => scrollToResult(value)}>
-          {tagText}
-        </div>
-        <div className={`${badgeClass} ms-1 mb-1 tag-item clickable short-tag`} onClick={() => scrollToResult(value)}>
-          {tagText.length > 30 ? tagText.substring(0, 30) + '...' : tagText}
-        </div>
+        <BadgePair badgeClass={badgeClass} text={tagText} clickable onClick={() => scrollToResult(value)} />
       </OverlayTipBottom>
     );
     // link to external mitre docs for Att&ck tags
@@ -80,10 +106,7 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
         </Modal>
         <OverlayTipBottom tip={`Click to see mitre documentation on this technique: ${tagText}`}>
           <a className="no-decoration" onClick={() => setShowRedirectModal(true)}>
-            <div className={`${badgeClass} ms-1 mb-1 tag-item clickable tags-hide`}>{tagText}</div>
-            <div className={`${badgeClass} ms-1 mb-1 tag-item clickable short-tag`}>
-              {tagText.length > 30 ? tagText.substring(0, 30) + '...' : tagText}
-            </div>
+            <BadgePair badgeClass={badgeClass} text={tagText} clickable />
           </a>
         </OverlayTipBottom>
       </>
@@ -130,53 +153,50 @@ const TagBadge: React.FC<TagBadgeProps> = ({ tag, value, condensed, action, reso
         </Modal>
         <OverlayTipBottom tip={`Click to see mitre documentation on this behavior: ${tagText}`}>
           <a className="no-decoration" onClick={() => setShowRedirectModal(true)}>
-            <div className={`${badgeClass} ms-1 mb-1 tag-item clickable tags-hide`}>{tagText}</div>
-            <div className={`${badgeClass} ms-1 mb-1 tag-item clickable short-tag`}>
-              {tagText.length > 30 ? tagText.substring(0, 30) + '...' : tagText}
-            </div>
+            <BadgePair badgeClass={badgeClass} text={tagText} clickable />
           </a>
         </OverlayTipBottom>
       </>
     );
   } else if (action == 'link') {
-    // built the URL search query params from the tag key and value
+    // resolve the resource's browse route once; both the append-in-place check and the href need it
+    const base = resource ? getBrowsingPathByEntity(resource) : undefined;
+    const href = resource ? buildTagBrowseHref(resource, tag, value) : undefined;
+    // no resource or no browse route → render a plain, non-clickable badge rather than a dead anchor
+    if (!resource || !base || !href) {
+      return (
+        <div>
+          <BadgePair badgeClass={badgeClass} text={tagText} clickable={false} />
+        </div>
+      );
+    }
+    const onClick = (e: React.MouseEvent) => {
+      // let the browser handle modified clicks (new tab, etc.) via the real href
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      // segment-aware match so '/files' does not also match '/filesystems' (a plain startsWith would)
+      const onBrowsePage = window.location.pathname === base || window.location.pathname.startsWith(`${base}/`);
+      // already on this resource's browse page → append the tag to the current filters (no reload);
+      // otherwise SPA-navigate to the browse page pre-filtered by this tag
+      if (onBrowsePage) {
+        const query = new URLSearchParams(window.location.search);
+        query.append(`tags[${tag}]`, value);
+        setSearchParams(query, { replace: true });
+      } else {
+        void navigate(href);
+      }
+    };
     return (
-      <OverlayTipBottom tip={`Click to browse ${resource}s with tag: ${tagText}`}>
-        <a
-          className="no-decoration"
-          onClick={() => {
-            if (resource === undefined) {
-              console.log('Error: No resource type provided for link');
-              return;
-            }
-            // we need to change locations in addition to adding query params
-            if (window.location.pathname.startsWith(resource.toLowerCase() + 's', 1)) {
-              const query = new URLSearchParams(window.location.search);
-              query.append(`tags[${tag}]`, value);
-              setSearchParams(query, { replace: true });
-              // we are already browsing and want to append tags to current search params
-            } else {
-              const query = new URLSearchParams();
-              query.append('limit', '10');
-              query.append(`tags[${tag}]`, value);
-              window.location.href = `/${resource.toLowerCase()}s?${query.toString()}`;
-            }
-          }}
-        >
-          <div className={`${badgeClass} ms-1 mb-1 tag-item clickable tags-hide`}>{tagText}</div>
-          <div className={`${badgeClass} ms-1 mb-1 tag-item clickable short-tag`}>
-            {tagText.length > 30 ? tagText.substring(0, 30) + '...' : tagText}
-          </div>
+      <OverlayTipBottom tip={`Click to browse ${entityLabel(resource)}s with tag: ${tagText}`}>
+        <a className="no-decoration" href={href} onClick={onClick}>
+          <BadgePair badgeClass={badgeClass} text={tagText} clickable />
         </a>
       </OverlayTipBottom>
     );
   } else {
     return (
       <div>
-        <div className={`${badgeClass} ms-1 mb-1 tag-item tags-hide`}>{tagText}</div>
-        <div className={`${badgeClass} ms-1 mb-1 tag-item short-tag`}>
-          {tagText.length > 30 ? tagText.substring(0, 30) + '...' : tagText}
-        </div>
+        <BadgePair badgeClass={badgeClass} text={tagText} clickable={false} />
       </div>
     );
   }

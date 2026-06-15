@@ -5,6 +5,8 @@ import { TagEntry } from '@models/tags';
 export { AssociationKind, BlankAssociationCreate };
 export type { AssociationCreate, AssociationTarget, TagEntry };
 
+// spec: ./upload.spec.md
+
 export const PARALLEL_UPLOAD_LIMIT = 5;
 
 export const TLP_COLORS: Record<string, string> = {

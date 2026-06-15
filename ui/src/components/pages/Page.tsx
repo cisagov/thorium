@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import styled from 'styled-components';
 
+// spec: ./Page.spec.md
+
 // project imports
 import { RequireAdmin, RequireAuth, useAuth } from '@utilities/auth';
 import { scaling } from '@styles';

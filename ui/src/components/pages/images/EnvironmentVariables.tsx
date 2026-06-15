@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 
 // project imports
@@ -16,7 +16,10 @@ import {
 import { ImageFormMode } from './types';
 import FieldBadge from '@components/shared/badges/FieldBadge';
 import SelectableDictionary from '@components/shared/inputs/selectable/SelectableDictionary';
+import type { DictionaryEntry } from '@components/shared/inputs/selectable/SelectableDictionary';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
+
+// spec: ./ImageInfo.spec.md
 
 const TOOLTIP = `Environment variables that get mapped into the running image.`;
 
@@ -26,6 +29,39 @@ interface EnvironmentVariablesProps {
   value: EnvValue;
   onChange: (value: EnvValue) => void;
   mode: ImageFormMode;
+  resetKey?: number;
+}
+
+/**
+ * Convert an env dictionary into editable key/value rows, always seeding a single empty row when
+ * the dictionary has no entries so the form starts with an editable line.
+ *
+ * @param value - The env dictionary (values may be `null` for empty values).
+ * @returns The key/value rows for `SelectableDictionary`.
+ */
+export function valueToEntries(value: EnvValue): DictionaryEntry[] {
+  const keys = Object.keys(value);
+  if (keys.length === 0) {
+    return [{ key: '', value: '' }];
+  }
+  return keys.map((k) => ({ key: k, value: value[k] ?? '' }));
+}
+
+/**
+ * Convert editable key/value rows back into an env dictionary, dropping rows with an empty key
+ * (in-progress trailing rows) and storing empty values as `null` to match the API shape.
+ *
+ * @param entries - The key/value rows from `SelectableDictionary`.
+ * @returns The env dictionary suitable for the image update/create payload.
+ */
+export function entriesToDict(entries: DictionaryEntry[]): EnvValue {
+  const result: EnvValue = {};
+  for (const entry of entries) {
+    if (entry.key) {
+      result[entry.key] = entry.value === '' ? null : entry.value;
+    }
+  }
+  return result;
 }
 
 const KeyCol = styled.div`
@@ -78,20 +114,22 @@ const DisplayEnvironmentVars: React.FC<{ value: EnvValue }> = ({ value }) => {
   );
 };
 
-const EnvironmentVariables: React.FC<EnvironmentVariablesProps> = ({ value, onChange, mode }) => {
-  const entries = useMemo(
-    () => (Object.keys(value).length ? Object.entries(value).map(([k, v]) => ({ key: k, value: v ?? '' })) : [{ key: '', value: '' }]),
-    [value],
-  );
+const EnvironmentVariables: React.FC<EnvironmentVariablesProps> = ({ value, onChange, mode, resetKey }) => {
+  // Rows are held in local state (not re-derived from `value` each render) so the trailing empty
+  // row that SelectableDictionary appends survives — the env dictionary can't represent an
+  // empty-key row, so deriving from it would immediately drop the new row and break auto-add.
+  const [entries, setEntries] = useState<DictionaryEntry[]>(() => valueToEntries(value));
+  // Re-seed the rows when the parent signals a fresh dataset (e.g. after a save refetch),
+  // without clobbering in-progress edits.
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
+    setEntries(valueToEntries(value));
+  }
 
-  const handleUpdate = (newEntries: { key: string; value: string }[]) => {
-    const result: EnvValue = {};
-    for (const entry of newEntries) {
-      if (entry.key) {
-        result[entry.key] = entry.value === '' ? null : entry.value;
-      }
-    }
-    onChange(result);
+  const handleUpdate = (newEntries: DictionaryEntry[]) => {
+    setEntries(newEntries);
+    onChange(entriesToDict(newEntries));
   };
 
   if (mode === ImageFormMode.View) {

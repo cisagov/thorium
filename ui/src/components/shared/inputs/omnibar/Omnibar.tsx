@@ -23,6 +23,8 @@ import styled from 'styled-components';
 import { getDropdownOptions } from './utils';
 import { OmnibarOptionMap } from './options';
 
+// spec: ./SPEC.md
+
 const OmnibarContainer = styled.div`
   width: 100%;
   position: relative;
@@ -34,6 +36,11 @@ type OmnibarProps = {
   dropdownOptions: OmnibarOptionMap;
   placeholder?: string;
   timepickerVisible?: boolean;
+  /**
+   * Extra removable tiles rendered inside the entry field alongside the clause chips (before the input) —
+   * for state that reads as a filter tile but isn't a {@link Clause} (e.g. the dashboard's hidden nodes).
+   */
+  extraChips?: React.ReactNode;
 };
 
 const Omnibar: React.FC<OmnibarProps> = ({
@@ -42,6 +49,7 @@ const Omnibar: React.FC<OmnibarProps> = ({
   setClauses,
   placeholder = 'Enter a query...',
   timepickerVisible = false,
+  extraChips,
 }) => {
   const [editingState, setEditingState] = useState<EditSession>({ mode: OmnibarEditMode.Idle });
   const [dropdownState, setDropdownState] = useState<DropdownState>({ index: 0, isSelecting: false });
@@ -357,6 +365,7 @@ const Omnibar: React.FC<OmnibarProps> = ({
         blankPlaceholder={placeholder}
         dropdownVisible={dropdownVisible}
         timepickerVisible={timepickerVisible}
+        extraChips={extraChips}
       />
       {dropdownVisible && (
         <OmnibarDropdown

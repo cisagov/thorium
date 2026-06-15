@@ -1,6 +1,8 @@
 import { useReducer } from 'react';
 import { CarvedSubType, OriginState, OriginType, DEFAULT_ORIGIN_STATE } from './types';
 
+// spec: ./upload.spec.md
+
 export type OriginAction =
   | { type: 'SET_ORIGIN_TYPE'; originType: OriginType }
   | { type: 'SET_CARVED_TYPE'; carvedType: CarvedSubType }

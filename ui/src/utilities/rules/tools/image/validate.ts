@@ -1,6 +1,7 @@
-// Validation spec: see VALIDATION_SPEC.md in this directory
 import type { Document } from 'yaml';
 import { isSeq } from 'yaml';
+
+// project imports
 import {
   nodeLineCol,
   findMapKey,
@@ -53,6 +54,8 @@ import {
   KWARG_DEPENDENCY_SCHEMA,
   AUTO_TAG_LOGIC_SCHEMA,
 } from './schema';
+
+// spec: ./validate.spec.md
 
 function validateSecurityContext(parentMap: unknown, parsed: Record<string, unknown>, lineIndex: LineIndex, diagnostics: Diagnostic[]) {
   const obj = validateObjectField(parentMap, parsed, 'security_context', lineIndex, diagnostics);
@@ -277,6 +280,19 @@ function validateLifetime(parentMap: unknown, parsed: Record<string, unknown>, l
   validateNumberField(subMap, obj, 'amount', lineIndex, diagnostics);
 }
 
+/**
+ * Validate a parsed image-request YAML document against the image schema.
+ *
+ * Reports missing required fields, unknown top-level fields, and per-field type/enum errors, then
+ * recurses into the nested image structures (resources, args, dependencies, output collection,
+ * cleanup, security context, lifetime, volumes, KVM, auto-tags, etc.) accumulating line/column
+ * anchored diagnostics.
+ *
+ * @param doc - The parsed YAML document (positional info for diagnostics).
+ * @param text - The raw YAML source, used to map node offsets to line/column.
+ * @param parsed - The plain-object form of `doc` used for value checks.
+ * @returns The list of {@link Diagnostic}s found (empty when the image request is valid).
+ */
 export function validateImageRequest(doc: Document, text: string, parsed: Record<string, unknown>): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const lineIndex = buildLineIndex(text);

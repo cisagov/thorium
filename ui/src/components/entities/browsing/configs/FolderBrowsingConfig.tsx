@@ -14,6 +14,8 @@ import { Entities } from '@models/entities/entities';
 import { scaling } from '@styles';
 import { getDetailsBasePathByEntity } from '@components/entities/details/EntityDetailsRoutes';
 
+// spec: ../EntityBrowsing.spec.md
+
 const Name = styled(Col)`
   white-space: pre-wrap;
   word-break: break-all;
@@ -52,10 +54,8 @@ const Sha256 = styled.div`
   font-style: italic;
 `;
 
-// get files using filters and and an optional cursor
+// Fetch folders using search filters and an optional pagination cursor.
 const getFolders = async (filters: Filters, cursor: string | null, errorHandler: (error: string) => void) => {
-  // reset cursor when filters have changed, caller must know this
-  // get files list from API
   const listFilters = structuredClone(filters);
   listFilters.kinds = [Entities.Folder];
   const { entityList, entityCursor } = await listEntities(listFilters, errorHandler, true, cursor);
@@ -80,7 +80,7 @@ const FolderListHeaders = () => {
 };
 
 interface FolderItemProps {
-  folder: Folder; // folder details
+  folder: Folder;
 }
 
 const FolderItems: React.FC<FolderItemProps> = ({ folder }) => {

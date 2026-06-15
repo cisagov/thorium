@@ -3,6 +3,8 @@ import { Modal, Button } from 'react-bootstrap';
 // project imports
 import AlertBanner from '@components/shared/alerts/AlertBanner';
 
+// spec: ./browsing.spec.md
+
 export interface DeleteConfirmModalProps {
   show: boolean;
   onHide: () => void;

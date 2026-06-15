@@ -1,5 +1,7 @@
 import type { GraphInstance } from '../types';
 
+// spec: ./GraphControlsToolbar.spec.md
+
 export enum NodeRenderMode {
   Spheres = 'spheres',
   Icons = 'icons',
@@ -22,12 +24,10 @@ export interface GraphControls {
   showEdgeLabels: boolean;
   showNodeLabels: boolean;
   selectedElement: SelectedElement | null;
-  showNodeInfo: boolean;
   nodeRenderMode: NodeRenderMode;
   focusOnClick: boolean;
-  adjustDistanceOnFocus: boolean;
+  fitNeighborhoodOnFocus: boolean;
   refitOnGrow: boolean;
-  focusDistanceRatio: number;
   nodeLabelScale: number;
   edgeLabelScale: number;
   // edges
@@ -43,9 +43,7 @@ export interface GraphControls {
   nodeOpacity: number;
   enableNodeDrag: boolean;
   nodeLabelDensity: number;
-  nodeLabelMinSize: number;
   edgeLabelDensity: number;
-  edgeLabelMinSize: number;
   // forces
   chargeStrength: number;
   velocityDecay: number;
@@ -69,10 +67,9 @@ export type DisplayAction =
         | 'filterChildless'
         | 'showEdgeLabels'
         | 'showNodeLabels'
-        | 'showNodeInfo'
         | 'focusOnClick'
+        | 'fitNeighborhoodOnFocus'
         | 'enableNodeDrag'
-        | 'adjustDistanceOnFocus'
         | 'refitOnGrow'
         | 'showGrid';
       state: boolean;
@@ -84,16 +81,7 @@ export type DisplayAction =
       state: number;
     }
   | {
-      type:
-        | 'nodeRelSize'
-        | 'nodeOpacity'
-        | 'focusDistanceRatio'
-        | 'nodeLabelScale'
-        | 'edgeLabelScale'
-        | 'nodeLabelDensity'
-        | 'nodeLabelMinSize'
-        | 'edgeLabelDensity'
-        | 'edgeLabelMinSize';
+      type: 'nodeRelSize' | 'nodeOpacity' | 'nodeLabelScale' | 'edgeLabelScale' | 'nodeLabelDensity' | 'edgeLabelDensity';
       state: number;
     }
   | { type: 'chargeStrength' | 'velocityDecay' | 'warmupTicks' | 'cooldownTime'; state: number }

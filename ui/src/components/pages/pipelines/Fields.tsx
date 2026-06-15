@@ -18,7 +18,10 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import { FieldError } from '@components/shared/inputs/FieldError';
 import Markdown from '@components/shared/syntax/Markdown';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
+import { cleanDescription } from '@utilities/description';
 import { DEFAULT_SLA } from '@utilities/transforms/pipeline';
+
+// spec: ./PipelineInfo.spec.md
 
 const TOOLTIPS = {
   name: `Pipeline name that contains only alpha-numeric characters and dashes.`,
@@ -27,58 +30,58 @@ const TOOLTIPS = {
   sla: `The number of seconds Thorium has to meet this pipeline's SLA.`,
 };
 
-/// The subset of pipeline fields edited by this form (name, group, description, SLA)
+/** The subset of pipeline fields edited by this form (name, group, description, SLA) */
 export interface PipelineFieldsValue {
-  /// The pipeline name
+  /** The pipeline name */
   name: string;
-  /// The group that owns the pipeline
+  /** The group that owns the pipeline */
   group: string;
-  /// The optional markdown description
+  /** The optional markdown description */
   description?: string;
-  /// The SLA in seconds
+  /** The SLA in seconds */
   sla?: number;
 }
 
-/// The internal string-backed form state for the fields
+/** The internal string-backed form state for the fields */
 interface FormFields {
-  /// The pipeline name
+  /** The pipeline name */
   name: string;
-  /// The group that owns the pipeline
+  /** The group that owns the pipeline */
   group: string;
-  /// The description text
+  /** The description text */
   description: string;
-  /// The SLA as raw input text (digits only)
+  /** The SLA as raw input text (digits only) */
   sla: string;
 }
 
 interface FieldsProps {
-  /// The current pipeline field values
+  /** The current pipeline field values */
   value: PipelineFieldsValue;
-  /// Called with the updated field values whenever the user edits a field
+  /** Called with the updated field values whenever the user edits a field */
   onChange: (value: PipelineFieldsValue) => void;
-  /// Called with whether the fields currently have validation errors
+  /** Called with whether the fields currently have validation errors */
   onValidate?: (hasErrors: boolean) => void;
-  /// The groups the user can create pipelines in (used for the group select)
+  /** The groups the user can create pipelines in (used for the group select) */
   groups: string[];
-  /// The mode this form is rendered in
+  /** The mode this form is rendered in */
   mode: PipelineFormMode;
-  /// Whether to surface validation errors to the user
+  /** Whether to surface validation errors to the user */
   showErrors?: boolean;
-  /// Increment to force the internal form to re-derive from `value` (e.g. after a refetch)
+  /** Increment to force the internal form to re-derive from `value` (e.g. after a refetch) */
   resetKey?: number;
 }
 
-/// Convert the API-shaped field values into the string-backed form state
+// Convert the API-shaped field values into the string-backed form state
 function apiToForm(value: PipelineFieldsValue): FormFields {
   return {
     name: value.name ?? '',
     group: value.group ?? '',
-    description: value.description && value.description !== 'null' ? value.description : '',
+    description: cleanDescription(value.description),
     sla: value.sla != null ? String(value.sla) : '',
   };
 }
 
-/// Convert the string-backed form state back into API-shaped field values
+// Convert the string-backed form state back into API-shaped field values
 function formToApi(form: FormFields): PipelineFieldsValue {
   const result: PipelineFieldsValue = {
     name: form.name,
@@ -90,7 +93,7 @@ function formToApi(form: FormFields): PipelineFieldsValue {
   return result;
 }
 
-/// Compute validation errors for the required fields
+// Compute validation errors for the required fields
 function validateFields(form: FormFields, mode: PipelineFormMode): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!form.name) errors.name = 'Required';
@@ -105,7 +108,7 @@ function validateFields(form: FormFields, mode: PipelineFormMode): Record<string
   return errors;
 }
 
-/// Read-only display of the pipeline fields used in View mode
+// Read-only display of the pipeline fields used in View mode
 const DisplayFields: React.FC<{ value: PipelineFieldsValue }> = ({ value }) => (
   <>
     <SectionRow>
@@ -117,7 +120,7 @@ const DisplayFields: React.FC<{ value: PipelineFieldsValue }> = ({ value }) => (
     <SectionRow>
       <FieldGroup>
         <Label>Description</Label>
-        <Markdown>{value.description && value.description !== 'null' ? value.description : ''}</Markdown>
+        <Markdown>{cleanDescription(value.description)}</Markdown>
       </FieldGroup>
     </SectionRow>
     <SectionRow>
@@ -129,7 +132,7 @@ const DisplayFields: React.FC<{ value: PipelineFieldsValue }> = ({ value }) => (
   </>
 );
 
-/// The editable field inputs shared between Create/Copy/Edit modes
+// The editable field inputs shared between Create/Copy/Edit modes
 const FieldInputs: React.FC<{
   form: FormFields;
   setForm: (f: FormFields) => void;
@@ -219,7 +222,7 @@ const FieldInputs: React.FC<{
   );
 };
 
-/// Pipeline core fields form (name, group, description, SLA) supporting create, copy, edit, and view
+// Pipeline core fields form (name, group, description, SLA) supporting create, copy, edit, and view
 const Fields: React.FC<FieldsProps> = ({ value, onChange, onValidate, groups, mode, showErrors = false, resetKey }) => {
   const [form, setFormState] = useState<FormFields>(() => apiToForm(value));
   // Re-derive the internal form from value when the parent signals a fresh dataset

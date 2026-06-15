@@ -139,6 +139,8 @@ impl Entity {
         &self,
         tags: &mut HashMap<String, HashSet<String>>,
     ) -> Result<(), ApiError> {
+        // tag this entity with its submitter so it can be queried by submitter
+        tag!(tags, "submitter", self.submitter.clone());
         match &self.metadata {
             EntityMetadata::Device(device) => {
                 // add all of the vendors for this device to tags
@@ -2070,5 +2072,42 @@ where
             // provide default params if none were given
             Ok(Self::default())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a minimal entity with the given submitter for tag tests
+    fn test_entity(submitter: &str) -> Entity {
+        Entity {
+            id: Uuid::nil(),
+            name: "test-entity".to_owned(),
+            kind: EntityKinds::Other,
+            metadata: EntityMetadata::Other,
+            description: None,
+            submitter: submitter.to_owned(),
+            groups: Vec::new(),
+            tags: TagMap::default(),
+            image: None,
+            created: DateTime::<Utc>::UNIX_EPOCH,
+        }
+    }
+
+    /// Every entity should be auto-tagged with its submitter so it can be
+    /// queried by submitter via the `tags` list filter
+    #[test]
+    fn populate_intrinsic_tags_tags_submitter() {
+        let entity = test_entity("alice");
+        let mut tags: HashMap<String, HashSet<String>> = HashMap::new();
+        entity
+            .populate_intrinsic_tags(&mut tags)
+            .expect("failed to populate intrinsic tags");
+        // the submitter should be present under the "submitter" tag key
+        let submitters = tags
+            .get("submitter")
+            .expect("submitter tag was not populated");
+        assert!(submitters.contains("alice"));
     }
 }

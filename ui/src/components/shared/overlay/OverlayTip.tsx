@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 
+// spec: ./OverlayTip.spec.md
+
 // Small delay before showing a tooltip so a quick pass-through hover (moving directly across several
 // tipped sections without pausing) doesn't flash/stack tooltips and churn the DOM.
 const SHOW_DELAY_MS = 150;

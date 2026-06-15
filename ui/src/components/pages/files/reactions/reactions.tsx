@@ -6,6 +6,8 @@ import { FaCircle, FaCheckCircle, FaDotCircle, FaTimesCircle, FaSpinner } from '
 import { createReaction, deleteReaction } from '@thorpi/reactions';
 import { ReactionRequest, ReactionRunResult, ReactionSelection } from '@models/reactions';
 
+// spec: ../files.spec.md
+
 type SelectedPipelines = Record<string, Record<string, boolean>>;
 
 // get the colored badge based on the status of a given reaction/job

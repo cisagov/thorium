@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 // project imports
-import { stripFilePath, formatSubmissionNames, formatTagNames, truncateString, getNodeName, getEdgeLabel } from './utilities';
+import { formatSubmissionNames, formatTagNames, getEdgeLabel, getNodeName, getOrCreate, stripFilePath, truncateString } from './utilities';
 import { Direction } from '@models/trees';
 import type { BranchNode, Graph, TreeNode } from '@models/trees';
 import type { SubmissionChunk, Sample } from '@models/files';
@@ -120,6 +120,28 @@ describe('getNodeName', () => {
   });
 });
 
+describe('getOrCreate', () => {
+  it('inserts and returns a freshly created value on a miss', () => {
+    const map = new Map<string, number[]>();
+    const value = getOrCreate(map, 'a', () => []);
+    value.push(1);
+    // the returned reference is the one stored in the map, so mutations persist
+    expect(map.get('a')).toBe(value);
+    expect(map.get('a')).toEqual([1]);
+  });
+
+  it('returns the existing value without invoking the factory on a hit', () => {
+    const map = new Map<string, number[]>([['a', [1]]]);
+    let factoryCalls = 0;
+    const value = getOrCreate(map, 'a', () => {
+      factoryCalls += 1;
+      return [];
+    });
+    expect(value).toEqual([1]);
+    expect(factoryCalls).toBe(0);
+  });
+});
+
 describe('getEdgeLabel', () => {
   const emptyGraph = { data_map: {}, branches: {}, initial: [], growable: [], id: '' } as Graph;
 
@@ -185,7 +207,7 @@ describe('getEdgeLabel', () => {
 
   it('returns association kind for Association relationships', () => {
     const node = branchWith({ Association: { kind: AssociationKind.AssociatedWith } });
-    expect(getEdgeLabel('b', 'a', node, emptyGraph)).toBe('Association: AssociatedWith');
+    expect(getEdgeLabel('b', 'a', node, emptyGraph)).toBe('Association: Associated With');
   });
 
   it('returns empty string for tag relationships with no tags', () => {

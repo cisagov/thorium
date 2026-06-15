@@ -1,79 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, Col, Row } from 'react-bootstrap';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import { JSONTree } from 'react-json-tree';
 
 // project imports
+import ResultAlerts from './ResultAlerts';
 import String from './String';
-import { getAlerts } from '../alerts';
-import ResultsFiles from './files/ResultsFiles';
-import ChildrenFiles from './files/ChildrenFiles';
+import { useResultAlerts } from './useResultAlerts';
 import { ResultRenderProps } from '../props';
-import { Value } from '@models/results';
+import { OceanJsonTheme } from '@components/shared/renderers/jsonTheme';
 
-const OceanJsonTheme = {
-  scheme: 'Ocean',
-  author: 'Chris Kempson (http://chriskempson.com)',
-  // this value is pulled from styles/colors.scss
-  base00: 'var(--thorium-panel-color)',
-  base01: '#343d46',
-  base02: '#4f5b66',
-  base03: '#65737e',
-  base04: '#a7adba',
-  base05: '#c0c5ce',
-  base06: '#dfe1e8',
-  base07: '#eff1f5',
-  base08: '#bf616a',
-  base09: '#d08770',
-  base0A: '#ebcb8b',
-  base0B: '#a3be8c',
-  base0C: '#96b5b4',
-  base0D: '#8fa1b3',
-  base0E: '#b48ead',
-  base0F: '#ab7967',
-};
+// spec: ../ToolResult.spec.md
 
-// generic json dump using react-json-view library
+/** Generic JSON result display backed by react-json-tree; falls back to the String display for non-JSON results. */
 const JSON: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
-  const [errors, setErrors] = useState<string[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [resultsJson, setResultsJson] = useState<Value>({});
-  const [isJson, setIsJson] = useState(true);
-
-  useEffect(() => {
-    // set alerts and process results to json
-    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, false);
-  }, [result]);
+  const { errors, warnings, resultsJson, isJson } = useResultAlerts(result.result, false);
+  // invert the dark token palette on light-background themes so the tree stays legible
+  // const invertTheme = useJsonTreeInvert();
 
   return (
     <>
       {isJson ? (
         <Card className="scroll-log tool-result">
           <Row>
-            {errors.map((err, idx) => (
-              <AlertBanner key={idx}>{err}</AlertBanner>
-            ))}
-            {warnings.map((warn, idx) => (
-              <AlertBanner key={idx} severity={Severity.Warning}>
-                {warn}
-              </AlertBanner>
-            ))}
+            <ResultAlerts errors={errors} warnings={warnings} />
           </Row>
-          {isJson && (
-            <Row>
-              <Col>
-                <JSONTree
-                  data={resultsJson}
-                  shouldExpandNodeInitially={() => true}
-                  hideRoot={true}
-                  theme={OceanJsonTheme}
-                  invertTheme={false}
-                />
-              </Col>
-            </Row>
-          )}
-          <ResultsFiles result={result} sha256={sha256} tool={tool} />
-          <ChildrenFiles result={result} sha256={sha256} tool={tool} />
+          <Row>
+            <Col>
+              <JSONTree data={resultsJson} shouldExpandNodeInitially={() => false} hideRoot={true} theme={OceanJsonTheme} />
+            </Col>
+          </Row>
         </Card>
       ) : (
         <String result={result} sha256={sha256} tool={tool} warnings={warnings} errors={errors} />
@@ -82,4 +37,4 @@ const JSON: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
   );
 };
 
-export { JSON as default, OceanJsonTheme };
+export default JSON;

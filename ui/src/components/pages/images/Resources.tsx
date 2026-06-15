@@ -18,6 +18,8 @@ import FieldBadge from '@components/shared/badges/FieldBadge';
 import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
+// spec: ./ImageInfo.spec.md
+
 const TOOLTIPS = {
   self: `The resources required to run this image. Running images that exceed their requested resources may be terminated.`,
   cpu: `The number of CPUs that an image will be allowed to consume. Requesting a large amount of CPU may result in an image that can never be scheduled. Units are either whole CPU or integer thousandths of a CPU (mCPU).`,

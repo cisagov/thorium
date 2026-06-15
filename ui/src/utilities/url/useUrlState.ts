@@ -22,14 +22,26 @@ import type { ParamCodec } from './codecs';
 export function useUrlState<T>(codec: ParamCodec<T>, fallback: T): [T, (next: T | ((prev: T) => T)) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Re-decode only when the query string actually changes, so the returned value is referentially
-  // stable across unrelated re-renders (callers can safely depend on it in effects).
   const paramsString = searchParams.toString();
-  // codec/fallback are expected to be stable for a given call site, so we key only on the URL
-  const value = useMemo(() => {
-    const decoded = codec.decode(new URLSearchParams(paramsString));
-    return decoded !== undefined ? decoded : fallback;
+  // Narrow the full query string down to only the params THIS codec owns, so the decoded value stays
+  // referentially stable when unrelated keys change. A codec composes with others on one URL (see
+  // codecs.ts): keying the decode on the whole query string would hand callers a brand-new value
+  // reference whenever a sibling feature edits its own keys (e.g. the dashboard builder appending seed
+  // params on add), needlessly re-firing their effects — and any refetch those effects drive.
+  const scopedString = useMemo(() => {
+    const all = new URLSearchParams(paramsString);
+    const owned = new URLSearchParams();
+    // dedupe: repeated params (e.g. `groups`) and dynamic keys (e.g. `tags[KEY]`) can appear more than once
+    new Set(codec.keys(all)).forEach((key) => {
+      all.getAll(key).forEach((value) => owned.append(key, value));
+    });
+    return owned.toString();
   }, [paramsString]);
+  // codec/fallback are expected to be stable for a given call site, so we key only on the owned params
+  const value = useMemo(() => {
+    const decoded = codec.decode(new URLSearchParams(scopedString));
+    return decoded !== undefined ? decoded : fallback;
+  }, [scopedString]);
 
   const setValue = useCallback(
     (next: T | ((prev: T) => T)) => {

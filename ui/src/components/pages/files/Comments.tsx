@@ -4,9 +4,12 @@ import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import UploadDropzone from '@components/shared/UploadDropzone';
+import { downloadBlob } from '@utilities/download';
 import { getFileDetails } from '@thorpi/files';
 import { downloadAttachment, postFileComments } from '@thorpi/comments';
 import type { Comment } from '@models/files';
+
+// spec: ./files.spec.md
 
 interface CommentsProps {
   sha256: string;
@@ -96,16 +99,7 @@ const Comments = ({ sha256 }: CommentsProps) => {
   const getAttachment = async (commentID: string, name: string, fileID: string) => {
     const attachRes = await downloadAttachment(sha256, commentID, fileID, setCommentError);
     if (attachRes && attachRes.data && attachRes.headers) {
-      const blob = new Blob([attachRes.data], {
-        type: attachRes.headers['content-type'] as string,
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', name);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
+      downloadBlob(attachRes.data, name, attachRes.headers['content-type'] as string);
     }
   };
 

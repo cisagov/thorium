@@ -4,10 +4,16 @@ import { Row, Col, Card } from 'react-bootstrap';
 // project imports
 import { Output, Value } from '@models/results';
 
+// spec: ../../ToolResult.spec.md
+
 interface VBAProps {
   result: Output;
 }
 
+/**
+ * Custom display for VBA macro extraction: shows the scan timestamp and each top-level scalar field
+ * of the structured result, omitting the large `analysis`, `form_strings`, and `macros` sections.
+ */
 const VBA: React.FC<VBAProps> = ({ result }) => {
   const newresult = result.result as { [key: string]: Value };
   return (

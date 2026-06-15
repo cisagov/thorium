@@ -23,38 +23,20 @@ export const FIELDS_KEYS = new Set([
 
 export type EnvValue = Record<string, string | null>;
 
+/** A keyed display-view section tile flowed through the balanced column layout. */
 export interface SectionItem {
+  /** Stable identity for the section (also the React key of its card). */
   key: string;
+  /** The rendered section content. */
   content: ReactNode;
-  estimatedHeight: number;
 }
 
-const ROW_HEIGHT = 24;
-const SECTION_PADDING = 20;
-
-export function estimateRows(rows: number): number {
-  return SECTION_PADDING + rows * ROW_HEIGHT;
-}
-
-export function distributeSections(sections: SectionItem[]): { left: SectionItem[]; right: SectionItem[] } {
-  const left: SectionItem[] = [];
-  const right: SectionItem[] = [];
-  let leftHeight = 0;
-  let rightHeight = 0;
-
-  for (const item of sections) {
-    if (leftHeight <= rightHeight) {
-      left.push(item);
-      leftHeight += item.estimatedHeight;
-    } else {
-      right.push(item);
-      rightHeight += item.estimatedHeight;
-    }
-  }
-
-  return { left, right };
-}
-
+/**
+ * Render a human-readable description of an image ban for display.
+ *
+ * @param kind - The ban kind variant to render (generic message, invalid image URL, or invalid host path).
+ * @returns A React node describing the ban, or a generic fallback for unrecognized variants.
+ */
 export function formatBanKind(kind: ImageBanKind): ReactNode {
   if ('Generic' in kind) return <>Ban: {kind.Generic.msg}</>;
   if ('InvalidImageUrl' in kind)

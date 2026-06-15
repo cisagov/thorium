@@ -67,6 +67,89 @@ test.describe('Sidebar Navigation Visual Validation', () => {
     await expect(page.locator('text=Vendors')).toBeVisible();
     await expect(page.locator('text=File Systems')).toBeVisible();
     await expect(page.locator('text=Sigma Rules')).toBeVisible();
+
+    // Less-common entity types stay hidden behind the "Show more" toggle.
+    await expect(page.locator('text=Flags')).not.toBeVisible();
+    await expect(page.locator('text=Folders')).not.toBeVisible();
+    await expect(page.getByTestId('secondary-toggle-Browse')).toBeVisible();
+  });
+
+  test('browse "Show more" reveals hidden entity types and toggles back', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await setupMockAuth(page);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1000);
+
+    await page.locator('text=Browse').click();
+    await page.waitForTimeout(500);
+
+    const toggle = page.getByTestId('secondary-toggle-Browse');
+    const flagsLink = page.getByRole('link', { name: 'Flags', exact: true });
+    await expect(toggle).toContainText('Show more');
+    await expect(flagsLink).not.toBeVisible();
+
+    // Expand: hidden types appear, label flips to "Show less".
+    await toggle.click();
+    await page.waitForTimeout(500);
+
+    await snapshot(page, SCREENSHOT_DIR, 'sidebar-browse-show-more');
+
+    await expect(flagsLink).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Folders', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Network Connections', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Windows Processes', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Compiled Functions', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Decompiled Functions', exact: true })).toBeVisible();
+    await expect(toggle).toContainText('Show less');
+
+    // Collapse: hidden types hide again.
+    await toggle.click();
+    await page.waitForTimeout(500);
+
+    await expect(flagsLink).not.toBeVisible();
+    await expect(toggle).toContainText('Show more');
+  });
+
+  test('browse flyout exposes "Show more" and reveals hidden types', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await setupMockAuth(page);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1000);
+
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="category-Browse"]');
+      if (el) {
+        el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
+        el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, cancelable: false }));
+      }
+    });
+    await page.waitForTimeout(500);
+
+    const flyoutToggle = page.getByTestId('flyout-secondary-toggle-Browse');
+    await expect(flyoutToggle).toContainText('Show more');
+    await expect(page.locator('text=Flags')).not.toBeVisible();
+
+    await flyoutToggle.click();
+    await page.waitForTimeout(500);
+
+    await snapshot(page, SCREENSHOT_DIR, 'sidebar-browse-flyout-show-more');
+
+    await expect(page.locator('text=Flags').last()).toBeVisible();
+    await expect(page.locator('text=Decompiled Functions').last()).toBeVisible();
+    await expect(flyoutToggle).toContainText('Show less');
+
+    // Collapsing shrinks the flyout out from under the cursor; it must stay open
+    // (not close) so the user can keep browsing.
+    await flyoutToggle.click();
+    await page.waitForTimeout(500);
+
+    await expect(flyoutToggle).toBeVisible();
+    await expect(flyoutToggle).toContainText('Show more');
+    await expect(page.getByRole('link', { name: 'Flags', exact: true })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Files', exact: true })).toBeVisible();
   });
 
   test('tools category expand shows subcategories', async ({ page }) => {

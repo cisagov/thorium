@@ -22,6 +22,8 @@ import { EntityTypes } from '@models/entities/entities';
 import { ReactionSelection } from '@models/reactions';
 import { UserInfo } from '@models/users';
 
+// spec: ./upload.spec.md
+
 interface OriginActions {
   setOriginType: (originType: OriginType) => void;
   setDownloadedField: (field: 'url' | 'name', value: string) => void;
@@ -51,6 +53,12 @@ interface UploadContextType {
   setReactionsList: (reactions: ReactionSelection[]) => void;
   userGroups: string[];
   userInfo: UserInfo | null;
+
+  // the entity the uploaded files will be associated with, if the page was opened from an entity page
+  entity: EntityTypes | undefined;
+  // the association kind linking the uploaded files to that entity
+  associationKind: AssociationKind;
+  setAssociationKind: (kind: AssociationKind) => void;
 
   uploadInProgress: boolean;
   activeUploads: string[];
@@ -101,6 +109,8 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
   const [selectedTLP, setSelectedTLP] = useState<TLPSelectionState>({ ...DEFAULT_TLP_SELECTION });
   const [reactionsList, setReactionsList] = useState<ReactionSelection[]>([]);
   const [associations, setAssociations] = useState<AssociationCreate[]>([]);
+  // the association kind chosen in the upload form's associations section (only used when linking to an entity)
+  const [associationKind, setAssociationKind] = useState<AssociationKind>(AssociationKind.AssociatedWith);
 
   const originHook = useOriginState();
   const fileUpload = useFileUpload();
@@ -108,8 +118,8 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
   const userGroups = useMemo(() => (userInfo?.groups ? [...userInfo.groups].sort() : []), [userInfo?.groups]);
 
   useEffect(() => {
-    handleAssociationUpdate([AssociationKind.AssociatedWith], entity, selectedGroups, setAssociations);
-  }, [entity, selectedGroups]);
+    handleAssociationUpdate([associationKind], entity, selectedGroups, setAssociations);
+  }, [entity, selectedGroups, associationKind]);
 
   const tlpTags = (): TagEntry[] => {
     return Object.keys(selectedTLP)
@@ -207,6 +217,10 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
       userGroups,
       userInfo,
 
+      entity,
+      associationKind,
+      setAssociationKind,
+
       uploadInProgress: fileUpload.uploadInProgress,
       activeUploads: fileUpload.activeUploads,
       uploadStatus: fileUpload.uploadStatus,
@@ -243,6 +257,8 @@ export const UploadProvider: React.FC<UploadProviderProps> = ({ entity, children
       reactionsList,
       userGroups,
       userInfo,
+      entity,
+      associationKind,
       fileUpload.uploadInProgress,
       fileUpload.activeUploads,
       fileUpload.uploadStatus,

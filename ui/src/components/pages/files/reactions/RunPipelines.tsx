@@ -9,6 +9,8 @@ import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import { useAuth } from '@utilities/auth';
 import type { ReactionRunResult, ReactionSelection } from '@models/reactions';
 
+// spec: ../files.spec.md
+
 interface RunPipelinesProps {
   sha256: string;
 }

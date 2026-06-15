@@ -101,7 +101,6 @@ const CollectionCreateConfig: EntityCreateConfig<Entities.Collection> = {
   kind: Entities.Collection,
   EntityMetadata: CollectionMetaInfo,
   BlankCreateEntity: BlankCreateCollection,
-  supportsGraphic: true,
 };
 
 export default CollectionCreateConfig;

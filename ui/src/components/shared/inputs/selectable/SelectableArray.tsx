@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Button, Col, Form, Row } from 'react-bootstrap';
 import { FaTrash } from 'react-icons/fa';
 
+// spec: ./selectable.spec.md
+
 interface SelectableArrayProps {
   initialEntries?: string[];
   setEntries: (entries: string[]) => void;

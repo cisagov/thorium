@@ -1,6 +1,8 @@
 import { stringify as yamlStringify } from 'yaml';
 import { FormatType } from '@utilities/rules/types';
 
+// spec: ./CodeEditor.spec.md
+
 export function toText(value: unknown, format: FormatType): string {
   if (value === null || value === undefined) {
     return '';

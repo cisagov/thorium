@@ -8,17 +8,21 @@ import styled from 'styled-components';
 const AssociationGraph = React.lazy(() => import('@components/associations/graph/AssociationGraph'));
 import { GraphDataProvider } from '@components/associations/data/GraphDataContext';
 import Page from '@components/pages/Page';
+import { BuildDashboardButton, BuildDashboardResource, ButtonToolbar } from '@components/shared/buttons';
 import Subtitle from '@components/shared/titles/Subtitle';
 import Title from '@components/shared/titles/Title';
 
+// spec: ../EntityDetails.spec.md
+
 interface RepoDetailsContextType {
-  repo: string | undefined; // full url for repo page is displaying
+  // full URL of the repo the page is displaying
+  repo: string | undefined;
 }
 
-// Page context
+// context carrying the current repo's URL to the page's subcomponents
 const RepoContext = createContext<RepoDetailsContextType | undefined>(undefined);
 
-// custom device create context hook
+// access the repo context; throws if used outside a RepoContext provider
 const useRepoContext = () => {
   const context = useContext(RepoContext);
   if (context === undefined) {
@@ -57,6 +61,9 @@ const RepoDetails = () => {
     <RepoContext.Provider value={{ repo }}>
       <Page className="full-min-width" title={`Repo · ${repo}`}>
         <RepoHeader />
+        <ButtonToolbar className="mt-3">
+          <BuildDashboardButton resource={BuildDashboardResource.Repo} id={repo ?? ''} label="repo" />
+        </ButtonToolbar>
         <GraphDataProvider initial={seed}>
           <Card className="panel">
             <Card.Body>

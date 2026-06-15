@@ -5,7 +5,7 @@ import { filterUsers } from './UserBrowsing';
 import { Clause, ClauseCondition } from '@components/shared/inputs/omnibar/ClauseTypes';
 import { RoleKey, ThoriumRole, UserInfo } from '@models/users';
 
-type UserExtras = { email?: string; verified?: boolean; local?: boolean };
+type UserExtras = { email?: string; verified?: boolean; local?: boolean; has_image?: boolean };
 
 // build a minimal UserInfo with the fields filterUsers depends on
 function makeUser(username: string, role: ThoriumRole, groups: string[], extra: UserExtras = {}): UserInfo {
@@ -19,6 +19,7 @@ function makeUser(username: string, role: ThoriumRole, groups: string[], extra: 
     settings: { theme: 'Dark' },
     local: extra.local ?? true,
     verified: extra.verified ?? true,
+    has_image: extra.has_image ?? false,
   };
 }
 

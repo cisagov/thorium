@@ -1,68 +1,40 @@
-import { useState, useEffect } from 'react';
 import { Card, Row } from 'react-bootstrap';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
 // project imports
-import { getAlerts } from '../alerts';
-import ResultsFiles from './files/ResultsFiles';
-import ChildrenFiles from './files/ChildrenFiles';
+import ResultAlerts from './ResultAlerts';
+import { useResultAlerts } from './useResultAlerts';
+import { formatResultBody } from '../alerts';
 import { ResultRenderProps } from '../props';
-import { Value } from '@models/results';
+
+// spec: ../ToolResult.spec.md
 
 type StringResultRenderProps = ResultRenderProps & {
   warnings: string[];
   errors: string[];
 };
 
-const String: React.FC<StringResultRenderProps> = ({ result, sha256, tool, warnings, errors }) => {
-  const [parsedErrors, setParsedErrors] = useState<string[]>([]);
-  const [parsedWarnings, setParsedWarnings] = useState<string[]>([]);
-  const [resultsJson, setResultsJson] = useState<Value>({});
-  const [isJson, setIsJson] = useState(true);
+/**
+ * Render a tool result as preformatted text. It may still be JSON when a result was too large to
+ * display (an object with a warning is returned), so alerts are parsed here in addition to any
+ * passed in by the caller.
+ */
+const String: React.FC<StringResultRenderProps> = ({ result, warnings, errors }) => {
+  const { errors: parsedErrors, warnings: parsedWarnings, resultsJson, isJson } = useResultAlerts(result.result, true);
 
-  // Check to see if this is json or string
-  // it might be json in cases where results were too large to display
-  // in which case an object w/ warning will be returned
-  useEffect(() => {
-    // set alerts and process results to json
-    getAlerts(result.result, setResultsJson, setParsedWarnings, setParsedErrors, setIsJson, true);
-    // combine any errors and warnings with those that are passed in to component
-    errors.push(...parsedErrors);
-    warnings.push(...parsedWarnings);
-  }, [result]);
-
-  // format string results or ignore result if json
-  let newResult = '';
-  // result is a string, replace new lines and format as such
-  if (!isJson) {
-    newResult = result?.result && typeof result.result === 'string' ? result.result.replace(/\\n/g, '\n').replace(/["]+/g, '') : '';
-  } else {
-    // ignore the results, they aren't strings
-    if (JSON.stringify(resultsJson) == '{}') {
-      newResult = '';
-    } else {
-      // there is non-empty json, display as string
-      newResult = JSON.stringify(resultsJson);
-    }
-  }
+  // show the alerts passed in by the caller alongside any parsed from this result; derive these
+  // during render so they reflect the latest parsed state without mutating the props arrays
+  const allErrors = [...errors, ...parsedErrors];
+  const allWarnings = [...warnings, ...parsedWarnings];
+  const newResult = formatResultBody(result.result, isJson, resultsJson);
 
   return (
     <Card className="scroll-log tool-result">
       <Row>
-        {errors.map((err, idx) => (
-          <AlertBanner key={idx}>{err}</AlertBanner>
-        ))}
-        {warnings.map((warn, idx) => (
-          <AlertBanner key={idx} severity={Severity.Warning}>
-            {warn}
-          </AlertBanner>
-        ))}
+        <ResultAlerts errors={allErrors} warnings={allWarnings} />
       </Row>
       <Row>
         <pre>{newResult}</pre>
       </Row>
-      <ResultsFiles result={result} sha256={sha256} tool={tool} />
-      <ChildrenFiles result={result} sha256={sha256} tool={tool} />
     </Card>
   );
 };

@@ -2,6 +2,8 @@
 import { EditingMode, FocusState } from './models';
 import { TagEntry, TagOptions } from '@models/tags';
 
+// spec: ./TagSelect.spec.md
+
 /**
  * Helper function for getting the current typed text based on state
  * @param {TagEntry[]} tags

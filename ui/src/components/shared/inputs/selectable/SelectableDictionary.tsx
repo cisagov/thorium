@@ -2,6 +2,8 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { Button, Col, Form, Row } from 'react-bootstrap';
 import { FaTrash } from 'react-icons/fa';
 
+// spec: ./selectable.spec.md
+
 export interface DictionaryEntry {
   key: string;
   value: string;

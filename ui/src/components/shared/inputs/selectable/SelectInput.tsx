@@ -5,6 +5,8 @@ import CreatableSelect from 'react-select/creatable';
 import { createReactSelectStyles } from '@utilities/select';
 import { ValueMap } from '@models/shared';
 
+// spec: ./selectable.spec.md
+
 // Default field message
 const DefaultMessage = 'Type a value...';
 

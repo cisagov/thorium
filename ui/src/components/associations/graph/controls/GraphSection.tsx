@@ -1,10 +1,12 @@
 import React from 'react';
 import { Dropdown, Form } from 'react-bootstrap';
 
+// project imports
 import type { GraphSectionProps } from './types';
 import { computeSizeDefaults } from './sizeDefaults';
 import { MenuList, MenuItem, MenuDropdown, PopoverBody, Divider } from './Toolbar.styled';
-import LabeledRange from './LabeledRange';
+
+// spec: ./GraphControlsToolbar.spec.md
 
 const GraphSection: React.FC<GraphSectionProps> = ({ controls, updateControls, graphInstance, nodeCount }) => (
   <PopoverBody>
@@ -44,27 +46,13 @@ const GraphSection: React.FC<GraphSectionProps> = ({ controls, updateControls, g
       }}
     />
     {controls.focusOnClick && (
-      <>
-        <Form.Check
-          type="switch"
-          id="form-adjust-distance"
-          label="Adjust Distance"
-          checked={controls.adjustDistanceOnFocus}
-          onChange={() => updateControls({ type: 'adjustDistanceOnFocus', state: !controls.adjustDistanceOnFocus })}
-        />
-        {controls.adjustDistanceOnFocus && (
-          <LabeledRange
-            id="form-focus-distance-ratio"
-            label="Distance"
-            value={controls.focusDistanceRatio}
-            min={0.1}
-            max={2}
-            step={0.1}
-            formatValue={(v) => (v >= 2 ? 'Fit All' : `${v.toFixed(1)}x`)}
-            onChange={(v) => updateControls({ type: 'focusDistanceRatio', state: v })}
-          />
-        )}
-      </>
+      <Form.Check
+        type="switch"
+        id="form-fit-neighborhood"
+        label="Fit Neighborhood"
+        checked={controls.fitNeighborhoodOnFocus}
+        onChange={() => updateControls({ type: 'fitNeighborhoodOnFocus', state: !controls.fitNeighborhoodOnFocus })}
+      />
     )}
 
     <Divider />
@@ -77,11 +65,7 @@ const GraphSection: React.FC<GraphSectionProps> = ({ controls, updateControls, g
       onChange={() => {
         const next = !controls.refitOnGrow;
         updateControls({ type: 'refitOnGrow', state: next });
-        if (next) {
-          updateControls({ type: 'focusOnClick', state: false });
-          updateControls({ type: 'adjustDistanceOnFocus', state: false });
-          updateControls({ type: 'focusDistanceRatio', state: 1 });
-        }
+        if (next) updateControls({ type: 'focusOnClick', state: false });
       }}
     />
 

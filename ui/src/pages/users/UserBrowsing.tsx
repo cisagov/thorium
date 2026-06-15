@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Badge, ButtonGroup, Button, Card, Col, Form, Modal, Row } from 'react-bootstrap';
+import { Badge, ButtonGroup, Button, Col, Form, Modal, Row } from 'react-bootstrap';
+import styled from 'styled-components';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
+import UserAvatar from '@components/shared/UserAvatar';
 import Page from '@components/pages/Page';
 import { OmnibarUsers } from '@components/shared/inputs/omnibar/Bars';
 import { Clause } from '@components/shared/inputs/omnibar/ClauseTypes';
@@ -54,14 +56,66 @@ type SingleUserInfoProps = {
   reloadUsers: () => void;
 };
 
+// Row layout constants. The avatar slot is a fixed width so usernames line up whether or not a user
+// has a picture; a present picture tucks into the card's leading padding.
+const AVATAR_SIZE = 28;
+// Padding in front of the avatar/slot (the "some padding in front of the profile picture").
+const ROW_LEAD_PAD = 12;
+// Gap between the avatar and the username.
+const ROW_ITEM_GAP = 8;
+// Trailing padding matches the empty leading space in front of a username that has no picture, so
+// the start and end insets read the same regardless of whether a picture is present.
+const ROW_END_PAD = ROW_LEAD_PAD + AVATAR_SIZE + ROW_ITEM_GAP;
+
+// Custom card replacing the react-bootstrap Card so the row's start/end padding is controlled
+// explicitly (the bootstrap Card + grid gutters added their own uneven spacing).
+const UserRowCard = styled.div`
+  margin-top: 0.25rem;
+  padding: 0.5rem ${ROW_END_PAD}px 0.5rem ${ROW_LEAD_PAD}px;
+  color: var(--thorium-text);
+  background-color: var(--thorium-panel-bg);
+  border: 1px solid var(--thorium-panel-border);
+  border-radius: 6px;
+`;
+
+// Fixed-size slot that reserves the avatar's footprint even when a user has no picture, keeping
+// usernames aligned across rows.
+const AvatarSlot = styled.div`
+  flex: 0 0 auto;
+  width: ${AVATAR_SIZE}px;
+  height: ${AVATAR_SIZE}px;
+`;
+
+// avatar slot + username on one baseline
+const UserNameRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${ROW_ITEM_GAP}px;
+`;
+
+const GroupBadge = styled.span`
+  //badge styles
+  display: inline-block;
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 0.1rem 0.4rem 0.1rem 0.4rem;
+  color: white;
+
+  word-break: break-word;
+  overflow-wrap: anywhere;
+`;
+
 // component to represent each user's info
 const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate, reloadUsers }) => {
   const [singleUserRole, setSingleUserRole] = useState(getThoriumRole(user.role));
   return (
-    <Card key={user.username} className="panel mt-1">
-      <Row className="align-items-center m-2">
+    <UserRowCard key={user.username}>
+      <Row className="align-items-center g-0">
         <Col className="username-col">
-          <h5 className="text mt-2">{user.username}</h5>
+          <UserNameRow>
+            <AvatarSlot>{user.has_image && <UserAvatar username={user.username} hasImage size={AVATAR_SIZE} />}</AvatarSlot>
+            <h5 className="text m-0">{user.username}</h5>
+          </UserNameRow>
         </Col>
         <Col className="user-role-col">
           <small>
@@ -70,9 +124,9 @@ const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate, relo
         </Col>
         <Col className="user-group-col">
           {user.groups.sort().map((group) => (
-            <Badge bg="" key={group} className="m-1 bg-cadet">
+            <GroupBadge key={group} className="m-1 bg-cadet">
               {group}
-            </Badge>
+            </GroupBadge>
           ))}
         </Col>
         <Col>
@@ -87,7 +141,7 @@ const SingleUserInfo: React.FC<SingleUserInfoProps> = ({ user, impersonate, relo
           />
         </Col>
       </Row>
-    </Card>
+    </UserRowCard>
   );
 };
 

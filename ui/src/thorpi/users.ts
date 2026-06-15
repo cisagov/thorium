@@ -2,6 +2,7 @@ import axios, { AxiosResponse } from 'axios';
 import client, { parseRequestError, thoriumCookieAuthConfig } from './client';
 
 // project imports
+import { profileGraphicFilename } from '@utilities/profileGraphic';
 import {
   CreateUserResult,
   EmailVerifyStatus,
@@ -343,6 +344,84 @@ export async function whoami(): Promise<UserInfo | null> {
     })
     .catch((error: unknown) => {
       parseRequestError(error, console.log, 'Who Am I');
+      return null;
+    });
+}
+
+/**
+ * Upload (or replace) the current user's profile icon (`POST /users/image`).
+ *
+ * The icon is sent as multipart form data in an `image` field. The backend streams it to S3
+ * and stores only the path on the user, so subsequent `whoami` calls stay lightweight. The part
+ * filename is derived from the blob's MIME type (the API keys the stored extension off the part's
+ * Content-Type), so animated GIFs and video clips keep the correct extension on the server.
+ *
+ * @param image - The image/video blob to upload (already resized for static images).
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the upload succeeded (HTTP 204), otherwise `false`.
+ */
+export async function uploadUserImage(image: Blob, errorHandler: (error: string) => void): Promise<boolean> {
+  const form = new FormData();
+  form.set('image', image, profileGraphicFilename(image.type));
+  return client
+    .post('/users/image', form)
+    .then((res) => res?.status == 204)
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Upload User Image');
+      return false;
+    });
+}
+
+/**
+ * Remove the current user's profile icon (`DELETE /users/image`).
+ *
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the icon was removed (HTTP 204), otherwise `false`.
+ */
+export async function deleteUserImage(errorHandler: (error: string) => void): Promise<boolean> {
+  return client
+    .delete('/users/image')
+    .then((res) => res?.status == 204)
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Delete User Image');
+      return false;
+    });
+}
+
+/**
+ * A user's profile icon fetched as a browser-displayable object URL plus its MIME type.
+ */
+export interface UserImage {
+  /** Object URL for the icon; the caller must revoke it with `URL.revokeObjectURL` when done. */
+  url: string;
+  /** The icon's MIME type (e.g. `image/png`, `video/mp4`), used to pick an `<img>` vs `<video>` renderer. */
+  type: string;
+}
+
+/**
+ * Fetch a user's profile icon as a browser-displayable object URL and its MIME type
+ * (`GET /users/user/{username}/image`).
+ *
+ * The blob is wrapped in an object URL via `URL.createObjectURL`; callers are responsible for
+ * revoking it with `URL.revokeObjectURL` when done to avoid leaking memory. The blob's MIME type is
+ * returned alongside so callers can render animated GIFs/images with `<img>` and video with `<video>`.
+ * A missing icon (`404`) is an expected outcome and is never reported; any other failure is passed to
+ * `errorHandler` when one is supplied, so unexpected errors stay reportable. Either way the function
+ * returns `null`.
+ *
+ * @param username - The username whose icon to fetch.
+ * @param errorHandler - Optional callback for a formatted message on an unexpected (non-404) failure.
+ * @returns The icon's object URL and MIME type, or `null` if the user has no icon or the request failed.
+ */
+export async function fetchUserImage(username: string, errorHandler?: (error: string) => void): Promise<UserImage | null> {
+  return client
+    .get<Blob>(`/users/user/${encodeURIComponent(username)}/image`, { responseType: 'blob' })
+    .then((res) => (res?.status == 200 && res.data ? { url: URL.createObjectURL(res.data), type: res.data.type } : null))
+    .catch((error: unknown) => {
+      // a missing icon (404) is expected and stays silent; surface anything else when a handler is given
+      if (errorHandler && !(axios.isAxiosError(error) && error.response?.status == 404)) {
+        parseRequestError(error, errorHandler, 'Fetch User Image');
+      }
       return null;
     });
 }

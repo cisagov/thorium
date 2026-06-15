@@ -4,12 +4,15 @@ import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import { FaDownload } from 'react-icons/fa';
 
 // project imports
+import { downloadBlob } from '@utilities/download';
 import { getFile } from '@thorpi/files';
+
+// spec: ./files.spec.md
 
 type ArchiveFormat = 'CaRT' | 'Encrypted ZIP';
 const Formats: ArchiveFormat[] = ['CaRT', 'Encrypted ZIP'];
 
-// trigger file download via blob URL
+// fetch the archived sample and trigger a browser download
 const downloadFile = async (
   sha256: string,
   setDownloadFileError: (e: string) => void,
@@ -18,14 +21,7 @@ const downloadFile = async (
 ) => {
   const res = await getFile(sha256, setDownloadFileError, archiveFormat, archivePassword);
   if (res) {
-    const blob = new Blob([res]);
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `${sha256}.${archiveFormat == 'CaRT' ? 'cart' : 'zip'}`);
-    document.body.appendChild(link);
-    link.click();
-    link.parentNode?.removeChild(link);
+    downloadBlob(res, `${sha256}.${archiveFormat == 'CaRT' ? 'cart' : 'zip'}`);
   }
 };
 

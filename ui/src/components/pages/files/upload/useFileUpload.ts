@@ -16,6 +16,8 @@ import { SampleSubmissionResponse } from '@models/files';
 import { ReactionSelection } from '@models/reactions';
 import { submitReactions } from '../reactions/reactions';
 
+// spec: ./upload.spec.md
+
 export function createSemaphore(limit: number) {
   let active = 0;
   const waiting: (() => void)[] = [];
@@ -294,7 +296,9 @@ export function useFileUpload() {
               reactionFail: false,
             },
           });
-          await createFileAssociations(response.sha256, selectedGroups, associations);
+          await createFileAssociations(response.sha256, selectedGroups, associations, (error) =>
+            addUploadErrorMsg(`File uploaded but association failed: ${error}`),
+          );
           dispatch({ type: 'ADJUST_REACTION_FAILURES', delta: reactionsList.length });
           await trackAndSubmitReactions(response.sha256, { path: filePath, size: submission.size }, reactionsList);
           dispatch({ type: 'REMOVE_UPLOAD_FAILURE', filePath });

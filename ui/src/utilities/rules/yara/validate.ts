@@ -1,8 +1,9 @@
-// Validation spec: see VALIDATION_SPEC.md in this directory
 // project imports
 import { Severity, includes, type Diagnostic } from '../types';
 import type { YaraParseResult } from './parse';
 import { KNOWN_MODULES, RULE_NAME_PATTERN, TEXT_STRING_MODIFIERS, REGEX_STRING_MODIFIERS, HEX_STRING_MODIFIERS } from './schema';
+
+// spec: ./validate.spec.md
 
 const MODIFIER_SETS = {
   text: TEXT_STRING_MODIFIERS,
@@ -16,6 +17,16 @@ const TYPE_LABELS = {
   hex: 'hex string',
 } as const;
 
+/**
+ * Validate a parsed YARA ruleset against the YARA schema.
+ *
+ * Flags unknown imported modules, invalid rule names, and unsupported string modifiers (checked
+ * against the modifier set for each string's type: text, regex, or hex), returning line/column
+ * anchored diagnostics.
+ *
+ * @param result - The parsed YARA source (imports, rules, and strings with positions).
+ * @returns The list of {@link Diagnostic}s found (empty when the ruleset is valid).
+ */
 export function validateYaraRules(result: YaraParseResult): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 

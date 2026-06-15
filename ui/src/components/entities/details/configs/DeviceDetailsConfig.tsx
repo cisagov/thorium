@@ -179,7 +179,6 @@ const DeviceDetailsConfig: EntityDetailsConfig<Entities.Device> = {
   EntityMetaInfo: DeviceMetaInfo,
   BlankEntity: BlankDevice,
   icon: (size: number) => <FaHardDrive size={size} />,
-  supportsGraphic: true,
 };
 
 export default DeviceDetailsConfig;

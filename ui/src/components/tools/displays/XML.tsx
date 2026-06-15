@@ -1,67 +1,49 @@
-import { useState, useEffect } from 'react';
 import { Card } from 'react-bootstrap';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import XMLViewer from 'react-xml-viewer';
 
 // project imports
-import { getAlerts } from '../alerts';
-import ResultsFiles from './files/ResultsFiles';
-import ChildrenFiles from './files/ChildrenFiles';
-import '@styles/main.scss';
+import ResultAlerts from './ResultAlerts';
+import { useResultAlerts } from './useResultAlerts';
+import { formatResultBody } from '../alerts';
 import { ResultRenderProps } from '../props';
-import { Value } from '@models/results';
+import { useJsonTreeInvert } from '@components/shared/renderers/jsonTheme';
+import '@styles/main.scss';
 
-const XML: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
-  const [errors, setErrors] = useState<string[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [resultsJson, setResultsJson] = useState<Value>({});
-  const [isJson, setIsJson] = useState(true);
+// spec: ../ToolResult.spec.md
 
-  useEffect(() => {
-    // set alerts and process results to json
-    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, true);
-  }, [result]);
+// XMLViewer takes a fixed color palette rather than CSS variables, so provide two hand-tuned palettes.
+// The dark palette is the original Ocean pastel set; the light palette darkens the same token roles so
+// tags/text stay legible on the near-white/cream panel backgrounds of the Light and Crab themes.
+const DARK_XML_THEME = {
+  attributeKeyColor: '#96b5b4',
+  attributeValueColor: '#d08770',
+  tagColor: '#8fa1b3',
+  textColor: '#a3be8c',
+  separatorColor: 'tan',
+};
+const LIGHT_XML_THEME = {
+  attributeKeyColor: '#2a6f6a',
+  attributeValueColor: '#a1441f',
+  tagColor: '#1f4b73',
+  textColor: '#3d6b2f',
+  separatorColor: '#7a5a20',
+};
 
-  // format string results or ignore result if json
-  let parsedResult = '';
-  // result is a string, replace new lines and format as such
-  if (!isJson) {
-    parsedResult = result?.result && typeof result.result === 'string' ? result.result.replace(/\\n/g, '\n').replace(/["]+/g, '') : '';
-  } else {
-    // ignore the results, they aren't strings
-    if (JSON.stringify(resultsJson) == '{}') {
-      parsedResult = '';
-    } else {
-      // there is non-empty json, display as string
-      parsedResult = JSON.stringify(resultsJson);
-    }
-  }
+/** Render a tool result as a collapsible XML tree, themed for light/dark backgrounds. */
+const XML: React.FC<ResultRenderProps> = ({ result }) => {
+  const { errors, warnings, resultsJson, isJson } = useResultAlerts(result.result, true);
+  // light-background themes (Light/Crab) need the darkened palette to stay legible
+  const useLightTheme = useJsonTreeInvert();
 
-  // Ocean theme from JSON tool renderer
-  const thoriumTheme = {
-    attributeKeyColor: '#96b5b4',
-    attributeValueColor: '#d08770',
-    tagColor: '#8fa1b3',
-    textColor: '#a3be8c',
-    separatorColor: 'tan',
-  };
+  const parsedResult = formatResultBody(result.result, isJson, resultsJson);
+  const thoriumTheme = useLightTheme ? LIGHT_XML_THEME : DARK_XML_THEME;
 
   return (
     <>
       <Card className="scroll-log tool-result">
         <Card.Body>
-          {errors.map((err, idx) => (
-            <AlertBanner key={idx}>{err}</AlertBanner>
-          ))}
-          {warnings.map((warn, idx) => (
-            <AlertBanner key={idx} severity={Severity.Warning}>
-              {warn}
-            </AlertBanner>
-          ))}
+          <ResultAlerts errors={errors} warnings={warnings} />
           <XMLViewer xml={parsedResult} theme={thoriumTheme} collapsible={true} initialCollapsedDepth={3} />
-          <hr />
-          <ResultsFiles result={result} sha256={sha256} tool={tool} />
-          <ChildrenFiles result={result} sha256={sha256} tool={tool} />
         </Card.Body>
       </Card>
     </>

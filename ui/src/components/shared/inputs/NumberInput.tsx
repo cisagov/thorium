@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 
+// spec: ./NumberInput.spec.md
+
 const Wrapper = styled.div<{ $disabled: boolean }>`
   display: flex;
   align-items: center;

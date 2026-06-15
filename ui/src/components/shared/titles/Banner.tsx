@@ -4,6 +4,8 @@ import styled from 'styled-components';
 // project imports
 import { TitleProps } from './props';
 
+// spec: ./titles.spec.md
+
 const BannerDiv = styled.div`
   color: var(--thorium-text);
   text-transform: uppercase;

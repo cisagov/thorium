@@ -24,8 +24,9 @@ const OverlayWrapper: React.FC<{
         left: `${position.left}px`,
         width: `${size.width}px`,
         height: `${size.height}px`,
-        overflowX: 'hidden',
-        overflowY: 'auto',
+        // the window itself is a fixed-size box; its body (OverlayBody) owns scrolling. keeping the
+        // wrapper non-scrolling avoids a redundant outer scrollbar stacked on the body's.
+        overflow: 'hidden',
         borderRadius: '5px',
         zIndex: zIndex,
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.9)',

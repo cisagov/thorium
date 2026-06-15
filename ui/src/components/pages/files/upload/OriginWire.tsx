@@ -2,6 +2,8 @@ import React from 'react';
 import { useUpload } from './UploadContext';
 import OriginField from './OriginField';
 
+// spec: ./upload.spec.md
+
 const OriginWire: React.FC = () => {
   const { originState, origin } = useUpload();
   const { sniffer, source, destination } = originState.wire;

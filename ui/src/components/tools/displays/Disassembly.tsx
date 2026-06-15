@@ -1,27 +1,25 @@
 import { Card, Row } from 'react-bootstrap';
-import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
 // project imports
-import ResultsFiles from './files/ResultsFiles';
+import { normalizeResultText } from '../alerts';
 import { ResultRenderProps } from '../props';
-import { ChildrenFiles } from './files';
+import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
 
+// spec: ../ToolResult.spec.md
+
+// results larger than this are truncated before highlighting to keep rendering responsive
 const MAX_LENGTH = 100000;
 
-const Disassembly: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
-  const rawCodeString = result?.result && typeof result.result === 'string' ? result.result.replace(/\\n/g, '\n').replace(/["]+/g, '') : '';
+/** Render a tool result as syntax-highlighted disassembly, truncating oversized output with a warning. */
+const Disassembly: React.FC<ResultRenderProps> = ({ result }) => {
+  const rawCodeString = result?.result && typeof result.result === 'string' ? normalizeResultText(result.result) : '';
   const totalCodeSize = rawCodeString.length;
   const codeString = rawCodeString.substring(0, MAX_LENGTH);
-  // trigger warning if code was truncated due to large size
-  let truncated = false;
-  if (rawCodeString.length > MAX_LENGTH) {
-    truncated = true;
-  }
+  const truncated = rawCodeString.length > MAX_LENGTH;
   return (
     <Card className="scroll-log tool-result">
-      <ResultsFiles result={result} sha256={sha256} tool={tool} />
       {truncated ? (
         <Row>
           <AlertBanner severity={Severity.Warning}>
@@ -32,9 +30,6 @@ const Disassembly: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
       ) : null}
       {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- atomOneDark has mismatched types */}
       <SyntaxHighlighter style={atomOneDark}>{codeString}</SyntaxHighlighter>
-      <hr />
-      <ResultsFiles result={result} sha256={sha256} tool={tool} />
-      <ChildrenFiles result={result} sha256={sha256} tool={tool} />
     </Card>
   );
 };

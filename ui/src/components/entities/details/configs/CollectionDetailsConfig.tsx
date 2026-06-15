@@ -160,7 +160,6 @@ const CollectionDetailsConfig: EntityDetailsConfig<Entities.Collection> = {
   EntityMetaInfo: CollectionMetaInfo,
   BlankEntity: BlankCollection,
   icon: (size: number) => <FaFolder size={size} />,
-  supportsGraphic: true,
 };
 
 export default CollectionDetailsConfig;

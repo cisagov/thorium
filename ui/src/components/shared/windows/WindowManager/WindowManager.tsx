@@ -4,6 +4,8 @@ import React, { Fragment, JSX } from 'react';
 import useWindowManagerProvider, { WindowManagerProviderOptions } from './use_window_manager_provider';
 import { WindowManagerContext } from './WindowManagerContext';
 
+// spec: ./WindowManager.spec.md
+
 type WindowManagerProps = WindowManagerProviderOptions & {
   children: JSX.Element;
 };

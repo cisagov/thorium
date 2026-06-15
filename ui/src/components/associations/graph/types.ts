@@ -4,6 +4,8 @@ import type * as THREE from 'three';
 // project imports
 import { NodeType } from '@models/trees';
 
+// spec: ./AssociationGraph.spec.md
+
 export enum VisualState {
   Basic = 'basic',
   Growable = 'growable',
@@ -49,7 +51,6 @@ export interface GraphOrbitControls {
 /** d3 charge force interface for the methods used by the graph */
 export interface D3ChargeForce {
   strength: (val?: number) => D3ChargeForce & number;
-  distanceMax: (val?: number) => D3ChargeForce & number;
 }
 
 /** d3 link force interface for the methods used by the graph */

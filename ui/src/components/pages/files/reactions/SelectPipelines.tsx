@@ -8,10 +8,13 @@ import { buildReactionsList, SelectedPipelines } from './reactions';
 import Title from '@components/shared/titles/Title';
 import Markdown from '@components/shared/syntax/Markdown';
 import { OverlayTipTop } from '@components/shared/overlay/tips';
+import { cleanDescription } from '@utilities/description';
 import { listPipelines } from '@thorpi/pipelines';
 import type { Pipeline } from '@models/pipelines';
 import type { ReactionSelection } from '@models/reactions';
 import type { UserInfo } from '@models/users';
+
+// spec: ../files.spec.md
 
 interface SelectPipelinesProps {
   userInfo: UserInfo | null;
@@ -99,12 +102,13 @@ const SelectPipelines = ({ userInfo, setReactionsList, setError, currentSelectio
                       <Col>
                         {pipelines[group]
                           .sort((a, b) => orderComparePipelineName(a, b))
-                          .map((pipeline) =>
-                            pipeline.description != null ? (
+                          .map((pipeline) => {
+                            const description = cleanDescription(pipeline.description);
+                            return description ? (
                               <OverlayTipTop
                                 key={`${pipeline.group}_${pipeline.name}`}
                                 wide
-                                tip={(<Markdown>{pipeline.description}</Markdown>) as unknown as string}
+                                tip={(<Markdown>{description}</Markdown>) as unknown as string}
                               >
                                 <Button
                                   variant=""
@@ -123,8 +127,8 @@ const SelectPipelines = ({ userInfo, setReactionsList, setError, currentSelectio
                               >
                                 <b>{pipeline.name}</b>
                               </Button>
-                            ),
-                          )}
+                            );
+                          })}
                       </Col>
                     </Row>
                   </div>

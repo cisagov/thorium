@@ -28,12 +28,15 @@ $grid-breakpoints: (
 }
 
 .tool-result {
-  padding: 0.5rem !important;
-  width: 95% !important;
+  /* >=12px horizontal padding absorbs the -12px bootstrap row gutters of the legacy display
+     components so they don't trigger a spurious horizontal scrollbar */
+  padding: 0.75rem !important;
+  width: 100%;
   border: none !important;
   background-color: var(--thorium-panel-bg);
   color: var(--thorium-text);
-  overflow: scroll;
+  /* auto (not scroll) so scrollbars only appear when content actually overflows */
+  overflow: auto;
 }
 
 .tables-entry-med {

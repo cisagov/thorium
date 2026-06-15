@@ -5,6 +5,8 @@ import { WindowData, ZRange } from './models';
 import { Margin } from '../bounds';
 import { sortIntegerStrings } from '@utilities/sorting';
 
+// spec: ./WindowManager.spec.md
+
 export type WindowManagerProviderOptions = {
   zRange: ZRange;
   canvasMargin: Margin;
@@ -75,9 +77,8 @@ function useWindowManagerProvider({ zRange, canvasMargin, name }: WindowManagerP
         // Registered but not yet managed: attach the window ReactNode
         windows[windowRefIdx].window = window;
         setManagedWindows([...windows.filter((w) => w.window != null)]);
-      } else if (windowRefIdx < 0 && managedWindows.findIndex((w) => w.id === windowId) > 0) {
-        // Managed but not registered — should not happen
-        console.log('Error: window already managed but somehow not registered.');
+      } else if (windowRefIdx < 0 && managedWindows.findIndex((w) => w.id === windowId) >= 0) {
+        // Managed but not registered — should not happen; re-register the ref to recover
         windows.push({ id: windowId, ref, window: window });
       }
     },

@@ -1,6 +1,8 @@
 import React from 'react';
 import { ProgressBar } from 'react-bootstrap';
 
+// spec: ./upload.spec.md
+
 interface ProgressBarProps {
   name: string;
   value: number;

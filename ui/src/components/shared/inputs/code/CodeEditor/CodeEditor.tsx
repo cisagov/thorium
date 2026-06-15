@@ -2,10 +2,12 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { bracketMatching, indentOnInput, foldGutter, foldKeymap } from '@codemirror/language';
+import { bracketMatching, indentOnInput, foldGutter, foldKeymap, StreamLanguage } from '@codemirror/language';
 import { linter, type Diagnostic as CmDiagnostic } from '@codemirror/lint';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';
 import { json as jsonLang } from '@codemirror/lang-json';
+import { cpp as cppLang } from '@codemirror/lang-cpp';
+import { gas } from '@codemirror/legacy-modes/mode/gas';
 import { parseDocument } from 'yaml';
 import { yaraLanguage } from './yara-language';
 import styled from 'styled-components';
@@ -15,13 +17,41 @@ import SuggestionPanel from './SuggestionPanel';
 import { createPreviewExtensions, addPreview } from './SuggestionPreview';
 import { type RuleChecker, type FieldSchema, FormatType, type Suggestion, Severity } from '@utilities/rules/types';
 
-const EditorContainer = styled.div<{ $height: string }>`
+// spec: ./CodeEditor.spec.md
+
+// When `height` is '100%' the editor fills its parent (flex column) instead of taking a fixed
+// pixel/vh height — used by the file-preview renderers so the editor sizes to the overlay window
+// and owns the single scroll for its content.
+const Root = styled.div<{ $fill: boolean }>`
+  ${(props) =>
+    props.$fill &&
+    `
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  `}
+`;
+
+const EditorContainer = styled.div<{ $height: string; $fill: boolean }>`
   width: 100%;
+  ${(props) =>
+    props.$fill &&
+    `
+    flex: 1 1 auto;
+    min-height: 0;
+  `}
 
   .cm-editor {
-    height: ${(props) => props.$height};
+    height: ${(props) => (props.$fill ? '100%' : props.$height)};
     overflow: auto;
   }
+`;
+
+// keep the suggestion panel at its natural height beneath the (flex-filling) editor
+const SuggestionSlot = styled.div`
+  flex: 0 0 auto;
 `;
 
 function getLanguageExtension(format: FormatType) {
@@ -32,6 +62,12 @@ function getLanguageExtension(format: FormatType) {
       return jsonLang();
     case FormatType.YARA:
       return yaraLanguage();
+    case FormatType.Decomp:
+      // decompiled output is C-like; reuse the prebuilt C/C++ grammar for highlighting
+      return cppLang();
+    case FormatType.Disassembly:
+      // disassembly is assembly text; the gas (GNU assembler) legacy mode highlights it well
+      return StreamLanguage.define(gas);
     default:
       return [];
   }
@@ -249,11 +285,14 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, checker, forma
     [format],
   );
 
+  const fill = height === '100%';
   return (
-    <div>
-      <EditorContainer ref={containerRef} $height={height} />
-      <SuggestionPanel suggestions={filteredSuggestions} onValueClick={handleValueClick} />
-    </div>
+    <Root $fill={fill}>
+      <EditorContainer ref={containerRef} $height={height} $fill={fill} />
+      <SuggestionSlot>
+        <SuggestionPanel suggestions={filteredSuggestions} onValueClick={handleValueClick} />
+      </SuggestionSlot>
+    </Root>
   );
 };
 

@@ -8,6 +8,8 @@ import { Filters, SearchFilters } from '@models/search';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
 import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 
+// spec: ./EntityBrowsing.spec.md
+
 interface EntityListProps<T> {
   type: string;
   displayEntity: (entity: T, idx: number, filters?: Filters) => React.ReactNode;

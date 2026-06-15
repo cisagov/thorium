@@ -10,6 +10,8 @@ import { EditingMode, FocusState, KeyName } from './models';
 import { TagEntry, TagOptions } from '@models/tags';
 import { loadTagOptionsFromLocalStorage, tagEntryIsEmpty } from '@utilities/tags';
 
+// spec: ./TagSelect.spec.md
+
 const TagSelectContainer = styled.div`
   width: 100%;
   position: relative;

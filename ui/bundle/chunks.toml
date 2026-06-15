@@ -21,6 +21,11 @@ patterns = [
     '^@headless-tree($|-|/)',
 ]
 
+[groups.visx]
+patterns = [
+    '^@visx($|-|/)',
+]
+
 [groups.xyflow]
 patterns = [
     '^@xyflow($|-|/)',

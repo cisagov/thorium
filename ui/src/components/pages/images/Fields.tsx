@@ -18,10 +18,13 @@ import Markdown from '@components/shared/syntax/Markdown';
 import FieldBadge from '@components/shared/badges/FieldBadge';
 import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
+import { cleanDescription } from '@utilities/description';
 import type { ImageVersion, ImageLifetime, SpawnLimitsValue } from '@models/images';
 import { ImageScaler } from '@models/images';
 import { OutputDisplayType } from '@models/results';
 import type { SemVer } from '@models/semver';
+
+// spec: ./ImageInfo.spec.md
 
 const TOOLTIPS = {
   name: `Image name that contains only alpha-numeric characters and dashes.`,
@@ -225,7 +228,7 @@ function apiToForm(value: FieldsValue): FormFields {
     name: value.name ?? '',
     group: value.group ?? '',
     version_text: versionText,
-    description: value.description && value.description !== 'null' ? value.description : '',
+    description: cleanDescription(value.description),
     scaler: value.scaler ?? ImageScaler.K8s,
     image: value.image ?? '',
     timeout: value.timeout != null ? String(value.timeout) : '',
@@ -356,7 +359,7 @@ const DisplayFields: React.FC<{
           </OverlayTipRight>
         </KeyCol>
         <ValCol>
-          <Markdown>{value.description && value.description !== 'null' ? value.description : ''}</Markdown>
+          <Markdown>{cleanDescription(value.description)}</Markdown>
         </ValCol>
       </SectionRow>
       <SectionRow>

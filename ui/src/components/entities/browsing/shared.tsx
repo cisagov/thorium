@@ -6,6 +6,8 @@ import styled from 'styled-components';
 import { scaling } from '@styles';
 import { fetchEntityImage } from '@thorpi/entities';
 
+// spec: ./EntityBrowsing.spec.md
+
 export const BrowsingCard = styled(Card)`
   margin: 0.1em 0em 0em 0.1em;
   min-height: 3em;

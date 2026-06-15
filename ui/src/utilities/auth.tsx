@@ -7,6 +7,8 @@ import { UserInfo, RoleKey, ScopedToken } from '@models/users';
 import { clearTagDataFromLocalStorage, fetchLocalStorageTags } from './tags';
 import { clearScopedSession, getScopedFromSession, setScopedSession } from '@thorpi/client';
 
+// spec: ./auth.spec.md
+
 /// The outcome of a password login attempt.
 export enum LoginOutcome {
   /// Authenticated; the session token has been stored.

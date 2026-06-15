@@ -6,6 +6,15 @@ import { useNavigate } from 'react-router-dom';
 import { OverlayTipBottom } from '@components/shared/overlay/tips';
 import { Collection, CollectionMeta } from '@models/entities/collections';
 
+// spec: ./EntityDetails.spec.md
+
+/**
+ * Build the browsing URL that lists the members of a collection, carrying the collection's
+ * filters (groups, tags, time range, case-sensitivity) as query params.
+ *
+ * @param collection - The collection to derive the browsing filters from.
+ * @returns A relative URL to the browsing route for the collection's kind, with the filters encoded as query params.
+ */
 export const buildCollectionsBrowsingUrl = (collection: Collection): string => {
   const params = new URLSearchParams();
   const metadata: CollectionMeta = collection.metadata;
@@ -14,7 +23,8 @@ export const buildCollectionsBrowsingUrl = (collection: Collection): string => {
   }
   Object.entries(metadata.Collection.collection_tags ?? {}).forEach(([key, values]) => {
     values.forEach((v) => {
-      const encodedKey = `tags[${key}]`; // e.g. tags[a]
+      // bracket-encode each tag key (e.g. tags[a]) so the browsing route parses it back into a tag filter
+      const encodedKey = `tags[${key}]`;
       params.append(encodedKey, v);
     });
   });
@@ -26,7 +36,7 @@ export const buildCollectionsBrowsingUrl = (collection: Collection): string => {
     params.set('end', end);
   }
   params.set('tags_case_insensitive', metadata.Collection.tags_case_insensitive ? 'true' : 'false');
-  // Build the final URL – the Files browsing route is `/files`
+  // route to the browsing page for the collection's kind (e.g. /files, /repos)
   return `/${metadata.Collection.collection_kind?.toLocaleLowerCase()}?${params.toString()}`;
 };
 
