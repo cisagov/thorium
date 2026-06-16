@@ -241,6 +241,12 @@ minithor get-config
 
 This writes the config to `~/thorium.yml`.
 
+> The raw config points at in-cluster `*.svc.cluster.local` addresses. If you are running
+> `thoradm` (or any Thorium binary) **from your host** against a minithor cluster, the
+> databases are only reachable through `minithor expose --dev`; use
+> `minithor get-config --local` to get a config rewritten for those local ports. See
+> "Step 7 → Testing Locally" for details (Scylla in particular needs special handling).
+
 **Option 2: kubectl (external Kubernetes cluster)**
 
 Extract the config directly from the cluster secret:
@@ -290,15 +296,121 @@ If `minithor` is not found, this environment may be using a different deployment
 |---------|-------------|
 | `minithor minikube install` | Install minikube and start a Kubernetes cluster |
 | `minithor deploy` | Deploy all Thorium services and backing infrastructure (includes a container registry) |
-| `minithor expose` | Port-forward Thorium API to localhost:8080 |
-| `minithor expose --port <port>` | Port-forward to a custom local port |
-| `minithor expose --dev` | Also forward database ports (Elastic, Redis, MinIO, Scylla) |
+| `minithor expose` | Port-forward Thorium API to localhost:8080 (and the registry to localhost:5000) |
+| `minithor expose --port <port>` | Port-forward the API to a custom local port |
+| `minithor expose --dev` | Also forward database ports (Elastic, Kibana, Redis, MinIO, Scylla). See "Testing locally" below — Scylla requires special handling |
 | `minithor expose --status` | Show which port-forwards are running |
-| `minithor expose --stop` | Stop all port-forwards |
+| `minithor expose --stop` | Stop all port-forwards **and remove any loopback aliases** created for Scylla |
 | `minithor start` | Start a previously stopped cluster |
 | `minithor stop` | Stop the cluster (preserves state) |
-| `minithor get-config` | Extract running config to ~/thorium.yml |
-| `minithor cleanup --confirm` | Remove all Thorium resources for a fresh deploy |
+| `minithor get-config` | Extract the raw in-cluster config to ~/thorium.yml |
+| `minithor get-config --local` | Extract the config **rewritten for local host access** via the exposed ports, to ~/thorium.local.yml (see "Testing locally") |
+| `minithor cleanup --confirm` | Remove all Thorium resources for a fresh deploy (also stops port-forwards and removes loopback aliases) |
+| `minithor minikube delete --confirm` | Fully remove minikube (also stops port-forwards and removes loopback aliases) |
+
+### Testing Locally: Connecting a Local Build to the Cluster Databases
+
+To run a local build of the API (or other Thorium services/tools) against the databases
+running in the minikube cluster, you need two things: the database ports forwarded to your
+host, and a config whose connection fields point at those local ports.
+
+**1. Forward the database ports:**
+
+```sh
+minithor expose --dev
+```
+
+This forwards, in addition to the API (`localhost:8080`) and registry (`localhost:5000`):
+
+| Service | Local address | Notes |
+|---------|---------------|-------|
+| Elasticsearch | `https://localhost:9200` | self-signed cert — clients must skip cert validation (see below) |
+| Kibana | `https://localhost:5601` | |
+| Redis | `localhost:6379` | |
+| MinIO (S3) | `http://localhost:9000` | |
+| Scylla (CQL) | `<advertised-cluster-ip>:9042` | **not** `localhost` — see "How Scylla is exposed" |
+
+**2. Generate a host-ready config:**
+
+```sh
+minithor get-config --local      # writes ~/thorium.local.yml
+```
+
+`--local` rewrites the in-cluster config so a host process can connect through the exposed
+ports. It changes: Elastic/Redis/MinIO hosts → `localhost`; Elastic `insecure_certificates`
+→ `true` (the cluster cert's SAN does not cover `localhost`); `scylla.nodes` → each node's
+advertised cluster IP (matching the forward, see below); `thorium.port` → `8888` (binding
+`80` needs root); and `thorium.tracing.external` → `null` (the in-cluster collector is not
+reachable and only produces connection noise). The raw `~/thorium.yml` is left untouched.
+
+> Plain `minithor get-config` (no `--local`) dumps the **raw** in-cluster config, whose
+> hosts are `*.svc.cluster.local` DNS names that do **not** resolve from your host. Use it
+> only for tools that run inside the cluster network; use `--local` for host testing.
+
+**3. Run the local build:**
+
+```sh
+# from the repo root (so banner.txt / UI assets resolve)
+cargo build -p thorium-api --bin thorium-api          # default features include `api`
+./target/debug/thorium-api --config ~/thorium.local.yml
+# the API connects to redis → scylla → elastic → s3 at startup, then:
+curl -sf -o /dev/null -w '%{http_code}\n' http://localhost:8888/api/health   # expect 204
+```
+
+A `204` from `/api/health` means **all** databases connected — the API establishes its
+Redis, Scylla, Elastic, and S3 connections eagerly during startup and will not bind/serve
+until they all succeed.
+
+### How Scylla is exposed (and why it's special)
+
+Redis, Elasticsearch, and MinIO are single-endpoint services, so a normal
+`localhost:<port>` port-forward works. **Scylla is different**: the CQL driver connects to
+the seed node, then reads the cluster topology and *re-dials each node at the address it
+advertises* (`broadcast_rpc_address`). With the scylla-operator each node advertises its
+per-pod ClusterIP (e.g. `10.98.161.114`), which a `localhost` tunnel cannot satisfy — so a
+naive forward connects, authenticates, then times out setting up the connection pool.
+
+To make this work with only a port-forward, `minithor expose --dev`:
+
+1. discovers each Scylla node's advertised cluster IP (its per-pod member service ClusterIP),
+2. **adds that IP as a loopback alias** on your machine (`ip addr add <ip>/32 dev lo` on
+   Linux, `ifconfig lo0 alias <ip>` on macOS) so the host can bind it, and
+3. binds the forward to that exact IP (`kubectl port-forward --address <ip> … 9042:9042`).
+
+The seed connection and the driver's topology re-dial then both land on the forward.
+`get-config --local` writes that same advertised IP into `scylla.nodes`. The created
+aliases are tracked in `/tmp/minithor-expose-logs/loopback-aliases` and are removed
+automatically by `expose --stop`, `cleanup --confirm`, and `minikube delete --confirm`.
+
+> Adding a loopback alias requires `sudo` (you may be prompted). The alias is harmless and
+> host-local; if a forward is killed without `expose --stop`, the alias may linger until the
+> next `expose --stop`/`cleanup` or a reboot.
+
+### Troubleshooting Local Connectivity
+
+First confirm what is actually forwarded and which aliases exist:
+
+```sh
+minithor expose --status                 # lists running port-forwards
+ip addr show dev lo | grep -w inet       # Linux: shows loopback aliases (e.g. 10.x for Scylla)
+ifconfig lo0 | grep inet                 # macOS equivalent
+cat /tmp/minithor-expose-logs/*.log      # per-forward kubectl logs
+```
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| API panics: `Failed to setup keyspace: … ConnectTimeout` or hangs after "Authenticating to Scylla" | Scylla reached but its advertised address isn't reachable. Run `minithor expose --dev` (not a plain forward) and point `scylla.nodes` at the advertised IP — easiest via `get-config --local`. Verify the loopback alias exists with `ip addr show dev lo`. |
+| `expose --dev` prints `scylla: SKIPPED (no Scylla nodes found)` | The Scylla pods aren't up/ready yet, or are in a different namespace. Check `minikube kubectl -- get pods -n scylla`. |
+| Elastic errors: TLS/cert hostname mismatch or `invalid peer certificate` | The cluster cert isn't valid for `localhost`. Set `elastic.insecure_certificates: true` (done automatically by `get-config --local`). |
+| Elastic `403 security_exception` for `cluster:monitor/*` | Not a connection problem — the `thorium` user simply lacks that privilege. Auth succeeded; querying a Thorium index works. |
+| API fails to bind / "permission denied" on port 80 | Running as non-root with `thorium.port: 80`. Use a non-privileged port (`get-config --local` sets `8888`). |
+| `expose` reports a forward, but connections are refused | The forward process may have died; check its log under `/tmp/minithor-expose-logs/` and re-run `minithor expose --dev`. Stale forwards on a port are auto-killed on the next `expose`. |
+| Stale Scylla loopback alias after a crash | `minithor expose --stop` removes all aliases; or remove manually with `sudo ip addr del <ip>/32 dev lo` (Linux) / `sudo ifconfig lo0 -alias <ip>` (macOS). |
+
+**macOS notes:** the loopback-alias and port-forward approach works on macOS too (it's
+host-local and driver-agnostic — `kubectl port-forward` tunnels through the API server, so
+no routing into the docker-driver VM is needed). minithor uses `ifconfig lo0 alias/-alias`
+on macOS and falls back from `ss` to `lsof` for stale-port detection.
 
 ### Container Registry
 

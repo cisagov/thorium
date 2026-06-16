@@ -10,9 +10,280 @@ ARCH="$(uname -m)"
 DRIVER=""
 CONTAINER_CMD=""
 
+# In-cluster container registry, referenced by its Kubernetes service DNS name.
+REGISTRY_HOST="registry.thorium.svc.cluster.local"
+REGISTRY_PORT=5000
+# Cluster-internal names that must never traverse an HTTP proxy and that the
+# minikube node must reach directly (CoreDNS is pod-facing only, so the node's
+# container runtime can't resolve/route these through a proxy). Suffix entries
+# (leading dot) match subdomains in Go's httpproxy matcher used by the runtime.
+CLUSTER_NO_PROXY="${REGISTRY_HOST},.svc.cluster.local,svc.cluster.local,cluster.local"
+
 kctl() { minikube kubectl -- "$@"; }
 
 log() { echo -e "\n====== $1 ======\n"; }
+
+########################################
+# Port-forward + loopback alias helpers (shared)
+#
+# Used by `expose`, `expose --stop`, `cleanup`, and `minikube delete` so that
+# dev port-forwards and the loopback aliases they create are always torn down
+# together.
+########################################
+
+# Where expose writes its logs and tracks the loopback aliases it created
+EXPOSE_LOG_DIR="/tmp/minithor-expose-logs"
+LOOPBACK_STATE_FILE="${EXPOSE_LOG_DIR}/loopback-aliases"
+CURRENT_USER="$(id -un)"
+
+# Scylla connection details (the operator runs Thorium's Scylla in this ns)
+SCYLLA_NAMESPACE="scylla"
+SCYLLA_CQL_PORT=9042
+
+# In-cluster service DNS names baked into the thorium secret. Used by
+# `get-config --local` to rewrite the config for host access via exposed ports.
+ELASTIC_CLUSTER_HOST="elastic-es-http.elastic-system.svc.cluster.local"
+REDIS_CLUSTER_HOST="redis.redis.svc.cluster.local"
+MINIO_CLUSTER_HOST="minio.minio.svc.cluster.local"
+SCYLLA_CLUSTER_HOST="scylla-client.scylla.svc.cluster.local"
+# Local API listen port written into a `--local` config (80 needs root)
+LOCAL_API_PORT=8888
+
+# List the minikube kubectl port-forward processes we manage. The `[p]ort`
+# trick keeps grep from matching itself; `.*svc/` tolerates an interspersed
+# `--address` flag (used for the Scylla forwards). `ps -A -o user,pid,args` is
+# portable across GNU (Linux) and BSD (macOS) ps — unlike `ps -eo user:20,...`,
+# whose `-e`/`:width` syntax means different things on macOS.
+find_forwards() {
+    ps -A -o user,pid,args 2>/dev/null \
+        | grep 'minikube kubectl.*[p]ort-forward.*svc/' \
+        || true
+}
+
+parse_service() { echo "$1" | sed -n 's/.*svc\/\([^ ]*\).*/\1/p'; }
+parse_ports()   { echo "$1" | awk '{print $NF}'; }
+
+kill_process() {
+    local pid=$1 owner=$2
+    if [ "$owner" = "$CURRENT_USER" ]; then
+        pkill -P "$pid" 2>/dev/null || true
+        kill "$pid" 2>/dev/null || true
+    else
+        echo "  Port-forward owned by $owner, using sudo to stop"
+        sudo pkill -P "$pid" 2>/dev/null || true
+        sudo kill "$pid" 2>/dev/null || true
+    fi
+}
+
+is_forward_alive() { find_forwards | grep -q "svc/$1"; }
+
+stop_forward() {
+    local service=$1 line owner pid
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        owner=$(echo "$line" | awk '{print $1}')
+        pid=$(echo "$line" | awk '{print $2}')
+        kill_process "$pid" "$owner"
+        echo "Stopped $service (PID $pid, owner $owner)"
+    done < <(find_forwards | grep "svc/$service")
+}
+
+stop_all_forwards() {
+    local found=false line owner pid service
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        found=true
+        owner=$(echo "$line" | awk '{print $1}')
+        pid=$(echo "$line" | awk '{print $2}')
+        service=$(parse_service "$line")
+        kill_process "$pid" "$owner"
+        echo "Stopped $service (PID $pid, owner $owner)"
+    done < <(find_forwards)
+    if [ "$found" = false ]; then
+        echo "No port-forwards running"
+    fi
+}
+
+show_status() {
+    local found=false line owner pid service ports
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        found=true
+        owner=$(echo "$line" | awk '{print $1}')
+        pid=$(echo "$line" | awk '{print $2}')
+        service=$(parse_service "$line")
+        ports=$(parse_ports "$line")
+        echo "  $service: running as $owner (PID $pid) -> $ports"
+    done < <(find_forwards)
+    if [ "$found" = false ]; then
+        echo "  No port-forwards running"
+    fi
+}
+
+# Start a single port-forward. Accepts an optional leading `--address <ip>` to
+# bind the forward to a specific local IP (used for Scylla, see forward_scylla_dev).
+#
+#   start_forward [--address <ip>] <name> <namespace> <service> <ports...>
+start_forward() {
+    local bind_addr=""
+    if [ "${1:-}" = "--address" ]; then
+        bind_addr="$2"
+        shift 2
+    fi
+    local name=$1 namespace=$2 service=$3
+    shift 3
+    local ports=("$@")
+
+    if is_forward_alive "$service"; then
+        local existing owner pid
+        existing=$(find_forwards | grep "svc/$service" | head -1)
+        owner=$(echo "$existing" | awk '{print $1}')
+        pid=$(echo "$existing" | awk '{print $2}')
+        echo "  $name: already running as $owner (PID $pid), skipping"
+        return
+    fi
+
+    if ! kctl get svc "$service" -n "$namespace" &>/dev/null; then
+        echo "  $name: SKIPPED (service $service not found in namespace $namespace)"
+        return 1
+    fi
+
+    # Kill any stale process holding the local port. When bound to a specific
+    # address, scope the check to that address so sibling forwards on the same
+    # port (e.g. multiple Scylla nodes on :9042) aren't killed.
+    local local_port="${ports[0]%%:*}"
+    local stale_pid stale_owner
+    if command -v ss &>/dev/null; then
+        if [ -n "$bind_addr" ]; then
+            stale_pid=$(ss -tlnp "src ${bind_addr}:${local_port}" 2>/dev/null | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1 || true)
+        else
+            stale_pid=$(ss -tlnp "sport = :$local_port" 2>/dev/null | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1 || true)
+        fi
+    elif [ -n "$bind_addr" ]; then
+        stale_pid=$(lsof -nP -ti "TCP@${bind_addr}:${local_port}" -sTCP:LISTEN 2>/dev/null | head -1 || true)
+    else
+        stale_pid=$(lsof -nP -ti "TCP:$local_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
+    fi
+    if [ -n "$stale_pid" ]; then
+        stale_owner=$(ps -o user= -p "$stale_pid" 2>/dev/null | awk '{print $1}' || true)
+        echo "  $name: killing stale process on port ${bind_addr:+$bind_addr:}$local_port (PID $stale_pid, owner ${stale_owner:-unknown})"
+        kill_process "$stale_pid" "${stale_owner:-$CURRENT_USER}"
+        sleep 1
+    fi
+
+    local addr_flag=()
+    [ -n "$bind_addr" ] && addr_flag=(--address "$bind_addr")
+
+    local log_file="$EXPOSE_LOG_DIR/$name.log"
+    kctl port-forward ${addr_flag[@]+"${addr_flag[@]}"} "svc/$service" -n "$namespace" "${ports[@]}" >/dev/null 2>"$log_file" &
+    local pid=$!
+
+    sleep 1
+    if is_forward_alive "$service"; then
+        echo "  $name: forwarding ${bind_addr:+$bind_addr }${ports[*]} (PID $pid)"
+    else
+        echo "  $name: FAILED to start (port-forward exited immediately)"
+        if [ -s "$log_file" ]; then
+            echo "  $name: log: $(cat "$log_file")"
+        fi
+        return 1
+    fi
+}
+
+# Is the given IP currently configured as a loopback alias?
+loopback_alias_present() {
+    local ip=$1
+    case "$OS" in
+        Linux)  ip addr show dev lo 2>/dev/null | grep -qw "$ip" ;;
+        Darwin) ifconfig lo0 2>/dev/null | grep -qw "$ip" ;;
+        *) return 1 ;;
+    esac
+}
+
+# Add an IP as a loopback alias so a port-forward can bind to it, recording it
+# in the state file so teardown knows to remove it. Idempotent.
+loopback_alias_add() {
+    local ip=$1
+    mkdir -p "$EXPOSE_LOG_DIR"
+    if ! { [ -f "$LOOPBACK_STATE_FILE" ] && grep -qxF "$ip" "$LOOPBACK_STATE_FILE"; }; then
+        echo "$ip" >> "$LOOPBACK_STATE_FILE"
+    fi
+    if loopback_alias_present "$ip"; then
+        return 0
+    fi
+    case "$OS" in
+        Linux)  sudo ip addr add "$ip/32" dev lo ;;
+        Darwin) sudo ifconfig lo0 alias "$ip" 255.255.255.255 ;;
+        *) echo "  WARNING: don't know how to add a loopback alias on $OS" >&2; return 1 ;;
+    esac
+}
+
+# Remove a single loopback alias if present.
+loopback_alias_del() {
+    local ip=$1
+    if loopback_alias_present "$ip"; then
+        case "$OS" in
+            Linux)  sudo ip addr del "$ip/32" dev lo 2>/dev/null || true ;;
+            Darwin) sudo ifconfig lo0 -alias "$ip" 2>/dev/null || true ;;
+        esac
+        echo "  Removed loopback alias $ip"
+    fi
+}
+
+# Remove every loopback alias expose created and clear the state file.
+remove_all_loopback_aliases() {
+    [ -f "$LOOPBACK_STATE_FILE" ] || return 0
+    local ip
+    while IFS= read -r ip; do
+        [ -n "$ip" ] || continue
+        loopback_alias_del "$ip"
+    done < "$LOOPBACK_STATE_FILE"
+    rm -f "$LOOPBACK_STATE_FILE"
+}
+
+# Discover Thorium's Scylla nodes and the address each advertises to clients
+# (its broadcast_rpc_address, which the Scylla driver re-dials after the initial
+# connection). With scylla-operator each node gets a per-pod ClusterIP "member"
+# service whose name matches the pod and whose ClusterIP is that advertised
+# address. Prints "<member-service-name> <advertised-ip>" per node.
+discover_scylla_nodes() {
+    local pods pod ip
+    pods=$(kctl get pods -n "$SCYLLA_NAMESPACE" \
+        -l app.kubernetes.io/name=scylla \
+        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null) || true
+    for pod in $pods; do
+        ip=$(kctl get svc "$pod" -n "$SCYLLA_NAMESPACE" \
+            -o jsonpath='{.spec.clusterIP}' 2>/dev/null) || true
+        if [ -n "$ip" ] && [ "$ip" != "None" ]; then
+            echo "$pod $ip"
+        fi
+    done
+}
+
+# Set up dev port-forwards for Scylla. A plain localhost forward does NOT work:
+# the driver connects to the seed, learns each node's advertised
+# broadcast_rpc_address (the per-pod ClusterIP) and re-dials *that* address,
+# which a localhost tunnel can't satisfy. So for each node we add its advertised
+# IP as a loopback alias and bind the forward to that exact IP, so both the seed
+# connection and the driver's re-dial land on the forward.
+forward_scylla_dev() {
+    local nodes
+    nodes=$(discover_scylla_nodes)
+    if [ -z "$nodes" ]; then
+        echo "  scylla: SKIPPED (no Scylla nodes found in namespace $SCYLLA_NAMESPACE)"
+        return 1
+    fi
+    local svc ip
+    while read -r svc ip; do
+        [ -n "$svc" ] || continue
+        if ! loopback_alias_add "$ip"; then
+            echo "  scylla[$svc]: FAILED to add loopback alias $ip"
+            continue
+        fi
+        start_forward --address "$ip" "scylla-$svc" "$SCYLLA_NAMESPACE" "$svc" \
+            "$SCYLLA_CQL_PORT:$SCYLLA_CQL_PORT"
+    done <<< "$nodes"
+}
 
 generate_password() {
     openssl rand -base64 32 | tr -d '/+=' | head -c 32
@@ -55,12 +326,26 @@ select_driver() {
 }
 
 minikube_start() {
+    # Trust the in-cluster registry as insecure (HTTP) at cluster-creation time.
+    # The node's container runtime defaults to HTTPS for every registry; without
+    # this, pulling from the HTTP-only internal registry fails the TLS handshake
+    # with "unexpected EOF" -> ErrImagePull/ImagePullBackOff. The flag must be set
+    # when the node is created since it bakes into the runtime's daemon config.
+    local insecure_registry="${REGISTRY_HOST}:${REGISTRY_PORT}"
+
+    # Ensure the cluster-internal names bypass any configured HTTP proxy. minikube
+    # propagates these env vars into the node runtime's proxy config at create time;
+    # without the cluster domain here, registry pulls get routed through the proxy
+    # and fail with "denied: Access denied". Merge (don't clobber) any user value.
+    export NO_PROXY="${NO_PROXY:+$NO_PROXY,}${CLUSTER_NO_PROXY}"
+    export no_proxy="${no_proxy:+$no_proxy,}${CLUSTER_NO_PROXY}"
+
     if [ "$DRIVER" = "docker" ]; then
-        env -u DOCKER_HOST minikube start --cni calico --driver="$DRIVER"
+        env -u DOCKER_HOST minikube start --cni calico --driver="$DRIVER" --insecure-registry="$insecure_registry"
     elif [ "$DRIVER" = "podman" ]; then
-        minikube start --cni calico --container-runtime=containerd --driver="$DRIVER"
+        minikube start --cni calico --container-runtime=containerd --driver="$DRIVER" --insecure-registry="$insecure_registry"
     else
-        minikube start --cni calico --driver="$DRIVER"
+        minikube start --cni calico --driver="$DRIVER" --insecure-registry="$insecure_registry"
     fi
 }
 
@@ -169,6 +454,25 @@ tune_kernel_params() {
         echo "  Persisting to $conf"
         printf '%s\n' "${params[@]}" | sudo tee "$conf" >/dev/null 2>&1 || echo "    WARNING: failed to write $conf"
     fi
+}
+
+# Map the in-cluster registry's service DNS name to its ClusterIP in the minikube
+# node's /etc/hosts. The node's container runtime pulls images using the node's
+# resolver (not CoreDNS), so without this it cannot resolve REGISTRY_HOST and
+# image pulls fail with "no such host". Idempotent; no-op when the registry isn't
+# deployed. The docker driver regenerates /etc/hosts on node restart, so this is
+# re-asserted on every `minithor start`.
+ensure_registry_node_dns() {
+    local ip
+    ip="$(kctl get svc registry -n thorium -o jsonpath='{.spec.clusterIP}' 2>/dev/null)" || return 0
+    [ -n "$ip" ] || return 0
+    echo "  Mapping ${REGISTRY_HOST} -> ${ip} on the minikube node"
+    # /etc/hosts is a bind-mount in the node; rewrite in place (rename-based edits
+    # like `sed -i` fail with "Device or resource busy").
+    minikube ssh -- "sudo cp /etc/hosts /tmp/minithor-hosts && \
+        grep -v ' ${REGISTRY_HOST}\$' /tmp/minithor-hosts | sudo tee /etc/hosts >/dev/null && \
+        echo '${ip} ${REGISTRY_HOST}' | sudo tee -a /etc/hosts >/dev/null" >/dev/null 2>&1 \
+        || echo "    WARNING: failed to set registry hosts entry on the minikube node"
 }
 
 helm_uninstall() {
@@ -349,10 +653,26 @@ usage_get_config() {
     cat <<EOF
 minithor get-config — extract Thorium config from the cluster
 
-Usage: minithor get-config
+Usage: minithor get-config [options]
 
-Reads the 'thorium' secret in the thorium namespace and writes
-thorium.yml to your home directory (~/).
+Options:
+  --local          Rewrite the config to connect to the databases through the
+                   local ports created by 'minithor expose --dev', and write it
+                   to ~/thorium.local.yml (the raw ~/thorium.yml is left alone).
+  -h, --help       Show this help message
+
+Reads the 'thorium' secret in the thorium namespace. By default writes the raw
+in-cluster config to thorium.yml in your home directory (~/).
+
+With --local it translates the config for running a local build of the API/tools
+against the cluster's databases via exposed ports:
+  * elastic / redis / minio hosts  -> localhost
+  * elastic insecure_certificates  -> true (localhost won't match the cluster cert)
+  * scylla.nodes                   -> each node's advertised cluster IP (matches
+                                      the loopback-aliased forward expose creates)
+  * thorium.port                   -> ${LOCAL_API_PORT} (80 needs root)
+  * thorium.tracing.external       -> null (in-cluster collector isn't reachable)
+Run 'minithor expose --dev' first so those ports are actually forwarded.
 EOF
 }
 
@@ -497,9 +817,11 @@ cmd_minikube_install() {
         echo 'alias kubectl="minikube kubectl --"' >> ~/.zshrc
     fi
 
-    local proxy_bypass="localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16"
-    export NO_PROXY="$proxy_bypass"
-    export no_proxy="$proxy_bypass"
+    local proxy_bypass="localhost,127.0.0.1,10.0.0.0/8,192.168.0.0/16,${CLUSTER_NO_PROXY}"
+    # Merge (don't clobber) any NO_PROXY the user already has in their environment,
+    # so minikube bakes env-provided bypass entries into the node alongside ours.
+    export NO_PROXY="${NO_PROXY:+$NO_PROXY,}$proxy_bypass"
+    export no_proxy="${no_proxy:+$no_proxy,}$proxy_bypass"
 
     for rc in ~/.bashrc ~/.zshrc; do
         if ! grep -q 'NO_PROXY=.*192\.168\.0\.0' "$rc" 2>/dev/null; then
@@ -552,6 +874,12 @@ cmd_minikube_delete() {
     else
         echo "No working podman/docker/kvm2 driver detected."
     fi
+
+    # Tear down any dev port-forwards and the loopback aliases they created
+    # before destroying the cluster they point at.
+    echo "Stopping dev port-forwards and removing loopback aliases..."
+    stop_all_forwards || true
+    remove_all_loopback_aliases || true
 
     if command -v minikube >/dev/null 2>&1; then
         minikube delete --all --purge || true
@@ -623,6 +951,10 @@ cmd_start() {
     tune_kernel_params minikube
 
     sleep 30
+
+    # Re-assert the registry hosts entry (lost when the node restarts) so pulls
+    # resolve before we clear any stuck ImagePullBackOff pods below.
+    ensure_registry_node_dns
 
     # Delete pods stuck in terminal failure states
     kctl get pods -A --no-headers 2>/dev/null \
@@ -2085,6 +2417,9 @@ REGEOF
 
         wait_for_rollout statefulset/registry thorium "$deploy_timeout"
 
+        # The node must resolve REGISTRY_HOST to pull images from the registry.
+        ensure_registry_node_dns
+
         log "Verifying registry"
         local catalog_response
         catalog_response=$(kctl -n thorium exec "pod/registry-0" -- \
@@ -2121,23 +2456,81 @@ REGEOF
 # Subcommand: get-config
 ########################################
 
+# Rewrite an extracted thorium.yml so a host process can reach the cluster's
+# databases through the ports created by `minithor expose --dev`.
+translate_config_local() {
+    local file=$1
+
+    # Swap in-cluster service DNS names for localhost and relax the elastic cert
+    # check (the cluster cert's SAN doesn't cover localhost). Use temp-file + mv
+    # rather than `sed -i` so this works with both GNU and BSD/macOS sed.
+    sed \
+        -e "s#${ELASTIC_CLUSTER_HOST}#localhost#g" \
+        -e "s#${REDIS_CLUSTER_HOST}#localhost#g" \
+        -e "s#${MINIO_CLUSTER_HOST}#localhost#g" \
+        -e 's/^\( *insecure_certificates: \)false/\1true/' \
+        -e "s/^\(  port: \)80\$/\1${LOCAL_API_PORT}/" \
+        "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+
+    # Point scylla.nodes at each node's advertised cluster IP (the address the
+    # expose forwards are bound to via loopback aliases). The raw config lists
+    # the aggregate client service once; replace that line with the real nodes.
+    local scylla_lines
+    scylla_lines=$(discover_scylla_nodes | awk -v p="$SCYLLA_CQL_PORT" '{printf "  - %s:%s\n", $2, p}')
+    if [ -z "$scylla_lines" ]; then
+        echo "ERROR: could not discover any Scylla nodes; is the cluster running?" >&2
+        return 1
+    fi
+    # $(...) strips the trailing newline from scylla_lines, so re-add one with \n
+    # (for multi-node repl the inner newlines are preserved and only the final
+    # one was stripped, so printing one back yields exactly the right output).
+    awk -v repl="$scylla_lines" '
+        /^  - scylla-client\.scylla\.svc\.cluster\.local$/ { printf "%s\n", repl; next }
+        { print }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+
+    # Null out external tracing (the in-cluster collector is not reachable from
+    # the host and only produces connection noise).
+    awk '
+        /^    external:$/ { print "    external: null"; skip=1; next }
+        skip && /^    local:$/ { skip=0 }
+        skip { next }
+        { print }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
+
 cmd_get_config() {
+    local local_mode=false
     for arg in "$@"; do
         case "$arg" in
             -h|--help) usage_get_config; return 0 ;;
+            --local)   local_mode=true ;;
+            *) echo "Unknown option: $arg"; usage_get_config; exit 1 ;;
         esac
     done
 
     ensure_minikube_running
 
     local output="${HOME}/thorium.yml"
+    [ "$local_mode" = true ] && output="${HOME}/thorium.local.yml"
 
     echo "Extracting Thorium config from cluster secret..."
     kctl get secret thorium -n thorium \
         -o go-template='{{index .data "thorium.yml" | base64decode}}' \
         > "$output"
 
-    echo "Config written to $output"
+    if [ "$local_mode" = true ]; then
+        echo "Translating config for local access via exposed ports..."
+        if ! translate_config_local "$output"; then
+            echo "ERROR: failed to translate config for local use" >&2
+            return 1
+        fi
+        echo "Local config written to $output"
+        echo "Run 'minithor expose --dev' (if you haven't) then start the API with:"
+        echo "  thorium-api --config $output     (listens on port ${LOCAL_API_PORT})"
+    else
+        echo "Config written to $output"
+    fi
 }
 
 ########################################
@@ -2150,9 +2543,6 @@ cmd_expose() {
     local STATUS_MODE=false
     local NO_API=false
     local API_PORT=8080
-    local CURRENT_USER
-    CURRENT_USER="$(id -un)"
-    local LOG_DIR="/tmp/minithor-expose-logs"
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -2185,147 +2575,19 @@ cmd_expose() {
     fi
 
     ensure_minikube_running
-    mkdir -p "$LOG_DIR"
-
-    ########################################
-    # Process inspection helpers
-    ########################################
-
-    find_forwards() {
-        ps -eo user:20,pid,args 2>/dev/null \
-            | grep 'minikube kubectl.*[p]ort-forward svc/' \
-            || true
-    }
-
-    parse_service() {
-        echo "$1" | sed -n 's/.*svc\/\([^ ]*\).*/\1/p'
-    }
-
-    parse_ports() {
-        echo "$1" | awk '{print $NF}'
-    }
-
-    kill_process() {
-        local pid=$1 owner=$2
-        if [ "$owner" = "$CURRENT_USER" ]; then
-            pkill -P "$pid" 2>/dev/null || true
-            kill "$pid" 2>/dev/null || true
-        else
-            echo "  Port-forward owned by $owner, using sudo to stop"
-            sudo pkill -P "$pid" 2>/dev/null || true
-            sudo kill "$pid" 2>/dev/null || true
-        fi
-    }
-
-    is_forward_alive() {
-        local service=$1
-        find_forwards | grep -q "svc/$service"
-    }
-
-    stop_forward() {
-        local service=$1
-        local line owner pid
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            owner=$(echo "$line" | awk '{print $1}')
-            pid=$(echo "$line" | awk '{print $2}')
-            kill_process "$pid" "$owner"
-            echo "Stopped $service (PID $pid, owner $owner)"
-        done < <(find_forwards | grep "svc/$service")
-    }
-
-    stop_all() {
-        local found=false
-        local line owner pid service
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            found=true
-            owner=$(echo "$line" | awk '{print $1}')
-            pid=$(echo "$line" | awk '{print $2}')
-            service=$(parse_service "$line")
-            kill_process "$pid" "$owner"
-            echo "Stopped $service (PID $pid, owner $owner)"
-        done < <(find_forwards)
-        if [ "$found" = false ]; then
-            echo "No port-forwards running"
-        fi
-    }
-
-    show_status() {
-        local found=false
-        local line owner pid service ports
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            found=true
-            owner=$(echo "$line" | awk '{print $1}')
-            pid=$(echo "$line" | awk '{print $2}')
-            service=$(parse_service "$line")
-            ports=$(parse_ports "$line")
-            echo "  $service: running as $owner (PID $pid) -> $ports"
-        done < <(find_forwards)
-        if [ "$found" = false ]; then
-            echo "  No port-forwards running"
-        fi
-    }
-
-    start_forward() {
-        local name=$1 namespace=$2 service=$3
-        shift 3
-        local ports=("$@")
-
-        if is_forward_alive "$service"; then
-            local existing
-            existing=$(find_forwards | grep "svc/$service" | head -1)
-            local owner pid
-            owner=$(echo "$existing" | awk '{print $1}')
-            pid=$(echo "$existing" | awk '{print $2}')
-            echo "  $name: already running as $owner (PID $pid), skipping"
-            return
-        fi
-
-        if ! kctl get svc "$service" -n "$namespace" &>/dev/null; then
-            echo "  $name: SKIPPED (service $service not found in namespace $namespace)"
-            return 1
-        fi
-
-        # Kill any stale process holding the local port
-        local local_port="${ports[0]%%:*}"
-        local stale_pid stale_owner
-        if command -v ss &>/dev/null; then
-            stale_pid=$(ss -tlnp "sport = :$local_port" 2>/dev/null | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1 || true)
-        else
-            stale_pid=$(lsof -nP -ti "TCP:$local_port" -sTCP:LISTEN 2>/dev/null | head -1 || true)
-        fi
-        if [ -n "$stale_pid" ]; then
-            stale_owner=$(ps -o user= -p "$stale_pid" 2>/dev/null | awk '{print $1}' || true)
-            echo "  $name: killing stale process on port $local_port (PID $stale_pid, owner ${stale_owner:-unknown})"
-            kill_process "$stale_pid" "${stale_owner:-$CURRENT_USER}"
-            sleep 1
-        fi
-
-        local log_file="$LOG_DIR/$name.log"
-        kctl port-forward "svc/$service" -n "$namespace" "${ports[@]}" >/dev/null 2>"$log_file" &
-        local pid=$!
-
-        sleep 1
-        if is_forward_alive "$service"; then
-            echo "  $name: forwarding ${ports[*]} (PID $pid)"
-        else
-            echo "  $name: FAILED to start (port-forward exited immediately)"
-            if [ -s "$log_file" ]; then
-                echo "  $name: log: $(cat "$log_file")"
-            fi
-            return 1
-        fi
-    }
+    mkdir -p "$EXPOSE_LOG_DIR"
 
     ########################################
     # Main expose logic
+    #
+    # Port-forward + loopback helpers live at the top of this script so that
+    # expose --stop, cleanup, and minikube delete can reuse them.
     ########################################
 
     if [ "$STOP_MODE" = true ]; then
         echo "Stopping all port-forwards..."
-        stop_all
+        stop_all_forwards
+        remove_all_loopback_aliases
         return 0
     fi
 
@@ -2349,7 +2611,8 @@ cmd_expose() {
         start_forward kibana elastic-system elastic-kb-http 5601
         start_forward redis redis redis 6379
         start_forward minio minio minio 9000
-        start_forward scylla scylla scylla-client 9042
+        # Scylla needs per-node loopback-aliased forwards (see forward_scylla_dev)
+        forward_scylla_dev
     fi
 
     echo ""
@@ -2365,10 +2628,16 @@ cmd_expose() {
         echo "Kibana at https://localhost:5601"
         echo "Redis at localhost:6379"
         echo "MinIO at http://localhost:9000"
-        echo "Scylla CQL at localhost:9042"
+        local scy_svc scy_ip
+        while read -r scy_svc scy_ip; do
+            [ -n "$scy_svc" ] || continue
+            echo "Scylla CQL ($scy_svc) at ${scy_ip}:${SCYLLA_CQL_PORT}"
+        done <<< "$(discover_scylla_nodes)"
+        echo "  (Scylla is bound to its advertised cluster IP via a loopback alias;"
+        echo "   point scylla.nodes at the address above, or use 'minithor get-config --local')"
     fi
     echo ""
-    echo "Logs: $LOG_DIR/"
+    echo "Logs: $EXPOSE_LOG_DIR/"
     echo "Run 'minithor expose --status' to check, 'minithor expose --stop' to stop all"
 }
 
@@ -2408,6 +2677,14 @@ cmd_cleanup() {
     trap 'echo "FATAL: Failed in \"$CURRENT_SECTION\" at line $LINENO (command: $BASH_COMMAND)" >&2' ERR
 
     ensure_minikube_running
+
+    ########################################
+    # Dev port-forwards + loopback aliases
+    ########################################
+    CURRENT_SECTION="Stopping dev port-forwards"
+    log "Stopping dev port-forwards and loopback aliases"
+    run_step stop_all_forwards
+    run_step remove_all_loopback_aliases
 
     ########################################
     # Container Registry (in thorium ns)
