@@ -20,7 +20,7 @@ import {
   ImageFormMode,
 } from '@components/pages/images';
 import type { FieldsValue, ResourcesValue } from '@components/pages/images';
-import { ImageCreateWrapper, ImageFieldsSection, AdvancedHidden } from '@components/pages/images/shared.styled';
+import { ImageCreateWrapper, SectionRow, TitleCol, FieldCol, AdvancedHidden } from '@components/pages/images/shared.styled';
 import Page from '@components/pages/Page';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
@@ -145,10 +145,10 @@ const ImageCreate: React.FC = () => {
   }, [editorObj.group]);
 
   useEffect(() => {
-    if (!(imageFieldErrors || volumeErrors || dependencyErrors || outputCollectionErrors || resourceErrors)) {
+    if (!(imageFieldErrors || volumeErrors || dependencyErrors || outputCollectionErrors || resourceErrors || argErrors)) {
       setCreateImageErrors('');
     }
-  }, [imageFieldErrors, volumeErrors, dependencyErrors, outputCollectionErrors, resourceErrors]);
+  }, [imageFieldErrors, volumeErrors, dependencyErrors, outputCollectionErrors, resourceErrors, argErrors]);
 
   const handleImageCreate = async () => {
     if (viewMode === ViewMode.Form) {
@@ -203,17 +203,21 @@ const ImageCreate: React.FC = () => {
           </>
         ) : (
           <>
-            <ImageFieldsSection className="mt-4">
-              <h5>Image</h5>
-              <Fields
-                value={editorObj as unknown as FieldsValue}
-                groups={groups ?? []}
-                onChange={handleFieldsChange}
-                onValidate={setImageFieldErrors}
-                showErrors={!!state || displayErrors}
-                mode={formMode}
-              />
-            </ImageFieldsSection>
+            <SectionRow className="mt-4">
+              <TitleCol>
+                <h5>Image</h5>
+              </TitleCol>
+              <FieldCol>
+                <Fields
+                  value={editorObj as unknown as FieldsValue}
+                  groups={groups ?? []}
+                  onChange={handleFieldsChange}
+                  onValidate={setImageFieldErrors}
+                  showErrors={!!state || displayErrors}
+                  mode={formMode}
+                />
+              </FieldCol>
+            </SectionRow>
             <Row>
               <Col className="d-flex justify-content-center">
                 <OverlayTipRight tip={`${hideAdvanced ? 'Expand' : 'Hide'} optional fields`}>

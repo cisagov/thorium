@@ -15,8 +15,8 @@ import {
   ImageFieldsWrapper,
 } from './shared.styled';
 import { ImageFormMode } from './types';
-import AlertBanner from '@components/shared/alerts/AlertBanner';
 import FieldBadge from '@components/shared/badges/FieldBadge';
+import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import SelectableArray from '@components/shared/inputs/selectable/SelectableArray';
 import ToggleSwitch from '@components/shared/inputs/ToggleSwitch';
 import SelectGroups from '@components/pages/groups/SelectGroups';
@@ -115,7 +115,7 @@ const AddBtn = styled.button`
   }
 `;
 
-const Input = styled.input`
+const Input = styled.input<{ $error?: boolean }>`
   width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -123,6 +123,7 @@ const Input = styled.input`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 
   &:disabled {
     opacity: 0.6;
@@ -456,6 +457,7 @@ const OutputCollectionInputs: React.FC<{
                 placeholder="tag name"
                 value={entry.key}
                 disabled={disabled}
+                $error={!!errors.auto_tag && entry.key.trim() === ''}
                 onChange={(e) => {
                   const copy = [...form.select_auto_tag];
                   copy[idx] = { ...copy[idx], key: e.target.value };
@@ -514,7 +516,7 @@ const OutputCollectionInputs: React.FC<{
           )}
         </div>
       </OverlayTipRight>
-      {errors.auto_tag && <AlertBanner>{errors.auto_tag}</AlertBanner>}
+      {errors.auto_tag && <FieldError>{errors.auto_tag}</FieldError>}
       <SubtitleRow>
         <Label>Group Permissions</Label>
       </SubtitleRow>

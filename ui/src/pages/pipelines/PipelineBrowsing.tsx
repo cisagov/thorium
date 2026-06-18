@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
-import { Accordion, Badge, Button } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 
 // project imports
+import { CountBadge, HeaderBar, OmnibarRow } from './PipelineBrowsing.styled';
 import PipelineAccordionItem from '@components/pages/pipelines/PipelineAccordionItem';
-import CreatePipelineModal from '@components/pages/pipelines/CreatePipelineModal';
-import { PIPELINE_CREATE_TEMPLATE } from '@components/pages/pipelines/CreatePipelineModal';
 import { orderComparePipeline } from '@components/pages/files/reactions/pipelines';
 import Page from '@components/pages/Page';
+import { Accordion } from '@components/shared/accordion';
+import { Button, ButtonVariant } from '@components/shared/buttons';
 import { OmnibarPipelines } from '@components/pages/search/omnibar/Bars';
 import type { Clause } from '@components/pages/search/omnibar/ClauseTypes';
 import { getGroupsFromClauses, matchesStringClauses } from '@components/pages/search/omnibar/utils';
@@ -20,7 +21,7 @@ import { useAuth } from '@utilities/auth';
 import { fetchGroups } from '@utilities/fetch';
 import { generateCopyName } from '@utilities/naming';
 import { getThoriumRole } from '@utilities/role';
-import { editorObjectToPipelineUpdate, pipelineToEditorObject } from '@utilities/transforms/pipeline';
+import { editorObjectToPipelineUpdate } from '@utilities/transforms/pipeline';
 import type { Group } from '@models/groups';
 import type { Pipeline, PipelineUpdate } from '@models/pipelines';
 import { RoleKey } from '@models/users';
@@ -38,13 +39,12 @@ const filterPipelines = (pipelines: Pipeline[], clauses: Clause[]): Pipeline[] =
 };
 
 const PipelineBrowsing: FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [groups, setGroups] = useState<Record<string, Group>>({});
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
   const [clauses, setClauses] = useState<Clause[]>([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [copySource, setCopySource] = useState<Pipeline | null>(null);
   const { userInfo, checkCookie } = useAuth();
 
   const filteredPipelines = filterPipelines(pipelines, clauses);
@@ -108,26 +108,20 @@ const PipelineBrowsing: FC = () => {
     : false;
 
   const handleOpenCreate = useCallback(() => {
-    setCopySource(null);
-    setShowCreateModal(true);
-  }, []);
+    void navigate('/create/pipeline');
+  }, [navigate]);
 
-  const handleCopyPipeline = useCallback((pipeline: Pipeline) => {
-    setCopySource(pipeline);
-    setShowCreateModal(true);
-  }, []);
-
-  const handleCloseCreateModal = useCallback(() => {
-    setShowCreateModal(false);
-    setCopySource(null);
-  }, []);
-
-  const initialModalData = useMemo(() => {
-    if (!copySource) return PIPELINE_CREATE_TEMPLATE;
-    const allNames = pipelines.map((p) => p.name);
-    const copyName = generateCopyName(copySource.name, allNames);
-    return { ...pipelineToEditorObject(copySource), name: copyName };
-  }, [copySource, pipelines]);
+  // Copy navigates to the create page seeded with the source pipeline and a fresh, unique name.
+  const handleCopyPipeline = useCallback(
+    (pipeline: Pipeline) => {
+      const copyName = generateCopyName(
+        pipeline.name,
+        pipelines.map((p) => p.name),
+      );
+      void navigate('/create/pipeline', { state: { ...pipeline, name: copyName } });
+    },
+    [navigate, pipelines],
+  );
 
   const pipelineCountTip =
     userInfo && getThoriumRole(userInfo.role) == RoleKey.Admin
@@ -142,13 +136,11 @@ const PipelineBrowsing: FC = () => {
 
   return (
     <Page title="Pipelines · Thorium">
-      <div className="d-flex justify-content-between ">
+      <HeaderBar>
         <div>
           <h2>
             <OverlayTipRight tip={pipelineCountTip}>
-              <Badge bg="" className="count-badge">
-                {pipelines.length}
-              </Badge>
+              <CountBadge data-testid="pipeline-count">{pipelines.length}</CountBadge>
             </OverlayTipRight>
           </h2>
         </div>
@@ -156,16 +148,16 @@ const PipelineBrowsing: FC = () => {
         <div>
           <h2>
             <OverlayTipLeft tip={createPipelineTip}>
-              <Button className="ok-btn" onClick={handleOpenCreate} disabled={!canCreatePipeline}>
+              <Button variant={ButtonVariant.Ok} data-testid="create-pipeline-btn" onClick={handleOpenCreate} disabled={!canCreatePipeline}>
                 +
               </Button>
             </OverlayTipLeft>
           </h2>
         </div>
-      </div>
-      <div className="d-flex justify-content-center">
+      </HeaderBar>
+      <OmnibarRow>
         <OmnibarPipelines clauses={clauses} setClauses={setClauses} pipelines={pipelines} />
-      </div>
+      </OmnibarRow>
       <LoadingSpinner loading={loading}></LoadingSpinner>
       {!loading && filteredPipelines.length === 0 && <NoResultsBanner type="Pipelines" />}
       <Accordion alwaysOpen activeKey={activeKeys} onSelect={handleAccordionSelect}>
@@ -185,12 +177,6 @@ const PipelineBrowsing: FC = () => {
             />
           ))}
       </Accordion>
-      <CreatePipelineModal
-        show={showCreateModal}
-        onHide={handleCloseCreateModal}
-        onCreated={() => void fetchPipelinesData()}
-        initialData={initialModalData}
-      />
     </Page>
   );
 };

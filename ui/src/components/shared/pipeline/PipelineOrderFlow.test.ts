@@ -9,11 +9,14 @@ import {
   getImagesInOrder,
   estimateNodeWidth,
   estimateStageWidth,
+  clusterStagesByX,
+  NODE_HEIGHT,
+  HANDLE_CENTER_Y,
 } from './order';
 
 // Layout constants mirrored from PipelineOrderFlow.tsx
-// TERMINAL_OFFSET = 70, STEP_WIDTH = 200, CLUSTER_THRESHOLD = 120
-// Stage 0 center: x=70, Stage 1 center: x=270, Stage 2 center: x=470
+// TERMINAL_OFFSET = 70, STEP_WIDTH = 300, CLUSTER_THRESHOLD = 100
+// Stage 0 left-edge: x=70, Stage 1: x=370, Stage 2: x=670
 
 describe('ordersEqual', () => {
   test('equal single-image stages', () => {
@@ -56,47 +59,65 @@ describe('insertImageAtPosition', () => {
     expect(result).toEqual(['a', 'b']);
   });
 
-  test('insert before first stage (flowX < stage 0 x)', () => {
-    // Stage 0 is at x=70, insert at x=0 which is < 70 and outside threshold
-    const result = insertImageAtPosition(['a', 'b'], 'new', 0);
-    // flowX=0 is within CLUSTER_THRESHOLD (120) of stage 0 at x=70: |0-70|=70 <= 120
-    // So it clusters with stage 0 as parallel
-    expect(result).toEqual([['a', 'new'], 'b']);
+  test('insert before first stage (flowX left of stage 0 node)', () => {
+    // Stage 0's node left edge is at x=TERMINAL_OFFSET (70). A click in the Start→first-node
+    // gap (flowX < 70) prepends a new leading stage rather than clustering into stage 0.
+    const result = insertImageAtPosition(['a', 'b'], 'new', 30);
+    expect(result).toEqual(['new', 'a', 'b']);
   });
 
-  test('insert between two stages as new sequential step', () => {
-    // Stage 0 at x=70, stage 1 at x=270. Insert at x=210 is outside threshold of stage 0
-    // (|210-70|=140 > 120) but within threshold of stage 1 (|210-270|=60 <= 120)
-    // So it clusters with stage 1
+  test('click in the gap between stages inserts a new sequential stage', () => {
+    // Stage 0 at x=70, stage 1 at x=370. flowX=210 is outside both stages' threshold (|210-70|=140,
+    // |210-370|=160, both > 100), and is left of stage 1, so it inserts a new stage between them.
     const result = insertImageAtPosition(['a', 'b'], 'new', 210);
-    expect(result).toEqual(['a', ['b', 'new']]);
+    expect(result).toEqual(['a', 'new', 'b']);
   });
 
   test('cluster with existing stage as parallel', () => {
-    // Stage 0 at x=70, flowX=80 is within threshold (|80-70|=10 <= 120)
+    // Stage 0 at x=70, flowX=80 is within threshold (|80-70|=10 <= 100)
     const result = insertImageAtPosition(['a', 'b'], 'new', 80);
     expect(result).toEqual([['a', 'new'], 'b']);
   });
 
-  test('insert as new stage between stages when outside threshold of both', () => {
-    // Stage 0 at x=70, stage 1 at x=270
-    // flowX must be > 70+120=190 and < 270-120=150... impossible with these constants
-    // Actually: we iterate stages in order. For stage 0 at x=70: |flowX-70|>120 means flowX>190 or flowX<-50
-    // For stage 1 at x=270: flowX<270 and |flowX-270|>120 means flowX<150
-    // No flowX satisfies both (>190 AND <150). With 3 stages:
-    // Stage 0 at 70, stage 1 at 270, stage 2 at 470
-    // Between 1 and 2: flowX>270+120=390 AND flowX<470-120=350 -- impossible
-    // The CLUSTER_THRESHOLD (120) is 60% of STEP_WIDTH (200), so adjacent stages always overlap.
-    // New sequential stages can only be inserted after all existing stages or before the first.
-    // Test inserting before first by using negative flowX:
+  test('click far left of the first stage prepends a new leading stage', () => {
+    // flowX=-200 is left of stage 0's node (< TERMINAL_OFFSET=70), so it prepends a leading stage.
     const result = insertImageAtPosition(['a'], 'new', -200);
-    // |(-200)-70| = 270 > 120, so not clustered. flowX < stageX, so insert before.
     expect(result).toEqual(['new', 'a']);
   });
 
   test('cluster into existing parallel stage', () => {
     const result = insertImageAtPosition([['a', 'b'], 'c'], 'new', 80);
     expect(result).toEqual([['a', 'b', 'new'], 'c']);
+  });
+});
+
+describe('clusterStagesByX (drag-reorder result)', () => {
+  // Stages laid out at x = 70, 370, 670 for a 3-image sequential order.
+  test('returns stages in left-to-right order', () => {
+    expect(
+      clusterStagesByX([
+        { label: 'a', x: 70 },
+        { label: 'b', x: 370 },
+        { label: 'c', x: 670 },
+      ]),
+    ).toEqual(['a', 'b', 'c']);
+  });
+
+  test('dragging a node before the first stage makes it the new leading stage', () => {
+    // 'c' dropped left of 'a' (near the Start terminal), separated by > CLUSTER_THRESHOLD (100).
+    const order = clusterStagesByX([{ label: 'c', x: -50 }, { label: 'a', x: 70 }, { label: 'b', x: 370 }]);
+    expect(order).toEqual(['c', 'a', 'b']);
+  });
+
+  test('dragging a node after the last stage makes it the new trailing stage', () => {
+    // 'a' dropped right of 'c' (near the End terminal), separated by > CLUSTER_THRESHOLD.
+    const order = clusterStagesByX([{ label: 'b', x: 370 }, { label: 'c', x: 670 }, { label: 'a', x: 820 }]);
+    expect(order).toEqual(['b', 'c', 'a']);
+  });
+
+  test('dropping a node onto a stage (within threshold) makes them parallel', () => {
+    const order = clusterStagesByX([{ label: 'a', x: 70 }, { label: 'b', x: 120 }, { label: 'c', x: 670 }]);
+    expect(order).toEqual([['a', 'b'], 'c']);
   });
 });
 
@@ -175,34 +196,42 @@ describe('getImagesInOrder', () => {
 });
 
 describe('estimateNodeWidth', () => {
-  test('short label clamps to min-width (80)', () => {
-    // "curl" = 4 chars: 4 * 7.2 + 32 = 60.8 → clamped to 80
-    expect(estimateNodeWidth('curl')).toBe(80);
+  test('short label clamps to min-width (120)', () => {
+    // "curl" = 4 chars: 4 * 7.2 + 36 = 64.8 → clamped to 120
+    expect(estimateNodeWidth('curl')).toBe(120);
   });
 
   test('medium label uses calculated width', () => {
-    // "my-analyzer" = 11 chars: 11 * 7.2 + 32 = 111.2
-    expect(estimateNodeWidth('my-analyzer')).toBeCloseTo(111.2);
+    // "my-analyzer-tool" = 16 chars: 16 * 7.2 + 36 = 151.2
+    expect(estimateNodeWidth('my-analyzer-tool')).toBeCloseTo(151.2);
   });
 
-  test('long label clamps to max-width (210)', () => {
-    // "very-long-image-name-here-extra" = 30 chars: 30 * 7.2 + 32 = 248 → clamped to 210
-    expect(estimateNodeWidth('very-long-image-name-here-extra')).toBe(210);
+  test('long label clamps to max-width (240)', () => {
+    // "very-long-image-name-here-extra" = 31 chars: 31 * 7.2 + 36 = 259.2 → clamped to 240
+    expect(estimateNodeWidth('very-long-image-name-here-extra')).toBe(240);
   });
 
   test('empty string clamps to min-width', () => {
-    // 0 * 7.2 + 32 = 32 → clamped to 80
-    expect(estimateNodeWidth('')).toBe(80);
+    // 0 * 7.2 + 36 = 36 → clamped to 120
+    expect(estimateNodeWidth('')).toBe(120);
+  });
+});
+
+describe('vertical handle geometry', () => {
+  // Image nodes, terminals, and barriers all derive their height/offset from these so every edge
+  // connection point shares one vertical center — otherwise the spine renders as a slight diagonal.
+  test('handle center is half the node height', () => {
+    expect(HANDLE_CENTER_Y).toBe(NODE_HEIGHT / 2);
   });
 });
 
 describe('estimateStageWidth', () => {
   test('single image stage', () => {
-    expect(estimateStageWidth('curl')).toBe(80);
+    expect(estimateStageWidth('curl')).toBe(120);
   });
 
   test('parallel stage returns widest', () => {
-    // "curl" → 80, "my-analyzer" → 111.2
-    expect(estimateStageWidth(['curl', 'my-analyzer'])).toBeCloseTo(111.2);
+    // "curl" → 120, "my-analyzer-tool" → 151.2
+    expect(estimateStageWidth(['curl', 'my-analyzer-tool'])).toBeCloseTo(151.2);
   });
 });

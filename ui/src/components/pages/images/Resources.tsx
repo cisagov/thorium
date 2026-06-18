@@ -14,8 +14,8 @@ import {
   ImageFieldsWrapper,
 } from './shared.styled';
 import { ImageFormMode } from './types';
-import AlertBanner from '@components/shared/alerts/AlertBanner';
 import FieldBadge from '@components/shared/badges/FieldBadge';
+import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 
 const TOOLTIPS = {
@@ -42,7 +42,7 @@ const InputRow = styled.div`
   margin-bottom: 8px;
 `;
 
-const Input = styled.input`
+const Input = styled.input<{ $error?: boolean }>`
   flex: 1;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -50,6 +50,7 @@ const Input = styled.input`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 `;
 
 const UnitSelect = styled.select`
@@ -288,6 +289,7 @@ const ResourceFields: React.FC<{
             type="text"
             value={form.cpu}
             placeholder={form.cpu_units === CpuUnit.mCPU ? '1000' : '1'}
+            $error={!!errors.cpu}
             onChange={(e) => update('cpu', numericOnly(e.target.value))}
           />
           <UnitSelect value={form.cpu_units} onChange={(e) => update('cpu_units', e.target.value)}>
@@ -295,7 +297,7 @@ const ResourceFields: React.FC<{
             <option value="mCPU">mCPU</option>
           </UnitSelect>
         </InputRow>
-        {errors.cpu && <AlertBanner className="m-2">{errors.cpu}</AlertBanner>}
+        {errors.cpu && <FieldError>{errors.cpu}</FieldError>}
       </OverlayTipRight>
 
       <FieldLabel>memory: </FieldLabel>
@@ -305,6 +307,7 @@ const ResourceFields: React.FC<{
             type="text"
             value={form.memory}
             placeholder={form.memory_units === MemoryUnit.Mi ? '2048' : '2'}
+            $error={!!errors.memory}
             onChange={(e) => update('memory', numericOnly(e.target.value))}
           />
           <UnitSelect value={form.memory_units} onChange={(e) => update('memory_units', e.target.value)}>
@@ -312,7 +315,7 @@ const ResourceFields: React.FC<{
             <option value="Mi">MiB</option>
           </UnitSelect>
         </InputRow>
-        {errors.memory && <AlertBanner className="m-2">{errors.memory}</AlertBanner>}
+        {errors.memory && <FieldError>{errors.memory}</FieldError>}
       </OverlayTipRight>
 
       <FieldLabel>storage: </FieldLabel>

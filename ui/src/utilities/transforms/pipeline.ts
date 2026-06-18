@@ -1,3 +1,7 @@
+/// Default pipeline SLA in seconds (1 week). Shown as placeholder text on the create form and
+/// applied when the SLA field is left blank.
+export const DEFAULT_SLA = 604800;
+
 /**
  * Deep-equality check for two values via JSON serialization (with reference/`null` fast paths).
  *
@@ -34,14 +38,18 @@ export function pipelineToEditorObject(pipeline: Record<string, unknown>): Recor
  * Build a pipeline-create request from the editor object.
  *
  * Requires `group`, `name`, and `order` (the stage execution order). Returns a shallow copy of the
- * editor object as the payload.
+ * editor object as the payload, defaulting `sla` to `DEFAULT_SLA` when it is left blank/absent.
  *
  * @param obj - The editor object to convert.
  * @returns The create request payload, or `null` if any required field is missing.
  */
 export function editorObjectToPipelineCreate(obj: Record<string, unknown>): Record<string, unknown> | null {
   if (!obj['group'] || !obj['name'] || !obj['order']) return null;
-  return { ...obj };
+  const payload = { ...obj };
+  if (payload['sla'] === undefined || payload['sla'] === null || payload['sla'] === '') {
+    payload['sla'] = DEFAULT_SLA;
+  }
+  return payload;
 }
 
 /**

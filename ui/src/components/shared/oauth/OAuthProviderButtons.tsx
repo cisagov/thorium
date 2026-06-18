@@ -1,4 +1,3 @@
-// spec: ./SPEC.md
 import styled from 'styled-components';
 
 // project imports

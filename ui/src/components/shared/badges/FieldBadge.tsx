@@ -5,6 +5,8 @@ import styled from 'styled-components';
 const TagBadge = styled(Badge)`
   text-wrap: pretty;
   white-space: break-spaces;
+  /* break long unbroken tokens (image paths, key:value tags) so they wrap instead of overflowing */
+  overflow-wrap: anywhere;
   max-width: 100%;
 `;
 

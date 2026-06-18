@@ -66,6 +66,12 @@ export interface FieldSchema {
    * widget to the stage editor and the insert builders to grouped output.
    */
   nestedList?: boolean;
+  /**
+   * Current value of a `nestedList` field, attached per-suggestion so the stage editor can seed
+   * itself with the existing stages (letting the user add to an existing pipeline `order` rather
+   * than overwriting it). Each inner array is one stage's parallel images.
+   */
+  currentStages?: readonly (readonly string[])[];
 }
 
 export interface Suggestion {

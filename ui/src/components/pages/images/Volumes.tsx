@@ -15,8 +15,8 @@ import {
   IMAGE_FIELDS_MAX_WIDTH,
 } from './shared.styled';
 import { ImageFormMode } from './types';
-import AlertBanner from '@components/shared/alerts/AlertBanner';
 import FieldBadge from '@components/shared/badges/FieldBadge';
+import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import ToggleSwitch from '@components/shared/inputs/ToggleSwitch';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { Volume, ConfigMap, Secret } from '@models/volumes';
@@ -84,7 +84,7 @@ const FieldInput = styled.div`
   margin: 4px 0;
 `;
 
-const Input = styled.input`
+const Input = styled.input<{ $error?: boolean }>`
   width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -92,9 +92,10 @@ const Input = styled.input`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 `;
 
-const Select = styled.select`
+const Select = styled.select<{ $error?: boolean }>`
   width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -102,6 +103,7 @@ const Select = styled.select`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 `;
 
 const AddButton = styled.button`
@@ -302,16 +304,25 @@ const VolumeEditor: React.FC<{
               <FieldLabel>Name</FieldLabel>
               <FieldInput>
                 <OverlayTipRight tip={TOOLTIPS.name}>
-                  <Input placeholder="name" value={vol.name} onChange={(e) => updateVolume(idx, 'name', '', e.target.value)} />
+                  <Input
+                    placeholder="name"
+                    value={vol.name}
+                    $error={!!vol.errors?.name}
+                    onChange={(e) => updateVolume(idx, 'name', '', e.target.value)}
+                  />
                 </OverlayTipRight>
-                {vol.errors?.name && <AlertBanner className="m-2">{vol.errors.name}</AlertBanner>}
+                {vol.errors?.name && <FieldError>{vol.errors.name}</FieldError>}
               </FieldInput>
             </FieldRow>
             <FieldRow>
               <FieldLabel>Archetype</FieldLabel>
               <FieldInput>
                 <OverlayTipRight tip={TOOLTIPS.archetype}>
-                  <Select value={vol.archetype} onChange={(e) => updateVolume(idx, 'archetype', '', e.target.value)}>
+                  <Select
+                    value={vol.archetype}
+                    $error={!!vol.errors?.archetype}
+                    onChange={(e) => updateVolume(idx, 'archetype', '', e.target.value)}
+                  >
                     {!vol.archetype && <option>Select an Archetype</option>}
                     {ARCHETYPES.map((a) => (
                       <option key={a} value={a}>
@@ -320,7 +331,7 @@ const VolumeEditor: React.FC<{
                     ))}
                   </Select>
                 </OverlayTipRight>
-                {vol.errors?.archetype && <AlertBanner className="m-2">{vol.errors.archetype}</AlertBanner>}
+                {vol.errors?.archetype && <FieldError>{vol.errors.archetype}</FieldError>}
               </FieldInput>
             </FieldRow>
 
@@ -373,10 +384,11 @@ const VolumeEditor: React.FC<{
                       <Input
                         placeholder="/host/src/path"
                         value={vol.host_path?.path ?? ''}
+                        $error={!!vol.errors?.host_path?.path}
                         onChange={(e) => updateVolume(idx, 'host_path', 'path', e.target.value)}
                       />
                     </OverlayTipRight>
-                    {vol.errors?.host_path?.path && <AlertBanner className="m-2">{vol.errors.host_path.path}</AlertBanner>}
+                    {vol.errors?.host_path?.path && <FieldError>{vol.errors.host_path.path}</FieldError>}
                   </FieldInput>
                 </FieldRow>
                 <FieldRow>
@@ -409,10 +421,11 @@ const VolumeEditor: React.FC<{
                       <Input
                         placeholder="hostname"
                         value={vol.nfs?.server ?? ''}
+                        $error={!!vol.errors?.nfs?.server}
                         onChange={(e) => updateVolume(idx, 'nfs', 'server', e.target.value)}
                       />
                     </OverlayTipRight>
-                    {vol.errors?.nfs?.server && <AlertBanner className="m-2">{vol.errors.nfs.server}</AlertBanner>}
+                    {vol.errors?.nfs?.server && <FieldError>{vol.errors.nfs.server}</FieldError>}
                   </FieldInput>
                 </FieldRow>
                 <FieldRow>
@@ -422,10 +435,11 @@ const VolumeEditor: React.FC<{
                       <Input
                         placeholder="/path/to/directory"
                         value={vol.nfs?.path ?? ''}
+                        $error={!!vol.errors?.nfs?.path}
                         onChange={(e) => updateVolume(idx, 'nfs', 'path', e.target.value)}
                       />
                     </OverlayTipRight>
-                    {vol.errors?.nfs?.path && <AlertBanner className="m-2">{vol.errors.nfs.path}</AlertBanner>}
+                    {vol.errors?.nfs?.path && <FieldError>{vol.errors.nfs.path}</FieldError>}
                   </FieldInput>
                 </FieldRow>
               </>
@@ -438,10 +452,11 @@ const VolumeEditor: React.FC<{
                   <Input
                     placeholder="mount path"
                     value={vol.mount_path}
+                    $error={!!vol.errors?.mount_path}
                     onChange={(e) => updateVolume(idx, 'mount_path', '', e.target.value)}
                   />
                 </OverlayTipRight>
-                {vol.errors?.mount_path && <AlertBanner className="m-2">{vol.errors.mount_path}</AlertBanner>}
+                {vol.errors?.mount_path && <FieldError>{vol.errors.mount_path}</FieldError>}
               </FieldInput>
             </FieldRow>
             <FieldRow>

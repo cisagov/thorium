@@ -13,6 +13,9 @@ export const IndentCol = styled.div`
 
 export const ValCol = styled.div`
   flex: 1;
+  /* allow the value column to shrink below its content's intrinsic width so long
+     values wrap inside the card instead of overflowing the accordion body */
+  min-width: 0;
 `;
 
 export const EditSpacer = styled.div`
@@ -68,13 +71,6 @@ export const ImageFieldsWrapper = styled.div`
 
 export const ImageCreateWrapper = styled.div`
   max-width: ${IMAGE_CREATE_MAX_WIDTH};
-  margin: 0 auto;
-`;
-
-// Centers the core image fields (the create form's first section) within the
-// form, capped at the same limited width the field inputs use elsewhere.
-export const ImageFieldsSection = styled.div`
-  max-width: ${IMAGE_FIELDS_MAX_WIDTH};
   margin: 0 auto;
 `;
 

@@ -1,4 +1,3 @@
-// spec: ./SPEC.md
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 
@@ -66,7 +65,7 @@ const USERNAME_CHECK_DEBOUNCE_MS = 400;
  * First-time OAuth identity form. If the chosen username is available it creates a new Thorium account;
  * if it is already taken it switches to "link mode", letting an existing local/LDAP user connect this
  * provider to their account via the email-link flow. Role/verification fields are not exposed (the
- * backend forces role=User). See ./SPEC.md.
+ * backend forces role=User).
  */
 const OAuthRegisterForm: React.FC<OAuthRegisterFormProps> = ({ provider, sessionToken, onComplete, onVerifyEmail, onError }) => {
   const [username, setUsername] = useState('');

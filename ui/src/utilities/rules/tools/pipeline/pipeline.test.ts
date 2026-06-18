@@ -302,6 +302,19 @@ describe('order suggestions', () => {
     expect(order!.isReplace).toBe(true);
   });
 
+  test('non-empty order offers "Edit order" seeded with the current stages', () => {
+    const order = pipelineSuggestions('group: g\nname: n\norder:\n  - img1\n  - [img2, img3]').find((sg) => sg.field === 'order');
+    expect(order).toBeDefined();
+    expect(order!.message).toBe('Edit order');
+    expect(order!.isReplace).toBe(true);
+    expect(order!.schema?.currentStages).toEqual([['img1'], ['img2', 'img3']]);
+  });
+
+  test('empty order carries empty currentStages', () => {
+    const order = pipelineSuggestions('group: g\nname: n\norder: []').find((sg) => sg.field === 'order');
+    expect(order!.schema?.currentStages).toEqual([]);
+  });
+
   test('JSON empty order [] also offers "Populate order"', () => {
     const json = new PipelineChecker();
     json.format = FormatType.JSON;

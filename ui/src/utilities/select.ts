@@ -9,9 +9,10 @@ import '@styles/main.scss';
  *
  * @param color - Text color applied to selected multi-value chips.
  * @param backgroundColor - Background color applied to multi-value chips and option hover.
+ * @param error - When true, the control gets a danger border + glow to flag an invalid field.
  * @returns A styles object suitable for the `styles` prop of a react-select component.
  */
-export const createReactSelectStyles = (color: string, backgroundColor: string) => {
+export const createReactSelectStyles = (color: string, backgroundColor: string, error: boolean = false) => {
   return {
     input: (base: CSSObjectWithLabel) => ({
       ...base,
@@ -25,10 +26,18 @@ export const createReactSelectStyles = (color: string, backgroundColor: string) 
       ...base,
       color: 'white',
       background: 'var(--thorium-secondary-panel-bg)',
-      borderColor: state.isFocused ? 'var(--thorium-highlight-panel-border)' : 'var(--thorium-panel-border)',
-      boxShadow: 'none',
+      borderColor: error
+        ? 'var(--thorium-danger-bg)'
+        : state.isFocused
+          ? 'var(--thorium-highlight-panel-border)'
+          : 'var(--thorium-panel-border)',
+      boxShadow: error ? '0 0 0 2px var(--thorium-danger-bg)' : 'none',
       '&:hover': {
-        borderColor: state.isFocused ? 'var(--thorium-highlight-panel-border)' : 'var(--thorium-panel-border)',
+        borderColor: error
+          ? 'var(--thorium-danger-bg)'
+          : state.isFocused
+            ? 'var(--thorium-highlight-panel-border)'
+            : 'var(--thorium-panel-border)',
       },
     }),
     menu: (base: CSSObjectWithLabel) => ({

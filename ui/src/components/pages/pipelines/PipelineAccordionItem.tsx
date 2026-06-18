@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import type { FC } from 'react';
-import { Accordion, Col } from 'react-bootstrap';
 
 // project imports
 import PipelineInfo from './PipelineInfo';
 import type { PipelineInfoHandle } from './PipelineInfo';
+import { AccordionBody, AccordionHeader, AccordionItem } from '@components/shared/accordion';
 import { HeaderActions, HeaderBtn, BanWarningIcon, DeleteConfirmModal } from '@components/shared/browsing';
 import { ButtonVariant } from '@components/shared/buttons';
 import { OverlayTipBottom, OverlayTipLeft, OverlayTipRight } from '@components/shared/overlay/tips';
@@ -63,26 +63,26 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
   };
 
   return (
-    <Accordion.Item eventKey={`${pipeline.name}_${pipeline.group}`}>
-      <Accordion.Header>
-        <Col className="accordion-item-name">
+    <AccordionItem eventKey={`${pipeline.name}_${pipeline.group}`}>
+      <AccordionHeader>
+        <div className="accordion-item-name">
           <div className="text">{pipeline.name}</div>
-        </Col>
-        <Col className="accordion-item-relation" />
-        <Col className="accordion-item-ownership">
+        </div>
+        <div className="accordion-item-relation" />
+        <div className="accordion-item-ownership">
           <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
             <small>
               <i>{pipeline.group}</i>
             </small>
           </OverlayTipLeft>
-        </Col>
-        <Col className="accordion-item-status">
+        </div>
+        <div className="accordion-item-status">
           {hasBans && (
             <OverlayTipRight tip="This pipeline has active bans and cannot run.">
               <BanWarningIcon />
             </OverlayTipRight>
           )}
-        </Col>
+        </div>
         <HeaderActions onClick={(e) => e.stopPropagation()}>
           {!inEditMode && canCreatePipeline && (
             <OverlayTipBottom tip={`Create a new pipeline using ${pipeline.name} as a template.`}>
@@ -107,14 +107,14 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
           )}
           {inEditMode && userCanModify && (
             <OverlayTipBottom tip="Submit pending updates.">
-              <HeaderBtn $variant={ButtonVariant.Ok} onClick={() => pipelineInfoRef.current?.handleUpdate()}>
+              <HeaderBtn $variant={ButtonVariant.Ok} data-testid="header-btn-accept" onClick={() => pipelineInfoRef.current?.handleUpdate()}>
                 Accept
               </HeaderBtn>
             </OverlayTipBottom>
           )}
           {inEditMode && userCanModify && (
             <OverlayTipBottom tip="Discard pending changes.">
-              <HeaderBtn $variant={ButtonVariant.Secondary} onClick={() => setEditMode(false)}>
+              <HeaderBtn $variant={ButtonVariant.Secondary} data-testid="header-btn-discard" onClick={() => setEditMode(false)}>
                 Discard
               </HeaderBtn>
             </OverlayTipBottom>
@@ -127,8 +127,8 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
             </OverlayTipBottom>
           )}
         </HeaderActions>
-      </Accordion.Header>
-      <Accordion.Body>
+      </AccordionHeader>
+      <AccordionBody>
         <PipelineInfo
           ref={pipelineInfoRef}
           pipeline={pipeline}
@@ -138,7 +138,7 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
           onUpdate={onUpdate}
           refreshPipeline={refreshPipeline}
         />
-      </Accordion.Body>
+      </AccordionBody>
       <DeleteConfirmModal
         show={showDeleteModal}
         onHide={handleCloseDeleteModal}
@@ -147,7 +147,7 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
         itemType="pipeline"
         error={deleteError}
       />
-    </Accordion.Item>
+    </AccordionItem>
   );
 };
 

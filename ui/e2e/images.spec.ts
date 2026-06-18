@@ -446,8 +446,8 @@ test.describe('Image Create — Form Validation', () => {
     await page.locator('.ok-btn:has-text("Create")').click();
     await page.waitForTimeout(300);
 
-    const alert = page.locator('.alert');
-    await expect(alert).toBeVisible();
+    // the bottom validation banner appears when required fields are missing
+    await expect(page.getByText('Please resolve missing fields or invalid entries')).toBeVisible();
 
     await snapshot(page, SCREENSHOT_DIR, 'image-create-validation-error');
   });
