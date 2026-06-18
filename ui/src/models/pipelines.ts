@@ -45,8 +45,9 @@ export type Pipeline = {
   name: string;
   /// The creator of this pipeline
   creator: string;
-  /// The order of images to be executed in this pipeline
-  order: [string[]];
+  /// The order of stages to be executed in this pipeline. Each stage is either a single
+  /// image (run alone) or an array of images (run in parallel within that stage).
+  order: (string | string[])[];
   /// The number of seconds we have to meet this pipelines SLA.
   sla: number;
   /// The triggers to execute this pipeline on

@@ -1,4 +1,3 @@
-// spec: ./SPEC.md
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 // project imports

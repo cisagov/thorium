@@ -1450,6 +1450,8 @@ interface ListRowsResult {
   container: HTMLElement;
   getValues: () => string[];
   focusFirst: () => void;
+  // Pre-fill the rows with existing values (e.g. seeding the stage editor from an existing order).
+  setValues: (values: readonly string[]) => void;
 }
 
 // A single-column dynamic list editor (bulleted rows), used for StringArray fields and for
@@ -1512,6 +1514,12 @@ function makeListRows(placeholder: string, onChange: () => void, onKeydown: (e: 
     container,
     getValues: () => inputs.map((i) => i.value.trim()).filter((v) => v !== ''),
     focusFirst: () => inputs[0]?.focus(),
+    setValues: (values) => {
+      if (!values.length) return;
+      inputs[0].value = values[0];
+      for (let i = 1; i < values.length; i++) addRow().value = values[i];
+      addRow(); // trailing empty row so the user can keep adding
+    },
   };
 }
 
@@ -1574,6 +1582,22 @@ function makeSelectRows(options: readonly string[], onChange: () => void, onKeyd
     container,
     getValues: () => selects.map((s) => s.value.trim()).filter((v) => v !== ''),
     focusFirst: () => selects[0]?.focus(),
+    setValues: (values) => {
+      if (!values.length) return;
+      // An existing image that isn't in the group's option list is appended so it isn't dropped.
+      const ensureOption = (select: HTMLSelectElement, value: string) => {
+        if (value && !options.includes(value)) {
+          const opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = value;
+          select.appendChild(opt);
+        }
+        select.value = value;
+      };
+      ensureOption(selects[0], values[0]);
+      for (let i = 1; i < values.length; i++) ensureOption(addRow(), values[i]);
+      addRow(); // trailing empty select so the user can keep adding
+    },
   };
 }
 
@@ -2682,7 +2706,7 @@ class PreviewWidget extends WidgetType {
       });
     };
 
-    const addStage = (): ListRowsResult => {
+    const addStage = (initialValues?: readonly string[]): ListRowsResult => {
       const block = document.createElement('div');
       block.style.cssText =
         'display:flex;flex-direction:column;gap:2px;border-left:2px solid var(--thorium-panel-border);padding-left:8px;';
@@ -2707,6 +2731,8 @@ class PreviewWidget extends WidgetType {
           ? makeSelectRows(imageOptions, rebuildText, onKeydown)
           : makeListRows(schema?.placeholder ?? 'image-name', rebuildText, onKeydown);
 
+      if (initialValues && initialValues.length) rows.setValues(initialValues);
+
       removeStageBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2729,7 +2755,17 @@ class PreviewWidget extends WidgetType {
       return rows;
     };
 
-    const firstStage = addStage();
+    // Seed the editor with the existing stages (if any) so the user adds to the current order
+    // rather than replacing it; a trailing empty stage is added so there's a slot to add into.
+    const currentStages = schema?.currentStages;
+    if (currentStages && currentStages.length) {
+      currentStages.forEach((stage) => addStage(stage));
+      addStage();
+    } else {
+      addStage();
+    }
+    // Focus the last (empty) stage so the user can immediately add an image.
+    const stageToFocus = stages[stages.length - 1];
     wrapper.appendChild(stagesContainer);
 
     // '+ Stage' sits right after the last stage's images (not in the Accept/Dismiss row).
@@ -2750,7 +2786,7 @@ class PreviewWidget extends WidgetType {
     wrapper.appendChild(btnContainer);
 
     setTimeout(() => {
-      firstStage.focusFirst();
+      stageToFocus.focusFirst();
       rebuildText();
     }, 0);
 

@@ -245,6 +245,15 @@ a.dropdown-toggle.nav-link {
   opacity: 0.97;
 }
 
+// OverlayTip renders with Popper `strategy: 'fixed'`, but Bootstrap's base `.tooltip` is
+// `position: absolute`, so the first frame (before Popper applies its inline fixed style) is absolute
+// and — if placed past the viewport — momentarily grows the page, flickering a scrollbar on rapid
+// hovers. Forcing fixed from frame one (matching the strategy) prevents that. Scoped to OverlayTip's
+// marker class so raw react-bootstrap tooltips (absolute strategy) are unaffected.
+.tooltip.tip-fixed {
+  position: fixed;
+}
+
 // Applied via className="tooltip-wide" in OverlayTip.tsx
 .tooltip-wide > .tooltip-inner {
   max-width: 800px !important;

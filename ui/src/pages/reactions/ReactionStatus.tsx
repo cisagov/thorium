@@ -24,7 +24,7 @@ const ReactionStatus = () => {
   const [reactionInfo, setReactionInfo] = useState<Partial<Reaction>>({});
   const [reactionInfoError, setReactionInfoError] = useState('');
   const [reactionLogs, setReactionLogs] = useState<ReactionLogEntry[]>([]);
-  const [pipelineOrder, setPipelineOrder] = useState<string[][]>([]);
+  const [pipelineOrder, setPipelineOrder] = useState<(string | string[])[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, string>>({});
   const [reactionFinished, setReactionFinished] = useState(false);
   const [width, setWindowWidth] = useState(0);
@@ -221,15 +221,17 @@ const ReactionStatus = () => {
   };
 
   // Render the pipeline stage chart with status icons and links to stage logs
-  const renderPipelineChart = (order: string[][], id: string, group: string) => {
+  const renderPipelineChart = (order: (string | string[])[], id: string, group: string) => {
     return (
       <Row className="ms-2 flex-nowrap pipeline-chart body-panel">
         {order.map &&
-          order.map((stage, idx) => (
-            <Col xs={2} key={idx} className="pipeline-col">
-              <Row>
-                {stage.map &&
-                  stage.map((image, idx) => (
+          order.map((stage, idx) => {
+            // a stage is either a single image (run alone) or a list of parallel images
+            const images = typeof stage === 'string' ? [stage] : stage;
+            return (
+              <Col xs={2} key={idx} className="pipeline-col">
+                <Row>
+                  {images.map((image, idx) => (
                     <Row key={`${image}_${idx}`}>
                       {statusMap[image] == undefined ? (
                         <Card className="m-1 panel reaction-card panel">
@@ -252,9 +254,10 @@ const ReactionStatus = () => {
                       )}
                     </Row>
                   ))}
-              </Row>
-            </Col>
-          ))}
+                </Row>
+              </Col>
+            );
+          })}
       </Row>
     );
   };

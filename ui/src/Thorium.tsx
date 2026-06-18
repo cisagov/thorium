@@ -25,6 +25,7 @@ const EntityBrowsing = lazy(async () => await import('./pages/entities/EntityBro
 const EntityDetails = lazy(async () => await import('./pages/entities/EntityDetails'));
 const EntityCreate = lazy(async () => await import('./pages/entities/EntityCreate'));
 const CreateImage = lazy(async () => await import('./pages/images/ImageCreate'));
+const CreatePipeline = lazy(async () => await import('./pages/pipelines/PipelineCreate'));
 const GraphBuilder = lazy(async () => await import('./pages/GraphBuilder'));
 const Pipelines = lazy(async () => await import('./pages/pipelines/PipelineBrowsing'));
 const Images = lazy(async () => await import('./pages/images/ImageBrowsing'));
@@ -98,6 +99,7 @@ const Resources = () => (
     <Route path="/pipelines" element={<PageWrapper Contents={Pipelines} />} />
     <Route path="/images" element={<PageWrapper Contents={Images} />} />
     <Route path="/create/image" element={<PageWrapper Contents={CreateImage} />} />
+    <Route path="/create/pipeline" element={<PageWrapper Contents={CreatePipeline} />} />
     // System
     <Route path="/settings" element={<PageWrapper admin Contents={SystemSettings} />} />
     // Testing

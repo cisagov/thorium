@@ -98,20 +98,30 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline list renders with correct count', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    const badge = page.locator('.count-badge');
+    const badge = page.locator('[data-testid="pipeline-count"]');
     await expect(badge).toContainText('2');
 
-    const items = page.locator('.accordion-item');
+    const items = page.locator('[data-testid="accordion-item"]');
     await expect(items).toHaveCount(2);
 
     await snapshot(page, SCREENSHOT_DIR, 'pipelines-list');
   });
 
+  test('shows a no-results banner when there are no pipelines', async ({ page }) => {
+    // re-register the pipeline mocks with an empty list (last route registered wins)
+    await setupPipelineMocks(page, []);
+    await page.goto('/pipelines');
+
+    await expect(page.getByText('No Pipelines Found')).toBeVisible();
+    await expect(page.locator('[data-testid="accordion-item"]')).toHaveCount(0);
+    await snapshot(page, SCREENSHOT_DIR, 'pipelines-no-results');
+  });
+
   test('pipeline names and groups display correctly', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
     await expect(page.locator('.accordion-item-name .text').first()).toContainText('test-pipeline');
     await expect(page.locator('.accordion-item-ownership i').first()).toContainText('system');
@@ -119,9 +129,9 @@ test.describe('Pipelines Page', () => {
 
   test('expand pipeline shows details', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForTimeout(500);
 
     await expect(page.locator('.bg-blue').first()).toContainText('test');
@@ -133,71 +143,93 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline with NewSample trigger displays trigger type', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').nth(1).click();
+    await page.locator('[data-testid="accordion-header"]').nth(1).click();
     await page.waitForTimeout(500);
 
     await expect(page.locator('text=new-sample-trigger')).toBeVisible();
     await expect(page.locator('text=NewSample')).toBeVisible();
   });
 
-  test('create pipeline button opens modal', async ({ page }) => {
+  test('create pipeline button navigates to create page', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.ok-btn:has-text("+")').click();
-    await page.waitForTimeout(500);
+    await page.locator('[data-testid="create-pipeline-btn"]').click();
+    await page.waitForURL('**/create/pipeline');
 
-    const modal = page.locator('.modal');
-    await expect(modal).toBeVisible();
-    await expect(modal.locator('.modal-title')).toContainText('Create New Pipeline');
+    await expect(page.locator('h3:has-text("Create A Pipeline")')).toBeVisible();
+    // both views are reachable via the form/editor toggle
+    await expect(page.locator('button:has-text("Form")')).toBeVisible();
+    await expect(page.locator('button:has-text("Editor")')).toBeVisible();
 
-    await waitForEditor(page);
-
-    await snapshot(page, SCREENSHOT_DIR, 'pipeline-create-modal');
+    await snapshot(page, SCREENSHOT_DIR, 'pipeline-create-page');
   });
 
-  test('create pipeline modal has format toggle', async ({ page }) => {
+  test('create pipeline page editor view has format toggle', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.ok-btn:has-text("+")').click();
-    await page.waitForTimeout(500);
+    await page.locator('[data-testid="create-pipeline-btn"]').click();
+    await page.waitForURL('**/create/pipeline');
 
-    const yamlBtn = page.locator('button:has-text("YAML")');
-    const jsonBtn = page.locator('button:has-text("JSON")');
-    await expect(yamlBtn).toBeVisible();
-    await expect(jsonBtn).toBeVisible();
+    // the YAML/JSON toggle only appears in the editor view
+    await page.locator('button:has-text("Editor")').click();
+    await expect(page.locator('button:has-text("YAML")')).toBeVisible();
+    await expect(page.locator('button:has-text("JSON")')).toBeVisible();
   });
 
-  test('edit button enters editor mode', async ({ page }) => {
+  test('create pipeline page form view shows order and triggers sections', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="create-pipeline-btn"]').click();
+    await page.waitForURL('**/create/pipeline');
+
+    // the form view (default) exposes the dedicated order and triggers editors
+    await expect(page.locator('h5:has-text("Order")')).toBeVisible();
+    await expect(page.locator('h5:has-text("Triggers")')).toBeVisible();
+    await expect(page.locator('button[aria-label="Add trigger"]')).toBeVisible();
+
+    // before a group is chosen the order section prompts for one (no diagram yet)
+    await expect(page.locator('text=Select a group to configure the pipeline order')).toBeVisible();
+
+    // choosing a group renders the editable xydiagram directly (no first-image dropdown)
+    await page.locator('select').first().selectOption('system');
+    await expect(page.locator('.react-flow')).toBeVisible();
+  });
+
+  test('edit button enters edit mode with form/editor toggle', async ({ page }) => {
+    await page.goto('/pipelines');
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
+
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForTimeout(500);
 
     await page.locator('button:has-text("Edit")').first().click();
     await page.waitForTimeout(500);
 
-    await waitForEditor(page);
     await expect(page.locator('button:has-text("Discard")').first()).toBeVisible();
     await expect(page.locator('button:has-text("Accept")').first()).toBeVisible();
+
+    // edit defaults to the form view; switching to the editor view shows the code editor
+    await page.locator('button:has-text("Editor")').first().click();
+    await waitForEditor(page);
 
     await snapshot(page, SCREENSHOT_DIR, 'pipeline-edit-mode');
   });
 
   test('cancel edit returns to view mode', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForTimeout(500);
 
     await page.locator('button:has-text("Edit")').first().click();
     await page.waitForTimeout(500);
-    await waitForEditor(page);
+    await expect(page.locator('button:has-text("Discard")').first()).toBeVisible();
 
     await page.locator('button:has-text("Discard")').first().click();
     await page.waitForTimeout(300);
@@ -208,9 +240,9 @@ test.describe('Pipelines Page', () => {
 
   test('delete pipeline shows confirmation modal', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForTimeout(500);
 
     await page.locator('button:has-text("Delete")').first().click();
@@ -235,9 +267,9 @@ test.describe('Pipelines Page', () => {
     });
 
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForTimeout(500);
 
     await page.locator('button:has-text("Delete")').first().click();
@@ -249,12 +281,14 @@ test.describe('Pipelines Page', () => {
     expect(deleteRequested).toBe(true);
   });
 
-  test('format toggle switches between YAML and JSON in create modal', async ({ page }) => {
+  test('format toggle switches between YAML and JSON on create page', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.ok-btn:has-text("+")').click();
-    await page.waitForTimeout(500);
+    await page.locator('[data-testid="create-pipeline-btn"]').click();
+    await page.waitForURL('**/create/pipeline');
+
+    await page.locator('button:has-text("Editor")').click();
     await waitForEditor(page);
 
     const editorContent = await page.locator('.cm-content').textContent();
@@ -270,13 +304,13 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline order flow renders with correct nodes', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow', { timeout: 5000 });
     await page.waitForTimeout(500);
 
-    const firstBody = page.locator('.accordion-item').first().locator('.accordion-body');
+    const firstBody = page.locator('[data-testid="accordion-item"]').first().locator('[data-testid="accordion-body"]');
     const imageNodes = firstBody.locator('.react-flow__node-imageStep');
     await expect(imageNodes).toHaveCount(3);
 
@@ -286,9 +320,9 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline order flow displays correct image names', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -300,9 +334,9 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline order flow renders edges between steps', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -312,9 +346,9 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline order flow is properly sized within container', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node', { timeout: 5000 });
     await page.waitForTimeout(800);
 
@@ -336,16 +370,18 @@ test.describe('Pipelines Page', () => {
 
   test('pipeline order flow survives edit round-trip', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    const firstBody = page.locator('.accordion-item').first().locator('.accordion-body');
-    await page.locator('.accordion-header').first().click();
+    const firstBody = page.locator('[data-testid="accordion-item"]').first().locator('[data-testid="accordion-body"]');
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node', { timeout: 5000 });
 
     await page.locator('button:has-text("Edit")').first().click();
     await page.waitForTimeout(500);
-    await waitForEditor(page);
 
+    // the editor view replaces the order diagram with the code editor
+    await page.locator('button:has-text("Editor")').first().click();
+    await waitForEditor(page);
     await expect(firstBody.locator('.react-flow')).toHaveCount(0);
 
     await page.locator('button:has-text("Discard")').first().click();
@@ -358,12 +394,12 @@ test.describe('Pipelines Page', () => {
 
   test('single-step pipeline order flow renders one node', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').nth(1).click();
+    await page.locator('[data-testid="accordion-header"]').nth(1).click();
     await page.waitForTimeout(1000);
 
-    const secondBody = page.locator('.accordion-item').nth(1).locator('.accordion-body');
+    const secondBody = page.locator('[data-testid="accordion-item"]').nth(1).locator('[data-testid="accordion-body"]');
     await expect(secondBody).toBeVisible({ timeout: 5000 });
 
     const imageNodes = secondBody.locator('.react-flow__node-imageStep');
@@ -383,9 +419,9 @@ test.describe('Pipelines Page', () => {
 
   test('right-click on empty pane shows context menu with Insert Image', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -399,9 +435,9 @@ test.describe('Pipelines Page', () => {
 
   test('right-click on image node shows context menu with Insert and Remove options', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node-imageStep', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -415,9 +451,9 @@ test.describe('Pipelines Page', () => {
 
   test('context menu dismissed on Escape', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -433,9 +469,9 @@ test.describe('Pipelines Page', () => {
 
   test('Insert Image opens select dropdown with available images', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -465,13 +501,13 @@ test.describe('Pipelines Page', () => {
 
   test('selecting an image from dropdown adds it to the diagram and shows Apply bar', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node-imageStep', { timeout: 5000 });
     await page.waitForTimeout(500);
 
-    const firstBody = page.locator('.accordion-item').first().locator('.accordion-body');
+    const firstBody = page.locator('[data-testid="accordion-item"]').first().locator('[data-testid="accordion-body"]');
 
     // Start with 3 image nodes
     await expect(firstBody.locator('.react-flow__node-imageStep')).toHaveCount(3);
@@ -499,13 +535,13 @@ test.describe('Pipelines Page', () => {
 
   test('Remove Image removes a node and shows Apply bar', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node-imageStep', { timeout: 5000 });
     await page.waitForTimeout(500);
 
-    const firstBody = page.locator('.accordion-item').first().locator('.accordion-body');
+    const firstBody = page.locator('[data-testid="accordion-item"]').first().locator('[data-testid="accordion-body"]');
     await expect(firstBody.locator('.react-flow__node-imageStep')).toHaveCount(3);
 
     // Right-click on a node to get Remove Image option
@@ -527,13 +563,13 @@ test.describe('Pipelines Page', () => {
 
   test('Discard reverts pending diagram changes', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow__node-imageStep', { timeout: 5000 });
     await page.waitForTimeout(500);
 
-    const firstBody = page.locator('.accordion-item').first().locator('.accordion-body');
+    const firstBody = page.locator('[data-testid="accordion-item"]').first().locator('[data-testid="accordion-body"]');
     await expect(firstBody.locator('.react-flow__node-imageStep')).toHaveCount(3);
 
     // Remove an image
@@ -555,9 +591,9 @@ test.describe('Pipelines Page', () => {
 
   test('double-click on empty pane opens image select dropdown', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow', { timeout: 5000 });
     await page.waitForTimeout(500);
 
@@ -572,9 +608,9 @@ test.describe('Pipelines Page', () => {
 
   test('select dropdown dismissed on Escape', async ({ page }) => {
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="accordion"]', { timeout: 10000 });
 
-    await page.locator('.accordion-header').first().click();
+    await page.locator('[data-testid="accordion-header"]').first().click();
     await page.waitForSelector('.react-flow', { timeout: 5000 });
     await page.waitForTimeout(500);
 

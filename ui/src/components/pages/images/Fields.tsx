@@ -14,9 +14,9 @@ import {
   ImageFieldsWrapper,
 } from './shared.styled';
 import { ImageFormMode } from './types';
-import AlertBanner from '@components/shared/alerts/AlertBanner';
 import Markdown from '@components/shared/syntax/Markdown';
 import FieldBadge from '@components/shared/badges/FieldBadge';
+import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { ImageVersion, ImageLifetime, SpawnLimitsValue } from '@models/images';
 import { ImageScaler } from '@models/images';
@@ -61,7 +61,7 @@ const KeyCol = styled.div`
   min-width: 140px;
 `;
 
-const Input = styled.input`
+const Input = styled.input<{ $error?: boolean }>`
   width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -69,6 +69,7 @@ const Input = styled.input`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 
   &:disabled {
     opacity: 0.6;
@@ -87,7 +88,7 @@ const TextArea = styled.textarea`
   resize: vertical;
 `;
 
-const Select = styled.select`
+const Select = styled.select<{ $error?: boolean }>`
   width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -95,6 +96,7 @@ const Select = styled.select`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 `;
 
 const LifetimeRow = styled.div`
@@ -499,9 +501,15 @@ const FieldInputs: React.FC<{
         <FieldGroup>
           <Label>Name</Label>
           <OverlayTipRight tip={TOOLTIPS.name}>
-            <Input type="text" value={form.name} placeholder="name" onChange={(e) => update('name', e.target.value)} />
+            <Input
+              type="text"
+              value={form.name}
+              placeholder="name"
+              $error={showErrors && !!errors.name}
+              onChange={(e) => update('name', e.target.value)}
+            />
           </OverlayTipRight>
-          {errors.name && showErrors && <AlertBanner>{errors.name}</AlertBanner>}
+          {errors.name && showErrors && <FieldError>{errors.name}</FieldError>}
         </FieldGroup>
       )}
 
@@ -515,7 +523,7 @@ const FieldInputs: React.FC<{
         <FieldGroup>
           <Label>Group</Label>
           <OverlayTipRight tip={TOOLTIPS.group}>
-            <Select value={form.group} onChange={(e) => update('group', e.target.value)}>
+            <Select value={form.group} $error={showErrors && !!errors.group} onChange={(e) => update('group', e.target.value)}>
               <option value="">Select a group</option>
               {groups.sort().map((g) => (
                 <option key={g} value={g}>
@@ -524,7 +532,7 @@ const FieldInputs: React.FC<{
               ))}
             </Select>
           </OverlayTipRight>
-          {errors.group && showErrors && <AlertBanner>{errors.group}</AlertBanner>}
+          {errors.group && showErrors && <FieldError>{errors.group}</FieldError>}
         </FieldGroup>
       )}
 
@@ -577,10 +585,11 @@ const FieldInputs: React.FC<{
             value={form.image}
             disabled={form.scaler !== ImageScaler.K8s}
             placeholder="docker:latest"
+            $error={showErrors && !!errors.image}
             onChange={(e) => update('image', e.target.value.trim())}
           />
         </OverlayTipRight>
-        {errors.image && showErrors && <AlertBanner>{errors.image}</AlertBanner>}
+        {errors.image && showErrors && <FieldError>{errors.image}</FieldError>}
       </FieldGroup>
 
       {/* Timeout */}
@@ -592,13 +601,14 @@ const FieldInputs: React.FC<{
             value={form.timeout}
             disabled={form.scaler === ImageScaler.External}
             placeholder="seconds"
+            $error={showErrors && !!errors.timeout}
             onChange={(e) => {
               const val = e.target.value ? e.target.value.replace(/[^0-9]+/gi, '') : '';
               update('timeout', val);
             }}
           />
         </OverlayTipRight>
-        {errors.timeout && showErrors && <AlertBanner>{errors.timeout}</AlertBanner>}
+        {errors.timeout && showErrors && <FieldError>{errors.timeout}</FieldError>}
       </FieldGroup>
 
       {/* Lifetime - only for K8s */}
@@ -641,7 +651,11 @@ const FieldInputs: React.FC<{
       <FieldGroup>
         <Label>Display Type</Label>
         <OverlayTipRight tip={TOOLTIPS.display_type}>
-          <Select value={form.display_type} onChange={(e) => update('display_type', e.target.value)}>
+          <Select
+            value={form.display_type}
+            $error={showErrors && !!errors.display_type}
+            onChange={(e) => update('display_type', e.target.value)}
+          >
             <option value="">Select a display type</option>
             {DISPLAY_TYPES.map((dt) => (
               <option key={dt} value={dt}>
@@ -650,7 +664,7 @@ const FieldInputs: React.FC<{
             ))}
           </Select>
         </OverlayTipRight>
-        {errors.display_type && showErrors && <AlertBanner>{errors.display_type}</AlertBanner>}
+        {errors.display_type && showErrors && <FieldError>{errors.display_type}</FieldError>}
       </FieldGroup>
 
       {/* Spawn Limit */}

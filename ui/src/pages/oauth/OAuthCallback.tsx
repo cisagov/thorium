@@ -1,4 +1,3 @@
-// spec: ./SPEC.md
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
@@ -30,7 +29,7 @@ enum CallbackStatus {
 /**
  * Landing page the IdP redirects back to after authorization. Exchanges the `code`/`state` for a
  * session (existing user) or a registration token (new user), then either logs the user in or
- * shows the OAuth registration form. See ./SPEC.md for the full state machine.
+ * shows the OAuth registration form.
  */
 const OAuthCallback = () => {
   const { provider = '' } = useParams();

@@ -33,7 +33,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 built-app/*
-package-lock.json
 thorpi/docs
 
 !banner.txt

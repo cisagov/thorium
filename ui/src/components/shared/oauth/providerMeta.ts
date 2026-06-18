@@ -1,4 +1,3 @@
-// spec: ./SPEC.md
 import { IconType } from 'react-icons';
 import { FaApple, FaGithub, FaGitlab, FaGoogle, FaMicrosoft } from 'react-icons/fa6';
 import { SiAuth0, SiKeycloak, SiOkta, SiOpenid } from 'react-icons/si';

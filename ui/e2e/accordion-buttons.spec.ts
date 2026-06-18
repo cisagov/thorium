@@ -166,7 +166,9 @@ test.describe('Accordion Header Button Styling', () => {
     await setupAuth(page);
     await setupPipelineMocks(page);
     await page.goto('/pipelines');
-    await page.waitForSelector('.accordion', { timeout: 10000 });
+    // The pipelines page uses the custom styled Accordion (no bootstrap `.accordion` class), so wait
+    // for a header action button instead.
+    await page.waitForSelector('[data-testid="header-btn-copy"]', { timeout: 10000 });
 
     const copyBtn = await getComputedStyleProps(headerBtn(page, 'copy'));
     const editBtn = await getComputedStyleProps(headerBtn(page, 'edit'));

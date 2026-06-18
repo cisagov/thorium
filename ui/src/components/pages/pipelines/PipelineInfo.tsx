@@ -1,18 +1,35 @@
 import { useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import type { FC, Ref } from 'react';
-import { Badge, Form } from 'react-bootstrap';
 import { FaQuestionCircle } from 'react-icons/fa';
 
 // project imports
 import { pipelineChecker } from './checker';
-import { InfoRow, HeaderCol, DetailCol } from './PipelineInfo.styled';
-import Markdown from '@components/shared/syntax/Markdown';
+import Fields from './Fields';
+import type { PipelineFieldsValue } from './Fields';
+import OrderField from './OrderField';
+import {
+  AlertSpacer,
+  CreatorBadge,
+  DetailCol,
+  EditForm,
+  FormatBar,
+  HeaderCol,
+  InfoRow,
+  OrderErrorSpacer,
+  SpacedInfoRow,
+  SpacedSectionRow,
+  ToggleBar,
+} from './PipelineInfo.styled';
+import { EditFieldCol, EditMiddle } from './shared.styled';
 import TriggerDisplay from './TriggerDisplay';
+import Triggers from './Triggers';
+import { PipelineFormMode } from './types';
+import Markdown from '@components/shared/syntax/Markdown';
 import { BansContainer, BanItem } from '@components/shared/browsing';
 import AlertBanner, { Severity } from '@components/shared/alerts/AlertBanner';
-import { BUTTON_BAR_MARGIN } from '@components/shared/buttons/tokens';
 import ImagePipelineEditor from '@components/shared/inputs/code/CodeEditor/ImagePipelineEditor';
 import FormatToggle from '@components/shared/inputs/code/CodeEditor/FormatToggle';
+import ViewModeToggle, { ViewMode } from '@components/shared/inputs/code/CodeEditor/ViewModeToggle';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import PipelineOrderFlow from '@components/shared/pipeline/PipelineOrderFlow';
 import { ApplyBtn, DiscardBtn, OrderChangeBar } from '@components/shared/pipeline/PipelineOrderFlow.styled';
@@ -24,7 +41,10 @@ import { canModifyPipeline } from '@utilities/permissions';
 import { FormatType } from '@utilities/rules/types';
 import { pipelineToEditorObject } from '@utilities/transforms/pipeline';
 import type { Group } from '@models/groups';
-import type { Pipeline, PipelineBan, PipelineUpdate } from '@models/pipelines';
+import type { EventTrigger, Pipeline, PipelineBan, PipelineUpdate } from '@models/pipelines';
+
+/// Top-level editor keys managed by the Fields form
+const FIELDS_KEYS = new Set(['name', 'group', 'description', 'sla']);
 
 export interface PipelineInfoHandle {
   handleUpdate: () => void;
@@ -44,9 +64,18 @@ interface PipelineInfoProps {
 const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode, onExitEditMode, onUpdate, refreshPipeline }) => {
   const { userInfo } = useAuth();
   const [updateError, setUpdateError] = useState('');
-  const [editorObj, setEditorObj] = useState<Record<string, unknown> | null>(null);
+  const [editorObj, setEditorObj] = useState<Record<string, unknown>>(() => pipelineToEditorObject(pipeline));
+  const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Form);
   const [format, setFormat] = useState<FormatType>(FormatType.YAML);
   const [parseValid, setParseValid] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState(false);
+  const [triggerErrors, setTriggerErrors] = useState(false);
+  // Per-field error state is only surfaced after a failed Accept attempt, so freshly added
+  // (empty) fields/triggers don't immediately show errors while still being edited.
+  const [displayErrors, setDisplayErrors] = useState(false);
+  // Bumped whenever editorObj is re-seeded from the pipeline so the form sections
+  // re-derive their internal state instead of keeping stale edits.
+  const [formResetKey, setFormResetKey] = useState(0);
   const [pendingOrder, setPendingOrder] = useState<(string | string[])[] | null>(null);
   const [orderUpdateError, setOrderUpdateError] = useState('');
   const pipelineTriggers = pipeline.triggers ?? {};
@@ -70,10 +99,13 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
       setPendingOrder(null);
       setOrderUpdateError('');
       setEditorObj(pipelineToEditorObject(pipeline));
+      setFormResetKey((k) => k + 1);
+      setViewMode(ViewMode.Form);
       setParseValid(true);
       setUpdateError('');
+      setDisplayErrors(false);
     } else {
-      setEditorObj(null);
+      setEditorObj(pipelineToEditorObject(pipeline));
       setUpdateError('');
       pipelineChecker.clearValidImageNames();
     }
@@ -117,35 +149,101 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
     }
   };
 
-  const handleUpdate = async () => {
-    if (editorObj && parseValid) {
-      if (await onUpdate(editorObj, pipeline, setUpdateError)) {
-        onExitEditMode();
+  // Switching views is lossless since both read/write the shared editorObj; the form
+  // view always holds a parseable object, so re-mark it valid when returning to it.
+  const handleViewModeChange = (mode: ViewMode) => {
+    if (mode === viewMode) return;
+    if (mode === ViewMode.Form) setParseValid(true);
+    setViewMode(mode);
+  };
+
+  // Fields manages multiple top-level keys — remove old keys before merging new ones
+  const handleFieldsChange = (fields: PipelineFieldsValue) => {
+    setEditorObj((prev) => {
+      const rest: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (!FIELDS_KEYS.has(k)) rest[k] = v;
       }
+      return { ...rest, ...(fields as unknown as Record<string, unknown>) };
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!parseValid) return;
+    if (viewMode === ViewMode.Form && (fieldErrors || triggerErrors)) {
+      setUpdateError('Please resolve missing fields or invalid entries');
+      setDisplayErrors(true);
+      return;
+    }
+    if (await onUpdate(editorObj, pipeline, setUpdateError)) {
+      onExitEditMode();
     }
   };
 
   useImperativeHandle(ref, () => ({ handleUpdate: () => void handleUpdate() }));
 
   return (
-    <Form>
+    <EditForm>
       {updateError != '' && (
-        <div style={{ marginBottom: '0.25rem' }}>
+        <AlertSpacer>
           <AlertBanner>{updateError}</AlertBanner>
-        </div>
+        </AlertSpacer>
       )}
-      {inEditMode ? (
+      {inEditMode && (
+        <ToggleBar>
+          <ViewModeToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
+        </ToggleBar>
+      )}
+      {inEditMode && viewMode === ViewMode.Editor ? (
         <>
-          <div style={{ marginBottom: BUTTON_BAR_MARGIN }}>
+          <FormatBar>
             <FormatToggle format={format} onFormatChange={setFormat} />
-          </div>
-          <ImagePipelineEditor
-            value={editorObj || {}}
-            onChange={handleEditorChange}
-            checker={pipelineChecker}
-            format={format}
-            height="400px"
+          </FormatBar>
+          <ImagePipelineEditor value={editorObj} onChange={handleEditorChange} checker={pipelineChecker} format={format} height="400px" />
+        </>
+      ) : inEditMode && viewMode === ViewMode.Form ? (
+        <>
+          <Fields
+            value={editorObj as unknown as PipelineFieldsValue}
+            groups={[]}
+            onChange={handleFieldsChange}
+            onValidate={setFieldErrors}
+            showErrors={displayErrors}
+            resetKey={formResetKey}
+            mode={PipelineFormMode.Edit}
           />
+          <SpacedSectionRow>
+            <EditMiddle>
+              <SimpleSubtitle>
+                <b>Order</b>
+              </SimpleSubtitle>
+            </EditMiddle>
+            <EditFieldCol>
+              <OrderField
+                order={Array.isArray(editorObj.order) ? (editorObj.order as (string | string[])[]) : []}
+                onChange={(o) => setEditorObj((prev) => ({ ...prev, order: o }))}
+                group={pipeline.group}
+                bannedImages={bannedImages}
+              />
+            </EditFieldCol>
+          </SpacedSectionRow>
+          <SpacedSectionRow>
+            <EditMiddle>
+              <SimpleSubtitle>
+                <b>Triggers</b>
+              </SimpleSubtitle>
+            </EditMiddle>
+            <EditFieldCol>
+              <Triggers
+                value={(editorObj.triggers as Record<string, EventTrigger>) ?? {}}
+                onChange={(t) => setEditorObj((prev) => ({ ...prev, triggers: t }))}
+                onValidate={setTriggerErrors}
+                resetKey={formResetKey}
+                showErrors={displayErrors}
+                mode={PipelineFormMode.Edit}
+              />
+            </EditFieldCol>
+          </SpacedSectionRow>
         </>
       ) : (
         <>
@@ -156,13 +254,11 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
               </SimpleSubtitle>
             </HeaderCol>
             <DetailCol>
-              <Badge bg="" className="bg-blue">
-                {pipeline.creator}
-              </Badge>
+              <CreatorBadge>{pipeline.creator}</CreatorBadge>
             </DetailCol>
           </InfoRow>
           {pipeline.bans && Object.keys(pipeline.bans).length > 0 && (
-            <InfoRow style={{ marginTop: '0.25rem' }}>
+            <SpacedInfoRow>
               <HeaderCol>
                 <SimpleSubtitle>
                   <b>Bans</b>
@@ -184,9 +280,9 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
                   ))}
                 </BansContainer>
               </DetailCol>
-            </InfoRow>
+            </SpacedInfoRow>
           )}
-          <InfoRow style={{ marginTop: '0.25rem' }}>
+          <SpacedInfoRow>
             <HeaderCol>
               <SimpleSubtitle>
                 <b>Description</b>
@@ -195,17 +291,12 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
             <DetailCol>
               <Markdown>{pipeline.description ?? ''}</Markdown>
             </DetailCol>
-          </InfoRow>
-          <InfoRow style={{ marginTop: '0.25rem' }}>
+          </SpacedInfoRow>
+          <SpacedInfoRow>
             <HeaderCol>
-              <OverlayTipRight
-                tip={`The order of images to run. Sequential steps run one after another.
-                Parallel steps (stacked vertically) run simultaneously.`}
-              >
-                <SimpleSubtitle>
-                  <b>Order</b> <FaQuestionCircle />
-                </SimpleSubtitle>
-              </OverlayTipRight>
+              <SimpleSubtitle>
+                <b>Order</b>
+              </SimpleSubtitle>
             </HeaderCol>
             <DetailCol>
               <PipelineOrderFlow
@@ -225,14 +316,14 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
                 </OrderChangeBar>
               )}
               {orderUpdateError && (
-                <div style={{ marginTop: BUTTON_BAR_MARGIN }}>
+                <OrderErrorSpacer>
                   <AlertBanner>{orderUpdateError}</AlertBanner>
-                </div>
+                </OrderErrorSpacer>
               )}
             </DetailCol>
-          </InfoRow>
+          </SpacedInfoRow>
           <TriggerDisplay triggers={pipelineTriggers} />
-          <InfoRow style={{ marginTop: '0.25rem' }}>
+          <SpacedInfoRow>
             <HeaderCol>
               <OverlayTipRight tip={`The length of the SLA in seconds.`}>
                 <SimpleSubtitle>
@@ -243,10 +334,10 @@ const PipelineInfo: FC<PipelineInfoProps> = ({ ref, pipeline, groups, inEditMode
             <DetailCol>
               <p>{pipeline.sla}</p>
             </DetailCol>
-          </InfoRow>
+          </SpacedInfoRow>
         </>
       )}
-    </Form>
+    </EditForm>
   );
 };
 

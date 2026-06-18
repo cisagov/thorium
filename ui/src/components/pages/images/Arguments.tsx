@@ -16,8 +16,8 @@ import {
   ImageFieldsWrapper,
 } from './shared.styled';
 import { ImageFormMode } from './types';
-import AlertBanner from '@components/shared/alerts/AlertBanner';
 import FieldBadge from '@components/shared/badges/FieldBadge';
+import { FieldError, errorOutline } from '@components/shared/inputs/FieldError';
 import SelectableArray from '@components/shared/inputs/selectable/SelectableArray';
 import { OverlayTipRight } from '@components/shared/overlay/tips';
 import type { ImageArgs, ArgStrategyValue } from '@models/images';
@@ -41,7 +41,7 @@ const KeyCol = styled.div`
   min-width: 120px;
 `;
 
-const Input = styled.input`
+const Input = styled.input<{ $error?: boolean }>`
   width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--thorium-panel-border);
@@ -49,6 +49,7 @@ const Input = styled.input`
   background: var(--thorium-secondary-panel-bg);
   color: var(--thorium-text);
   font-size: 14px;
+  ${({ $error }) => $error && errorOutline}
 `;
 
 const Select = styled.select`
@@ -241,12 +242,18 @@ const ArgumentFields: React.FC<{
         <OverlayTipRight tip={TOOLTIPS.kwarg}>
           <FieldGroup>
             <Label>Kwarg</Label>
-            <Input type="text" value={form.kwarg} placeholder="kwarg option" onChange={(e) => update('kwarg', e.target.value.trim())} />
+            <Input
+              type="text"
+              value={form.kwarg}
+              placeholder="kwarg option"
+              $error={!!errors.output}
+              onChange={(e) => update('kwarg', e.target.value.trim())}
+            />
           </FieldGroup>
         </OverlayTipRight>
       )}
 
-      {errors.output && <AlertBanner className="m-2">{errors.output}</AlertBanner>}
+      {errors.output && <FieldError>{errors.output}</FieldError>}
     </ImageFieldsWrapper>
   );
 };

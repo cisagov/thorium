@@ -89,14 +89,21 @@ export function generatePipelineSuggestions(
     }
   }
 
-  // Empty `order: []` (e.g. a freshly created pipeline) — offer to populate it via the stage editor.
-  // (A null `order` is already covered by the loop above; an empty array is not.)
-  if (Array.isArray(parsed['order']) && (parsed['order'] as unknown[]).length === 0) {
+  // Offer the stage editor for an array `order` whether it is empty or already populated, so a user
+  // can add images to an existing order (not just seed a fresh one). The editor is seeded with the
+  // current stages (carried on the schema) so accepting produces existing + added; the order
+  // populate replaces the whole `order` block. (A null `order` is covered by the loop above.)
+  if (Array.isArray(parsed['order'])) {
+    const rawOrder = parsed['order'] as unknown[];
+    const isEmpty = rawOrder.length === 0;
+    const currentStages = rawOrder
+      .map((stage) => (Array.isArray(stage) ? stage.filter((s): s is string => typeof s === 'string') : typeof stage === 'string' ? [stage] : []))
+      .filter((stage) => stage.length > 0);
     suggestions.push({
       line: findKeyLine(doc.contents, 'order', lineIndex),
       field: 'order',
-      message: 'Populate order',
-      schema: PIPELINE_FIELD_SCHEMAS.order,
+      message: isEmpty ? 'Populate order' : 'Edit order',
+      schema: { ...PIPELINE_FIELD_SCHEMAS.order, currentStages },
       isReplace: true,
     });
   }

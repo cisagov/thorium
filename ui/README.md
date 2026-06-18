@@ -95,7 +95,20 @@ npm run test:watch         # watch mode
 
 ### E2E Tests (Playwright)
 
-E2E tests run against a live Thorium instance. See [e2e/TESTING.md](e2e/TESTING.md) for full details.
+E2E tests run against a live Thorium instance and drive a real Chromium browser. See
+[e2e/TESTING.md](e2e/TESTING.md) for full details.
+
+**One-time setup** — install the Playwright browser (plus its OS libraries):
+
+```bash
+npx playwright install --with-deps chromium   # downloads Chromium + installs system deps (needs sudo)
+```
+
+If you only need the browser binary (deps already present) use `npx playwright install chromium`.
+The download is fetched from `cdn.playwright.dev`, so this host must be reachable — in a restricted
+network, allow egress to it, or install a system browser (`sudo apt-get install -y chromium-browser`
+/ `google-chrome-stable`) and point Playwright at it via `channel`/`executablePath` in
+`playwright.config.ts`.
 
 ```bash
 THORIUM_API_URL=http://localhost:8080 npm run test:e2e           # headless

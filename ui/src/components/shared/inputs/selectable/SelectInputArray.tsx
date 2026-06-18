@@ -49,6 +49,7 @@ interface SelectInputProps {
   onCreate?: (input: any) => void; // call back when a new value is created
   isCreatable?: boolean;
   defaultMessage?: string; // default field message when no initial value is provided
+  error?: boolean; // whether to render the control with a danger outline
 }
 
 const DefaultMessage = 'Type each item and press enter...';
@@ -62,11 +63,12 @@ const SelectInputArray: React.FC<SelectInputProps> = ({
   onCreate,
   isCreatable = true,
   defaultMessage = DefaultMessage,
+  error = false,
 }) => {
   const [inputValue, setInputValue] = React.useState('');
   const [value, setValue] = React.useState<SelectOption[]>(formatInitialValues(values, valuesMap));
   const [valueOptions, setValueOptions] = React.useState<SelectOption[]>(formatInitialValues(options ? options : [], valuesMap));
-  const selectStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)');
+  const selectStyle = createReactSelectStyles('White', 'rgb(160, 162, 163)', error);
 
   // update internal options if prop options change
   useEffect(() => {
