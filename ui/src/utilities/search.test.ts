@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest';
 
 // project imports
 import { OmniClauseAndTimeToFilter } from './search';
-import { Clause, ClauseCondition } from '@components/pages/search/omnibar/ClauseTypes';
-import { AbsoluteSelection } from '@components/pages/search/omnibar/timepicker/utils';
+import { Clause, ClauseCondition } from '@components/shared/inputs/omnibar/ClauseTypes';
+import { AbsoluteSelection } from '@components/shared/inputs/omnibar/timepicker/utils';
 
 function multi(category: string, field: string, values: string[]): Clause {
   return { category, field, condition: ClauseCondition.IsOneOf, value: { values } };
+}
+
+function single(category: string, field: string, value: string): Clause {
+  return { category, field, condition: ClauseCondition.Is, value: { value } };
 }
 
 describe('OmniClauseAndTimeToFilter', () => {
@@ -14,10 +18,22 @@ describe('OmniClauseAndTimeToFilter', () => {
     expect(OmniClauseAndTimeToFilter([], { mode: 'all' })).toEqual({
       limit: 25,
       groups: [],
+      tags: {},
       start: null,
       end: null,
       hideTags: [],
     });
+  });
+
+  it('extracts tag clauses into Filters.tags (and excludes hidden tags)', () => {
+    const clauses: Clause[] = [
+      single('tag', 'family', 'emotet'),
+      single('tag', 'family', 'trickbot'),
+      single('tag', 'av', 'malicious'),
+      multi('hidden tags', 'hidden tags', ['Results', 'Parent']),
+    ];
+    const filter = OmniClauseAndTimeToFilter(clauses, { mode: 'all' });
+    expect(filter.tags).toEqual({ family: ['emotet', 'trickbot'], av: ['malicious'] });
   });
 
   it('honors a custom default limit', () => {

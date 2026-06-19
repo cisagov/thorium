@@ -9,6 +9,7 @@ import {
   getSearchTextFromClauses,
   getStringFieldFromClauses,
   getStringFieldListFromClauses,
+  getTagsFromClauses,
   matchesStringClauses,
 } from './utils';
 import { Clause, ClauseCondition } from './ClauseTypes';
@@ -143,5 +144,30 @@ describe('getHiddenTagsFromClauses', () => {
 
   it('ignores single-value clauses and returns [] when none present', () => {
     expect(getHiddenTagsFromClauses([single('text', 'text', 'x')])).toEqual([]);
+  });
+});
+
+describe('getTagsFromClauses', () => {
+  it('returns {} when there are no tag clauses', () => {
+    expect(getTagsFromClauses([single('group', 'group', 'g1')])).toEqual({});
+  });
+
+  it('collects a single tag key/value', () => {
+    expect(getTagsFromClauses([single('tag', 'family', 'emotet')])).toEqual({ family: ['emotet'] });
+  });
+
+  it('merges and de-duplicates values for the same key', () => {
+    const clauses = [single('tag', 'family', 'emotet'), single('tag', 'family', 'trickbot'), single('tag', 'family', 'emotet')];
+    expect(getTagsFromClauses(clauses)).toEqual({ family: ['emotet', 'trickbot'] });
+  });
+
+  it('groups multiple keys and supports multi-value clauses', () => {
+    const clauses = [single('tag', 'av', 'malicious'), multi('tag', 'os', ['windows', 'linux'])];
+    expect(getTagsFromClauses(clauses)).toEqual({ av: ['malicious'], os: ['windows', 'linux'] });
+  });
+
+  it('excludes the hidden-tags display filter', () => {
+    const clauses = [single('tag', 'family', 'emotet'), multi('hidden tags', 'hidden tags', ['Results', 'Parent'])];
+    expect(getTagsFromClauses(clauses)).toEqual({ family: ['emotet'] });
   });
 });

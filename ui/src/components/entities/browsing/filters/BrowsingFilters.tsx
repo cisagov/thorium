@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Button, Col, Row } from 'react-bootstrap';
 import { useNavigate } from 'react-router';
 
 // project imports
 import { getCreatePathByEntity } from '@components/entities/create/EntityCreateRoutes';
-import { OmnibarStandardTimeFilters } from '@components/pages/search/omnibar/Bars';
-import { Clause, DefaultClausesEntities } from '@components/pages/search/omnibar/ClauseTypes';
-import { TimeSelection } from '@components/pages/search/omnibar/timepicker/utils';
+import { OmnibarStandardTimeFilters } from '@components/shared/inputs/omnibar/Bars';
+import { DefaultClausesEntities } from '@components/shared/inputs/omnibar/ClauseTypes';
+import { useOmnibarUrlState } from '@components/shared/inputs/omnibar/useOmnibarUrlState';
 import { OverlayTipLeft } from '@components/shared/overlay/tips';
 import Title from '@components/shared/titles/Title';
 import { OmniClauseAndTimeToFilter } from '@utilities/search';
@@ -23,13 +23,14 @@ interface BrowsingFiltersProps {
 
 const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({ onChange, disabled = false, title = null, kind, creatable = false }) => {
   const navigate = useNavigate();
-  const [clauses, setClauses] = useState<Clause[]>(DefaultClausesEntities());
-  const [time, setTime] = useState<TimeSelection>({ mode: 'all' });
+  // clauses + time live in the URL so filtered browse views are shareable/bookmarkable
+  const { clauses, setClauses, time, setTime } = useOmnibarUrlState({ clauses: DefaultClausesEntities(), time: { mode: 'all' } });
 
-  // seed the parent's filters from the default clauses on mount so the initial list loads
+  // push filters to the parent on mount and whenever the URL-backed clauses/time change (covers
+  // user edits, deep links, and back/forward navigation uniformly)
   useEffect(() => {
     onChange(OmniClauseAndTimeToFilter(clauses, time));
-  }, []);
+  }, [clauses, time, onChange]);
 
   return (
     <>
@@ -57,18 +58,7 @@ const BrowsingFilters: React.FC<BrowsingFiltersProps> = ({ onChange, disabled = 
       </Row>
       <Row>
         <Col className="d-flex justify-content-center">
-          <OmnibarStandardTimeFilters
-            clauses={clauses}
-            setClauses={(next) => {
-              setClauses(next);
-              onChange(OmniClauseAndTimeToFilter(next, time));
-            }}
-            time={time}
-            setTime={(next) => {
-              setTime(next);
-              onChange(OmniClauseAndTimeToFilter(clauses, next));
-            }}
-          />
+          <OmnibarStandardTimeFilters clauses={clauses} setClauses={setClauses} time={time} setTime={setTime} />
         </Col>
       </Row>
     </>

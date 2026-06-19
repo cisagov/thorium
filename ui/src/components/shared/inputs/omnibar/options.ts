@@ -6,6 +6,8 @@ export type OmnibarOptionMap = Record<string, OmnibarCategoryOption>;
 export type OmnibarCategoryOption = {
   fields: Record<string, OmnibarFieldOption>;
   helpText?: string;
+  /// Whether the user may enter arbitrary field keys not present in `fields` (e.g. custom tag keys)
+  fieldsCreatable?: boolean;
 };
 
 export type OmnibarFieldOption = {
@@ -75,6 +77,8 @@ export function addTagOptions(optMap: OmnibarOptionMap, tagOpts: TagOptions): Om
     tag: {
       fields: {},
       helpText: 'Match a tag key/value',
+      // tag keys are open-ended: allow filtering on user-entered keys not in the known set
+      fieldsCreatable: true,
     },
   };
 

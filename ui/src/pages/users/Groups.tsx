@@ -15,9 +15,11 @@ import GroupRoleBadge from '@components/pages/groups/GroupRoleBadge';
 import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
 import { OverlayTipRight, OverlayTipTop, OverlayTipLeft } from '@components/shared/overlay/tips';
-import { OmnibarGroups } from '@components/pages/search/omnibar/Bars';
-import { Clause } from '@components/pages/search/omnibar/ClauseTypes';
-import { getGroupsFromClauses, getStringFieldListFromClauses } from '@components/pages/search/omnibar/utils';
+import { OmnibarGroups } from '@components/shared/inputs/omnibar/Bars';
+import { Clause } from '@components/shared/inputs/omnibar/ClauseTypes';
+import { defaultTimeSelection } from '@components/shared/inputs/omnibar/timepicker/utils';
+import { useOmnibarUrlState } from '@components/shared/inputs/omnibar/useOmnibarUrlState';
+import { getGroupsFromClauses, getStringFieldListFromClauses } from '@components/shared/inputs/omnibar/utils';
 import { getAllGroupUsers, hasOverlap } from '@utilities/groups';
 import { useAuth } from '@utilities/auth';
 import { createReactSelectStyles } from '@utilities/select';
@@ -87,7 +89,8 @@ const Groups = () => {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<Record<string, Group>>({});
   const [allUsers, setAllUSers] = useState<string[]>([]);
-  const [clauses, setClauses] = useState<Clause[]>([]);
+  // omnibar filters live in the URL so a filtered group list is shareable
+  const { clauses, setClauses } = useOmnibarUrlState({ clauses: [], time: defaultTimeSelection() });
   const { userInfo, checkCookie } = useAuth();
 
   const filteredGroups = filterGroups(groups, clauses);

@@ -4,14 +4,16 @@ import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
 import Page from '@components/pages/Page';
-import { OmnibarUsers } from '@components/pages/search/omnibar/Bars';
-import { Clause } from '@components/pages/search/omnibar/ClauseTypes';
+import { OmnibarUsers } from '@components/shared/inputs/omnibar/Bars';
+import { Clause } from '@components/shared/inputs/omnibar/ClauseTypes';
+import { defaultTimeSelection } from '@components/shared/inputs/omnibar/timepicker/utils';
+import { useOmnibarUrlState } from '@components/shared/inputs/omnibar/useOmnibarUrlState';
 import {
   getGroupsFromClauses,
   getStringFieldFromClauses,
   getStringFieldListFromClauses,
   matchesStringClauses,
-} from '@components/pages/search/omnibar/utils';
+} from '@components/shared/inputs/omnibar/utils';
 import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 import Title from '@components/shared/titles/Title';
 import { OverlayTipLeft } from '@components/shared/overlay/tips';
@@ -351,7 +353,8 @@ const EditRoles: React.FC<EditRolesProps> = ({ role, username, user, setRole, re
 const UserBrowsing = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [users, setUsers] = useState<UserInfo[]>([]);
-  const [clauses, setClauses] = useState<Clause[]>([]);
+  // omnibar filters live in the URL so a filtered user list is shareable
+  const { clauses, setClauses } = useOmnibarUrlState({ clauses: [], time: defaultTimeSelection() });
   const { checkCookie, impersonate } = useAuth();
 
   const filteredUsers = filterUsers(users, clauses);

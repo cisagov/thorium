@@ -9,9 +9,11 @@ import { orderComparePipeline } from '@components/pages/files/reactions/pipeline
 import Page from '@components/pages/Page';
 import { Accordion } from '@components/shared/accordion';
 import { Button, ButtonVariant } from '@components/shared/buttons';
-import { OmnibarPipelines } from '@components/pages/search/omnibar/Bars';
-import type { Clause } from '@components/pages/search/omnibar/ClauseTypes';
-import { getGroupsFromClauses, matchesStringClauses } from '@components/pages/search/omnibar/utils';
+import { OmnibarPipelines } from '@components/shared/inputs/omnibar/Bars';
+import type { Clause } from '@components/shared/inputs/omnibar/ClauseTypes';
+import { defaultTimeSelection } from '@components/shared/inputs/omnibar/timepicker/utils';
+import { useOmnibarUrlState } from '@components/shared/inputs/omnibar/useOmnibarUrlState';
+import { getGroupsFromClauses, matchesStringClauses } from '@components/shared/inputs/omnibar/utils';
 import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 import Title from '@components/shared/titles/Title';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
@@ -22,6 +24,8 @@ import { fetchGroups } from '@utilities/fetch';
 import { generateCopyName } from '@utilities/naming';
 import { getThoriumRole } from '@utilities/role';
 import { editorObjectToPipelineUpdate } from '@utilities/transforms/pipeline';
+import { listCodec } from '@utilities/url/codecs';
+import { useUrlState } from '@utilities/url/useUrlState';
 import type { Group } from '@models/groups';
 import type { Pipeline, PipelineUpdate } from '@models/pipelines';
 import { RoleKey } from '@models/users';
@@ -43,8 +47,9 @@ const PipelineBrowsing: FC = () => {
   const [loading, setLoading] = useState(false);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [groups, setGroups] = useState<Record<string, Group>>({});
-  const [activeKeys, setActiveKeys] = useState<string[]>([]);
-  const [clauses, setClauses] = useState<Clause[]>([]);
+  // expanded accordion rows + omnibar filters live in the URL so the view is shareable
+  const [activeKeys, setActiveKeys] = useUrlState(listCodec('open'), []);
+  const { clauses, setClauses } = useOmnibarUrlState({ clauses: [], time: defaultTimeSelection() });
   const { userInfo, checkCookie } = useAuth();
 
   const filteredPipelines = filterPipelines(pipelines, clauses);

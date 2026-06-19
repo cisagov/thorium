@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Card, Col, Row, Stack } from 'react-bootstrap';
 import DOMPurify from 'dompurify';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
@@ -7,14 +7,16 @@ import parse from 'html-react-parser';
 import styled from 'styled-components';
 
 // project imports
+import { OmnibarMainSearch } from '../../shared/inputs/omnibar/Bars';
+import { Clause } from '../../shared/inputs/omnibar/ClauseTypes';
+import { TimeSelection, TimeSelectionToStrings, defaultTimeSelection } from '../../shared/inputs/omnibar/timepicker/utils';
+import { useOmnibarUrlState } from '../../shared/inputs/omnibar/useOmnibarUrlState';
+import { getGroupsFromClauses, getIndexesFromClauses, getLimitFromClauses, getSearchTextFromClauses } from '../../shared/inputs/omnibar/utils';
 import EntityList from '@entities/browsing/EntityList';
 import { search } from '@thorpi/search';
-import { SearchFilters, ElasticIndex, ElasticDoc } from '@models/search';
+import { OmniClauseAndTimeToFilter } from '@utilities/search';
+import { ElasticDoc, SearchFilters } from '@models/search';
 import { scaling } from '@styles';
-import { Clause, ClauseCondition } from './omnibar/ClauseTypes';
-import { defaultTimeSelection, TimeSelection, TimeSelectionToStrings } from './omnibar/timepicker/utils';
-import { getGroupsFromClauses, getIndexesFromClauses, getLimitFromClauses, getSearchTextFromClauses } from './omnibar/utils';
-import { OmnibarMainSearch } from './omnibar/Bars';
 
 // get hash of a file from result ID
 const getSha256 = (id: string) => {
@@ -172,58 +174,36 @@ const SearchBarContainer = styled.div`
 
 // component containing search bar and related functionality
 const Search = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  // omnibar clauses + time live in the URL so searches are shareable/bookmarkable
+  const {
+    clauses: omnibarClauses,
+    setClauses: setOmnibarClauses,
+    time: omniTime,
+    setTime: setOmniTime,
+  } = useOmnibarUrlState({
+    clauses: [],
+    time: defaultTimeSelection(),
+  });
   const [searching, setSearching] = useState<boolean>(true);
   const [filters, setFilters] = useState<SearchFilters>({ query: '' });
   // the id of the cursor for paging search results;
   const [searchError, setSearchError] = useState<string>('');
   const [debouncedQuery, setDebouncedQuery] = useState<string>('');
-  const [omnibarClauses, setOmnibarClauses] = useState<Clause[]>([]);
-  const [omniTime, setOmniTime] = useState<TimeSelection>(defaultTimeSelection());
 
-  // read filter values from url search query params
-  const readURLSearchParams = () => {
-    const clauses: Clause[] = [];
-    const savedIndexes: ElasticIndex[] = searchParams.getAll('indexes').map((index) => ElasticIndex[index as keyof typeof ElasticIndex]);
-    // generate default selected groups list with each group set to unselected/false
-    if (savedIndexes.length > 0) {
-      clauses.push({
-        field: 'index',
-        category: 'index',
-        condition: ClauseCondition.IsOneOf,
-        value: { values: savedIndexes },
-      });
-    }
-    const paramQuery = searchParams.get('query');
-    if (paramQuery) {
-      clauses.push({ category: 'text', field: 'text', condition: ClauseCondition.Is, value: { value: paramQuery } });
-    }
-    //setDebouncedQuery(paramQuery ? paramQuery: "");
-    setOmnibarClauses(clauses);
-  };
-
+  // debounce omnibar changes into the search query + filters that drive EntityList; deriving
+  // filters from the full clause+time state means changing group/index/limit/time alone (not just
+  // the query text) also re-triggers the search
   useEffect(() => {
     const handleSetQuery = setTimeout(() => {
       const query = getSearchTextFromClauses(omnibarClauses);
       setDebouncedQuery(query);
-      // update query in url params
       setSearchError('');
-      if (query !== '') {
-        // update query in url params
-        searchParams.set('query', query);
-      } else {
-        searchParams.delete('query');
-      }
-      setSearchParams(searchParams);
-      const pendingSearchFilters: SearchFilters = structuredClone(filters);
-      pendingSearchFilters['query'] = query;
-      setFilters(pendingSearchFilters);
+      setFilters({ ...OmniClauseAndTimeToFilter(omnibarClauses, omniTime), query });
     }, 500);
     return () => clearTimeout(handleSetQuery);
   }, [omnibarClauses, omniTime]);
 
   useEffect(() => {
-    readURLSearchParams();
     setSearching(false);
   }, []);
 

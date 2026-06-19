@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 // project imports
 import { filterUsers } from './UserBrowsing';
-import { Clause, ClauseCondition } from '@components/pages/search/omnibar/ClauseTypes';
+import { Clause, ClauseCondition } from '@components/shared/inputs/omnibar/ClauseTypes';
 import { RoleKey, ThoriumRole, UserInfo } from '@models/users';
 
 type UserExtras = { email?: string; verified?: boolean; local?: boolean };
