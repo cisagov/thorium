@@ -5,6 +5,7 @@ import {
   AddFieldToClauseDraft,
   ToggleValueInClause,
   Clause,
+  ClauseCondition,
   ClauseDraft,
   ClauseIsMulti,
   CondIsMulti,
@@ -110,15 +111,22 @@ const Omnibar: React.FC<OmnibarProps> = ({
     if (editingState.mode !== OmnibarEditMode.EditNew) return;
     const newEditState: EditSession = { ...editingState, textDraft: '' };
     const category = editingState.clauseDraft.category!;
-    const fieldOpts = dropdownOptions[category].fields;
-    if (!Object.hasOwn(fieldOpts, next)) {
+    const categoryObj = dropdownOptions[category];
+    const fieldOpts = categoryObj.fields;
+    // resolve the field's conditions: a known field uses its defined conditions; an unknown field is
+    // allowed only when the category permits creatable keys (e.g. user-entered tag keys), defaulting
+    // to a single `Is` condition
+    let conditions: ClauseCondition[];
+    if (Object.hasOwn(fieldOpts, next)) {
+      conditions = fieldOpts[next].conditions;
+    } else if (categoryObj.fieldsCreatable) {
+      conditions = [ClauseCondition.Is];
+    } else {
       console.error('field does not exist, returning');
       return;
     }
-    const fieldObj = fieldOpts[next];
     newEditState.clauseDraft = AddFieldToClauseDraft(newEditState.clauseDraft, next);
 
-    const conditions = fieldObj.conditions;
     if (conditions.length == 1) {
       //one condition. auto set and move on to value
       newEditState.part = 'value';

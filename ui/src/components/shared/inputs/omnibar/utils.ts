@@ -1,8 +1,9 @@
-import { ElasticIndex } from '@models/search';
 import { DropdownOption, EditSession, OmnibarEditMode } from './EditingTypes';
 import { Clause, ClauseCondition, ClauseDraft, ClauseIsMulti, GetConditionHelpText, GetValueString } from './ClauseTypes';
 import { multiCategories, OmnibarOptionMap } from './options';
 import { getTagColorClass } from '@components/tags';
+import { ElasticIndex } from '@models/search';
+import { RequestTags } from '@models/tags';
 
 function filterOptionsOnText(options: DropdownOption[], text: string): DropdownOption[] {
   if (!text)
@@ -75,7 +76,14 @@ export function getDropdownOptions(
         value: field,
       };
     });
-    return filterOptionsOnText(opts, editState.textDraft);
+    const filtered = filterOptionsOnText(opts, editState.textDraft);
+    // for categories that allow arbitrary keys (e.g. tags), offer to create the typed key when it
+    // doesn't match an existing one
+    const typed = editState.textDraft.trim();
+    if (categoryObj.fieldsCreatable && typed != '' && !filtered.some((opt) => opt.value === typed)) {
+      filtered.push({ category: category, value: typed, helpText: `Create new ${category} key` });
+    }
+    return filtered;
   }
   //field should be defined at this point. get defaults for comparison and
   //value based on the field
@@ -188,6 +196,27 @@ export function getHiddenTagsFromClauses(clauses: Clause[]): string[] {
     }
   });
   return result;
+}
+
+/**
+ * Collect tag-filter clauses into a {@link RequestTags} map (`{ [key]: values }`) for the list/search
+ * APIs. Only true tag clauses are included — the `hidden tags` display filter (which shares the `tag`
+ * category) is excluded since it controls rendering, not the query. Values for the same key are
+ * merged and de-duplicated.
+ *
+ * @param clauses - All active omnibar clauses.
+ * @returns A map of tag key to its filter values (empty when there are no tag clauses).
+ */
+export function getTagsFromClauses(clauses: Clause[]): RequestTags {
+  const tags: RequestTags = {};
+  clauses
+    .filter((clause) => clause.category == 'tag' && clause.field != 'hidden tags')
+    .forEach((clause) => {
+      const values = ClauseIsMulti(clause) ? clause.value.values : [clause.value.value];
+      const existing = tags[clause.field] ?? [];
+      tags[clause.field] = Array.from(new Set([...existing, ...values]));
+    });
+  return tags;
 }
 
 /**
