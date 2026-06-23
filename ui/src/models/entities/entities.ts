@@ -53,16 +53,7 @@ export enum Entities {
 
 // pure entities
 export type EntityTypes =
-  | Device
-  | Collection
-  | FileSystem
-  | Folder
-  | NetworkConnection
-  | Other
-  | SigmaRule
-  | Vendor
-  | WindowsProcess
-  | WindowsProcessTree;
+  Device | Collection | FileSystem | Folder | NetworkConnection | Other | SigmaRule | Vendor | WindowsProcess | WindowsProcessTree;
 
 export type EntityMetaTypes =
   | DeviceMeta

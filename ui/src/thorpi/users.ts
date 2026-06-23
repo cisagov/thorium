@@ -184,11 +184,7 @@ export async function resendVerificationEmail(username: string, errorHandler: (e
  * @param errorHandler - Called with a formatted message only on an unexpected (non-401) failure.
  * @returns An {@link EmailVerifyStatus}: `Verified` (204), `Expired` (401), or `Error`.
  */
-export async function verifyEmail(
-  username: string,
-  token: string,
-  errorHandler: (error: string) => void,
-): Promise<EmailVerifyStatus> {
+export async function verifyEmail(username: string, token: string, errorHandler: (error: string) => void): Promise<EmailVerifyStatus> {
   const url = `/users/verify/${encodeURIComponent(username)}/email/${encodeURIComponent(token)}`;
   return client
     .get(url)
