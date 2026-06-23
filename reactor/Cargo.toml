@@ -8,7 +8,7 @@ license-file = "../LICENSE"
 
 [features]
 # include kvm by default
-default = ["kvm"]
+default = []
 
 # support kvm-based builds
 kvm = ["virt", "kanal", "rand", "base64", "quick_cache", "tempfile"]

@@ -107,7 +107,11 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
           )}
           {inEditMode && userCanModify && (
             <OverlayTipBottom tip="Submit pending updates.">
-              <HeaderBtn $variant={ButtonVariant.Ok} data-testid="header-btn-accept" onClick={() => pipelineInfoRef.current?.handleUpdate()}>
+              <HeaderBtn
+                $variant={ButtonVariant.Ok}
+                data-testid="header-btn-accept"
+                onClick={() => pipelineInfoRef.current?.handleUpdate()}
+              >
                 Accept
               </HeaderBtn>
             </OverlayTipBottom>

@@ -11,7 +11,12 @@ import { OmnibarMainSearch } from '../../shared/inputs/omnibar/Bars';
 import { Clause } from '../../shared/inputs/omnibar/ClauseTypes';
 import { TimeSelection, TimeSelectionToStrings, defaultTimeSelection } from '../../shared/inputs/omnibar/timepicker/utils';
 import { useOmnibarUrlState } from '../../shared/inputs/omnibar/useOmnibarUrlState';
-import { getGroupsFromClauses, getIndexesFromClauses, getLimitFromClauses, getSearchTextFromClauses } from '../../shared/inputs/omnibar/utils';
+import {
+  getGroupsFromClauses,
+  getIndexesFromClauses,
+  getLimitFromClauses,
+  getSearchTextFromClauses,
+} from '../../shared/inputs/omnibar/utils';
 import EntityList from '@entities/browsing/EntityList';
 import { search } from '@thorpi/search';
 import { OmniClauseAndTimeToFilter } from '@utilities/search';

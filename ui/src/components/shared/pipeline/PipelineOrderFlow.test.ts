@@ -105,18 +105,30 @@ describe('clusterStagesByX (drag-reorder result)', () => {
 
   test('dragging a node before the first stage makes it the new leading stage', () => {
     // 'c' dropped left of 'a' (near the Start terminal), separated by > CLUSTER_THRESHOLD (100).
-    const order = clusterStagesByX([{ label: 'c', x: -50 }, { label: 'a', x: 70 }, { label: 'b', x: 370 }]);
+    const order = clusterStagesByX([
+      { label: 'c', x: -50 },
+      { label: 'a', x: 70 },
+      { label: 'b', x: 370 },
+    ]);
     expect(order).toEqual(['c', 'a', 'b']);
   });
 
   test('dragging a node after the last stage makes it the new trailing stage', () => {
     // 'a' dropped right of 'c' (near the End terminal), separated by > CLUSTER_THRESHOLD.
-    const order = clusterStagesByX([{ label: 'b', x: 370 }, { label: 'c', x: 670 }, { label: 'a', x: 820 }]);
+    const order = clusterStagesByX([
+      { label: 'b', x: 370 },
+      { label: 'c', x: 670 },
+      { label: 'a', x: 820 },
+    ]);
     expect(order).toEqual(['b', 'c', 'a']);
   });
 
   test('dropping a node onto a stage (within threshold) makes them parallel', () => {
-    const order = clusterStagesByX([{ label: 'a', x: 70 }, { label: 'b', x: 120 }, { label: 'c', x: 670 }]);
+    const order = clusterStagesByX([
+      { label: 'a', x: 70 },
+      { label: 'b', x: 120 },
+      { label: 'c', x: 670 },
+    ]);
     expect(order).toEqual([['a', 'b'], 'c']);
   });
 });

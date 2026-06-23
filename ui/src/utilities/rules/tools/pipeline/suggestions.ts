@@ -97,7 +97,9 @@ export function generatePipelineSuggestions(
     const rawOrder = parsed['order'] as unknown[];
     const isEmpty = rawOrder.length === 0;
     const currentStages = rawOrder
-      .map((stage) => (Array.isArray(stage) ? stage.filter((s): s is string => typeof s === 'string') : typeof stage === 'string' ? [stage] : []))
+      .map((stage) =>
+        Array.isArray(stage) ? stage.filter((s): s is string => typeof s === 'string') : typeof stage === 'string' ? [stage] : [],
+      )
       .filter((stage) => stage.length > 0);
     suggestions.push({
       line: findKeyLine(doc.contents, 'order', lineIndex),

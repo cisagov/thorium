@@ -64,7 +64,9 @@ const HeaderRow = styled.div<{ $open: boolean }>`
 
   &:focus-visible {
     outline: none;
-    box-shadow: inset 0 0 1px var(--thorium-panel-border), 0 0 8px var(--thorium-highlight-panel-border);
+    box-shadow:
+      inset 0 0 1px var(--thorium-panel-border),
+      0 0 8px var(--thorium-highlight-panel-border);
   }
 `;
 

@@ -26,7 +26,15 @@ export interface OverlayTipProps {
 
 type OverlayTipBaseProps = OverlayTipProps & { placement: Placement };
 
-const OverlayTip: React.FC<OverlayTipBaseProps> = ({ children, tip, wide = false, className = '', placement, disabled = false, block = false }) => {
+const OverlayTip: React.FC<OverlayTipBaseProps> = ({
+  children,
+  tip,
+  wide = false,
+  className = '',
+  placement,
+  disabled = false,
+  block = false,
+}) => {
   const [showOverlay, setShowOverlay] = useState(false);
   const [hoveringOverlay, setHoveringOverlay] = useState(false);
   const showTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
