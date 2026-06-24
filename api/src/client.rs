@@ -187,6 +187,46 @@ impl ThoriumClientBuilder {
         self
     }
 
+    /// Disable all proxies and connect to hosts directly
+    ///
+    /// By default the client respects proxy settings from the environment
+    /// (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`, honoring `NO_PROXY`). This disables that and
+    /// connects directly, which is useful for in-cluster traffic.
+    #[must_use]
+    pub fn disable_proxy(mut self) -> Self {
+        self.settings.disable_proxy = true;
+        self
+    }
+
+    /// Route all traffic through an explicit proxy
+    ///
+    /// This takes precedence over environment proxy settings but is ignored when
+    /// [`Self::disable_proxy`] is set. The URL may embed credentials (e.g.
+    /// `http://user:pass@host:port`).
+    ///
+    /// # Arguments
+    ///
+    /// * `proxy` - The proxy URL to route traffic through
+    #[must_use]
+    pub fn proxy<T: Into<String>>(mut self, proxy: T) -> Self {
+        self.settings.proxy = Some(proxy.into());
+        self
+    }
+
+    /// Set the hosts that should bypass an explicit proxy
+    ///
+    /// This mirrors the `NO_PROXY` environment variable and only applies when a proxy is set
+    /// via [`Self::proxy`].
+    ///
+    /// # Arguments
+    ///
+    /// * `no_proxy` - A comma-separated list of hosts/domains/CIDRs that bypass the proxy
+    #[must_use]
+    pub fn no_proxy<T: Into<String>>(mut self, no_proxy: T) -> Self {
+        self.settings.no_proxy = Some(no_proxy.into());
+        self
+    }
+
     /// Load auth info from a key file on disk
     ///
     /// # Arguments

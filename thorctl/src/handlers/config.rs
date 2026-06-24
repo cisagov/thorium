@@ -42,6 +42,19 @@ fn update_config(mut config: CtlConf, opts: &ConfigOpts) -> CtlConf {
     if let Some(timeout) = opts.timeout {
         config.client.timeout = timeout;
     }
+    if let Some(disable_proxy) = opts.disable_proxy {
+        config.client.disable_proxy = disable_proxy;
+    }
+    if opts.clear_proxy {
+        config.client.proxy = None;
+    } else if let Some(proxy) = &opts.proxy {
+        config.client.proxy = Some(proxy.clone());
+    }
+    if opts.clear_no_proxy {
+        config.client.no_proxy = None;
+    } else if let Some(no_proxy) = &opts.no_proxy {
+        config.client.no_proxy = Some(no_proxy.join(","));
+    }
     if let Some(skip_insecure_warning) = opts.skip_insecure_warning {
         config.skip_insecure_warning = Some(skip_insecure_warning);
     }

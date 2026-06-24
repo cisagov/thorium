@@ -42,6 +42,21 @@ pub struct ConfigOpts {
     /// The timeout for all requests to the Thorium API
     #[clap(long)]
     pub timeout: Option<u64>,
+    /// Disable all proxies and connect to Thorium directly, ignoring environment proxy settings
+    #[clap(long)]
+    pub disable_proxy: Option<bool>,
+    /// An explicit proxy URL to route all traffic to Thorium through
+    #[clap(long, conflicts_with = "clear_proxy")]
+    pub proxy: Option<String>,
+    /// Clear the explicit proxy URL so environment proxy settings are used
+    #[clap(long, conflicts_with = "proxy")]
+    pub clear_proxy: bool,
+    /// A comma-separated list of hosts/domains/CIDRs that bypass the explicit proxy
+    #[clap(long, value_delimiter = ',', conflicts_with = "clear_no_proxy")]
+    pub no_proxy: Option<Vec<String>>,
+    /// Clear the list of hosts that bypass the explicit proxy
+    #[clap(long, conflicts_with = "no_proxy")]
+    pub clear_no_proxy: bool,
     /// Disable the warning when Thorctl is set to connect insecurely to Thorium
     #[clap(long)]
     pub skip_insecure_warning: Option<bool>,

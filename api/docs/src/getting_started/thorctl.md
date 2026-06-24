@@ -91,6 +91,32 @@ You can specify a config file to modify using the `--config` flag as described a
 thorctl --config <PATH-TO-CONFIG-FILE> config --skip-updates=true
 ```
 
+#### Proxy Settings
+
+By default Thorctl **respects proxy settings from the environment**
+(`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`, honoring `NO_PROXY`). You can override this in the
+`client` block of the config:
+
+```yaml
+client:
+  # Disable all proxies and connect directly, ignoring the environment (default: false)
+  disable_proxy: false
+  # Route all traffic through an explicit proxy (may embed credentials,
+  # e.g. http://user:pass@host:port). Takes precedence over the environment.
+  proxy: http://proxy.example.com:8080
+  # Comma-separated hosts/domains/CIDRs that bypass the explicit `proxy`
+  # (mirrors NO_PROXY; only applies when `proxy` is set).
+  no_proxy: localhost,cluster.local
+```
+
+These can also be set with `thorctl config`:
+
+```
+thorctl config --proxy http://proxy.example.com:8080 --no-proxy localhost,cluster.local
+thorctl config --disable-proxy=true
+thorctl config --clear-proxy
+```
+
 ### Thorctl Help
 
 Thorctl will print help info if you pass in either the `-h` or `--help` flags.
