@@ -1,10 +1,31 @@
 use std::path::{Path, PathBuf};
+use url::Url;
 
 use super::Keys;
 use crate::Error;
 
 #[cfg(feature = "python")]
 use pyo3::pyclass;
+
+/// Normalize a URL into the host string reqwest compares against when matching `NO_PROXY`
+///
+/// reqwest's `NO_PROXY` matching tests the request's host (no scheme, port, or path), so a
+/// `no_proxy` entry meant to bypass a given URL has to be reduced to just that host. This parses
+/// `url` with the same library reqwest uses, so the result matches the host the client actually
+/// connects to. Returns `None` if `url` has no host (e.g. it isn't a valid URL).
+///
+/// This is only meant for inputs that are URLs; raw `NO_PROXY` entries (bare domains, leading-dot
+/// domains, IPs, CIDRs) are already in the form reqwest expects and should be used as-is.
+///
+/// # Arguments
+///
+/// * `url` - The URL whose host should be used as a `no_proxy` entry
+#[must_use]
+pub fn no_proxy_host(url: &str) -> Option<String> {
+    Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_owned))
+}
 
 /// The settings to use when cloning repos
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -48,6 +69,27 @@ pub struct ClientSettings {
     /// The number of seconds to wait before timing out
     #[serde(default = "default_client_timeout")]
     pub timeout: u64,
+    /// Disable all proxies and connect to hosts directly
+    ///
+    /// When false (the default), proxy settings are read from the environment
+    /// (`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`, honoring `NO_PROXY`). Setting this to true
+    /// ignores those and connects directly, which is useful for in-cluster traffic where
+    /// every host is reachable without a proxy.
+    #[serde(default)]
+    pub disable_proxy: bool,
+    /// An explicit proxy URL to route all (http + https) traffic through
+    ///
+    /// This takes precedence over environment proxy settings but is ignored when
+    /// `disable_proxy` is true. The URL may embed credentials (e.g.
+    /// `http://user:pass@host:port`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
+    /// A comma-separated list of hosts/domains/CIDRs that bypass the explicit `proxy`
+    ///
+    /// This mirrors the `NO_PROXY` environment variable and only applies when `proxy` is
+    /// set; environment-based proxies already honor `NO_PROXY` on their own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub no_proxy: Option<String>,
 }
 
 impl Default for ClientSettings {
@@ -58,6 +100,9 @@ impl Default for ClientSettings {
             invalid_hostnames: false,
             certificate_authorities: Vec::default(),
             timeout: default_client_timeout(),
+            disable_proxy: false,
+            proxy: None,
+            no_proxy: None,
         }
     }
 }

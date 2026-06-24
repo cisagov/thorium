@@ -749,6 +749,25 @@ impl K8s {
         }
     }
 
+    /// Resolve the full API URL agents in a cluster use to reach Thorium
+    ///
+    /// This uses the cluster's configured `api_url` override when one is set, otherwise it builds
+    /// the in-cluster service URL from the Thorium namespace.
+    ///
+    /// # Arguments
+    ///
+    /// * `context_name` - The cluster to resolve the API URL for, by its context name
+    /// * `namespace` - The Thorium namespace, used to build the in-cluster service URL
+    #[must_use]
+    pub fn resolved_api_url(&self, context_name: &str, namespace: &str) -> String {
+        match self.api_url(context_name) {
+            // use the configured override for this cluster
+            Some(api_url) => api_url.to_owned(),
+            // fall back to the in-cluster k8s service url
+            None => format!("http://thorium-api.{namespace}.svc.cluster.local."),
+        }
+    }
+
     /// The host aliases for pods in a specific cluster
     ///
     /// If this cluster cannot be found then this function will default to an empty hashmap.
@@ -1225,6 +1244,23 @@ pub struct Scaler {
     /// The crane specific setttings
     #[serde(default)]
     pub crane: Crane,
+    /// Extra `NO_PROXY` entries injected into spawned agents so they bypass any image/environment
+    /// proxy when reaching these hosts
+    ///
+    /// These are raw `NO_PROXY`-syntax entries (bare domains, leading-dot domains like `.local`,
+    /// IPs, or CIDRs) added on top of (not replacing) the agent environment's `NO_PROXY`. They do
+    /// not affect the Thorium API unless an entry happens to match the API host; use
+    /// `agent_auto_bypass_proxy_for_api` to bypass the proxy for the API.
+    #[serde(default)]
+    pub agent_no_proxy: Vec<String>,
+    /// Whether the scaler makes agents bypass any image/environment proxy when reaching the API
+    ///
+    /// When true (the default) the scaler adds the API host to each agent's `NO_PROXY` environment
+    /// variable so the agent connects to the API directly even if the image's proxy can't route to
+    /// it. Set this to false for the rare topology where the API itself sits behind the proxy and
+    /// must be reached through it.
+    #[serde(default = "default_true")]
+    pub agent_auto_bypass_proxy_for_api: bool,
 }
 
 impl Default for Scaler {
@@ -1238,6 +1274,8 @@ impl Default for Scaler {
             kvm: Kvm::default(),
             tasks: ScalerTaskDelays::default(),
             crane: Crane::default(),
+            agent_no_proxy: Vec::default(),
+            agent_auto_bypass_proxy_for_api: true,
         }
     }
 }

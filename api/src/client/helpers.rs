@@ -1,6 +1,42 @@
-use reqwest::Certificate;
+use reqwest::{Certificate, ClientBuilder, NoProxy, Proxy};
 
 use super::{ClientSettings, Error};
+
+/// Apply our proxy settings to a [`reqwest::ClientBuilder`]
+///
+/// The precedence is:
+/// 1. If `disable_proxy` is set, disable all proxies and connect directly.
+/// 2. Otherwise if an explicit `proxy` is set, route all traffic through it. Explicit proxies
+///    do not automatically honor `NO_PROXY`, so we attach a bypass list from the `no_proxy`
+///    setting if given, falling back to the `NO_PROXY` environment variable.
+/// 3. Otherwise leave the builder untouched so reqwest reads proxy settings from the
+///    environment and honors `NO_PROXY` automatically.
+///
+/// # Arguments
+///
+/// * `builder` - The client builder to apply proxy settings to
+/// * `settings` - The settings for building a client
+fn apply_proxy_settings(
+    builder: ClientBuilder,
+    settings: &ClientSettings,
+) -> Result<ClientBuilder, Error> {
+    // disabling proxies takes precedence over any other proxy setting
+    if settings.disable_proxy {
+        return Ok(builder.no_proxy());
+    }
+    // route all traffic through an explicit proxy if one was set
+    if let Some(proxy_url) = &settings.proxy {
+        // build a bypass list from our settings or fall back to the environment
+        let bypass = settings
+            .no_proxy
+            .as_deref()
+            .and_then(NoProxy::from_string)
+            .or_else(NoProxy::from_env);
+        return Ok(builder.proxy(Proxy::all(proxy_url)?.no_proxy(bypass)));
+    }
+    // otherwise let reqwest read proxy settings from the environment
+    Ok(builder)
+}
 
 /// Build a reqwest client for thorctl
 ///
@@ -12,10 +48,11 @@ pub(super) async fn build_reqwest_client(
 ) -> Result<reqwest::Client, Error> {
     // start building our client
     let mut builder = reqwest::Client::builder()
-        .no_proxy()
         .danger_accept_invalid_certs(settings.invalid_certs)
         .danger_accept_invalid_hostnames(settings.invalid_hostnames)
         .timeout(std::time::Duration::from_secs(settings.timeout));
+    // apply our proxy settings
+    builder = apply_proxy_settings(builder, settings)?;
     // crawl over any custom CAs and add them to our trust store
     for ca_path in &settings.certificate_authorities {
         // try to load this CA from disk
@@ -59,10 +96,11 @@ pub(super) fn build_blocking_reqwest_client(
 ) -> Result<reqwest::Client, Error> {
     // start building our client
     let mut builder = reqwest::Client::builder()
-        .no_proxy()
         .danger_accept_invalid_certs(settings.invalid_certs)
         .danger_accept_invalid_hostnames(settings.invalid_hostnames)
         .timeout(std::time::Duration::from_secs(settings.timeout));
+    // apply our proxy settings
+    builder = apply_proxy_settings(builder, settings)?;
     // crawl over any custom CAs and add them to our trust store
     for ca_path in &settings.certificate_authorities {
         // try to load this CA from disk

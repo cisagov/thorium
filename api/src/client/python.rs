@@ -102,7 +102,10 @@ impl ClientSettings {
             invalid_certs=false,
             invalid_hostnames=false,
             certificate_authorities=Vec::new(),
-            timeout=default_client_timeout()
+            timeout=default_client_timeout(),
+            disable_proxy=false,
+            proxy=None,
+            no_proxy=None
         )
     )]
     fn new_py(
@@ -110,12 +113,18 @@ impl ClientSettings {
         invalid_hostnames: bool,
         certificate_authorities: Vec<PathBuf>,
         timeout: u64,
+        disable_proxy: bool,
+        proxy: Option<String>,
+        no_proxy: Option<String>,
     ) -> Self {
         Self {
             invalid_certs,
             invalid_hostnames,
             certificate_authorities,
             timeout,
+            disable_proxy,
+            proxy,
+            no_proxy,
         }
     }
 }

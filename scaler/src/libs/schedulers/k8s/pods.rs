@@ -58,7 +58,7 @@ impl Pods {
         // build volumes wrapper
         let volumes = Volumes::new(client, conf, context_name);
         // build the containers wrapper
-        let containers = Containers::new(cluster_name);
+        let containers = Containers::new(cluster_name, context_name);
         // get our host aliases
         let unconverted_aliases = conf.thorium.scaler.k8s.host_aliases(context_name);
         // convert our host aliases into a K8s host aliases object

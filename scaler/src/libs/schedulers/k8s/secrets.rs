@@ -43,15 +43,11 @@ impl Secrets {
             None
         };
         // get the api url to use
-        let api_url = match conf.thorium.scaler.k8s.api_url(context) {
-            // use this custom url
-            Some(api_url) => api_url.to_owned(),
-            // build the in cluster k8s service url
-            None => format!(
-                "http://thorium-api.{}.svc.cluster.local.",
-                &conf.thorium.namespace
-            ),
-        };
+        let api_url = conf
+            .thorium
+            .scaler
+            .k8s
+            .resolved_api_url(context, &conf.thorium.namespace);
         Secrets {
             client: client.clone(),
             api,
