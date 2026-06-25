@@ -1,12 +1,10 @@
 import { useRef, useState } from 'react';
 import type { FC } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Accordion, Col } from 'react-bootstrap';
 
 // project imports
 import ImageInfo from './ImageInfo';
 import type { ImageInfoHandle } from './ImageInfo';
-import { CompactBody } from './ImageInfo.styled';
 import { BanWarningIcon, DeleteConfirmModal, HeaderActions, HeaderBtn } from '@components/shared/browsing';
 import { ButtonVariant } from '@components/shared/buttons';
 import { OverlayTipBottom, OverlayTipLeft, OverlayTipRight } from '@components/shared/overlay/tips';
@@ -16,6 +14,10 @@ import { generateCopyName } from '@utilities/naming';
 import { canDeleteImage, canDevelopAnyInGroup, canModifyImage } from '@utilities/permissions';
 import type { Group } from '@models/groups';
 import type { Image } from '@models/images';
+import { updateURLSection } from '@utilities/url';
+import { toast } from 'react-toastify';
+import { FaLink } from 'react-icons/fa';
+import { AccordionItem, AccordionHeader, AccordionBody } from '@components/shared/accordion/Accordion';
 
 interface ImageAccordionItemProps {
   image: Image;
@@ -56,27 +58,45 @@ const ImageAccordionItem: FC<ImageAccordionItemProps> = ({ image, images, groups
     }
   };
 
+  const id = `${image.name}--${image.group}`;
+
+  const handleLink = (e: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => {
+    e.stopPropagation(); //don't close accordion
+    updateURLSection(id, '');
+    void navigator.clipboard.writeText(window.location.href);
+    const notify = () => toast(`Copied "${window.location.href}" to clipboard!`);
+    notify();
+    onExpand(id);
+  };
+
   return (
-    <Accordion.Item eventKey={`${image.name}_${image.group}`}>
-      <Accordion.Header className="d-flex">
-        <Col className="accordion-item-name">
-          <div className="text">{image.name}</div>
-        </Col>
-        <Col className="accordion-item-relation" />
-        <Col className="accordion-item-ownership">
+    <AccordionItem eventKey={id}>
+      <AccordionHeader>
+        <div className="accordion-item-name">
+          <div className="text">
+            <OverlayTipBottom tip={`Copy image link to clipboard`}>
+              <a className="title-link" onClick={handleLink}>
+                <FaLink className="title-link-no-color me-3" size={12} />
+              </a>
+            </OverlayTipBottom>
+            {image.name}
+          </div>
+        </div>
+        <div className="accordion-item-relation" />
+        <div className="accordion-item-ownership">
           <OverlayTipLeft tip={`This image is owned by the ${image.group} group.`}>
             <small>
               <i>{image.group}</i>
             </small>
           </OverlayTipLeft>
-        </Col>
-        <Col className="accordion-item-status">
+        </div>
+        <div className="accordion-item-status">
           {hasBans && (
             <OverlayTipRight tip="This image has active bans and cannot be used.">
               <BanWarningIcon />
             </OverlayTipRight>
           )}
-        </Col>
+        </div>
         <HeaderActions onClick={(e) => e.stopPropagation()}>
           {!inEditMode && userCanCreateImage && (
             <OverlayTipBottom tip={`Create a new image using ${image.name} as a template.`}>
@@ -100,7 +120,7 @@ const ImageAccordionItem: FC<ImageAccordionItemProps> = ({ image, images, groups
                 data-testid="header-btn-edit"
                 onClick={() => {
                   setEditMode(true);
-                  onExpand(`${image.name}_${image.group}`);
+                  onExpand(id);
                 }}
               >
                 Edit
@@ -129,8 +149,8 @@ const ImageAccordionItem: FC<ImageAccordionItemProps> = ({ image, images, groups
             </OverlayTipBottom>
           )}
         </HeaderActions>
-      </Accordion.Header>
-      <CompactBody>
+      </AccordionHeader>
+      <AccordionBody>
         <ImageInfo
           ref={imageInfoRef}
           images={images}
@@ -141,7 +161,7 @@ const ImageAccordionItem: FC<ImageAccordionItemProps> = ({ image, images, groups
           onExitEditMode={() => setEditMode(false)}
           userCanModify={userCanModify}
         />
-      </CompactBody>
+      </AccordionBody>
       <DeleteConfirmModal
         show={showDeleteModal}
         onHide={handleCloseDeleteModal}
@@ -150,7 +170,7 @@ const ImageAccordionItem: FC<ImageAccordionItemProps> = ({ image, images, groups
         itemType="image"
         error={deleteError}
       />
-    </Accordion.Item>
+    </AccordionItem>
   );
 };
 

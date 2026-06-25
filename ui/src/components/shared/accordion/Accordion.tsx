@@ -134,7 +134,9 @@ export const AccordionItem: FC<AccordionItemProps> = ({ eventKey, children }) =>
   const isOpen = activeKeys.includes(eventKey);
   return (
     <ItemContext.Provider value={{ eventKey, isOpen }}>
-      <ItemWrapper data-testid="accordion-item">{children}</ItemWrapper>
+      <ItemWrapper data-testid="accordion-item" id={eventKey} className="scrollable-item">
+        {children}
+      </ItemWrapper>
     </ItemContext.Provider>
   );
 };

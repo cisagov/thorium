@@ -13,6 +13,9 @@ import { canDeletePipeline, canModifyPipeline } from '@utilities/permissions';
 import { deletePipeline } from '@thorpi/pipelines';
 import type { Group } from '@models/groups';
 import type { Pipeline } from '@models/pipelines';
+import { FaLink } from 'react-icons/fa';
+import { updateURLSection } from '@utilities/url';
+import { toast } from 'react-toastify';
 
 interface PipelineAccordionItemProps {
   pipeline: Pipeline;
@@ -62,11 +65,29 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
     }
   };
 
+  const id = `${pipeline.name}--${pipeline.group}`;
+
+  const handleLink = (e: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => {
+    e.stopPropagation(); //don't close accordion
+    updateURLSection(id, '');
+    void navigator.clipboard.writeText(window.location.href);
+    const notify = () => toast(`Copied "${window.location.href}" to clipboard!`);
+    notify();
+    onExpand(id);
+  };
+
   return (
-    <AccordionItem eventKey={`${pipeline.name}_${pipeline.group}`}>
+    <AccordionItem eventKey={id}>
       <AccordionHeader>
         <div className="accordion-item-name">
-          <div className="text">{pipeline.name}</div>
+          <div className="text">
+            <OverlayTipBottom tip={`Copy pipeline link to clipboard`}>
+              <a className="title-link" onClick={handleLink}>
+                <FaLink className="title-link-no-color me-3" size={12} />
+              </a>
+            </OverlayTipBottom>
+            {pipeline.name}
+          </div>
         </div>
         <div className="accordion-item-relation" />
         <div className="accordion-item-ownership">
@@ -98,7 +119,7 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
                 data-testid="header-btn-edit"
                 onClick={() => {
                   setEditMode(true);
-                  onExpand(`${pipeline.name}_${pipeline.group}`);
+                  onExpand(id);
                 }}
               >
                 Edit
