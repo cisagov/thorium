@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // project imports
 import { CountBadge, HeaderBar, OmnibarRow } from './PipelineBrowsing.styled';
@@ -24,11 +24,10 @@ import { fetchGroups } from '@utilities/fetch';
 import { generateCopyName } from '@utilities/naming';
 import { getThoriumRole } from '@utilities/role';
 import { editorObjectToPipelineUpdate } from '@utilities/transforms/pipeline';
-import { listCodec } from '@utilities/url/codecs';
-import { useUrlState } from '@utilities/url/useUrlState';
 import type { Group } from '@models/groups';
 import type { Pipeline, PipelineUpdate } from '@models/pipelines';
 import { RoleKey } from '@models/users';
+import { scrollToSection } from '@utilities/interactions';
 
 /** Filter pipelines client-side by the omnibar clauses (name, creator, group). */
 const filterPipelines = (pipelines: Pipeline[], clauses: Clause[]): Pipeline[] => {
@@ -48,9 +47,12 @@ const PipelineBrowsing: FC = () => {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [groups, setGroups] = useState<Record<string, Group>>({});
   // expanded accordion rows + omnibar filters live in the URL so the view is shareable
-  const [activeKeys, setActiveKeys] = useUrlState(listCodec('open'), []);
+  // const [activeKeys, setActiveKeys] = useUrlState(listCodec('open'), []);
   const { clauses, setClauses } = useOmnibarUrlState({ clauses: [], time: defaultTimeSelection() });
   const { userInfo, checkCookie } = useAuth();
+
+  const [activeKeys, setActiveKeys] = useState<string[]>([]);
+  const location = useLocation();
 
   const filteredPipelines = filterPipelines(pipelines, clauses);
 
@@ -71,6 +73,18 @@ const PipelineBrowsing: FC = () => {
     const results = await Promise.all(Object.keys(groups).map((group) => listPipelines(group, () => void checkCookie(), true, null, 1000)));
     setPipelines(results.filter(Boolean).flat() as Pipeline[]);
     setLoading(false);
+    setTimeout(scrollOnLoad, 1000);
+  };
+
+  const scrollOnLoad = () => {
+    const hash = location.hash;
+    if (hash.length <= 1) return;
+
+    const scroll_id = hash.slice(1);
+    if (scroll_id != '') {
+      scrollToSection(scroll_id);
+      handleAccordionSelect(scroll_id);
+    }
   };
 
   // Refetch a single pipeline and replace just that entry in place, so an edit re-renders only

@@ -132,3 +132,11 @@ $grid-breakpoints: (
 
 // 576px
 //@media (max-width: scaling.$sm) { ... }
+
+:target {
+  scroll-margin-top: 80px;
+}
+
+.scrollable-item {
+  scroll-margin-top: 80px;
+}

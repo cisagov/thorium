@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FC } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Accordion, Badge, Button, Col, Row } from 'react-bootstrap';
 
 // project imports
 import ImageAccordionItem from '@components/pages/images/ImageAccordionItem';
@@ -18,12 +17,14 @@ import { OverlayTipRight, OverlayTipBottom } from '@components/shared/overlay/ti
 import { useAuth } from '@utilities/auth';
 import { getThoriumRole } from '@utilities/role';
 import { fetchImages, fetchGroups } from '@utilities/fetch';
-import { listCodec } from '@utilities/url/codecs';
-import { useUrlState } from '@utilities/url/useUrlState';
 import type { Image } from '@models/images';
 import type { Group } from '@models/groups';
 import { RoleKey } from '@models/users';
 import type { UserInfo } from '@models/users';
+import { scrollToSection } from '@utilities/interactions';
+import { Accordion } from '@components/shared/accordion';
+import { CountBadge, HeaderBar, OmnibarRow } from '@pages/pipelines/PipelineBrowsing.styled';
+import { Button } from '@components/shared/buttons';
 
 /** Filter images client-side by the omnibar clauses (group, creator, name, free text). */
 const filterImages = (images: Image[], clauses: Clause[]): Image[] => {
@@ -72,10 +73,10 @@ const ImageBrowsing: FC = () => {
   const [images, setImages] = useState<Image[]>([]);
   const [groups, setGroups] = useState<Record<string, Group>>({});
   // expanded accordion rows + omnibar filters live in the URL so the view is shareable
-  const [activeKeys, setActiveKeys] = useUrlState(listCodec('open'), []);
   const { clauses, setClauses } = useOmnibarUrlState({ clauses: [], time: defaultTimeSelection() });
   const { userInfo, checkCookie } = useAuth();
   const cancelUpdateRef = useRef(false);
+  const [activeKeys, setActiveKeys] = useState<string[]>([]);
 
   const filteredImages = filterImages(images, clauses);
 
@@ -98,12 +99,29 @@ const ImageBrowsing: FC = () => {
   useEffect(() => {
     cancelUpdateRef.current = false;
     if (groups && Object.keys(groups).length) {
-      void fetchImages(Object.keys(groups), setImages, cancelUpdateRef.current, () => void checkCookie(), setLoading, true);
+      void fetchImageData();
     }
     return () => {
       cancelUpdateRef.current = true;
     };
   }, [groups]);
+
+  const fetchImageData = async () => {
+    await fetchImages(Object.keys(groups), setImages, cancelUpdateRef.current, () => void checkCookie(), setLoading, true);
+    // need to wait 1 second because the page takes so long to load
+    setTimeout(scrollOnLoad, 1000); 
+  };
+
+  const scrollOnLoad = () => {
+    const hash = location.hash;
+    if (hash.length <= 1) return;
+
+    const scroll_id = hash.slice(1);
+    if (scroll_id != '') {
+      scrollToSection(scroll_id);
+      handleAccordionSelect(scroll_id);
+    }
+  };
 
   // Full list reload (with the loading spinner) used after a delete removes an image.
   const reloadImages = useCallback(() => {
@@ -119,26 +137,22 @@ const ImageBrowsing: FC = () => {
 
   return (
     <Page title="Images · Thorium">
-      <Row>
-        <Col>
+      <HeaderBar>
+        <div>
           <h2>
             <OverlayTipRight tip={imageCountTip}>
-              <Badge bg="" className="count-badge">
-                {images.length}
-              </Badge>
+              <CountBadge> {images.length} </CountBadge>
             </OverlayTipRight>
           </h2>
-        </Col>
-        <Col className="d-flex justify-content-center">
-          <Title>Images</Title>
-        </Col>
-        <Col className="d-flex justify-content-end">
+        </div>
+        <Title>Images</Title>
+        <div>
           <CreateImageButton userInfo={userInfo} />
-        </Col>
-      </Row>
-      <Row className="d-flex justify-content-center">
+        </div>
+      </HeaderBar>
+      <OmnibarRow>
         <OmnibarImages clauses={clauses} setClauses={setClauses} images={images} />
-      </Row>
+      </OmnibarRow>
       <LoadingSpinner loading={loading}></LoadingSpinner>
       {!loading && filteredImages.length === 0 && <NoResultsBanner type="Images" />}
       <Accordion alwaysOpen activeKey={activeKeys} onSelect={handleAccordionSelect}>

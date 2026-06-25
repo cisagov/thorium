@@ -492,6 +492,12 @@ $snl-black-0: tint($snl-black, 25%);
   --thorium-ok-bar-bg: #{$snl-green-600};
   --thorium-info-bar-bg: #{$snl-medium-blue};
   --thorium-form-select-arrow: url('data:image/svg+xml,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3e%3cpath fill=%27none%27 stroke=%27%23060606%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%272%27 d=%27m2 5 6 6 6-6%27/%3e%3c/svg%3e');
+  //Omnibar
+  --thorium-omnibar-bg: #f9f0de;
+  --thorium-omnibar-border: #{$snl-warm-grey-400};
+  --thorium-omnibar-placeholder: var(--thorium-secondary-text);
+  --thorium-omnibar-dropdown-highlight: var(--thorium-highlight-panel-bg);
+  --thorium-omnibar-dropdown-shadow: rgba(0, 0, 0, 0.16);
 }
 
 // Traffic light protocol colors
