@@ -268,6 +268,8 @@ const Omnibar: React.FC<OmnibarProps> = ({
       case KeyName.Tab:
         HandleTab(e);
         break;
+      default:
+        setDropdownState({ index: 0, isSelecting: false });
     }
   }
 
