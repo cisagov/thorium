@@ -73,7 +73,7 @@ impl DeviceEntity {
     }
 }
 
-/// A device entity
+/// A request to create a device entity
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct DeviceEntityRequest {

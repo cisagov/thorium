@@ -372,3 +372,17 @@ macro_rules! opt_tag_to_string {
         }
     };
 }
+
+/// add a a list of values to tags
+#[doc(hidden)]
+#[macro_export]
+macro_rules! tag_list_clone {
+    ($tags:expr, $key:expr, $values:expr) => {
+        // get an entry to this tag keys values
+        let entry = $tags.entry($key.to_owned()).or_default();
+        // add all of the values in this list
+        for value in &$values {
+            entry.insert(value.clone());
+        }
+    };
+}
