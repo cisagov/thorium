@@ -520,7 +520,7 @@ impl OutputCollection {
     /// # Arguments
     ///
     /// * `update` - The update to apply
-    pub fn update(&mut self, update: OutputCollectionUpdate) {
+    pub fn update(&mut self, mut update: OutputCollectionUpdate) {
         update!(self.handler, update.handler);
         update!(self.files.results, update.files.results);
         update!(self.files.result_files, update.files.result_files);

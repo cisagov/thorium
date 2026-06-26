@@ -225,7 +225,7 @@ impl SystemSettings {
     #[rustfmt::skip]
     pub async fn update(
         mut self,
-        update: SystemSettingsUpdate,
+        mut update: SystemSettingsUpdate,
         user: &User,
         shared: &Shared,
     ) -> Result<Self, ApiError> {

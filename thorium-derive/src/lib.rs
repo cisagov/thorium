@@ -37,7 +37,7 @@ fn add_json_serialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     });
 }
 
-/// Add the json based serialzie impl
+/// Add the json based serialize impl
 fn add_json_deserialize(stream: &mut proc_macro2::TokenStream, name: &Ident) {
     // extend our token stream
     stream.extend(quote! {

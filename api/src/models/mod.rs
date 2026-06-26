@@ -44,13 +44,17 @@ pub use entities::countries::Country;
 pub use entities::devices::{DeviceEntity, DeviceEntityRequest};
 pub use entities::filesystem::{FileSystemEntity, FileSystemEntityBuilder, FileSystemFolderEntity};
 pub use entities::flags::{Confidence, Flag};
+pub use entities::functions::{CompiledFunction, CompiledInstruction, DecompiledFunction};
+pub use entities::incident::{Incident, IncidentRequest};
+pub use entities::pe::{PeImportEntity, PeSectionEntity};
 pub use entities::processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 pub use entities::rules::{SigmaRule, SigmaRuleAppliesTo};
 pub use entities::shared::CriticalSector;
 pub use entities::vendors::{VendorEntity, VendorEntityRequest};
 pub use entities::{
     Entity, EntityKinds, EntityListLine, EntityListOpts, EntityListParams, EntityMetadata,
-    EntityMetadataRequest, EntityParentInfo, EntityRequest, EntityResponse, EntityUpdate,
+    EntityMetadataRequest, EntityMetadataUpdate, EntityParentInfo, EntityRequest, EntityResponse,
+    EntityUpdate,
 };
 pub use errors::InvalidEnum;
 pub use events::{

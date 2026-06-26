@@ -517,7 +517,12 @@ impl FileSystemEntityBuilder {
                         // add our tool if this filesystem doesn't contain our tool name
                         if !meta.tools.contains(tool) {
                             // build an update to add this tool to this entity
-                            let update = crate::models::EntityUpdate::default().tool(tool);
+                            let update = crate::models::EntityUpdate::default().metadata(
+                                crate::models::EntityMetadataUpdate::FileSystem {
+                                    add_tools: vec![tool.clone()],
+                                    remove_tools: Vec::new(),
+                                },
+                            );
                             // update this entity
                             thorium.entities.update(entity.id, update).await?;
                         }

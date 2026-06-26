@@ -70,6 +70,10 @@ pub enum AssociationKind {
     ChildProcess,
     /// Opens or receives data from a network connection
     HasNetworkConnection,
+    /// A PE section within a file/binary
+    SectionIn,
+    /// A library imported by a file/binary
+    ImportIn,
     /// A flag on some data in Thorium
     FlagFor,
     /// This entity was created by
@@ -113,6 +117,8 @@ impl AssociationKind {
             AssociationKind::ProcessTreeIn => "ProcessTreeIn",
             AssociationKind::ChildProcess => "ChildProcess",
             AssociationKind::HasNetworkConnection => "HasNetworkConnection",
+            AssociationKind::SectionIn => "SectionIn",
+            AssociationKind::ImportIn => "ImportIn",
             AssociationKind::FlagFor => "FlagFor",
             AssociationKind::CreatedBy => "CreatedBy",
             AssociationKind::SigmaRuleHit => "SigmaRuleHit",
@@ -131,6 +137,8 @@ impl AssociationKind {
             EntityKinds::Folder => Self::FolderIn,
             EntityKinds::Flag => Self::FlagFor,
             EntityKinds::NetworkConnection => Self::HasNetworkConnection,
+            EntityKinds::PeSection => Self::SectionIn,
+            EntityKinds::PeImport => Self::ImportIn,
             _ => Self::AssociatedWith,
         }
     }

@@ -22,11 +22,12 @@ use crate::models::entities::incident::Incident;
 use crate::models::entities::network_activity::{NetConState, NetworkConnection};
 use crate::models::{
     ApiCursor, AssociationKind, AssociationListOpts, AssociationRequest, AssociationTarget,
-    AssociationTargetColumn, CollectionEntity, Country, CriticalSector, DeviceEntity, Entity,
-    EntityForm, EntityKinds, EntityListLine, EntityListParams, EntityListRow, EntityMetadata,
-    EntityMetadataUpdateForm, EntityResponse, EntityRow, EntityUpdateForm, FileSystemEntity,
-    FileSystemFolderEntity, Flag, Group, GroupAllowAction, ListableAssociation, SigmaRule,
-    TagListRow, TagMap, TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity,
+    AssociationTargetColumn, CollectionEntity, CompiledFunction, Country, CriticalSector,
+    DecompiledFunction, DeviceEntity, Entity, EntityForm, EntityKinds, EntityListLine,
+    EntityListParams, EntityListRow, EntityMetadata, EntityMetadataUpdateForm, EntityResponse,
+    EntityRow, EntityUpdateForm, FileSystemEntity, FileSystemFolderEntity, Flag, Group,
+    GroupAllowAction, ListableAssociation, PeImportEntity, PeSectionEntity, SigmaRule, TagListRow,
+    TagMap, TagType, TreeSupport, User, VendorEntity, WindowsProcessEntity,
     WindowsProcessTreeEntity,
 };
 use crate::utils::{ApiError, Shared};
@@ -227,10 +228,22 @@ impl Entity {
                 tag_list_clone!(tags, "IncidentMachine".to_owned(), incident.machines);
                 tag_list_clone!(tags, "IncidentLocation".to_owned(), incident.locations);
             }
+            EntityMetadata::PeSection(section) => {
+                // tag this section's content hash so sections can be looked up by md5
+                opt_tag!(tags, "SectionMd5", section.md5.clone());
+            }
+            EntityMetadata::PeImport(import) => {
+                // tag each imported function so samples can be found by imported function
+                for function in &import.functions {
+                    tag!(tags, "ImportedFunction", function.clone());
+                }
+            }
             // other and windows process trees have no taggable data
             EntityMetadata::Other
             | EntityMetadata::Collection(_)
-            | EntityMetadata::WindowsProcessTree(_) => (),
+            | EntityMetadata::WindowsProcessTree(_)
+            | EntityMetadata::CompiledFunction(_)
+            | EntityMetadata::DecompiledFunction(_) => (),
         }
         Ok(())
     }
@@ -290,9 +303,13 @@ impl Entity {
                 | EntityMetadata::Folder(_)
                 | EntityMetadata::WindowsProcessTree(_)
                 | EntityMetadata::WindowsProcess(_)
+                | EntityMetadata::PeSection(_)
+                | EntityMetadata::PeImport(_)
                 | EntityMetadata::SigmaRule(_)
                 | EntityMetadata::Flag(_)
                 | EntityMetadata::Incident(_)
+                | EntityMetadata::CompiledFunction(_)
+                | EntityMetadata::DecompiledFunction(_)
                 | EntityMetadata::NetworkConnection(_) => (),
             }
         }
@@ -449,6 +466,7 @@ impl Entity {
                 update!(conn.source, form.source);
                 update_opt!(conn.source_port, form.source_port);
                 update!(conn.destination, form.destination);
+                update!(conn.destination_port, form.destination_port);
                 update_opt!(conn.state, form.state);
                 update_opt!(conn.pid, form.pid);
                 update_opt!(conn.process, form.process);
@@ -512,6 +530,38 @@ impl Entity {
                 incident
                     .locations
                     .retain(|location| !form.remove_locations.contains(location));
+            }
+            EntityMetadata::CompiledFunction(func) => {
+                // update this functions addres if needed
+                update!(func.address, form.function_address);
+                // replace our disassembly entirely if any was set
+                if !form.disassembly.is_empty() {
+                    // set our new disassembly
+                    std::mem::swap(&mut func.disassembly, &mut form.disassembly);
+                }
+            }
+            EntityMetadata::DecompiledFunction(decomp) => {
+                // update this functions addres if needed
+                update!(decomp.address, form.function_address);
+                // update our decompilation if needed
+                update!(decomp.content, form.decompilation_content);
+                // add new tools that decompiled this function
+                decomp.tools.append(&mut form.add_tools);
+                // remove any old tools from this function
+                decomp.tools.retain(|tool| !form.remove_tools.contains(tool));
+            }
+            EntityMetadata::PeSection(section) => {
+                // update any section details that were set in the form
+                update_opt!(section.md5, form.md5);
+                update_opt!(section.raw_size, form.raw_size);
+                update_opt!(section.virtual_size, form.virtual_size);
+                update_opt!(section.entropy, form.entropy);
+            }
+            EntityMetadata::PeImport(import) => {
+                // replace the imported functions if a new list was provided
+                if !form.functions.is_empty() {
+                    import.functions = std::mem::take(&mut form.functions);
+                }
             }
             // other kinds have no metadata to update
             EntityMetadata::Other | EntityMetadata::Folder(_) => (),
@@ -808,10 +858,14 @@ impl Entity {
             | EntityMetadata::Folder(_)
             | EntityMetadata::WindowsProcessTree(_)
             | EntityMetadata::WindowsProcess(_)
+            | EntityMetadata::PeSection(_)
+            | EntityMetadata::PeImport(_)
             | EntityMetadata::NetworkConnection(_)
             | EntityMetadata::SigmaRule(_)
             | EntityMetadata::Flag(_)
             | EntityMetadata::Incident(_)
+            | EntityMetadata::CompiledFunction(_)
+            | EntityMetadata::DecompiledFunction(_)
             | EntityMetadata::Other => (),
         }
     }
@@ -848,9 +902,13 @@ impl EntityMetadata {
             EntityMetadata::WindowsProcessTree(win_proc_tree) => Some(serialize!(win_proc_tree)),
             EntityMetadata::WindowsProcess(win_proc) => Some(serialize!(win_proc)),
             EntityMetadata::NetworkConnection(conn) => Some(serialize!(conn)),
+            EntityMetadata::PeSection(section) => Some(serialize!(section)),
+            EntityMetadata::PeImport(import) => Some(serialize!(import)),
             EntityMetadata::SigmaRule(rule) => Some(serialize!(rule)),
             EntityMetadata::Flag(flag) => Some(serialize!(flag)),
             EntityMetadata::Incident(incident) => Some(serialize!(incident)),
+            EntityMetadata::CompiledFunction(func) => Some(serialize!(func)),
+            EntityMetadata::DecompiledFunction(decomp) => Some(serialize!(decomp)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -1139,6 +1197,11 @@ impl EntityMetadataForm {
             "destination_port" => self.destination_port = Some(field.text().await?.parse()?),
             "state" => self.state = Some(field.text().await?.parse::<NetConState>()?),
             "process" => self.process = Some(field.text().await?),
+            // the PE section specific form fields
+            "md5" => self.md5 = Some(field.text().await?),
+            "raw_size" => self.raw_size = Some(field.text().await?.parse()?),
+            "virtual_size" => self.virtual_size = Some(field.text().await?.parse()?),
+            "entropy" => self.entropy = Some(field.text().await?.parse()?),
             // the sigma rule specific fields
             "sigma_rule" => self.sigma_rule = Some(field.text().await?),
             "score" => self.score = Some(field.text().await?.parse()?),
@@ -1147,6 +1210,11 @@ impl EntityMetadataForm {
             "confidence" => self.confidence = Some(field.text().await?.parse()?),
             "content" => self.content = Some(field.text().await?),
             "reasoning" => self.reasoning = Some(field.text().await?),
+            // the function specific fields
+            "function_address" => self.function_address = Some(field.text().await?.parse()?),
+            "decompilation_content" => self.decompilation_content = Some(field.text().await?),
+            // the incident specific fields
+            "cover_term" => self.cover_term = Some(field.text().await?),
             maybe_list => {
                 match maybe_list {
                     "urls" => {
@@ -1184,8 +1252,15 @@ impl EntityMetadataForm {
                         entry.insert(field.text().await?);
                     }
                     "tools" => self.tools.push(field.text().await?),
+                    "functions" => self.functions.push(field.text().await?),
                     "sigma_applies_to" => self.sigma_applies_to.push(field.text().await?.parse()?),
                     "sigma_actions" => self.sigma_actions.push(deserialize!(&field.text().await?)),
+                    "disassembly" => self.disassembly.push(deserialize!(&field.text().await?)),
+                    // the incident specific list fields
+                    "mission_teams" => self.mission_teams.push(field.text().await?),
+                    "networks" => self.networks.push(field.text().await?),
+                    "machines" => self.machines.push(field.text().await?),
+                    "locations" => self.locations.push(field.text().await?),
                     bad_name => {
                         return bad!(format!("'{bad_name}' is not a valid metadata form name"));
                     }
@@ -1234,9 +1309,19 @@ impl EntityMetadataForm {
             EntityKinds::NetworkConnection => Ok(EntityMetadata::NetworkConnection(
                 NetworkConnection::from_form(self)?,
             )),
+            EntityKinds::PeSection => {
+                Ok(EntityMetadata::PeSection(PeSectionEntity::from_form(self)?))
+            }
+            EntityKinds::PeImport => Ok(EntityMetadata::PeImport(PeImportEntity::from_form(self)?)),
             EntityKinds::SigmaRule => Ok(EntityMetadata::SigmaRule(SigmaRule::from_form(self)?)),
             EntityKinds::Flag => Ok(EntityMetadata::Flag(Flag::from_form(self)?)),
             EntityKinds::Incident => Ok(EntityMetadata::Incident(Incident::from_form(self))),
+            EntityKinds::CompiledFunction => Ok(EntityMetadata::CompiledFunction(
+                CompiledFunction::from_form(self)?,
+            )),
+            EntityKinds::DecompiledFunction => Ok(EntityMetadata::DecompiledFunction(
+                DecompiledFunction::from_form(self)?,
+            )),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }
     }
@@ -1430,9 +1515,24 @@ impl EntityMetadataUpdateForm {
             "state" => self.state = Some(field.text().await?.parse::<NetConState>()?),
             "pid" => self.pid = Some(field.text().await?.parse()?),
             "process" => self.process = Some(field.text().await?),
+            // the PE section specific form fields
+            "md5" => self.md5 = Some(field.text().await?),
+            "raw_size" => self.raw_size = Some(field.text().await?.parse()?),
+            "virtual_size" => self.virtual_size = Some(field.text().await?.parse()?),
+            "entropy" => self.entropy = Some(field.text().await?.parse()?),
             // the sigma rule specific fields
             "sigma_rule" => self.sigma_rule = Some(field.text().await?),
             "score" => self.score = Some(field.text().await?.parse()?),
+            // the flag specific fields
+            "suspicion" => self.suspicion = Some(field.text().await?.parse()?),
+            "confidence" => self.confidence = Some(field.text().await?.parse()?),
+            "content" => self.content = Some(field.text().await?),
+            "reasoning" => self.reasoning = Some(field.text().await?),
+            // the incident specific fields
+            "cover_term" => self.cover_term = Some(field.text().await?),
+            // the function specific fields
+            "function_address" => self.function_address = Some(field.text().await?.parse()?),
+            "decompilation_content" => self.decompilation_content = Some(field.text().await?),
             // this could be a list field
             maybe_list => {
                 match maybe_list {
@@ -1488,6 +1588,7 @@ impl EntityMetadataUpdateForm {
                     }
                     "add_tools" => self.add_tools.push(field.text().await?),
                     "remove_tools" => self.remove_tools.push(field.text().await?),
+                    "functions" => self.functions.push(field.text().await?),
                     "add_sigma_applies_to" => {
                         self.add_sigma_applies_to.push(field.text().await?.parse()?)
                     }
@@ -1501,6 +1602,19 @@ impl EntityMetadataUpdateForm {
                         self.remove_sigma_actions
                             .insert(field.text().await?.parse()?);
                     }
+                    // the incident specific list fields
+                    "add_mission_teams" => self.add_mission_teams.push(field.text().await?),
+                    "remove_mission_teams" => {
+                        self.remove_mission_teams.push(field.text().await?);
+                    }
+                    "add_networks" => self.add_networks.push(field.text().await?),
+                    "remove_networks" => self.remove_networks.push(field.text().await?),
+                    "add_machines" => self.add_machines.push(field.text().await?),
+                    "remove_machines" => self.remove_machines.push(field.text().await?),
+                    "add_locations" => self.add_locations.push(field.text().await?),
+                    "remove_locations" => self.remove_locations.push(field.text().await?),
+                    // the compiled function disassembly (json serialized per element)
+                    "disassembly" => self.disassembly.push(deserialize!(&field.text().await?)),
                     // this is an invalid key so return an error
                     bad_name => {
                         return bad!(format!(
@@ -1622,14 +1736,12 @@ impl TryFrom<EntityRow> for Entity {
     type Error = ApiError;
 
     fn try_from(row: EntityRow) -> Result<Self, Self::Error> {
-        // deserialize our metadata
-        let metadata = deserialize!(&row.metadata);
         // return the entity with just the single group from this row and no tags
         Ok(Self {
             id: row.id,
             name: row.name,
             kind: row.kind,
-            metadata,
+            metadata: row.metadata,
             groups: vec![row.group],
             created: row.created,
             submitter: row.submitter,

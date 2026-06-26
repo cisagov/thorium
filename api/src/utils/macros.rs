@@ -301,13 +301,13 @@ macro_rules! can_create_all {
 #[macro_export]
 macro_rules! update {
     ($orig:expr, $update:expr) => {
-        if let Some(new) = $update {
+        if let Some(new) = $update.take() {
             $orig = new;
         }
     };
     // map the updated value with a fallible mapping function before setting the value
     ($orig:expr, $update:expr, $map:expr) => {
-        if let Some(new) = $update {
+        if let Some(new) = $update.take() {
             $orig = $map(new)?;
         }
     };
