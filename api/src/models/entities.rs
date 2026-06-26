@@ -20,8 +20,10 @@ pub mod countries;
 pub mod devices;
 pub mod filesystem;
 pub mod flags;
+pub mod functions;
 pub mod incident;
 pub mod network_activity;
+pub mod pe;
 pub mod processes;
 pub mod rules;
 pub mod shared;
@@ -31,8 +33,10 @@ use devices::DeviceEntity;
 use filesystem::{FileSystemEntity, FileSystemFolderEntity};
 use flags::Confidence;
 use flags::Flag;
+use functions::{CompiledFunction, CompiledInstruction, DecompiledFunction};
 use incident::{Incident, IncidentRequest};
 use network_activity::NetworkConnection;
+use pe::{PeImportEntity, PeSectionEntity};
 use processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 use rules::{SigmaRule, SigmaRuleAppliesTo};
 
@@ -127,6 +131,22 @@ cfg_if::cfg_if! {
             pub machines: Vec<String>,
             /// The locations this incident is from
             pub locations: Vec<String>,
+            /// The address this function is located at
+            pub function_address: Option<u64>,
+            /// The dissasembled instructions for this function
+            pub disassembly: Vec<CompiledInstruction>,
+            /// The decompiled content for a function
+            pub decompilation_content: Option<String>,
+            /// The MD5 of a PE section's raw data
+            pub md5: Option<String>,
+            /// The raw (on disk) size of a PE section in bytes
+            pub raw_size: Option<u64>,
+            /// The virtual (in memory) size of a PE section in bytes
+            pub virtual_size: Option<u64>,
+            /// The Shannon entropy of a PE section's data
+            pub entropy: Option<f64>,
+            /// The functions imported from a PE import's library
+            pub functions: Vec<String>,
         }
 
         impl EntityMetadataForm {
@@ -270,6 +290,22 @@ cfg_if::cfg_if! {
             pub add_locations: Vec<String>,
             /// The locations to remove from this incident
             pub remove_locations: Vec<String>,
+            /// The address this function is located at
+            pub function_address: Option<u64>,
+            /// The dissasembled instructions for this function
+            pub disassembly: Vec<CompiledInstruction>,
+            /// The decompiled content for a function
+            pub decompilation_content: Option<String>,
+            /// The MD5 of a PE section's raw data
+            pub md5: Option<String>,
+            /// The raw (on disk) size of a PE section in bytes
+            pub raw_size: Option<u64>,
+            /// The virtual (in memory) size of a PE section in bytes
+            pub virtual_size: Option<u64>,
+            /// The Shannon entropy of a PE section's data
+            pub entropy: Option<f64>,
+            /// The functions to set for a PE import's library
+            pub functions: Vec<String>,
         }
     }
 }
@@ -623,6 +659,7 @@ impl TagSupport for Entity {
 )]
 #[cfg_attr(feature = "api", strum_discriminants(derive(utoipa::ToSchema)))]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "scylla-utils", derive(thorium_derive::ScyllaStoreJson))]
 pub enum EntityMetadata {
     /// A device entity
     Device(DeviceEntity),
@@ -649,6 +686,14 @@ pub enum EntityMetadata {
     Flag(Flag),
     /// An occurence or incident
     Incident(Incident),
+    /// A compiled function
+    CompiledFunction(CompiledFunction),
+    /// A decompiled function
+    DecompiledFunction(DecompiledFunction),
+    /// A section within a PE/binary
+    PeSection(PeSectionEntity),
+    /// A library imported by a PE/binary and its functions
+    PeImport(PeImportEntity),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
@@ -694,6 +739,14 @@ pub enum EntityMetadataRequest {
     Flag(Flag),
     /// An occurence or incident
     Incident(IncidentRequest),
+    /// A compiled function
+    CompiledFunction(CompiledFunction),
+    /// A decompild function
+    DecompiledFunction(DecompiledFunction),
+    /// A section within a PE/binary
+    PeSection(PeSectionEntity),
+    /// A library imported by a PE/binary and its functions
+    PeImport(PeImportEntity),
     /// An entity that can't be described by any of the other variants
     Other,
 }
@@ -721,6 +774,10 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::SigmaRule(rule) => rule.add_to_form(form),
             EntityMetadataRequest::Flag(flag) => flag.add_to_form(form),
             EntityMetadataRequest::Incident(incident) => incident.add_to_form(form),
+            EntityMetadataRequest::CompiledFunction(func) => func.add_to_form(form),
+            EntityMetadataRequest::DecompiledFunction(decomp) => decomp.add_to_form(form),
+            EntityMetadataRequest::PeSection(section) => section.add_to_form(form),
+            EntityMetadataRequest::PeImport(import) => import.add_to_form(form),
             // just set our kind to other
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }
@@ -740,6 +797,10 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::SigmaRule(_) => EntityKinds::SigmaRule,
             EntityMetadataRequest::Flag(_) => EntityKinds::Flag,
             EntityMetadataRequest::Incident(_) => EntityKinds::Incident,
+            EntityMetadataRequest::CompiledFunction(_) => EntityKinds::CompiledFunction,
+            EntityMetadataRequest::DecompiledFunction(_) => EntityKinds::DecompiledFunction,
+            EntityMetadataRequest::PeSection(_) => EntityKinds::PeSection,
+            EntityMetadataRequest::PeImport(_) => EntityKinds::PeImport,
             EntityMetadataRequest::Other => EntityKinds::Other,
         }
     }
@@ -775,7 +836,14 @@ impl EntityMetadataRequest {
             Self::NetworkConnection(conn) => Ok(Some(serde_json::to_string(conn)?)),
             Self::Flag(flag) => Ok(Some(serde_json::to_string(flag)?)),
             Self::Incident(incident) => Ok(Some(serde_json::to_string(incident)?)),
-            Self::WindowsProcessTree | Self::SigmaRule(_) | Self::Other => Ok(None),
+            Self::CompiledFunction(func) => Ok(Some(serde_json::to_string(func)?)),
+            Self::DecompiledFunction(decomp) => Ok(Some(serde_json::to_string(decomp)?)),
+            // PE sections/imports are storage/display only and not scanned with sigma rules
+            Self::WindowsProcessTree
+            | Self::PeSection(_)
+            | Self::PeImport(_)
+            | Self::SigmaRule(_)
+            | Self::Other => Ok(None),
         }
     }
 
@@ -831,6 +899,13 @@ pub enum IdentifyingEntityInfo<'a> {
         confidence: Confidence,
         reasoning: &'a String,
     },
+    /// A compiled function
+    CompiledFunction {
+        address: u64,
+        disassembly: &'a Vec<CompiledInstruction>,
+    },
+    /// A decompiled function
+    DecompiledFunction { address: u64, content: &'a String },
     /// An entity that cannot be accurately/usefully identified to prevent duplicates
     Unidentifiable,
 }
@@ -857,11 +932,21 @@ impl<'a> From<&'a EntityMetadata> for IdentifyingEntityInfo<'a> {
                 confidence: flag.confidence,
                 reasoning: &flag.reasoning,
             },
+            EntityMetadata::CompiledFunction(func) => Self::CompiledFunction {
+                address: func.address,
+                disassembly: &func.disassembly,
+            },
+            EntityMetadata::DecompiledFunction(decomp) => Self::DecompiledFunction {
+                address: decomp.address,
+                content: &decomp.content,
+            },
             // These entities have no useful identifying info
             EntityMetadata::Device(_)
             | EntityMetadata::Vendor(_)
             | EntityMetadata::WindowsProcessTree(_)
             | EntityMetadata::Incident(_)
+            | EntityMetadata::PeSection(_)
+            | EntityMetadata::PeImport(_)
             | EntityMetadata::Other => Self::Unidentifiable,
         }
     }
@@ -889,11 +974,21 @@ impl<'a> From<&'a EntityMetadataRequest> for IdentifyingEntityInfo<'a> {
                 confidence: flag.confidence,
                 reasoning: &flag.reasoning,
             },
+            EntityMetadataRequest::CompiledFunction(func) => Self::CompiledFunction {
+                address: func.address,
+                disassembly: &func.disassembly,
+            },
+            EntityMetadataRequest::DecompiledFunction(decomp) => Self::DecompiledFunction {
+                address: decomp.address,
+                content: &decomp.content,
+            },
             // These entities have no useful identifying info
             EntityMetadataRequest::Device(_)
             | EntityMetadataRequest::Vendor(_)
             | EntityMetadataRequest::WindowsProcessTree
             | EntityMetadataRequest::Incident(_)
+            | EntityMetadataRequest::PeSection(_)
+            | EntityMetadataRequest::PeImport(_)
             | EntityMetadataRequest::Other => Self::Unidentifiable,
         }
     }
@@ -913,6 +1008,8 @@ impl EntityKinds {
         match self {
             Self::WindowsProcess => Some(SigmaRuleAppliesTo::WindowsProcesses),
             Self::NetworkConnection => Some(SigmaRuleAppliesTo::NetworkConnections),
+            Self::CompiledFunction => Some(SigmaRuleAppliesTo::CompiledFunctions),
+            Self::DecompiledFunction => Some(SigmaRuleAppliesTo::DecompiledFunctions),
             // all other entity kinds cannot be scanned with sigma rules
             Self::Device
             | Self::Vendor
@@ -920,6 +1017,8 @@ impl EntityKinds {
             | Self::FileSystem
             | Self::Folder
             | Self::WindowsProcessTree
+            | Self::PeSection
+            | Self::PeImport
             | Self::SigmaRule
             | Self::Flag
             | Self::Incident
@@ -942,9 +1041,13 @@ impl EntityKinds {
             | Self::FileSystem
             | Self::WindowsProcessTree
             | Self::NetworkConnection
+            | Self::PeSection
+            | Self::PeImport
             | Self::SigmaRule
             | Self::Flag
             | Self::Incident
+            | Self::CompiledFunction
+            | Self::DecompiledFunction
             | Self::Other => &[],
         }
     }
@@ -956,6 +1059,8 @@ impl From<SigmaRuleAppliesTo> for EntityKinds {
         match applies_to {
             SigmaRuleAppliesTo::WindowsProcesses => EntityKinds::WindowsProcess,
             SigmaRuleAppliesTo::NetworkConnections => EntityKinds::NetworkConnection,
+            SigmaRuleAppliesTo::CompiledFunctions => EntityKinds::CompiledFunction,
+            SigmaRuleAppliesTo::DecompiledFunctions => EntityKinds::DecompiledFunction,
         }
     }
 }
@@ -1069,9 +1174,13 @@ impl EntityRequest {
             | EntityMetadataRequest::FileSystem(_)
             | EntityMetadataRequest::WindowsProcessTree
             | EntityMetadataRequest::NetworkConnection(_)
+            | EntityMetadataRequest::PeSection(_)
+            | EntityMetadataRequest::PeImport(_)
             | EntityMetadataRequest::SigmaRule(_)
             | EntityMetadataRequest::Flag(_)
             | EntityMetadataRequest::Incident(_)
+            | EntityMetadataRequest::CompiledFunction(_)
+            | EntityMetadataRequest::DecompiledFunction(_)
             | EntityMetadataRequest::Other => None,
         }
     }
@@ -1382,7 +1491,7 @@ pub struct EntityListLine {
 }
 
 /// An update to apply to an entity
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct EntityUpdate {
     /// The new name to set
@@ -1395,10 +1504,8 @@ pub struct EntityUpdate {
     pub description: Option<String>,
     /// Clear this entities description
     pub clear_description: bool,
-    /// Add a tool to this entity
-    pub add_tools: Vec<String>,
-    /// Remoev a tool from this entity
-    pub remove_tools: Vec<String>,
+    /// The kind-specific metadata update to apply, if any
+    pub metadata: Option<EntityMetadataUpdate>,
 }
 
 impl EntityUpdate {
@@ -1452,25 +1559,15 @@ impl EntityUpdate {
         self
     }
 
-    /// Add a tool to this entity
+    /// Set the kind-specific metadata update to apply
     ///
     /// # Arguments
     ///
-    /// * `tool` - The tool to add
-    pub fn tool(mut self, tool: impl Into<String>) -> Self {
-        // add this tool
-        self.add_tools.push(tool.into());
-        self
-    }
-
-    /// Remove a tool from this entity
-    ///
-    /// # Arguments
-    ///
-    /// * `tool` - The tool to remove
-    pub fn remove_tool(mut self, tool: impl Into<String>) -> Self {
-        // add this tool to our remove list
-        self.remove_tools.push(tool.into());
+    /// * `metadata` - The kind-specific metadata update to apply
+    #[must_use]
+    pub fn metadata(mut self, metadata: EntityMetadataUpdate) -> Self {
+        // set our kind-specific metadata update
+        self.metadata = Some(metadata);
         self
     }
 
@@ -1485,11 +1582,542 @@ impl EntityUpdate {
             .text("clear_description", self.clear_description.to_string());
         // set our name form field
         let form = multipart_text!(form, "name", self.name);
-        // add the groups to add/remove to this form
-        let form = multipart_list!(form, "add_groups", self.add_groups);
-        let form = multipart_list!(form, "remove_groups", self.remove_groups);
+        // add the groups to add/remove to this form (list fields require a trailing `[]`)
+        let form = multipart_list!(form, "add_groups[]", self.add_groups);
+        let form = multipart_list!(form, "remove_groups[]", self.remove_groups);
         // set our description form field
         let form = multipart_text!(form, "description", self.description);
+        // add any kind-specific metadata update fields
+        let form = match self.metadata {
+            Some(metadata) => metadata.add_to_form(form)?,
+            None => form,
+        };
+        Ok(form)
+    }
+}
+
+/// A kind-specific metadata update for an entity
+///
+/// Each variant carries only the fields that are valid to update for that entity
+/// kind, so invalid field/kind combinations are rejected at compile time. Fields
+/// default to empty (no change) so callers only set what they intend to change.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub enum EntityMetadataUpdate {
+    /// Updates for a device entity
+    Device {
+        /// The urls to add to this device
+        add_urls: Vec<String>,
+        /// The urls to remove from this device
+        remove_urls: Vec<String>,
+        /// Whether this device is a critical system
+        critical_system: Option<bool>,
+        /// Clear this devices critical system flag
+        clear_critical_system: Option<bool>,
+        /// Whether this device is in a sensitive location
+        sensitive_location: Option<bool>,
+        /// Clear this devices sensitive location flag
+        clear_sensitive_location: Option<bool>,
+        /// The critical sectors to add to this device
+        add_critical_sectors: Vec<shared::CriticalSector>,
+        /// The critical sectors to remove from this device
+        remove_critical_sectors: Vec<shared::CriticalSector>,
+    },
+    /// Updates for a vendor entity
+    Vendor {
+        /// The countries (alpha-2 codes) to add to this vendor
+        add_countries: Vec<String>,
+        /// The countries (alpha-2 codes) to remove from this vendor
+        remove_countries: Vec<String>,
+        /// The critical sectors to add to this vendor
+        add_critical_sectors: Vec<shared::CriticalSector>,
+        /// The critical sectors to remove from this vendor
+        remove_critical_sectors: Vec<shared::CriticalSector>,
+    },
+    /// Updates for a collection entity
+    Collection {
+        /// The collection tags to add, keyed by tag key
+        add_collection_tags: std::collections::HashMap<String, HashSet<String>>,
+        /// The collection tags to delete, keyed by tag key
+        delete_collection_tags: std::collections::HashMap<String, HashSet<String>>,
+        /// Whether tag matching for this collection should be case-insensitive
+        tags_case_insensitive: Option<bool>,
+        /// Whether this collection should ignore group filtering
+        ignore_groups: Option<bool>,
+        /// When to start listing data for this collection
+        start: Option<DateTime<Utc>>,
+        /// When to stop listing data for this collection
+        end: Option<DateTime<Utc>>,
+        /// Clear this collections start point
+        clear_start: Option<bool>,
+        /// Clear this collections end point
+        clear_end: Option<bool>,
+    },
+    /// Updates for a filesystem entity
+    FileSystem {
+        /// The tools to add to this filesystem
+        add_tools: Vec<String>,
+        /// The tools to remove from this filesystem
+        remove_tools: Vec<String>,
+    },
+    /// Updates for a windows process tree entity
+    WindowsProcessTree {
+        /// The tools to add to this process tree
+        add_tools: Vec<String>,
+        /// The tools to remove from this process tree
+        remove_tools: Vec<String>,
+    },
+    /// Updates for a windows process entity
+    WindowsProcess {
+        /// The process name to set
+        name: Option<String>,
+        /// The image path to set
+        image_path: Option<String>,
+        /// The command line to set
+        command: Option<String>,
+        /// The offset to set
+        offset: Option<u64>,
+        /// The thread count to set
+        threads: Option<u32>,
+        /// The handle count to set
+        handles: Option<u32>,
+        /// Whether this process is wow64
+        is_wow64: Option<bool>,
+        /// The session id to set
+        session_id: Option<u32>,
+        /// The create time to set
+        create_time: Option<DateTime<Utc>>,
+        /// The exit time to set
+        exit_time: Option<DateTime<Utc>>,
+    },
+    /// Updates for a network connection entity
+    NetworkConnection {
+        /// The transport layer protocol to set
+        protocol: Option<network_activity::TransportLayerProtocol>,
+        /// The source address to set
+        #[cfg_attr(feature = "api", schema(value_type = Option<String>))]
+        source: Option<IpAddr>,
+        /// The source port to set
+        source_port: Option<u16>,
+        /// The destination address to set
+        #[cfg_attr(feature = "api", schema(value_type = Option<String>))]
+        destination: Option<IpAddr>,
+        /// The destination port to set
+        destination_port: Option<u16>,
+        /// The connection state to set
+        state: Option<network_activity::NetConState>,
+        /// The owning process id to set
+        pid: Option<u64>,
+        /// The owning process name to set
+        process: Option<String>,
+        /// The create time to set
+        create_time: Option<DateTime<Utc>>,
+    },
+    /// Updates for a sigma rule entity
+    SigmaRule {
+        /// The new sigma rule to set
+        sigma_rule: Option<String>,
+        /// The new score to set
+        score: Option<i64>,
+        /// The things this rule should also apply to
+        add_applies_to: Vec<SigmaRuleAppliesTo>,
+        /// The things this rule should no longer apply to
+        remove_applies_to: Vec<SigmaRuleAppliesTo>,
+        /// The actions to add to this rule
+        add_actions: Vec<rules::SigmaActionToTake>,
+        /// The action indices to remove from this rule
+        remove_actions: std::collections::BTreeSet<usize>,
+    },
+    /// Updates for a flag entity
+    Flag {
+        /// The suspicion score to set
+        suspicion: Option<i64>,
+        /// The confidence to set
+        confidence: Option<Confidence>,
+        /// The reasoning to set
+        reasoning: Option<String>,
+        /// The content to set
+        content: Option<String>,
+    },
+    /// Updates for an incident entity
+    Incident {
+        /// The cover term to set
+        cover_term: Option<String>,
+        /// The mission teams to add
+        add_mission_teams: Vec<String>,
+        /// The mission teams to remove
+        remove_mission_teams: Vec<String>,
+        /// The networks to add
+        add_networks: Vec<String>,
+        /// The networks to remove
+        remove_networks: Vec<String>,
+        /// The machines to add
+        add_machines: Vec<String>,
+        /// The machines to remove
+        remove_machines: Vec<String>,
+        /// The locations to add
+        add_locations: Vec<String>,
+        /// The locations to remove
+        remove_locations: Vec<String>,
+    },
+    /// Updates for a compiled function entity
+    CompiledFunction {
+        /// The function address to set
+        function_address: Option<u64>,
+        /// The disassembly to replace this functions disassembly with
+        disassembly: Vec<CompiledInstruction>,
+    },
+    /// Updates for a decompiled function entity
+    DecompiledFunction {
+        /// The function address to set
+        function_address: Option<u64>,
+        /// The decompilation content to set
+        decompilation_content: Option<String>,
+        /// The tools to add to this function
+        add_tools: Vec<String>,
+        /// The tools to remove from this function
+        remove_tools: Vec<String>,
+    },
+    /// Updates for a PE section entity
+    PeSection {
+        /// The MD5 of this sections raw data
+        md5: Option<String>,
+        /// The raw (on disk) size of this section
+        raw_size: Option<u64>,
+        /// The virtual (in memory) size of this section
+        virtual_size: Option<u64>,
+        /// The Shannon entropy of this sections data
+        entropy: Option<f64>,
+    },
+    /// Updates for a PE import entity
+    PeImport {
+        /// The imported functions to replace this librarys functions with
+        functions: Vec<String>,
+    },
+}
+
+impl EntityMetadataUpdate {
+    /// Add this kind-specific metadata update to a multipart form
+    ///
+    /// All fields are nested under `metadata[..]` and list fields use a trailing
+    /// `[]`, matching the server's `EntityMetadataUpdateForm` parser.
+    ///
+    /// # Arguments
+    ///
+    /// * `form` - The form to add our metadata update fields to
+    #[cfg(feature = "client")]
+    #[allow(clippy::too_many_lines)]
+    pub fn add_to_form(
+        self,
+        form: reqwest::multipart::Form,
+    ) -> Result<reqwest::multipart::Form, crate::Error> {
+        // allow the form to be reassigned as we add each field
+        let mut form = form;
+        // add the fields specific to our kind
+        match self {
+            EntityMetadataUpdate::Device {
+                mut add_urls,
+                mut remove_urls,
+                critical_system,
+                clear_critical_system,
+                sensitive_location,
+                clear_sensitive_location,
+                add_critical_sectors,
+                remove_critical_sectors,
+            } => {
+                // add/remove this device's urls
+                form = crate::multipart_list!(form, "metadata[add_urls][]", add_urls);
+                form = crate::multipart_list!(form, "metadata[remove_urls][]", remove_urls);
+                // set or clear the critical system flag
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[critical_system]",
+                    critical_system
+                );
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[clear_critical_system]",
+                    clear_critical_system
+                );
+                // set or clear the sensitive location flag
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[sensitive_location]",
+                    sensitive_location
+                );
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[clear_sensitive_location]",
+                    clear_sensitive_location
+                );
+                // add/remove this device's critical sectors (sent as their string representation)
+                for sector in add_critical_sectors {
+                    form = form.text("metadata[add_critical_sectors][]", sector.to_string());
+                }
+                for sector in remove_critical_sectors {
+                    form = form.text("metadata[remove_critical_sectors][]", sector.to_string());
+                }
+            }
+            EntityMetadataUpdate::Vendor {
+                add_countries,
+                remove_countries,
+                add_critical_sectors,
+                remove_critical_sectors,
+            } => {
+                // add/remove this vendor's countries (alpha-2 codes)
+                for country in add_countries {
+                    form = form.text("metadata[add_countries][]", country);
+                }
+                for country in remove_countries {
+                    form = form.text("metadata[remove_countries][]", country);
+                }
+                // add/remove this vendor's critical sectors
+                for sector in add_critical_sectors {
+                    form = form.text("metadata[add_critical_sectors][]", sector.to_string());
+                }
+                for sector in remove_critical_sectors {
+                    form = form.text("metadata[remove_critical_sectors][]", sector.to_string());
+                }
+            }
+            EntityMetadataUpdate::Collection {
+                add_collection_tags,
+                delete_collection_tags,
+                tags_case_insensitive,
+                ignore_groups,
+                start,
+                end,
+                clear_start,
+                clear_end,
+            } => {
+                // collection tags are nested by their tag key
+                for (key, values) in add_collection_tags {
+                    let field_key = format!("metadata[add_collection_tags][{key}][]");
+                    for value in values {
+                        form = form.text(field_key.clone(), value);
+                    }
+                }
+                for (key, values) in delete_collection_tags {
+                    let field_key = format!("metadata[delete_collection_tags][{key}][]");
+                    for value in values {
+                        form = form.text(field_key.clone(), value);
+                    }
+                }
+                // set the tag matching/group filtering behavior flags
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[collection_tags_case_insensitive]",
+                    tags_case_insensitive
+                );
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[collection_ignore_groups]",
+                    ignore_groups
+                );
+                // set the collection's start/end window
+                form = crate::multipart_date!(form, "metadata[collection_start]", start);
+                form = crate::multipart_date!(form, "metadata[collection_end]", end);
+                // clear the collection's start/end window if requested
+                form =
+                    crate::multipart_text_to_string!(form, "metadata[clear_collection_start]", clear_start);
+                form =
+                    crate::multipart_text_to_string!(form, "metadata[clear_collection_end]", clear_end);
+            }
+            EntityMetadataUpdate::FileSystem {
+                mut add_tools,
+                mut remove_tools,
+            }
+            | EntityMetadataUpdate::WindowsProcessTree {
+                mut add_tools,
+                mut remove_tools,
+            } => {
+                // add/remove the tools that dumped this entity
+                form = crate::multipart_list!(form, "metadata[add_tools][]", add_tools);
+                form = crate::multipart_list!(form, "metadata[remove_tools][]", remove_tools);
+            }
+            EntityMetadataUpdate::WindowsProcess {
+                mut name,
+                mut image_path,
+                mut command,
+                offset,
+                threads,
+                handles,
+                is_wow64,
+                session_id,
+                create_time,
+                exit_time,
+            } => {
+                // set the process's descriptive string fields
+                form = crate::multipart_text!(form, "metadata[name]", name);
+                form = crate::multipart_text!(form, "metadata[image_path]", image_path);
+                form = crate::multipart_text!(form, "metadata[command]", command);
+                // set the process's numeric/boolean fields
+                form = crate::multipart_text_to_string!(form, "metadata[offset]", offset);
+                form = crate::multipart_text_to_string!(form, "metadata[threads]", threads);
+                form = crate::multipart_text_to_string!(form, "metadata[handles]", handles);
+                form = crate::multipart_text_to_string!(form, "metadata[is_wow64]", is_wow64);
+                form = crate::multipart_text_to_string!(form, "metadata[session_id]", session_id);
+                // set the process's create/exit timestamps
+                form = crate::multipart_date!(form, "metadata[create_time]", create_time);
+                form = crate::multipart_date!(form, "metadata[exit_time]", exit_time);
+            }
+            EntityMetadataUpdate::NetworkConnection {
+                protocol,
+                source,
+                source_port,
+                destination,
+                destination_port,
+                state,
+                pid,
+                mut process,
+                create_time,
+            } => {
+                // set the protocol and source/destination endpoints
+                form = crate::multipart_text_to_string!(form, "metadata[protocol]", protocol);
+                form = crate::multipart_text_to_string!(form, "metadata[source]", source);
+                form = crate::multipart_text_to_string!(form, "metadata[source_port]", source_port);
+                form = crate::multipart_text_to_string!(form, "metadata[destination]", destination);
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[destination_port]",
+                    destination_port
+                );
+                // set the connection state and owning process info
+                form = crate::multipart_text_to_string!(form, "metadata[state]", state);
+                form = crate::multipart_text_to_string!(form, "metadata[pid]", pid);
+                form = crate::multipart_text!(form, "metadata[process]", process);
+                // set the connection's create timestamp
+                form = crate::multipart_date!(form, "metadata[create_time]", create_time);
+            }
+            EntityMetadataUpdate::SigmaRule {
+                mut sigma_rule,
+                score,
+                mut add_applies_to,
+                mut remove_applies_to,
+                add_actions,
+                remove_actions,
+            } => {
+                // set the rule body and score
+                form = crate::multipart_text!(form, "metadata[sigma_rule]", sigma_rule);
+                form = crate::multipart_text_to_string!(form, "metadata[score]", score);
+                // add/remove what this rule applies to (sent as their string representation)
+                form = crate::multipart_list_conv!(
+                    form,
+                    "metadata[add_sigma_applies_to][]",
+                    add_applies_to
+                );
+                form = crate::multipart_list_conv!(
+                    form,
+                    "metadata[remove_sigma_applies_to][]",
+                    remove_applies_to
+                );
+                // sigma actions are serialized to json per element
+                crate::multipart_list_serialize!(form, "metadata[add_sigma_actions][]", add_actions);
+                // action indices to remove are sent as plain integers
+                for index in remove_actions {
+                    form = form.text("metadata[remove_sigma_actions][]", index.to_string());
+                }
+            }
+            EntityMetadataUpdate::Flag {
+                suspicion,
+                confidence,
+                mut reasoning,
+                mut content,
+            } => {
+                // set this flag's suspicion score and confidence
+                form = crate::multipart_text_to_string!(form, "metadata[suspicion]", suspicion);
+                form = crate::multipart_text_to_string!(form, "metadata[confidence]", confidence);
+                // set this flag's reasoning and content
+                form = crate::multipart_text!(form, "metadata[reasoning]", reasoning);
+                form = crate::multipart_text!(form, "metadata[content]", content);
+            }
+            EntityMetadataUpdate::Incident {
+                mut cover_term,
+                mut add_mission_teams,
+                mut remove_mission_teams,
+                mut add_networks,
+                mut remove_networks,
+                mut add_machines,
+                mut remove_machines,
+                mut add_locations,
+                mut remove_locations,
+            } => {
+                // set this incident's cover term
+                form = crate::multipart_text!(form, "metadata[cover_term]", cover_term);
+                // add/remove this incident's mission teams
+                form = crate::multipart_list!(
+                    form,
+                    "metadata[add_mission_teams][]",
+                    add_mission_teams
+                );
+                form = crate::multipart_list!(
+                    form,
+                    "metadata[remove_mission_teams][]",
+                    remove_mission_teams
+                );
+                // add/remove this incident's networks
+                form = crate::multipart_list!(form, "metadata[add_networks][]", add_networks);
+                form = crate::multipart_list!(form, "metadata[remove_networks][]", remove_networks);
+                // add/remove this incident's machines
+                form = crate::multipart_list!(form, "metadata[add_machines][]", add_machines);
+                form = crate::multipart_list!(form, "metadata[remove_machines][]", remove_machines);
+                // add/remove this incident's locations
+                form = crate::multipart_list!(form, "metadata[add_locations][]", add_locations);
+                form =
+                    crate::multipart_list!(form, "metadata[remove_locations][]", remove_locations);
+            }
+            EntityMetadataUpdate::CompiledFunction {
+                function_address,
+                disassembly,
+            } => {
+                // set this function's address
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[function_address]",
+                    function_address
+                );
+                // disassembly is serialized to json per element
+                crate::multipart_list_serialize!(form, "metadata[disassembly][]", disassembly);
+            }
+            EntityMetadataUpdate::DecompiledFunction {
+                function_address,
+                mut decompilation_content,
+                mut add_tools,
+                mut remove_tools,
+            } => {
+                // set this function's address and decompilation content
+                form = crate::multipart_text_to_string!(
+                    form,
+                    "metadata[function_address]",
+                    function_address
+                );
+                form = crate::multipart_text!(
+                    form,
+                    "metadata[decompilation_content]",
+                    decompilation_content
+                );
+                // add/remove the tools that decompiled this function
+                form = crate::multipart_list!(form, "metadata[add_tools][]", add_tools);
+                form = crate::multipart_list!(form, "metadata[remove_tools][]", remove_tools);
+            }
+            EntityMetadataUpdate::PeSection {
+                mut md5,
+                raw_size,
+                virtual_size,
+                entropy,
+            } => {
+                // set this section's content hash and sizes
+                form = crate::multipart_text!(form, "metadata[md5]", md5);
+                form = crate::multipart_text_to_string!(form, "metadata[raw_size]", raw_size);
+                form =
+                    crate::multipart_text_to_string!(form, "metadata[virtual_size]", virtual_size);
+                // set this section's entropy
+                form = crate::multipart_text_to_string!(form, "metadata[entropy]", entropy);
+            }
+            EntityMetadataUpdate::PeImport { mut functions } => {
+                // replace this library's imported functions
+                form = crate::multipart_list!(form, "metadata[functions][]", functions);
+            }
+        }
         Ok(form)
     }
 }

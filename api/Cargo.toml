@@ -169,7 +169,7 @@ bytecheck = { version = "=0.6.11", optional = true }
 
 # client dependencies
 reqwest = { workspace = true, optional = true }
-tokio-util = { version = "0.7", default-features = false, features = ["codec", "io", "compat"], optional = true }
+tokio-util = { version = "0.7", default-features = false, features = ["codec", "io", "compat", "time"], optional = true }
 git2 = { version = "0.20", optional = true }
 gix = { version = "0.72", optional = true }
 gix-date = { version = "0.10", optional = true }
@@ -218,3 +218,69 @@ rand = { version = "0.9.1", features = ["alloc", "small_rng"] }
 # udeps might think this is unused but its used by our doc tests
 tokio-test = "0.4"
 serial_test = "3"
+
+# Per-entity-kind integration tests. These live in the tests/entities/ subdirectory
+# which cargo does not auto-discover, so each kind is registered as its own binary.
+[[test]]
+name = "entities_other"
+path = "tests/entities/other.rs"
+
+[[test]]
+name = "entities_vendor"
+path = "tests/entities/vendor.rs"
+
+[[test]]
+name = "entities_device"
+path = "tests/entities/device.rs"
+
+[[test]]
+name = "entities_flag"
+path = "tests/entities/flag.rs"
+
+[[test]]
+name = "entities_sigma"
+path = "tests/entities/sigma.rs"
+
+[[test]]
+name = "entities_network_connection"
+path = "tests/entities/network_connection.rs"
+
+[[test]]
+name = "entities_collection"
+path = "tests/entities/collection.rs"
+
+[[test]]
+name = "entities_filesystem"
+path = "tests/entities/filesystem.rs"
+
+[[test]]
+name = "entities_folder"
+path = "tests/entities/folder.rs"
+
+[[test]]
+name = "entities_windows_process_tree"
+path = "tests/entities/windows_process_tree.rs"
+
+[[test]]
+name = "entities_windows_process"
+path = "tests/entities/windows_process.rs"
+
+[[test]]
+name = "entities_pe_section"
+path = "tests/entities/pe_section.rs"
+
+[[test]]
+name = "entities_pe_import"
+path = "tests/entities/pe_import.rs"
+
+[[test]]
+name = "entities_incident"
+path = "tests/entities/incident.rs"
+
+[[test]]
+name = "entities_compiled_function"
+path = "tests/entities/compiled_function.rs"
+
+[[test]]
+name = "entities_decompiled_function"
+path = "tests/entities/decompiled_function.rs"

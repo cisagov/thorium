@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use scylla::DeserializeRow;
 use uuid::Uuid;
 
-use crate::models::EntityKinds;
+use crate::models::{EntityKinds, EntityMetadata};
 
 /// A single row of an entity from Scylla
 #[derive(Debug, Deserialize, DeserializeRow)]
@@ -22,9 +22,8 @@ pub struct EntityRow {
     pub name: String,
     /// The user who originally submitted the entity
     pub submitter: String,
-    // TODO metadata should be able to be directly deserialized using StoreJson stuff
     /// The data specific to the entity's kind
-    pub metadata: String,
+    pub metadata: EntityMetadata,
     /// The entity's description
     pub description: Option<String>,
     /// The path to this entities image if it has one

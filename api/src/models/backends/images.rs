@@ -206,7 +206,7 @@ impl BurstableResourcesUpdate {
     /// # Arguments
     ///
     /// * `image` - The image to update
-    pub fn update(self, resources: &mut Resources) -> Result<(), ApiError> {
+    pub fn update(mut self, resources: &mut Resources) -> Result<(), ApiError> {
         // update this images resources
         update!(resources.burstable.cpu, self.cpu);
         update!(resources.burstable.memory, self.memory);
@@ -220,7 +220,7 @@ impl ResourcesUpdate {
     /// # Arguments
     ///
     /// * `image` - The image to update
-    pub fn update(self, image: &mut Image) -> Result<(), ApiError> {
+    pub fn update(mut self, image: &mut Image) -> Result<(), ApiError> {
         // update this images resources
         update!(image.resources.cpu, self.cpu);
         update!(image.resources.memory, self.memory);
@@ -384,7 +384,7 @@ impl ChildFiltersUpdate {
     /// # Arguments
     ///
     /// `child_filters` - The image's child filters to update
-    pub fn update(self, child_filters: &mut ChildFilters) -> Result<(), ApiError> {
+    pub fn update(mut self, child_filters: &mut ChildFilters) -> Result<(), ApiError> {
         // first validate all filters we want to add
         validate_regex_filters(
             self.add_mime
@@ -444,7 +444,7 @@ impl CleanupUpdate {
     /// # Arguments
     ///
     /// * `image` - The image to apply this update too
-    pub fn update(self, image: &mut Image) -> Result<(), ApiError> {
+    pub fn update(mut self, image: &mut Image) -> Result<(), ApiError> {
         // if the update is to clear this images clean up settings then just do that
         if self.clear {
             image.clean_up = None;
@@ -486,7 +486,7 @@ impl KvmUpdate {
     /// # Arguments
     ///
     /// * `image` - The image to apply this update too
-    pub fn update(self, image: &mut Image) -> Result<(), ApiError> {
+    pub fn update(mut self, image: &mut Image) -> Result<(), ApiError> {
         // extract any existing kvm settings
         let kvm = match image.kvm.take() {
             Some(mut kvm) => {

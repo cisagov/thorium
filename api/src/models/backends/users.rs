@@ -453,7 +453,7 @@ impl AiEndpointUpdate {
     /// # Arguments
     ///
     /// * `endpoint` - The endpoint to apply this update too
-    pub fn apply(self, mut endpoint: AiEndpoint) -> AiEndpoint {
+    pub fn apply(mut self, mut endpoint: AiEndpoint) -> AiEndpoint {
         // update this endpoints settings
         update!(endpoint.url, self.url);
         update!(endpoint.api_key, self.api_key);
@@ -547,7 +547,7 @@ impl UserSettingsUpdate {
     /// # Arguments
     ///
     /// * `settings` - The user settings to update
-    pub fn apply(self, settings: &mut UserSettings) -> Result<(), ApiError> {
+    pub fn apply(mut self, settings: &mut UserSettings) -> Result<(), ApiError> {
         // update our theme if an update was set
         update!(settings.theme, self.theme);
         // apply any AI settings updates
@@ -947,7 +947,11 @@ impl User {
     /// * `update` - The update to apply to this user
     /// * `shared` - Shared objects in Thorium
     #[instrument(name = "User::update", skip_all, err(Debug))]
-    pub async fn update(mut self, update: UserUpdate, shared: &Shared) -> Result<Self, ApiError> {
+    pub async fn update(
+        mut self,
+        mut update: UserUpdate,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
         // if we are updating our role make sure we are an admin
         if update.role.is_some() {
             // only admins can update roles
@@ -996,7 +1000,7 @@ impl User {
     pub async fn update_user(
         &self,
         username: &str,
-        update: UserUpdate,
+        mut update: UserUpdate,
         shared: &Shared,
     ) -> Result<(), ApiError> {
         // only admins can update other users

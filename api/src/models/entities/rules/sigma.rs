@@ -16,6 +16,10 @@ pub enum SigmaRuleAppliesTo {
     WindowsProcesses,
     /// Apply this rule to network connections
     NetworkConnections,
+    /// Apply this rule to a compiled function
+    CompiledFunctions,
+    /// Apply this rule to a decompiled function
+    DecompiledFunctions,
 }
 
 impl SigmaRuleAppliesTo {
@@ -24,6 +28,8 @@ impl SigmaRuleAppliesTo {
         match self {
             SigmaRuleAppliesTo::WindowsProcesses => "WindowsProcesses",
             SigmaRuleAppliesTo::NetworkConnections => "NetworkConnections",
+            SigmaRuleAppliesTo::CompiledFunctions => "CompiledFunctions",
+            SigmaRuleAppliesTo::DecompiledFunctions => "DecompiledFunctions",
         }
     }
 }
@@ -45,11 +51,16 @@ impl FromStr for SigmaRuleAppliesTo {
     }
 }
 
+fn default_confidence_temp() -> Confidence {
+    Confidence::Unsure
+}
+
 /// Automatically promote this sigma rule hit to a flag
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct SigmaAutoFlag {
     /// How confident we are in this rule/flag not being a false positive
+    #[serde(default = "default_confidence_temp")]
     pub confidence: Confidence,
     /// The interesting, odd, or suspicious characteristic
     pub content: Option<String>,
@@ -206,13 +217,13 @@ impl SigmaRule {
         // always set our entity kind
         let form = form
             .text("kind", crate::models::EntityKinds::SigmaRule.as_str())
-            .text("metadata[rule]", self.rule)
+            .text("metadata[sigma_rule]", self.rule)
             .text("metadata[score]", self.score.to_string());
-        // add what data this sigma rule applies to
+        // add what data this sigma rule applies to (list fields require a trailing `[]`)
         let mut form =
-            crate::multipart_list_conv!(form, "metadata[sigma_applies_to]", self.applies_to);
+            crate::multipart_list_conv!(form, "metadata[sigma_applies_to][]", self.applies_to);
         // add what actions to take when this sigma rule hits
-        crate::multipart_list_serialize!(form, "metadata[sigma_actions]", self.actions);
+        crate::multipart_list_serialize!(form, "metadata[sigma_actions][]", self.actions);
         Ok(form)
     }
 }

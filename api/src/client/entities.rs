@@ -187,6 +187,44 @@ impl Entities {
         send!(self.client, req)
     }
 
+    /// Deletes an [`Entity`] in Thorium
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The id of the entity to delete
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// # use thorium::Error;
+    /// use uuid::Uuid;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create a Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // try to delete an entity in Thorium (use a real entity id though)
+    /// thorium.entities.delete(Uuid::new_v4()).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Entities::delete", skip(self), err(Debug))
+    )]
+    pub async fn delete(&self, id: Uuid) -> Result<reqwest::Response, Error> {
+        // build url for deleting an entity
+        let url = format!("{base}/api/entities/{id}", base = self.host);
+        // build request
+        let req = self.client.delete(&url).header("authorization", &self.token);
+        // send this request
+        send!(self.client, req)
+    }
+
     /// Lists all entities that meet some search criteria
     ///
     /// # Arguments
