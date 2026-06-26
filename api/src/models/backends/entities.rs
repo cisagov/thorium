@@ -18,6 +18,7 @@ use super::db;
 use crate::models::backends::GraphicSupport;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
 use crate::models::entities::EntityMetadataForm;
+use crate::models::entities::incident::Incident;
 use crate::models::entities::network_activity::{NetConState, NetworkConnection};
 use crate::models::{
     ApiCursor, AssociationKind, AssociationListOpts, AssociationRequest, AssociationTarget,
@@ -31,8 +32,8 @@ use crate::models::{
 use crate::utils::{ApiError, Shared};
 use crate::{
     bad, bad_internal, deserialize, ensure_empty_segment, ensure_segments_complete, for_groups,
-    internal_err, not_found, opt_tag, opt_tag_to_string, serialize, tag, unauthorized, update,
-    update_add_rem, update_clear_opt, update_opt,
+    internal_err, not_found, opt_tag, opt_tag_to_string, serialize, tag, tag_list_clone,
+    unauthorized, update, update_add_rem, update_clear_opt, update_opt,
 };
 
 mod collections;
@@ -215,6 +216,17 @@ impl Entity {
                 // tag this rules confidence
                 tag!(tags, "FlagConfidence", flag.confidence.to_string());
             }
+            EntityMetadata::Incident(incident) => {
+                opt_tag!(
+                    tags,
+                    "IncidentCoverTerm".to_owned(),
+                    incident.cover_term.clone()
+                );
+                tag_list_clone!(tags, "MissionTeam".to_owned(), incident.mission_teams);
+                tag_list_clone!(tags, "IncidentNetwork".to_owned(), incident.networks);
+                tag_list_clone!(tags, "IncidentMachine".to_owned(), incident.machines);
+                tag_list_clone!(tags, "IncidentLocation".to_owned(), incident.locations);
+            }
             // other and windows process trees have no taggable data
             EntityMetadata::Other
             | EntityMetadata::Collection(_)
@@ -280,6 +292,7 @@ impl Entity {
                 | EntityMetadata::WindowsProcess(_)
                 | EntityMetadata::SigmaRule(_)
                 | EntityMetadata::Flag(_)
+                | EntityMetadata::Incident(_)
                 | EntityMetadata::NetworkConnection(_) => (),
             }
         }
@@ -471,6 +484,34 @@ impl Entity {
                 update!(flag.reasoning, form.reasoning.take());
                 // update any optional values if needed
                 update_opt!(flag.content, form.content);
+            }
+            EntityMetadata::Incident(incident) => {
+                // update our incident coverterm if needed
+                update_opt!(incident.cover_term, form.cover_term);
+                // add new mission teams to this incident
+                incident.mission_teams.append(&mut form.add_mission_teams);
+                // remove any mission teams from this incident
+                incident
+                    .mission_teams
+                    .retain(|team| !form.remove_mission_teams.contains(team));
+                // add new networks to this incident
+                incident.networks.append(&mut form.add_networks);
+                // remove any networks from this incident
+                incident
+                    .networks
+                    .retain(|network| !form.remove_networks.contains(network));
+                // add new machines to this incident
+                incident.machines.append(&mut form.add_machines);
+                // remove any machines from this incident
+                incident
+                    .machines
+                    .retain(|machine| !form.remove_machines.contains(machine));
+                // add new locations to this incident
+                incident.locations.append(&mut form.add_locations);
+                // remove any locations from this incident
+                incident
+                    .locations
+                    .retain(|location| !form.remove_locations.contains(location));
             }
             // other kinds have no metadata to update
             EntityMetadata::Other | EntityMetadata::Folder(_) => (),
@@ -770,6 +811,7 @@ impl Entity {
             | EntityMetadata::NetworkConnection(_)
             | EntityMetadata::SigmaRule(_)
             | EntityMetadata::Flag(_)
+            | EntityMetadata::Incident(_)
             | EntityMetadata::Other => (),
         }
     }
@@ -808,6 +850,7 @@ impl EntityMetadata {
             EntityMetadata::NetworkConnection(conn) => Some(serialize!(conn)),
             EntityMetadata::SigmaRule(rule) => Some(serialize!(rule)),
             EntityMetadata::Flag(flag) => Some(serialize!(flag)),
+            EntityMetadata::Incident(incident) => Some(serialize!(incident)),
             EntityMetadata::Other => None,
         };
         Ok((self.into(), data))
@@ -1193,6 +1236,7 @@ impl EntityMetadataForm {
             )),
             EntityKinds::SigmaRule => Ok(EntityMetadata::SigmaRule(SigmaRule::from_form(self)?)),
             EntityKinds::Flag => Ok(EntityMetadata::Flag(Flag::from_form(self)?)),
+            EntityKinds::Incident => Ok(EntityMetadata::Incident(Incident::from_form(self))),
             EntityKinds::Other => Ok(EntityMetadata::Other),
         }
     }

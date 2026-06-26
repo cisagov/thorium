@@ -6,7 +6,7 @@ use chrono::prelude::*;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::models::{Directionality, EntityKinds, InvalidEnum, OutputKey};
+use crate::models::{Directionality, EntityKinds};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -76,6 +76,8 @@ pub enum AssociationKind {
     CreatedBy,
     /// A Sigma rule hit
     SigmaRuleHit,
+    /// This was involved in something
+    InvolvedIn,
 }
 
 impl std::fmt::Display for AssociationKind {
@@ -114,6 +116,7 @@ impl AssociationKind {
             AssociationKind::FlagFor => "FlagFor",
             AssociationKind::CreatedBy => "CreatedBy",
             AssociationKind::SigmaRuleHit => "SigmaRuleHit",
+            AssociationKind::InvolvedIn => "InvolvedIn",
         }
     }
 
@@ -142,7 +145,10 @@ impl From<(EntityKinds, EntityKinds)> for AssociationKind {
             (EntityKinds::SigmaRule, EntityKinds::Flag) => Self::CreatedBy,
             (EntityKinds::Flag, _) => Self::FlagFor,
             (EntityKinds::Vendor, EntityKinds::Device) => Self::DevelopedBy,
-            (EntityKinds::Other, _) | (_, EntityKinds::Other) | _ => Self::AssociatedWith,
+            (EntityKinds::Incident, _) | (EntityKinds::Other, _) | (_, EntityKinds::Other) => {
+                Self::AssociatedWith
+            }
+            _ => Self::AssociatedWith,
         }
     }
 }

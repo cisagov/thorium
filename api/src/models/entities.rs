@@ -20,6 +20,7 @@ pub mod countries;
 pub mod devices;
 pub mod filesystem;
 pub mod flags;
+pub mod incident;
 pub mod network_activity;
 pub mod processes;
 pub mod rules;
@@ -30,6 +31,7 @@ use devices::DeviceEntity;
 use filesystem::{FileSystemEntity, FileSystemFolderEntity};
 use flags::Confidence;
 use flags::Flag;
+use incident::{Incident, IncidentRequest};
 use network_activity::NetworkConnection;
 use processes::{WindowsProcessEntity, WindowsProcessTreeEntity};
 use rules::{SigmaRule, SigmaRuleAppliesTo};
@@ -115,6 +117,16 @@ cfg_if::cfg_if! {
             pub content: Option<String>,
             /// The reason for this Flag
             pub reasoning: Option<String>,
+            /// The cover term used for this incident
+            pub cover_term: Option<String>,
+            /// The mission teams involved in this incident
+            pub mission_teams: Vec<String>,
+            /// The networks this incident was on
+            pub networks: Vec<String>,
+            /// The machines this incident was found on
+            pub machines: Vec<String>,
+            /// The locations this incident is from
+            pub locations: Vec<String>,
         }
 
         impl EntityMetadataForm {
@@ -240,6 +252,24 @@ cfg_if::cfg_if! {
             pub content: Option<String>,
             /// The reason for this Flag
             pub reasoning: Option<String>,
+            /// The cover term used for this incident
+            pub cover_term: Option<String>,
+            /// The mission teams to add to this incident
+            pub add_mission_teams: Vec<String>,
+            /// The mission teams to remove from this incident
+            pub remove_mission_teams: Vec<String>,
+            /// The networks to add to this incident
+            pub add_networks: Vec<String>,
+            /// The networks to remove from this incident
+            pub remove_networks: Vec<String>,
+            /// The machines to add to this incident
+            pub add_machines: Vec<String>,
+            /// The machines to remove from this incident
+            pub remove_machines: Vec<String>,
+            /// The locations to add to this incident
+            pub add_locations: Vec<String>,
+            /// The locations to remove from this incident
+            pub remove_locations: Vec<String>,
         }
     }
 }
@@ -617,6 +647,8 @@ pub enum EntityMetadata {
     SigmaRule(SigmaRule),
     /// A flag on some suspicious data
     Flag(Flag),
+    /// An occurence or incident
+    Incident(Incident),
     /// An entity that can't be described by any of the other variants
     #[strum_discriminants(default)]
     Other,
@@ -660,6 +692,8 @@ pub enum EntityMetadataRequest {
     SigmaRule(SigmaRule),
     /// A flag on some suspicious data
     Flag(Flag),
+    /// An occurence or incident
+    Incident(IncidentRequest),
     /// An entity that can't be described by any of the other variants
     Other,
 }
@@ -686,6 +720,7 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::NetworkConnection(conn) => conn.add_to_form(form),
             EntityMetadataRequest::SigmaRule(rule) => rule.add_to_form(form),
             EntityMetadataRequest::Flag(flag) => flag.add_to_form(form),
+            EntityMetadataRequest::Incident(incident) => incident.add_to_form(form),
             // just set our kind to other
             EntityMetadataRequest::Other => Ok(form.text("kind", EntityKinds::Other.as_str())),
         }
@@ -704,6 +739,7 @@ impl EntityMetadataRequest {
             EntityMetadataRequest::NetworkConnection(_) => EntityKinds::NetworkConnection,
             EntityMetadataRequest::SigmaRule(_) => EntityKinds::SigmaRule,
             EntityMetadataRequest::Flag(_) => EntityKinds::Flag,
+            EntityMetadataRequest::Incident(_) => EntityKinds::Incident,
             EntityMetadataRequest::Other => EntityKinds::Other,
         }
     }
@@ -738,6 +774,7 @@ impl EntityMetadataRequest {
             Self::WindowsProcess(proc) => Ok(Some(serde_json::to_string(proc)?)),
             Self::NetworkConnection(conn) => Ok(Some(serde_json::to_string(conn)?)),
             Self::Flag(flag) => Ok(Some(serde_json::to_string(flag)?)),
+            Self::Incident(incident) => Ok(Some(serde_json::to_string(incident)?)),
             Self::WindowsProcessTree | Self::SigmaRule(_) | Self::Other => Ok(None),
         }
     }
@@ -824,6 +861,7 @@ impl<'a> From<&'a EntityMetadata> for IdentifyingEntityInfo<'a> {
             EntityMetadata::Device(_)
             | EntityMetadata::Vendor(_)
             | EntityMetadata::WindowsProcessTree(_)
+            | EntityMetadata::Incident(_)
             | EntityMetadata::Other => Self::Unidentifiable,
         }
     }
@@ -855,6 +893,7 @@ impl<'a> From<&'a EntityMetadataRequest> for IdentifyingEntityInfo<'a> {
             EntityMetadataRequest::Device(_)
             | EntityMetadataRequest::Vendor(_)
             | EntityMetadataRequest::WindowsProcessTree
+            | EntityMetadataRequest::Incident(_)
             | EntityMetadataRequest::Other => Self::Unidentifiable,
         }
     }
@@ -883,6 +922,7 @@ impl EntityKinds {
             | Self::WindowsProcessTree
             | Self::SigmaRule
             | Self::Flag
+            | Self::Incident
             | Self::Other => None,
         }
     }
@@ -904,6 +944,7 @@ impl EntityKinds {
             | Self::NetworkConnection
             | Self::SigmaRule
             | Self::Flag
+            | Self::Incident
             | Self::Other => &[],
         }
     }
@@ -1030,6 +1071,7 @@ impl EntityRequest {
             | EntityMetadataRequest::NetworkConnection(_)
             | EntityMetadataRequest::SigmaRule(_)
             | EntityMetadataRequest::Flag(_)
+            | EntityMetadataRequest::Incident(_)
             | EntityMetadataRequest::Other => None,
         }
     }

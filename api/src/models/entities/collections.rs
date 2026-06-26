@@ -5,9 +5,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use strum::{AsRefStr, EnumString};
 
-#[cfg(feature = "client")]
-use crate::multipart_set;
-
 /// A dynamic collection of items in Thorium defined by various parameters
 /// each item in the collection must
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,13 +110,13 @@ impl CollectionEntityRequest {
             );
         }
         // add collection tags to this form
-        for (key, mut values) in self.collection_tags {
+        for (key, values) in self.collection_tags {
             // build the tag key for this and_tag
             let tag_key = format!("metadata[collection_tags][{key}][]");
             // add this tags list of values to our form
             form = values
                 .into_iter()
-                .fold(form, |form, value| form.text(key.to_owned(), value))
+                .fold(form, |form, value| form.text(tag_key.to_owned(), value))
         }
         Ok(form)
     }
