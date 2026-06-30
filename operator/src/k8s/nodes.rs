@@ -1,6 +1,6 @@
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::{DeleteParams, ListParams, Patch, PatchParams, PostParams};
-use thorium::{Error, Thorium, models::Version};
+use thorium::{Error, Thorium};
 
 use super::clusters::ClusterMeta;
 
@@ -179,6 +179,9 @@ pub async fn cleanup_provision_pods(meta: &ClusterMeta) -> Result<(), Error> {
 /// * `meta` - Thorium cluster client and metadata
 /// * `node` - Name of node to deploy pod
 pub async fn deploy_provision_pod(meta: &ClusterMeta, node: &str) -> Result<(), Error> {
+    // get the api component spec to set environment, we don't need node provisioners having
+    // their own CRD config just for environment
+    let api_spec = &meta.cluster.spec.components.api;
     let pod_name = format!("node-provisioner-{node}");
     // set default resources for node provision pods
     let resources = serde_json::json!({"cpu": "250m", "memory": "250Mi"});
@@ -216,6 +219,7 @@ pub async fn deploy_provision_pod(meta: &ClusterMeta, node: &str) -> Result<(), 
                         "limits": resources.clone(),
                         "requests": resources.clone()
                     },
+                    "env": api_spec.env.clone(),
                     "volumeMounts": [
                         {
                             "name": "opt-mount",

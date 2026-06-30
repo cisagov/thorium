@@ -1,7 +1,7 @@
 //! Watches the api pods and applies any required labels
 
 use futures::StreamExt;
-use k8s_openapi::api::core::v1::{Pod, PodStatus};
+use k8s_openapi::api::core::v1::Pod;
 use kube::api::{ListParams, Patch, PatchParams};
 use kube::runtime::Controller;
 use kube::runtime::controller::Action;
@@ -13,7 +13,6 @@ use std::time::Duration;
 use thorium::Error;
 
 use crate::k8s::controller::SharedInfo;
-use crate::k8s::crds::ThoriumCluster;
 
 /// The context for our api pod watcher
 #[derive(Clone)]
