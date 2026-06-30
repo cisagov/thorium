@@ -3,7 +3,6 @@ use kube::{
     api::{DeleteParams, Patch, PatchParams, PostParams},
     runtime::reflector::Lookup,
 };
-use serde_json::Value;
 use thorium::Error;
 
 use super::clusters::ClusterMeta;
