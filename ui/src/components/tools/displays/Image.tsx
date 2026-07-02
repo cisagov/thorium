@@ -44,7 +44,7 @@ const Image: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
     };
     void fetchFiles();
     // set alerts and process results to json
-    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, false);
+    getAlerts(result.result, setResultsJson, setWarnings, setErrors, setIsJson, true);
   }, [result, sha256, tool]);
 
   return (
