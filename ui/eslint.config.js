@@ -43,6 +43,7 @@ export default tseslint.config(
         ignoreRegExpLiterals: true,
       }],
       "@typescript-eslint/no-explicit-any": "off",
+      "react/no-unstable-nested-components": ["error", { allowAsProps: true }],
     }
   },
 );

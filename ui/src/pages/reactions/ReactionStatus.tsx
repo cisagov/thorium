@@ -16,7 +16,67 @@ import { ReactionStatus as ReactionStatusEnum, type Reaction, type ReactionLogEn
 
 interface ReactionLogsProps {
   logs: ReactionLogEntry[];
+  width: number;
 }
+
+// Display the reaction log entries in a scrollable card
+const ReactionLogs = ({ logs, width }: ReactionLogsProps) => {
+  return (
+    <Card className="log-box scroll-log panel">
+      <Card.Header>
+        <Row className="mt-1 mb-1 flex-nowrap">
+          <Col className="timestamp-log" xs={3}>
+            TIME STAMP
+          </Col>
+          <Col className="action-log" xs={2}>
+            ACTION
+          </Col>
+          <Col className="flex-nowrap">
+            <Row className="flex-nowrap">
+              <Col className="key-log" xs={2}>
+                KEY
+              </Col>
+              <Col className="value-log">VALUE</Col>
+            </Row>
+          </Col>
+        </Row>
+      </Card.Header>
+      <Card.Body>
+        {logs.map((reaction, idx) => (
+          <Row key={`${reaction.id}_${idx}`} className="flex-nowrap">
+            <Col className="timestamp-log" xs={3}>
+              {width <= 1400 ? reaction.timestamp.split('.')[0] : reaction.timestamp}
+            </Col>
+            <Col className="action-log" xs={2}>
+              {reaction.action}
+            </Col>
+            <Col>{renderUpdate(reaction)}</Col>
+          </Row>
+        ))}
+      </Card.Body>
+    </Card>
+  );
+};
+
+// Render the key/value pairs for a single log entry update
+const renderUpdate = (reaction: ReactionLogEntry) => {
+  const exclude = ['current_stage', 'group', 'pipeline', 'reaction', 'id', 'status'];
+  const sorted = Object.keys(reaction.update)
+    .filter((key) => !exclude.includes(key))
+    .sort();
+  return (
+    <>
+      {sorted.map((key) => (
+        <Row key={key} className="flex-nowrap">
+          <Col className="key-log" xs={2}>
+            {key}
+          </Col>
+          <Col className="value-log">{reaction.update[key]}</Col>
+        </Row>
+      ))}
+    </>
+  );
+};
 
 const ReactionStatus = () => {
   const { reactionID } = useParams();
@@ -160,65 +220,6 @@ const ReactionStatus = () => {
     }, 5000);
     return () => clearInterval(intervalId);
   }, [reactionFinished]);
-
-  // Render the key/value pairs for a single log entry update
-  const renderUpdate = (reaction: ReactionLogEntry) => {
-    const exclude = ['current_stage', 'group', 'pipeline', 'reaction', 'id', 'status'];
-    const sorted = Object.keys(reaction.update)
-      .filter((key) => !exclude.includes(key))
-      .sort();
-    return (
-      <>
-        {sorted.map((key) => (
-          <Row key={key} className="flex-nowrap">
-            <Col className="key-log" xs={2}>
-              {key}
-            </Col>
-            <Col className="value-log">{reaction.update[key]}</Col>
-          </Row>
-        ))}
-      </>
-    );
-  };
-
-  // Display the reaction log entries in a scrollable card
-  const ReactionLogs = ({ logs }: ReactionLogsProps) => {
-    return (
-      <Card className="log-box scroll-log panel">
-        <Card.Header>
-          <Row className="mt-1 mb-1 flex-nowrap">
-            <Col className="timestamp-log" xs={3}>
-              TIME STAMP
-            </Col>
-            <Col className="action-log" xs={2}>
-              ACTION
-            </Col>
-            <Col className="flex-nowrap">
-              <Row className="flex-nowrap">
-                <Col className="key-log" xs={2}>
-                  KEY
-                </Col>
-                <Col className="value-log">VALUE</Col>
-              </Row>
-            </Col>
-          </Row>
-        </Card.Header>
-        <Card.Body>
-          {logs.map((reaction, idx) => (
-            <Row key={`${reaction.id}_${idx}`} className="flex-nowrap">
-              <Col className="timestamp-log" xs={3}>
-                {width <= 1400 ? reaction.timestamp.split('.')[0] : reaction.timestamp}
-              </Col>
-              <Col className="action-log" xs={2}>
-                {reaction.action}
-              </Col>
-              <Col>{renderUpdate(reaction)}</Col>
-            </Row>
-          ))}
-        </Card.Body>
-      </Card>
-    );
-  };
 
   // Render the pipeline stage chart with status icons and links to stage logs
   const renderPipelineChart = (order: (string | string[])[], id: string, group: string) => {
@@ -548,7 +549,7 @@ const ReactionStatus = () => {
                     {renderPipelineChart(pipelineOrder, reactionInfo.id, reactionInfo.group as string)}
                   </Tab>
                   <Tab eventKey="logs" title="Logs">
-                    <ReactionLogs logs={reactionLogs} />
+                    <ReactionLogs logs={reactionLogs} width={width} />
                   </Tab>
                   <Tab eventKey="tags" title="Tags">
                     <Row>

@@ -11,6 +11,10 @@ import '@styles/main.scss';
 import { ResultRenderProps } from './props';
 import { Value } from '@models/results';
 
+const SanitizeHTML = ({ html }: { html: Value }) => (
+  <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(typeof html === 'string' ? html : '') }} />
+);
+
 const SafeHtml: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -24,10 +28,6 @@ const SafeHtml: React.FC<ResultRenderProps> = ({ result, sha256, tool }) => {
       true,
     );
   }, [result]);
-
-  const SanitizeHTML = ({ html }: { html: Value }) => (
-    <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(typeof html === 'string' ? html : '') }} />
-  );
 
   return (
     <>
