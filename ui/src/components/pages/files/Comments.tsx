@@ -11,6 +11,63 @@ import type { Comment } from '@models/files';
 interface CommentsProps {
   sha256: string;
 }
+const CommentAlertBanner = ({ commentError }: { commentError: string }) => {
+  return (
+    <Fragment>
+      {commentError == 'Success' && (
+        <AlertBanner severity={Severity.Success} className="attachment-card">
+          Comment has uploaded successfully!
+        </AlertBanner>
+      )}
+      {commentError != '' && commentError != 'Success' && <AlertBanner className="attachment-card">{commentError}</AlertBanner>}
+    </Fragment>
+  );
+};
+
+const CommentList = ({
+  comments,
+  page,
+  limit,
+  getAttachment,
+}: {
+  comments: Array<Comment>;
+  page: number;
+  limit: number;
+  getAttachment: (commentID: string, name: string, fileID: string) => Promise<void>;
+}) => {
+  return (
+    <Fragment>
+      {comments &&
+        comments.slice(page * limit, page * limit + limit).map((singleCommentobj, i) => (
+          <Card key={i} className="single-comment mb-2 panel">
+            <Card.Header>
+              {singleCommentobj.author} <i>{singleCommentobj.uploaded}</i>
+            </Card.Header>
+            <Card.Body>
+              <Row key={i}>
+                <p key={i}>{singleCommentobj.comment}</p>
+              </Row>
+              {singleCommentobj &&
+                singleCommentobj.attachments &&
+                Object.keys(singleCommentobj.attachments).map((name, i) => (
+                  <Col key={i}>
+                    <a
+                      href="#comments"
+                      className="text"
+                      onClick={() => {
+                        void getAttachment(singleCommentobj.id, name, singleCommentobj.attachments[name]);
+                      }}
+                    >
+                      {name}
+                    </a>
+                  </Col>
+                ))}
+            </Card.Body>
+          </Card>
+        ))}
+    </Fragment>
+  );
+};
 
 const Comments = ({ sha256 }: CommentsProps) => {
   const [newComment, setNewComment] = useState('');
@@ -76,58 +133,10 @@ const Comments = ({ sha256 }: CommentsProps) => {
     }
   };
 
-  const CommentAlertBanner = () => {
-    return (
-      <Fragment>
-        {commentError == 'Success' && (
-          <AlertBanner severity={Severity.Success} className="attachment-card">
-            Comment has uploaded successfully!
-          </AlertBanner>
-        )}
-        {commentError != '' && commentError != 'Success' && <AlertBanner className="attachment-card">{commentError}</AlertBanner>}
-      </Fragment>
-    );
-  };
-
-  const CommentList = () => {
-    return (
-      <Fragment>
-        {comments &&
-          comments.slice(page * limit, page * limit + limit).map((singleCommentobj, i) => (
-            <Card key={i} className="single-comment mb-2 panel">
-              <Card.Header>
-                {singleCommentobj.author} <i>{singleCommentobj.uploaded}</i>
-              </Card.Header>
-              <Card.Body>
-                <Row key={i}>
-                  <p key={i}>{singleCommentobj.comment}</p>
-                </Row>
-                {singleCommentobj &&
-                  singleCommentobj.attachments &&
-                  Object.keys(singleCommentobj.attachments).map((name, i) => (
-                    <Col key={i}>
-                      <a
-                        href="#comments"
-                        className="text"
-                        onClick={() => {
-                          void getAttachment(singleCommentobj.id, name, singleCommentobj.attachments[name]);
-                        }}
-                      >
-                        {name}
-                      </a>
-                    </Col>
-                  ))}
-              </Card.Body>
-            </Card>
-          ))}
-      </Fragment>
-    );
-  };
-
   return (
     <div id="comments-tab">
       <div className="comments">
-        <CommentList />
+        <CommentList page={page} limit={limit} comments={comments} getAttachment={getAttachment} />
       </div>
       {comments.length == 0 && (
         <Fragment>
@@ -167,7 +176,7 @@ const Comments = ({ sha256 }: CommentsProps) => {
           <Row className="d-flex justify-content-center mt-2">
             <Col>
               <center>
-                <CommentAlertBanner />
+                <CommentAlertBanner commentError={commentError} />
               </center>
               <Button
                 className="mt-3 primary-btn auto-width"
