@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Fragment, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Col, Pagination, Row } from 'react-bootstrap';
 
 // project imports
@@ -84,17 +84,21 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
 
   const limit = filters.limit ? filters.limit : DEFAULT_LIST_LIMIT;
 
-  return (
-    <Fragment>
-      {!loading && <Row className="d-flex justify-content-center">{entityHeaders}</Row>}
+  const entityList = entities.slice(page * limit, page * limit + limit).map((entity, idx) => (
+    <Row key={`${type}_entity_${idx}`} className="d-flex justify-content-center g-0">
+      {displayEntity(entity, idx, filters)}
+    </Row>
+  ));
 
-      {!loading &&
-        entities.slice(page * limit, page * limit + limit).map((entity, idx) => (
-          <Row key={`${type}_entity_${idx}`} className="d-flex justify-content-center">
-            {displayEntity(entity, idx, filters)}
-          </Row>
-        ))}
+  return (
+    <>
       <LoadingSpinner loading={loading} />
+      {!loading && (
+        <>
+          <Row className="d-flex justify-content-center g-0">{entityHeaders}</Row>
+          {entityList}
+        </>
+      )}
       {entities.length === 0 && !loading && isMountingRef.current && (
         <Row>
           <NoResultsBanner type={type} />
@@ -115,7 +119,7 @@ const EntityList = <T,>({ type, displayEntity, entityHeaders, filters, fetchEnti
           </Col>
         </Row>
       )}
-    </Fragment>
+    </>
   );
 };
 

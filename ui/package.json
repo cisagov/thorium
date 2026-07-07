@@ -81,6 +81,7 @@
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.2.0",
     "babel-plugin-react-compiler": "^1.0.0",
+    "babel-plugin-styled-components": "^2.3.0",
     "es-check": "^9.6.4",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",

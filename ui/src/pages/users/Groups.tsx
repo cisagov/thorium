@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Accordion, Button, Badge, Col, Form, Modal } from 'react-bootstrap';
+import { Accordion, Button, Badge, Form, Modal } from 'react-bootstrap';
 import AlertBanner from '@components/shared/alerts/AlertBanner';
 
 // project imports
@@ -192,19 +192,19 @@ const Groups = () => {
             .map((group) => (
               <Accordion.Item key={group} eventKey={group}>
                 <Accordion.Header>
-                  <Col className="accordion-item-name mt-2">
-                    <div className="text">{group}</div>
-                  </Col>
-                  <Col className="accordion-item-relation mt-2">
-                    <small>
-                      <i>
-                        <GroupMemberCount group={filteredGroups[group]} />
-                      </i>
-                    </small>
-                  </Col>
-                  <Col className="accordion-item-ownership d-flex justify-content-center">
-                    {userInfo && <GroupRoleBadge group={filteredGroups[group]} user={userInfo} />}
-                  </Col>
+                  <div className="accordion-text">
+                    <div className="accordion-item-name">
+                      <div className="text">{group}</div>
+                    </div>
+                    <div className="accordion-item-ownership">
+                      <small>
+                        <i>
+                          <GroupMemberCount group={filteredGroups[group]} />
+                        </i>
+                      </small>
+                    </div>
+                  </div>
+                  <div className="accordion-group-role">{userInfo && <GroupRoleBadge group={filteredGroups[group]} user={userInfo} />}</div>
                 </Accordion.Header>
                 <Accordion.Body>
                   <GroupInfo

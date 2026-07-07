@@ -12,7 +12,6 @@ import {
   CreateTitle,
   FieldCol,
   FormatRow,
-  FormSection,
   PipelineCreateWrapper,
   SectionRow,
   TitleCol,
@@ -172,7 +171,7 @@ const PipelineCreate: React.FC = () => {
           </>
         ) : (
           <>
-            <FormSection>
+            <SectionRow>
               <TitleCol>
                 <h5>Pipeline</h5>
               </TitleCol>
@@ -186,7 +185,7 @@ const PipelineCreate: React.FC = () => {
                   mode={formMode}
                 />
               </FieldCol>
-            </FormSection>
+            </SectionRow>
             <hr />
             <SectionRow>
               <TitleCol>

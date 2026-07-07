@@ -30,20 +30,6 @@ $grid-breakpoints: (
   opacity: 0.4;
 }
 
-.upload-field-name {
-  flex: 1;
-}
-
-.upload-field-name-alt {
-  flex: 1;
-  align-content: left;
-  display: none;
-}
-
-.upload-field {
-  flex: 10;
-}
-
 .description-field {
   height: 100px;
 }
@@ -161,19 +147,6 @@ $grid-breakpoints: (
 @media (max-width: scaling.$lg) {
   .name-width {
     width: 100px;
-  }
-
-  .upload-field-name-alt {
-    display: flex;
-  }
-
-  .upload-field-name {
-    display: none;
-  }
-
-  .alt-label {
-    margin-top: 1rem;
-    margin-bottom: 0.25rem !important;
   }
 }
 

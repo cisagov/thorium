@@ -17,7 +17,7 @@ import { getGroupsFromClauses, matchesStringClauses } from '@components/shared/i
 import NoResultsBanner from '@components/shared/alerts/NoResultsBanner';
 import Title from '@components/shared/titles/Title';
 import LoadingSpinner from '@components/shared/fallback/LoadingSpinner';
-import { OverlayTipRight, OverlayTipLeft } from '@components/shared/overlay/tips';
+import { OverlayTipRight, OverlayTipBottom } from '@components/shared/overlay/tips';
 import { getPipeline, listPipelines, updatePipeline } from '@thorpi/pipelines';
 import { useAuth } from '@utilities/auth';
 import { fetchGroups } from '@utilities/fetch';
@@ -165,13 +165,17 @@ const PipelineBrowsing: FC = () => {
         </div>
         <Title>Pipelines</Title>
         <div>
-          <h2>
-            <OverlayTipLeft tip={createPipelineTip}>
-              <Button variant={ButtonVariant.Ok} data-testid="create-pipeline-btn" onClick={handleOpenCreate} disabled={!canCreatePipeline}>
-                +
-              </Button>
-            </OverlayTipLeft>
-          </h2>
+          <OverlayTipBottom tip={createPipelineTip}>
+            <Button
+              className="ok-btn m-1"
+              variant={ButtonVariant.Ok}
+              data-testid="create-pipeline-btn"
+              onClick={handleOpenCreate}
+              disabled={!canCreatePipeline}
+            >
+              <b>+</b>
+            </Button>
+          </OverlayTipBottom>
         </div>
       </HeaderBar>
       <OmnibarRow>

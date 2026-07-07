@@ -3,27 +3,45 @@ import styled from 'styled-components';
 // project imports
 import { BUTTON_BAR_GAP } from '@components/shared/buttons/tokens';
 import { errorOutline } from '@components/shared/inputs/FieldError';
+import { scaling } from '@styles';
 
 // Fixed width for every section's title column so titles line up at the same x
 // regardless of title length (mirrors the image form scaffolding).
 export const SECTION_TITLE_WIDTH = '210px';
 export const PIPELINE_CREATE_MAX_WIDTH = '900px';
+const PIPELINE_FIELDS_MAX_WIDTH = '700px';
 
 /// A horizontal section row: title column on the left, fields on the right
 export const SectionRow = styled.div`
   display: flex;
   gap: 8px;
   align-items: flex-start;
+
+  @media (max-width: ${scaling.xl}) {
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+    max-width: ${PIPELINE_FIELDS_MAX_WIDTH};
+    margin: 0 auto;
+  }
 `;
 
 /// The fixed-width title column used by the create form's sections
 export const TitleCol = styled.div`
   flex: 0 0 ${SECTION_TITLE_WIDTH};
+
+  @media (max-width: ${scaling.xl}) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
 `;
 
 /// The flexible field column that holds a section's inputs
 export const FieldCol = styled.div`
   flex: 1;
+  @media (max-width: ${scaling.xl}) {
+    width: 100%;
+  }
 `;
 
 /// Empty spacer column that aligns edit-mode sections with the create form
@@ -107,6 +125,10 @@ export const PipelineFieldsWrapper = styled.div`
 export const PipelineCreateWrapper = styled.div`
   max-width: ${PIPELINE_CREATE_MAX_WIDTH};
   margin: 0 auto;
+
+  @media (max-width: ${scaling.xl}) {
+    max-width: ${PIPELINE_FIELDS_MAX_WIDTH};
+  }
 `;
 
 /// The centered create-page heading (replaces the deprecated <center> + bootstrap row)

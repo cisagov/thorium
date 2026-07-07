@@ -104,6 +104,10 @@ export default defineConfig(() => {
         babel: {
           plugins: [
             ['babel-plugin-react-compiler', {}],
+            ['babel-plugin-styled-components', {
+              displayName: true,
+              fileName: false,
+            }]
           ],
         },
       }),

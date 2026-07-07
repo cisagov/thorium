@@ -116,7 +116,7 @@ const Resources = () => (
   </Routes>
 );
 
-const Body = styled.div`
+const Main = styled.div`
   color: var(--thorium-text);
   background-color: var(--thorium-body-bg);
   min-height: 100vh;
@@ -125,8 +125,13 @@ const Body = styled.div`
   // overflow-x: hidden;
 `;
 
+const Body = styled.div`
+  display: flex;
+  justify-content: center;
+`;
+
 const Site = () => (
-  <Body>
+  <Main>
     <ToastContainer
       position="top-right"
       autoClose={2000}
@@ -139,13 +144,15 @@ const Site = () => (
       theme="dark"
     />
     <NavBanner />
-    <SidebarColumn />
-    <Suspense fallback={FallbackView}>
-      <ErrorBoundary fallback={<RenderErrorAlert />}>
-        <Resources />
-      </ErrorBoundary>
-    </Suspense>
-  </Body>
+    <Body>
+      <SidebarColumn />
+      <Suspense fallback={FallbackView}>
+        <ErrorBoundary fallback={<RenderErrorAlert />}>
+          <Resources />
+        </ErrorBoundary>
+      </Suspense>
+    </Body>
+  </Main>
 );
 
 const Thorium = () => (

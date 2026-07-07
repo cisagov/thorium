@@ -88,7 +88,7 @@ const RepoBrowsingConfig: EntityBrowseConfig<Entities.Repo> = {
   title: 'Repos',
   typeLabel: '',
   kind: Entities.Repo,
-  creatable: true,
+  creatable: false,
   entityHeaders: <RepoListHeaders />,
   renderEntity: (repo) => <RepoItem repo={repo} />,
   fetchEntities: getRepos,

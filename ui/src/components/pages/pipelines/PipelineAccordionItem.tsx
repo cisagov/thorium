@@ -79,23 +79,24 @@ const PipelineAccordionItem: FC<PipelineAccordionItemProps> = ({
   return (
     <AccordionItem eventKey={id}>
       <AccordionHeader>
-        <div className="accordion-item-name">
-          <div className="text">
-            <OverlayTipBottom tip={`Copy pipeline link to clipboard`}>
-              <a className="title-link" onClick={handleLink}>
-                <FaLink className="title-link-no-color me-3" size={12} />
-              </a>
-            </OverlayTipBottom>
-            {pipeline.name}
+        <div className="accordion-text">
+          <div className="accordion-item-name">
+            <div className="text">
+              <OverlayTipBottom tip={`Copy pipeline link to clipboard`}>
+                <a className="title-link" onClick={handleLink}>
+                  <FaLink className="title-link-no-color me-3" size={12} />
+                </a>
+              </OverlayTipBottom>
+              {pipeline.name}
+            </div>
           </div>
-        </div>
-        <div className="accordion-item-relation" />
-        <div className="accordion-item-ownership">
-          <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
-            <small>
-              <i>{pipeline.group}</i>
-            </small>
-          </OverlayTipLeft>
+          <div className="accordion-item-subtitle">
+            <OverlayTipLeft tip={`This pipeline is owned by the ${pipeline.group} group.`}>
+              <small>
+                <i>{pipeline.group}</i>
+              </small>
+            </OverlayTipLeft>
+          </div>
         </div>
         <div className="accordion-item-status">
           {hasBans && (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { Button, Col, Form, Row } from 'react-bootstrap';
 import Subtitle from '@components/shared/titles/Subtitle';
 import UploadDropzone from '@components/shared/UploadDropzone';
@@ -11,6 +11,42 @@ import TLPSelection from './TLPSelection';
 import OriginForm from './OriginForm';
 import UploadAlertBanner from './UploadAlertBanner';
 import { useUpload } from './UploadContext';
+
+type UploadFieldProps = {
+  label: string;
+  marker?: '*' | 'T';
+  disabled?: boolean;
+  rowClassName?: string;
+  children: ReactNode;
+}
+
+const UploadField: React.FC<UploadFieldProps> = ({
+  label,
+  marker,
+  disabled = false,
+  rowClassName = 'mb-4',
+  children,
+}) => {
+
+  const title = (
+    <Subtitle>
+      {label} {marker && <sup>{marker}</sup>}
+    </Subtitle>
+  )
+
+  return (
+    <>
+      <Row className={rowClassName}>
+        <Col xs={12} xl={2} className="upload-field-name">
+          {title}
+        </Col>
+        <Col xs={12} xl={10} className={`${disabled ? 'disabled ' : ''}upload-field`}>
+          {children}
+        </Col>
+      </Row>
+    </>
+  )
+}
 
 const UploadForm: React.FC = () => {
   const {
@@ -38,163 +74,77 @@ const UploadForm: React.FC = () => {
     resetStatusMessages,
   } = useUpload();
 
-  const disabledClass = uploadInProgress ? 'disabled ' : '';
-
   return (
     <>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>
-            File <sup>*</sup>
-          </Subtitle>
-        </Col>
-      </Row>
-      <Row>
-        <Col className="upload-field-name">
-          <Subtitle>
-            File <sup>*</sup>
-          </Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <UploadDropzone onChange={setFilesArray} onError={setValidationErrors} selectedFiles={filesArray} width="100%" />
-          <br />
-        </Col>
-      </Row>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>
-            Groups <sup>*</sup>
-          </Subtitle>
-        </Col>
-      </Row>
-      <Row className="mb-4">
-        <Col className="upload-field-name">
-          <Subtitle>
-            Groups <sup>*</sup>
-          </Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <SelectInputArray
-            isCreatable={false}
-            options={userGroups}
-            values={selectedGroups.sort()}
-            onChange={(groups: string[]) => setSelectedGroups(groups)}
-          />
-        </Col>
-      </Row>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>Description</Subtitle>
-        </Col>
-      </Row>
-      <Row>
-        <Col className="upload-field-name">
-          <Subtitle>Description</Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <Form.Control
-            style={{ minHeight: '200px' }}
-            as="textarea"
-            placeholder="Add Description"
-            value={description}
-            onChange={(e) => {
-              setDescription(e.target.value);
-              resetStatusMessages();
-            }}
-          />
-        </Col>
-      </Row>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>Tags</Subtitle>
-        </Col>
-      </Row>
-      <Row className="mb-2">
-        <Col className="upload-field-name">
-          <Subtitle>Tags</Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <TagSelect tags={tags} setTags={setTags} placeholderText="Add Tags" />
-        </Col>
-      </Row>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>
-            TLP <sup>T</sup>
-          </Subtitle>
-        </Col>
-      </Row>
-      <Row className="mb-2">
-        <Col className="upload-field-name">
-          <Subtitle>
-            TLP <sup>T</sup>
-          </Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <TLPSelection selectedTLP={selectedTLP} onTLPChange={handleTLPChange} />
-        </Col>
-      </Row>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>
-            Origin <sup>T</sup>
-          </Subtitle>
-        </Col>
-      </Row>
-      <Row className="mb-4">
-        <Col className="upload-field-name">
-          <Subtitle>
-            Origin <sup>T</sup>
-          </Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <OriginForm />
-        </Col>
-      </Row>
-      <Row className="mb-4 alt-label">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field-name-alt">
-          <Subtitle>Run Pipelines</Subtitle>
-        </Col>
-      </Row>
-      <Row>
-        <Col className="upload-field-name">
-          <Subtitle>Run Pipelines</Subtitle>
-        </Col>
-        <Col className={disabledClass + 'upload-field'}>
-          <SelectPipelines
-            userInfo={userInfo}
-            setReactionsList={setReactionsList}
-            setError={setValidationErrors}
-            currentSelections={reactionsList}
-          />
-        </Col>
-      </Row>
-      <Row className="mt-3">
-        <Col className="upload-field-name" />
-        <Col className="upload-field ms-4">
-          <p>
-            <sup>*</sup> This field is required.
-          </p>
-        </Col>
-      </Row>
-      <Row>
-        <Col className="upload-field-name" />
-        <Col className="upload-field ms-4">
-          <p>
-            <sup>T</sup> This field also creates tags when specified.
-          </p>
-        </Col>
-      </Row>
+      <UploadField
+        label='File'
+        marker='*'
+        disabled={uploadInProgress}
+      >
+        <UploadDropzone onChange={setFilesArray} onError={setValidationErrors} selectedFiles={filesArray} width="100%" />
+      </UploadField>
+
+      <UploadField
+        label='Groups'
+        marker='*'
+        disabled={uploadInProgress}
+        rowClassName='mb-4'
+      >
+        <SelectInputArray
+          isCreatable={false}
+          options={userGroups}
+          values={selectedGroups.sort()}
+          onChange={(groups: string[]) => setSelectedGroups(groups)}
+        />
+      </UploadField>
+
+      <UploadField label='Description' disabled={uploadInProgress}>
+        <Form.Control
+          style={{ minHeight: '200px' }}
+          as="textarea"
+          placeholder="Add Description"
+          value={description}
+          onChange={(e) => {
+            setDescription(e.target.value);
+            resetStatusMessages();
+          }}
+        />
+      </UploadField>
+
+      <UploadField label='Tags' disabled={uploadInProgress}>
+        <TagSelect tags={tags} setTags={setTags} placeholderText="Add Tags" />
+      </UploadField>
+
+      <UploadField label='TLP' marker='T' disabled={uploadInProgress} >
+        <TLPSelection selectedTLP={selectedTLP} onTLPChange={handleTLPChange} />
+      </UploadField>
+
+      <UploadField label='Origin' marker='T' disabled={uploadInProgress}>
+        <OriginForm />
+      </UploadField>
+
+      <UploadField label='Run Pipelines' disabled={uploadInProgress}>
+        <SelectPipelines
+          userInfo={userInfo}
+          setReactionsList={setReactionsList}
+          setError={setValidationErrors}
+          currentSelections={reactionsList}
+        />
+      </UploadField>
+
+      <UploadField label='' rowClassName=''>
+        <p>
+          <sup>*</sup> This field is required.
+        </p>
+      </UploadField>
+      <UploadField label='' rowClassName=''>
+        <p>
+          <sup>T</sup> This field also creates tags when specified.
+        </p>
+      </UploadField>
+
       <Row className="d-flex justify-content-center">
-        <Col className="upload-field-name"></Col>
-        <Col className="upload-field">
+        <UploadField label='' rowClassName=''>
           {uploadStatus && Object.entries(uploadStatus).length > 0 && (
             <Row className="upload-bar mt-3">
               {Object.entries(uploadStatus).map(([key, value]) => (
@@ -223,7 +173,7 @@ const UploadForm: React.FC = () => {
               </Row>
             </>
           )}
-        </Col>
+        </UploadField>
       </Row>
     </>
   );

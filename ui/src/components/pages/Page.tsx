@@ -51,12 +51,9 @@ const PageContainer = styled.div`
   width: 100%;
   max-width: 85%;
   margin: 0 auto;
-  padding: 4rem 15px 0.5rem 15px;
-  @media (min-width: ${scaling.sm}) {
-    padding: 4rem 0rem 0.5rem 3.5rem;
-  }
-  @media (min-width: ${scaling.lg}) {
-    padding: 4rem 0rem 0.5rem 6rem;
+  padding: 4rem 30px 0.5rem 30px;
+  @media (max-width: ${scaling.md}) {
+    padding: 4rem 15px 0.5rem 15px;
   }
   @media (min-width: ${scaling.xxxl}) {
     max-width: 80%;
