@@ -4,20 +4,21 @@ use chrono::prelude::*;
 use futures::future::try_join_all;
 use futures::stream::{self, StreamExt};
 use scylla::DeserializeRow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use tracing::{Level, event, instrument};
 use uuid::Uuid;
 
 use super::keys::{
     ImageKeys, JobKeys, ReactionCacheKind, ReactionKeys, StreamKeys, SubReactionLists, logs,
 };
-use super::{images, jobs, pipelines, streams};
-use crate::models::backends::reactions::InternalReactionCacheFileUpdates;
+use super::{RedisCursor, images, jobs, pipelines, streams};
+use crate::models::backends::db::{RedisCursorSupport, RedisGroupCursor};
+use crate::models::backends::reactions::{InternalReactionCacheFileUpdates, ReactionCursorParam};
 use crate::models::{
-    BulkReactionResponse, Group, JobHandleStatus, JobList, JobResetRequestor, JobResets, Pipeline,
-    RawJob, Reaction, ReactionActions, ReactionCache, ReactionCacheUpdate, ReactionExpire,
-    ReactionList, ReactionRequest, ReactionStatus, StageLogs, StageLogsAdd, StatusRequest,
-    StatusUpdate, SystemComponents, User,
+    ApiCursor, BulkReactionResponse, Group, JobHandleStatus, JobList, JobResetRequestor, JobResets,
+    Pipeline, RawJob, Reaction, ReactionActions, ReactionCache, ReactionCacheUpdate,
+    ReactionExpire, ReactionList, ReactionRequest, ReactionStatus, StageLogs, StageLogsAdd,
+    StatusRequest, StatusUpdate, SystemComponents, User,
 };
 use crate::utils::{ApiError, Shared};
 use crate::{
@@ -411,6 +412,142 @@ pub async fn list_tag(
         // more groups exist use new_cursor
         Ok(ReactionList::new(Some(new_cursor), names))
     }
+}
+
+impl RedisCursorSupport for Reaction {
+    /// The params to use when listing data in redis
+    type Params = ReactionCursorParam;
+
+    /// The type of data to return when listing without details
+    type Names = String;
+
+    /// The type of data we are sorting on
+    type Sort = String;
+
+    /// Get our cursor id from params if one was provided
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params to get a cursor id from
+    fn get_id(params: &Self::Params) -> Option<Uuid> {
+        match params {
+            ReactionCursorParam::General { params, .. } => params.cursor,
+            ReactionCursorParam::Status { params, .. } => params.cursor,
+            ReactionCursorParam::Tag { params, .. } => params.cursor,
+            ReactionCursorParam::Sub { params, .. } => params.cursor,
+            ReactionCursorParam::SubAndStatus { params, .. } => params.cursor,
+        }
+    }
+
+    /// Get the amount of data to return at most for this page
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params ot get limits from
+    fn get_limit(params: &Self::Params) -> usize {
+        match params {
+            ReactionCursorParam::General { params, .. } => params.limit,
+            ReactionCursorParam::Status { params, .. } => params.limit,
+            ReactionCursorParam::Tag { params, .. } => params.limit,
+            ReactionCursorParam::Sub { params, .. } => params.limit,
+            ReactionCursorParam::SubAndStatus { params, .. } => params.limit,
+        }
+    }
+
+    /// Get the groups to return data from
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params ot get groups from
+    fn get_groups(params: &Self::Params) -> &Vec<String> {
+        match params {
+            ReactionCursorParam::General { params, .. } => &params.groups,
+            ReactionCursorParam::Status { params, .. } => &params.groups,
+            ReactionCursorParam::Tag { params, .. } => &params.groups,
+            ReactionCursorParam::Sub { params, .. } => &params.groups,
+            ReactionCursorParam::SubAndStatus { params, .. } => &params.groups,
+        }
+    }
+
+    /// Build the keys to a specific groups name set
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The params to build keys from
+    /// * `shared` - Shared Thorium objects
+    fn name_key(params: &Self::Params, group: &str, shared: &Shared) -> String {
+        // build the correct key to list reaction ids in redis
+        match params {
+            ReactionCursorParam::General { pipeline, .. } => {
+                ReactionKeys::set(group, pipeline, shared)
+            }
+            ReactionCursorParam::Status {
+                pipeline, status, ..
+            } => ReactionKeys::status(group, pipeline, status, shared),
+            ReactionCursorParam::Tag { tag, .. } => ReactionKeys::tag(group, tag, shared),
+            ReactionCursorParam::Sub { sub, .. } => ReactionKeys::sub_set(group, sub, shared),
+            ReactionCursorParam::SubAndStatus { sub, status, .. } => {
+                ReactionKeys::sub_status_set(group, sub, status, shared)
+            }
+        }
+    }
+
+    /// Get the name of items in a single group
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group to get names in
+    async fn get_names(
+        params: &Self::Params,
+        group_cursor: &RedisGroupCursor,
+        shared: &Shared,
+    ) -> Result<(u64, Vec<Self::Names>), ApiError> {
+        // get list of reactions
+        let (new_cursor, names): (u64, Vec<String>) = query!(
+            redis::cmd("sscan")
+                .arg(&group_cursor.key)
+                .arg(group_cursor.cursor)
+                .arg("count")
+                .arg(Self::get_limit(params)),
+            shared
+        )
+        .await?;
+        Ok((new_cursor, names))
+    }
+
+    /// Add new data to our cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `names` - The names to add to this groups sorted list
+    /// * `sorted` - The sorted list to add new names too
+    fn add_names(names: Vec<Self::Names>, sorted: &mut BTreeMap<Self::Sort, Self::Names>) {
+        // step over the names and build their sort key and add them to our remaining names
+        for name in names {
+            // add this name to our sorted list
+            sorted.insert(name.clone(), name);
+        }
+    }
+}
+
+/// Lists reaction ids across a set of groups using a redis cursor
+///
+/// # Arguments
+///
+/// * `params` - The params for listing reactions
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::reactions::list_new", skip_all, err(Debug))]
+pub async fn list_new(
+    params: ReactionCursorParam,
+    shared: &Shared,
+) -> Result<ApiCursor<String>, ApiError> {
+    // create a new or load an existing redis cursor from disk
+    let mut cursor = RedisCursor::<Reaction>::new(params, shared).await?;
+    // get the next page of data to return
+    let api_cursor = cursor.consume(shared).await?;
+    // save this cursor to redis
+    cursor.save(shared).await?;
+    Ok(api_cursor)
 }
 
 /// Lists reaction ids in the group wide status sorted set

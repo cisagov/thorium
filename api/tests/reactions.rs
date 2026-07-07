@@ -1,9 +1,10 @@
 //! Tests the Images routes in Thorium
 
+use std::collections::HashSet;
 use thorium::models::{
     GenericJobArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageUpdate, PipelineBan,
-    PipelineBanKind, PipelineBanUpdate, PipelineRequest, PipelineUpdate, ReactionStatus,
-    ReactionUpdate, Resources,
+    PipelineBanKind, PipelineBanUpdate, PipelineRequest, PipelineUpdate, ReactionCursorOpts,
+    ReactionRequest, ReactionStatus, ReactionUpdate, Resources,
 };
 use thorium::test_utilities::{self, generators};
 use thorium::{Error, fail, is, is_empty, is_in, is_not_in, vec_in_vec};
@@ -372,6 +373,235 @@ async fn list_sub_status_details() -> Result<(), Error> {
     cursor.next().await?;
     // make sure all the reactions we tried to create are in our list
     vec_in_vec!(&cursor.details, &sub_reactions);
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_new() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // setup 20 random reactions
+    let (reactions, resp) = generators::reactions(&group, 20, None, &client).await?;
+    // make sure no errors were returned
+    is_empty!(resp.errors);
+    // build the options for listing reactions in this group
+    let opts = ReactionCursorOpts::default().group(&group);
+    // list the reactions we just created
+    let cursor = client
+        .reactions
+        .list_new(&reactions[0].pipeline, &opts)
+        .await?;
+    // make sure all the reactions we tried to create are in our list
+    for id in &resp.created {
+        is_in!(cursor.data, id.to_string());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_new_multi_group() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create two groups to list reactions across
+    let groups: Vec<String> = generators::groups(2, &client)
+        .await?
+        .into_iter()
+        .map(|group| group.name)
+        .collect();
+    // use the same pipeline name in both groups
+    let pipeline_name = "shared-mg-pipe";
+    // track the reactions we create in both groups
+    let mut created = Vec::with_capacity(20);
+    // create the same pipeline and 10 reactions in each group
+    for group in &groups {
+        // create a random image for this groups pipeline
+        let image_req = generators::gen_image(group);
+        client.images.create(&image_req).await?;
+        // create a pipeline with the shared name in this group
+        let pipe_req = PipelineRequest::new(
+            group,
+            pipeline_name,
+            serde_json::json!(vec![vec![&image_req.name]]),
+        );
+        client.pipelines.create(&pipe_req).await?;
+        // get the pipeline we just created
+        let pipe = client.pipelines.get(group, pipeline_name).await?;
+        // create 10 random reactions for this groups pipeline
+        let react_reqs: Vec<ReactionRequest> = (0..10)
+            .map(|_| generators::gen_reaction(group, &pipe, None))
+            .collect();
+        let resp = client.reactions.create_bulk(&react_reqs).await?;
+        // make sure no errors were returned
+        is_empty!(resp.errors);
+        // track the reactions we created in this group
+        created.extend(resp.created);
+    }
+    // build the options for listing reactions across both groups
+    let opts = ReactionCursorOpts::default().groups(groups);
+    // list the reactions we just created across both groups
+    let cursor = client.reactions.list_new(pipeline_name, &opts).await?;
+    // make sure all the reactions we tried to create are in our list
+    for id in &created {
+        is_in!(cursor.data, id.to_string());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_new_paged() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // setup 20 random reactions
+    let (reactions, resp) = generators::reactions(&group, 20, None, &client).await?;
+    // make sure no errors were returned
+    is_empty!(resp.errors);
+    // build the options for listing reactions in small pages
+    let opts = ReactionCursorOpts::default().group(&group).page_size(5);
+    // list the first page of reactions we just created
+    let mut cursor = client
+        .reactions
+        .list_new(&reactions[0].pipeline, &opts)
+        .await?;
+    // track all the reaction ids we gather across pages
+    let mut gathered = cursor.data.clone();
+    // walk the remaining pages of this cursor
+    while !cursor.exhausted() {
+        // get the next page of reactions
+        cursor.refill().await?;
+        // add this pages reactions to our gathered list
+        gathered.extend(cursor.data.iter().cloned());
+    }
+    // make sure all the reactions we tried to create are in our list
+    for id in &resp.created {
+        is_in!(gathered, id.to_string());
+    }
+    // make sure no duplicate reactions were returned across pages
+    let unique = gathered.iter().collect::<HashSet<_>>();
+    is!(gathered.len(), unique.len());
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_status_new() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // setup 20 random reactions
+    let (reactions, resp) = generators::reactions(&group, 20, None, &client).await?;
+    // make sure no errors were returned
+    is_empty!(resp.errors);
+    // build the options for listing reactions in this group
+    let opts = ReactionCursorOpts::default().group(&group);
+    // list the created reactions we just created
+    let cursor = client
+        .reactions
+        .list_status_new(&reactions[0].pipeline, &ReactionStatus::Created, &opts)
+        .await?;
+    // make sure all the reactions we tried to create are in our list
+    for id in &resp.created {
+        is_in!(cursor.data, id.to_string());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_tag_new_multi_group() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create two groups to list reactions across
+    let groups: Vec<String> = generators::groups(2, &client)
+        .await?
+        .into_iter()
+        .map(|group| group.name)
+        .collect();
+    // track the reactions we create in both groups
+    let mut created = Vec::with_capacity(20);
+    // create 10 tagged reactions in each group
+    for group in &groups {
+        // setup 10 random reactions with a shared tag
+        let (_, resp) = generators::reactions(group, 10, Some("mg_tag"), &client).await?;
+        // make sure no errors were returned
+        is_empty!(resp.errors);
+        // track the reactions we created in this group
+        created.extend(resp.created);
+    }
+    // build the options for listing reactions across both groups in small pages
+    let opts = ReactionCursorOpts::default().groups(groups).page_size(5);
+    // list the first page of reactions with this tag
+    let mut cursor = client.reactions.list_tag_new("mg_tag", &opts).await?;
+    // track all the reaction ids we gather across pages
+    let mut gathered = cursor.data.clone();
+    // walk the remaining pages of this cursor
+    while !cursor.exhausted() {
+        // get the next page of reactions
+        cursor.refill().await?;
+        // add this pages reactions to our gathered list
+        gathered.extend(cursor.data.iter().cloned());
+    }
+    // make sure all the reactions we tried to create are in our list
+    for id in &created {
+        is_in!(gathered, id.to_string());
+    }
+    // make sure no duplicate reactions were returned across pages
+    let unique = gathered.iter().collect::<HashSet<_>>();
+    is!(gathered.len(), unique.len());
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_sub_new() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // setup 1 random parent reaction
+    let (_, resp) = generators::reactions(&group, 1, None, &client).await?;
+    // make sure no errors were returned
+    is_empty!(resp.errors);
+    // setup 20 random sub reactions
+    let (_, sub_resp, _) = generators::sub_reactions(&group, 20, &resp.created[0], &client).await?;
+    // build the options for listing sub reactions in this group
+    let opts = ReactionCursorOpts::default().group(&group);
+    // list the sub reactions we just created
+    let cursor = client
+        .reactions
+        .list_sub_new(&resp.created[0], &opts)
+        .await?;
+    // make sure all the sub reactions we tried to create are in our list
+    for created in &sub_resp {
+        is_in!(cursor.data, created.id.to_string());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_sub_status_new() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // setup 1 random parent reaction
+    let (_, resp) = generators::reactions(&group, 1, None, &client).await?;
+    // make sure no errors were returned
+    is_empty!(resp.errors);
+    // setup 20 random sub reactions
+    let (_, sub_resp, _) = generators::sub_reactions(&group, 20, &resp.created[0], &client).await?;
+    // build the options for listing sub reactions in this group
+    let opts = ReactionCursorOpts::default().group(&group);
+    // list the created sub reactions we just created
+    let cursor = client
+        .reactions
+        .list_sub_status_new(&resp.created[0], &ReactionStatus::Created, &opts)
+        .await?;
+    // make sure all the sub reactions we tried to create are in our list
+    for created in &sub_resp {
+        is_in!(cursor.data, created.id.to_string());
+    }
     Ok(())
 }
 

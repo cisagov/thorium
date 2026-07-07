@@ -11,17 +11,22 @@ use uuid::Uuid;
 
 use super::traits::TransferProgress;
 use super::{Cursor, Error, LogsCursor};
+use crate::models::Cursor as SearchCursor;
 use crate::models::{
     BulkReactionResponse, CartedFile, DownloadedFile, FileDownloadOpts, Reaction, ReactionCache,
-    ReactionCacheFileUpdate, ReactionCacheUpdate, ReactionCreation, ReactionListParams,
-    ReactionRequest, ReactionStatus, ReactionUpdate, StageLogs, StageLogsAdd, StatusUpdate,
-    UncartedFile,
+    ReactionCacheFileUpdate, ReactionCacheUpdate, ReactionCreation, ReactionCursorOpts,
+    ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, StageLogs, StageLogsAdd,
+    StatusUpdate, UncartedFile,
 };
-use crate::{send, send_build, send_bytes};
+use crate::{add_query, add_query_list, send, send_build, send_bytes};
 
 // import our static runtime if we need a blocking client
 #[cfg(feature = "sync")]
 use super::RUNTIME;
+
+// import our blocking cursor if we need a blocking client
+#[cfg(feature = "sync")]
+use crate::models::CursorBlocking;
 
 // import python bindings
 #[cfg(feature = "python")]
@@ -1256,6 +1261,340 @@ impl Reactions {
         let req = self.client.get(&url).header("authorization", &self.token);
         // send request
         send_bytes!(self.client, req)
+    }
+}
+
+#[cfg_attr(
+    feature = "sync",
+    thorium_derive::blocking_struct(wrap_return(SearchCursor = "CursorBlocking"))
+)]
+impl Reactions {
+    /// Builds the shared query params for a multi group reaction listing cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `opts` - The options to build query params from
+    fn build_cursor_query(opts: &ReactionCursorOpts) -> Vec<(String, String)> {
+        // get the correct page size if our limit is smaller then our page_size
+        let page_size = opts.limit.map_or_else(
+            || opts.page_size,
+            |limit| std::cmp::min(opts.page_size, limit),
+        );
+        // build our query params
+        let mut query = vec![("limit".to_owned(), page_size.to_string())];
+        add_query_list!(query, "groups[]".to_owned(), opts.groups);
+        add_query!(query, "cursor".to_owned(), opts.cursor);
+        query
+    }
+
+    /// Lists [`Reaction`] ids for a specific pipeline across groups
+    ///
+    /// # Arguments
+    ///
+    /// * `pipeline` - The pipeline to list reactions from
+    /// * `opts` - The options for this listing
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::{Thorium, models::ReactionCursorOpts};
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // build the options for listing reactions
+    /// let opts = ReactionCursorOpts::default().group("Corn").limit(50);
+    /// // list up to 50 reaction ids for this pipeline (limit is weakly enforced)
+    /// let cursor = thorium.reactions.list_new("CornHarvest", &opts).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(name = "Thorium::Reactions::list_new", skip(self, opts), err(Debug))
+    )]
+    pub async fn list_new(
+        &self,
+        pipeline: &str,
+        opts: &ReactionCursorOpts,
+    ) -> Result<SearchCursor<String>, Error> {
+        // build url for listing reactions for this pipeline
+        let url = format!(
+            "{base}/api/reactions/list/{pipeline}/",
+            base = self.host,
+            pipeline = pipeline
+        );
+        // build our query params
+        let query = Self::build_cursor_query(opts);
+        // get the first page for this cursor
+        SearchCursor::new(
+            url,
+            opts.page_size,
+            opts.limit,
+            &self.token,
+            &query,
+            &self.client,
+        )
+        .await
+    }
+
+    /// Lists [`Reaction`] ids with a status for a specific pipeline across groups
+    ///
+    /// # Arguments
+    ///
+    /// * `pipeline` - The pipeline to list reactions from
+    /// * `status` - The status reactions should have
+    /// * `opts` - The options for this listing
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::{Thorium, models::{ReactionCursorOpts, ReactionStatus}};
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // build the options for listing reactions
+    /// let opts = ReactionCursorOpts::default().group("Corn").limit(50);
+    /// // list up to 50 created reaction ids for this pipeline (limit is weakly enforced)
+    /// let cursor = thorium.reactions
+    ///     .list_status_new("CornHarvest", &ReactionStatus::Created, &opts)
+    ///     .await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::list_status_new",
+            skip(self, opts),
+            err(Debug)
+        )
+    )]
+    pub async fn list_status_new(
+        &self,
+        pipeline: &str,
+        status: &ReactionStatus,
+        opts: &ReactionCursorOpts,
+    ) -> Result<SearchCursor<String>, Error> {
+        // build url for listing reactions for this pipeline with a status
+        let url = format!(
+            "{base}/api/reactions/status/{pipeline}/{status}/",
+            base = self.host,
+            pipeline = pipeline,
+            status = status
+        );
+        // build our query params
+        let query = Self::build_cursor_query(opts);
+        // get the first page for this cursor
+        SearchCursor::new(
+            url,
+            opts.page_size,
+            opts.limit,
+            &self.token,
+            &query,
+            &self.client,
+        )
+        .await
+    }
+
+    /// Lists [`Reaction`] ids with a tag across groups
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The tag reactions should have
+    /// * `opts` - The options for this listing
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::{Thorium, models::ReactionCursorOpts};
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // build the options for listing reactions
+    /// let opts = ReactionCursorOpts::default().group("Corn").limit(50);
+    /// // list up to 50 reaction ids with the woot tag (limit is weakly enforced)
+    /// let cursor = thorium.reactions.list_tag_new("woot", &opts).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::list_tag_new",
+            skip(self, opts),
+            err(Debug)
+        )
+    )]
+    pub async fn list_tag_new(
+        &self,
+        tag: &str,
+        opts: &ReactionCursorOpts,
+    ) -> Result<SearchCursor<String>, Error> {
+        // build url for listing reactions with this tag
+        let url = format!("{base}/api/reactions/tag/{tag}/", base = self.host, tag = tag);
+        // build our query params
+        let query = Self::build_cursor_query(opts);
+        // get the first page for this cursor
+        SearchCursor::new(
+            url,
+            opts.page_size,
+            opts.limit,
+            &self.token,
+            &query,
+            &self.client,
+        )
+        .await
+    }
+
+    /// Lists sub [`Reaction`] ids for a parent reaction across groups
+    ///
+    /// # Arguments
+    ///
+    /// * `reaction` - The parent reaction to list sub reactions from
+    /// * `opts` - The options for this listing
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::{Thorium, models::ReactionCursorOpts};
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // in a real use case this would be an actual reaction uuid
+    /// let reaction = Uuid::new_v4();
+    /// // build the options for listing sub reactions
+    /// let opts = ReactionCursorOpts::default().group("Corn").limit(50);
+    /// // list up to 50 sub reaction ids (limit is weakly enforced)
+    /// let cursor = thorium.reactions.list_sub_new(&reaction, &opts).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::list_sub_new",
+            skip(self, opts),
+            fields(reaction = reaction.to_string()),
+            err(Debug)
+        )
+    )]
+    pub async fn list_sub_new(
+        &self,
+        reaction: &Uuid,
+        opts: &ReactionCursorOpts,
+    ) -> Result<SearchCursor<String>, Error> {
+        // build url for listing sub reactions for this parent reaction
+        let url = format!(
+            "{base}/api/reactions/sub/{reaction}/",
+            base = self.host,
+            reaction = reaction
+        );
+        // build our query params
+        let query = Self::build_cursor_query(opts);
+        // get the first page for this cursor
+        SearchCursor::new(
+            url,
+            opts.page_size,
+            opts.limit,
+            &self.token,
+            &query,
+            &self.client,
+        )
+        .await
+    }
+
+    /// Lists sub [`Reaction`] ids with a status for a parent reaction across groups
+    ///
+    /// # Arguments
+    ///
+    /// * `reaction` - The parent reaction to list sub reactions from
+    /// * `status` - The status sub reactions should have
+    /// * `opts` - The options for this listing
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::{Thorium, models::{ReactionCursorOpts, ReactionStatus}};
+    /// use uuid::Uuid;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // in a real use case this would be an actual reaction uuid
+    /// let reaction = Uuid::new_v4();
+    /// // build the options for listing sub reactions
+    /// let opts = ReactionCursorOpts::default().group("Corn").limit(50);
+    /// // list up to 50 created sub reaction ids (limit is weakly enforced)
+    /// let cursor = thorium.reactions
+    ///     .list_sub_status_new(&reaction, &ReactionStatus::Created, &opts)
+    ///     .await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        tracing::instrument(
+            name = "Thorium::Reactions::list_sub_status_new",
+            skip(self, opts),
+            fields(reaction = reaction.to_string()),
+            err(Debug)
+        )
+    )]
+    pub async fn list_sub_status_new(
+        &self,
+        reaction: &Uuid,
+        status: &ReactionStatus,
+        opts: &ReactionCursorOpts,
+    ) -> Result<SearchCursor<String>, Error> {
+        // build url for listing sub reactions for this parent reaction with a status
+        let url = format!(
+            "{base}/api/reactions/sub/{reaction}/status/{status}/",
+            base = self.host,
+            reaction = reaction,
+            status = status
+        );
+        // build our query params
+        let query = Self::build_cursor_query(opts);
+        // get the first page for this cursor
+        SearchCursor::new(
+            url,
+            opts.page_size,
+            opts.limit,
+            &self.token,
+            &query,
+            &self.client,
+        )
+        .await
     }
 }
 

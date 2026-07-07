@@ -113,6 +113,45 @@ impl Trees {
         send_build!(self.client, req, Tree)
     }
 
+    /// Get an existing tree of data in Thorium in its entirety
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The id of the tree to get
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // have an existing tree to get
+    /// # let id = uuid::Uuid::new_v4();
+    /// // get this tree from Thorium
+    /// let tree = thorium.trees.get(id).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    #[cfg_attr(
+        feature = "trace",
+        instrument(name = "Thorium::Trees::get", skip_all, err(Debug))
+    )]
+    pub async fn get(&self, id: Uuid) -> Result<Tree, Error> {
+        // build url for getting an existing tree
+        let url = format!("{base}/api/trees/{id}", base = &self.host, id = id);
+        // build request
+        let req = self.client.get(&url).header("authorization", &self.token);
+        // send this request and build a tree from the response
+        send_build!(self.client, req, Tree)
+    }
+
     /// Grow an existing tree of data in Thorium
     ///
     /// # Arguments

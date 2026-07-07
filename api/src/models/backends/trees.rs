@@ -741,10 +741,11 @@ impl Tree {
         // pre allocate a list to store the node hashes in our association map
         let mut node_keys = Vec::with_capacity(ring_assoc.len());
         // get all of our node keys
+        // the closure must return true to keep iterating over all keys
         ring_assoc
             .iter_async(|key, _| {
                 node_keys.push(*key);
-                false
+                true
             })
             .await;
         // step over all nodes and get their association map
@@ -754,10 +755,11 @@ impl Tree {
                 // pre allocate a list to store the association hashes for this nodes associations
                 let mut assoc_keys = Vec::with_capacity(associations.len());
                 // get all of our association keys
+                // the closure must return true to keep iterating over all keys
                 associations
                     .iter_async(|key, _| {
                         assoc_keys.push(*key);
-                        false
+                        true
                     })
                     .await;
                 // iterate over the associations within this nodes maps
