@@ -72,23 +72,24 @@ const ImageAccordionItem: FC<ImageAccordionItemProps> = ({ image, images, groups
   return (
     <AccordionItem eventKey={id}>
       <AccordionHeader>
-        <div className="accordion-item-name">
-          <div className="text">
-            <OverlayTipBottom tip={`Copy image link to clipboard`}>
-              <a className="title-link" onClick={handleLink}>
-                <FaLink className="title-link-no-color me-3" size={12} />
-              </a>
-            </OverlayTipBottom>
-            {image.name}
+        <div className="accordion-text">
+          <div className="accordion-item-name">
+            <div className="text">
+              <OverlayTipBottom tip={`Copy image link to clipboard`}>
+                <a className="title-link" onClick={handleLink}>
+                  <FaLink className="title-link-no-color me-3" size={12} />
+                </a>
+              </OverlayTipBottom>
+              {image.name}
+            </div>
           </div>
-        </div>
-        <div className="accordion-item-relation" />
-        <div className="accordion-item-ownership">
-          <OverlayTipLeft tip={`This image is owned by the ${image.group} group.`}>
-            <small>
-              <i>{image.group}</i>
-            </small>
-          </OverlayTipLeft>
+          <div className="accordion-item-subtitle">
+            <OverlayTipLeft tip={`This image is owned by the ${image.group} group.`}>
+              <small>
+                <i>{image.group}</i>
+              </small>
+            </OverlayTipLeft>
+          </div>
         </div>
         <div className="accordion-item-status">
           {hasBans && (

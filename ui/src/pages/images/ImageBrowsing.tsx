@@ -57,11 +57,7 @@ const CreateImageButton: FC<CreateImageButtonProps> = ({ userInfo }) => {
 
   return (
     <OverlayTipBottom tip={tip}>
-      <Button
-        className="ok-btn m-1 d-flex justify-content-center"
-        disabled={!userCanCreateImage}
-        onClick={() => void navigate('/create/image')}
-      >
+      <Button className="ok-btn m-1" disabled={!userCanCreateImage} onClick={() => void navigate('/create/image')}>
         <b>+</b>
       </Button>
     </OverlayTipBottom>
@@ -109,7 +105,7 @@ const ImageBrowsing: FC = () => {
   const fetchImageData = async () => {
     await fetchImages(Object.keys(groups), setImages, cancelUpdateRef.current, () => void checkCookie(), setLoading, true);
     // need to wait 1 second because the page takes so long to load
-    setTimeout(scrollOnLoad, 1000); 
+    setTimeout(scrollOnLoad, 1000);
   };
 
   const scrollOnLoad = () => {

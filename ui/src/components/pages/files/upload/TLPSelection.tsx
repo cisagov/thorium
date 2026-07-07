@@ -10,7 +10,7 @@ interface TLPSelectionProps {
 const TLPSelection: React.FC<TLPSelectionProps> = ({ selectedTLP, onTLPChange }) => {
   return (
     <Card className="panel">
-      <Card.Body className="d-flex justify-content-center">
+      <Card.Body className="d-flex justify-content-center flex-wrap gap-1">
         {Object.keys(TLP_COLORS).map((tlp) => (
           <Button
             variant=""

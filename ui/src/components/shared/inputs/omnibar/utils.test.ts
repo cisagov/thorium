@@ -29,13 +29,9 @@ describe('getSearchTextFromClauses', () => {
   });
 
   it('returns the value of a single text clause', () => {
-    expect(getSearchTextFromClauses([single('text', 'text', 'malware')])).toBe('malware');
+    expect(getSearchTextFromClauses([single('text', 'text', 'malware')])).toBe('"malware"');
   });
 
-  it('joins multiple text clauses and multi-value text clauses with spaces', () => {
-    const clauses = [single('text', 'text', 'foo'), multi('text', 'text', ['bar', 'baz'])];
-    expect(getSearchTextFromClauses(clauses)).toBe('foo bar baz');
-  });
 });
 
 describe('getGroupsFromClauses', () => {

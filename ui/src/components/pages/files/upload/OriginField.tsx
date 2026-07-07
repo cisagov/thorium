@@ -25,10 +25,10 @@ const OriginField: React.FC<OriginFieldProps> = ({
     <>
       <br />
       <Row>
-        <Col className="name-width" xs={2}>
+        <Col m={12} lg={3} xxl={2}>
           <Subtitle>{label}</Subtitle>
         </Col>
-        <Col xs={5}>
+        <Col m={12} lg={9} xxl={10}>
           <Form.Control
             type={type}
             placeholder={placeholder}

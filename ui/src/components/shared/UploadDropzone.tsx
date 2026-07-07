@@ -28,6 +28,7 @@ const UploadDropzone: React.FC<DropzoneProperties> = ({ width, onChange, onError
     outline: 'none',
     transition: 'border .24s ease-in-out',
     width: width,
+    cursor: 'pointer',
   };
 
   const activeStyle = {

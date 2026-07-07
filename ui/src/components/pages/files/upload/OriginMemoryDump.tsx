@@ -22,10 +22,10 @@ const OriginMemoryDump: React.FC = () => {
       <OriginField label="Parent" value={parentFile} onChange={(v) => origin.setMemoryDumpField('parentFile', v)} />
       <br />
       <Row>
-        <Col className="name-width" xs={2}>
+        <Col m={12} lg={3} xxl={2}>
           <Subtitle>Reconstructed</Subtitle>
         </Col>
-        <Col xs={5}>
+        <Col m={12} lg={9} xxl={10}>
           <SelectableArray
             initialEntries={[]}
             setEntries={(entries: string[]) => origin.setMemoryDumpField('reconstructed', entries.join(','))}

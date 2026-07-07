@@ -1,20 +1,36 @@
-.accordion-item-ownership {
+@use '../scaling';
+
+.accordion-text {
+  flex: 1 1 auto;
   display: flex;
-  flex: 4;
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
-.accordion-item-name {
-  flex: 4;
+.accordion-item-name,
+.accordion-item-subtitle,
+.accordion-item-ownership {
+  flex: 0 0 50%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
-// relation gap, for groups this is the role field
-.accordion-item-relation {
-  flex: 3;
+@media (max-width: scaling.$md) {
+  .accordion-item-name,
+  .accordion-item-subtitle,
+  .accordion-item-ownership {
+    flex: 0 0 100%;
+  }
 }
 
 .accordion-item-status {
-  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.accordion-group-role {
+  flex: 0 0 120px;
+  display: flex;
+  justify-content: center;
 }
