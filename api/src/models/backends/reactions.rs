@@ -2,20 +2,23 @@
 //! Currently only Redis is supported
 
 use aws_sdk_s3::primitives::ByteStream;
-use axum::extract::Multipart;
+use axum::extract::{FromRequestParts, Multipart};
+use axum::http::request::Parts;
 use chrono::prelude::*;
 use futures::StreamExt;
 use futures::stream;
 use std::collections::{HashMap, HashSet};
-use tracing::{Level, Span, event, instrument, span};
+use tracing::{Level, event, instrument, span};
 use uuid::Uuid;
 
 use super::db;
+use crate::models::ApiCursor;
+use crate::models::ReactionCursorParams;
 use crate::models::{
-    BulkReactionResponse, GenericJobArgs, Group, GroupAllowAction, JobList, Pipeline, Reaction,
-    ReactionCache, ReactionCacheUpdate, ReactionDetailsList, ReactionExpire, ReactionList,
-    ReactionRequest, ReactionStatus, ReactionUpdate, Repo, RepoDependency, Sample, StageLogs,
-    StageLogsAdd, StatusUpdate, User,
+    BulkReactionResponse, Group, GroupAllowAction, JobList, Pipeline, Reaction, ReactionCache,
+    ReactionCacheUpdate, ReactionDetailsList, ReactionExpire, ReactionList, ReactionRequest,
+    ReactionStatus, ReactionUpdate, Repo, RepoDependency, Sample, StageLogs, StageLogsAdd,
+    StatusUpdate, User,
 };
 use crate::utils::{ApiError, Shared, bounder};
 use crate::{
@@ -546,6 +549,25 @@ impl Reaction {
         db::reactions::list_tag(&group.name, tag, cursor, limit, shared).await
     }
 
+    /// Lists reaction ids across groups with a redis cursor
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is listing reactions
+    /// * `params` - The params to use when listing reactions
+    /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "Reaction::list_new", skip_all, err(Debug))]
+    pub async fn list_new(
+        user: &User,
+        mut params: ReactionCursorParam,
+        shared: &Shared,
+    ) -> Result<ApiCursor<String>, ApiError> {
+        // authorize the groups to list reactions from
+        user.authorize_groups(params.mut_groups(), shared).await?;
+        // use correct backend to list reaction names
+        db::reactions::list_new(params, shared).await
+    }
+
     /// Lists reactions for an entire group with a set status
     ///
     /// # Arguments
@@ -976,6 +998,82 @@ impl Reaction {
         let s3_path = format!("{}/files/{file_path}", self.id);
         // download this attachment
         shared.s3.reaction_cache.download(&s3_path).await
+    }
+}
+
+/// The parameters for listing reactions in redis using a cursor
+#[derive(Debug)]
+pub enum ReactionCursorParam {
+    /// List reactions across all groups
+    General {
+        /// The pipeline to list reactions for
+        pipeline: String,
+        /// The shared params for listing reactions with a cursor
+        params: ReactionCursorParams,
+    },
+    /// List reactions by status
+    Status {
+        /// The pipeline to list reactions for
+        pipeline: String,
+        /// The status that listed reactions must have
+        status: ReactionStatus,
+        /// The shared params for listing reactions with a cursor
+        params: ReactionCursorParams,
+    },
+    /// List reactions by tag
+    Tag {
+        /// The tag that listed reactions must have
+        tag: String,
+        /// The shared params for listing reactions with a cursor
+        params: ReactionCursorParams,
+    },
+    /// List sub reactions
+    Sub {
+        /// The parent reaction to list sub reactions for
+        sub: Uuid,
+        /// The shared params for listing reactions with a cursor
+        params: ReactionCursorParams,
+    },
+    /// List sub reactions with a status
+    SubAndStatus {
+        /// The parent reaction to list sub reactions for
+        sub: Uuid,
+        /// The status that listed sub reactions must have
+        status: ReactionStatus,
+        /// The shared params for listing reactions with a cursor
+        params: ReactionCursorParams,
+    },
+}
+
+impl ReactionCursorParam {
+    /// Get a mutable reference to the groups to return data from
+    pub fn mut_groups(&mut self) -> &mut Vec<String> {
+        match self {
+            ReactionCursorParam::General { params, .. } => &mut params.groups,
+            ReactionCursorParam::Status { params, .. } => &mut params.groups,
+            ReactionCursorParam::Tag { params, .. } => &mut params.groups,
+            ReactionCursorParam::Sub { params, .. } => &mut params.groups,
+            ReactionCursorParam::SubAndStatus { params, .. } => &mut params.groups,
+        }
+    }
+}
+
+impl<S> FromRequestParts<S> for ReactionCursorParams
+where
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // try to extract our query
+        if let Some(query) = parts.uri.query() {
+            // try to deserialize our query string
+            Ok(serde_qs::Config::new()
+                .max_depth(5)
+                .deserialize_str(query)?)
+        } else {
+            Ok(Self::default())
+        }
     }
 }
 

@@ -119,9 +119,10 @@ pub use pipelines::{
 };
 pub use reactions::{
     BulkReactionResponse, HandleReactionResponse, Reaction, ReactionArgs, ReactionCache,
-    ReactionCacheFileUpdate, ReactionCacheUpdate, ReactionCreation, ReactionDetailsList,
-    ReactionExpire, ReactionIdResponse, ReactionList, ReactionListParams, ReactionRequest,
-    ReactionStatus, ReactionUpdate, StageLogLine, StageLogs, StageLogsAdd,
+    ReactionCacheFileUpdate, ReactionCacheUpdate, ReactionCreation, ReactionCursorOpts,
+    ReactionCursorParams, ReactionDetailsList, ReactionExpire, ReactionIdResponse, ReactionList,
+    ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, StageLogLine, StageLogs,
+    StageLogsAdd,
 };
 pub use requisitions::{Requisition, ScopedRequisition, SpawnedUpdate};
 pub use results::{

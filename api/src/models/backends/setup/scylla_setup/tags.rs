@@ -61,9 +61,6 @@ impl TagsPreparedStatements {
     }
 }
 
-///// Setup all required tags tables and prepared statements
-//pub fn setup(session: &Session, config: &Conf)
-
 /// Setup the tags table for Thorium
 ///
 /// # Arguments

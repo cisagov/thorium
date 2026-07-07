@@ -13,12 +13,14 @@ use uuid::Uuid;
 
 use super::OpenApiSecurity;
 use crate::bad;
+use crate::models::backends::reactions::ReactionCursorParam;
 use crate::models::{
-    Actions, BulkReactionResponse, CommitishKinds, Group, HandleReactionResponse, ImageScaler,
-    JobResetRequestor, Pipeline, Reaction, ReactionCache, ReactionCacheUpdate, ReactionDetailsList,
-    ReactionIdResponse, ReactionList, ReactionListParams, ReactionRequest, ReactionStatus,
-    ReactionUpdate, RepoDependency, RepoDependencyRequest, StageLogLine, StageLogs, StageLogsAdd,
-    StatusUpdate, SystemComponents, User,
+    Actions, ApiCursor, BulkReactionResponse, CommitishKinds, Group, HandleReactionResponse,
+    ImageScaler, JobResetRequestor, Pipeline, Reaction, ReactionCache, ReactionCacheUpdate,
+    ReactionCursorParams, ReactionDetailsList, ReactionIdResponse, ReactionList,
+    ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency,
+    RepoDependencyRequest, StageLogLine, StageLogs, StageLogsAdd, StatusUpdate, SystemComponents,
+    User,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -655,6 +657,86 @@ async fn list_status_details(
     Ok(Json(details))
 }
 
+/// Lists reaction ids for a specific pipeline across groups
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing reactions
+/// * `pipeline` - The pipeline to list reactions from
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/reactions/list/:pipeline/",
+    params(
+        ("pipeline" = String, Path, description = "The pipeline to list reactions from"),
+        ("params" = ReactionCursorParams, Query, description = "The query params to use for this request")
+    ),
+    responses(
+        (status = 200, description = "A page of reaction ids for this pipeline and a cursor id if more data may exist", body = ApiCursor<String>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::list_new", skip_all, err(Debug))]
+async fn list_new(
+    user: User,
+    Path(pipeline): Path<String>,
+    params: ReactionCursorParams,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<String>>, ApiError> {
+    // build the params to pass to our redis cursor
+    let params = ReactionCursorParam::General { pipeline, params };
+    // list reactions for this pipeline
+    let cursor = Reaction::list_new(&user, params, &state.shared).await?;
+    Ok(Json(cursor))
+}
+
+/// Lists reaction ids for a specific pipeline and status across groups
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing reactions
+/// * `pipeline` - The pipeline to list reactions from
+/// * `status` - The status to list reactions for
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/reactions/status/:pipeline/:status/",
+    params(
+        ("pipeline" = String, Path, description = "The pipeline to list reactions from"),
+        ("status" = ReactionStatus, Path, description = "The status to list reactions for"),
+        ("params" = ReactionCursorParams, Query, description = "The query params to use for this request")
+    ),
+    responses(
+        (status = 200, description = "A page of reaction ids with this status and a cursor id if more data may exist", body = ApiCursor<String>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::list_status_new", skip_all, err(Debug))]
+async fn list_status_new(
+    user: User,
+    Path((pipeline, status)): Path<(String, ReactionStatus)>,
+    params: ReactionCursorParams,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<String>>, ApiError> {
+    // build the params to pass to our redis cursor
+    let params = ReactionCursorParam::Status {
+        pipeline,
+        status,
+        params,
+    };
+    // list reactions for this pipeline with this status
+    let cursor = Reaction::list_new(&user, params, &state.shared).await?;
+    Ok(Json(cursor))
+}
+
 /// Lists reactions with a specific tag
 ///
 /// # Arguments
@@ -693,6 +775,43 @@ async fn list_tag(
     let names =
         Reaction::list_tag(&group, &tag, params.cursor, params.limit, &state.shared).await?;
     Ok(Json(names))
+}
+
+/// Lists reaction ids with a specific tag across groups
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing reactions
+/// * `tag` - The tag to list reactions from
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/reactions/tag/:tag/",
+    params(
+        ("tag" = String, Path, description = "The tag to list reactions from"),
+        ("params" = ReactionCursorParams, Query, description = "The query params to use for this request")
+    ),
+    responses(
+        (status = 200, description = "A page of reaction ids with this tag and a cursor id if more data may exist", body = ApiCursor<String>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::list_tag_new", skip_all, err(Debug))]
+async fn list_tag_new(
+    user: User,
+    Path(tag): Path<String>,
+    params: ReactionCursorParams,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<String>>, ApiError> {
+    // build the params to pass to our redis cursor
+    let params = ReactionCursorParam::Tag { tag, params };
+    // list reactions with this tag
+    let cursor = Reaction::list_new(&user, params, &state.shared).await?;
+    Ok(Json(cursor))
 }
 
 /// Lists reaction details with a specific tag
@@ -910,6 +1029,89 @@ async fn list_sub_status(
     )
     .await?;
     Ok(Json(names))
+}
+
+/// Lists sub reaction ids for a specific parent reaction across groups
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing sub reactions
+/// * `reaction` - The parent reaction to list sub reactions for
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/reactions/sub/:reaction/",
+    params(
+        ("reaction" = Uuid, Path, description = "The parent reaction to list sub reactions for"),
+        ("params" = ReactionCursorParams, Query, description = "The query params to use for this request")
+    ),
+    responses(
+        (status = 200, description = "A page of sub reaction ids and a cursor id if more data may exist", body = ApiCursor<String>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::list_sub_new", skip_all, err(Debug))]
+async fn list_sub_new(
+    user: User,
+    Path(reaction): Path<Uuid>,
+    params: ReactionCursorParams,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<String>>, ApiError> {
+    // build the params to pass to our redis cursor
+    let params = ReactionCursorParam::Sub {
+        sub: reaction,
+        params,
+    };
+    // list sub reactions for this parent reaction
+    let cursor = Reaction::list_new(&user, params, &state.shared).await?;
+    Ok(Json(cursor))
+}
+
+/// Lists sub reaction ids for a specific parent reaction and status across groups
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing sub reactions
+/// * `reaction` - The parent reaction to list sub reactions for
+/// * `status` - The status to list sub reactions for
+/// * `params` - The query params to use for this request
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/reactions/sub/:reaction/status/:status/",
+    params(
+        ("reaction" = Uuid, Path, description = "The parent reaction to list sub reactions for"),
+        ("status" = ReactionStatus, Path, description = "The status to list sub reactions for"),
+        ("params" = ReactionCursorParams, Query, description = "The query params to use for this request")
+    ),
+    responses(
+        (status = 200, description = "A page of sub reaction ids with this status and a cursor id if more data may exist", body = ApiCursor<String>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::reactions::list_sub_status_new", skip_all, err(Debug))]
+async fn list_sub_status_new(
+    user: User,
+    Path((reaction, status)): Path<(Uuid, ReactionStatus)>,
+    params: ReactionCursorParams,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<String>>, ApiError> {
+    // build the params to pass to our redis cursor
+    let params = ReactionCursorParam::SubAndStatus {
+        sub: reaction,
+        status,
+        params,
+    };
+    // list sub reactions for this parent reaction with this status
+    let cursor = Reaction::list_new(&user, params, &state.shared).await?;
+    Ok(Json(cursor))
 }
 
 /// Lists sub reactions with details for a specific parent reaction
@@ -1132,10 +1334,10 @@ async fn download_ephemeral(
 #[derive(OpenApi)]
 #[openapi(
     paths(create, create_bulk, get_reaction, update, delete_reaction, handle, logs, stage_logs, add_stage_logs,
-          list, list_details, list_status, list_status_details, list_tag, list_tag_details, list_group_set,
-          list_group_set_details, list_sub, list_sub_details, list_sub_status_details, list_sub_status,
-          download_ephemeral),
-    components(schemas(Actions, BulkReactionResponse, CommitishKinds, HandleReactionResponse, ImageScaler, JobResetRequestor, Reaction, ReactionIdResponse, ReactionList, ReactionDetailsList, ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency, RepoDependencyRequest, StageLogs, StageLogsAdd, StageLogLine, StatusUpdate, SystemComponents, ReactionCache, ReactionCacheUpdate)),
+          list, list_new, list_details, list_status, list_status_new, list_status_details, list_tag, list_tag_new,
+          list_tag_details, list_group_set, list_group_set_details, list_sub, list_sub_new, list_sub_details,
+          list_sub_status_details, list_sub_status, list_sub_status_new, download_ephemeral),
+    components(schemas(Actions, ApiCursor<String>, BulkReactionResponse, CommitishKinds, HandleReactionResponse, ImageScaler, JobResetRequestor, Reaction, ReactionIdResponse, ReactionList, ReactionDetailsList, ReactionCursorParams, ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency, RepoDependencyRequest, StageLogs, StageLogsAdd, StageLogLine, StatusUpdate, SystemComponents, ReactionCache, ReactionCacheUpdate)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct ReactionApiDocs;
@@ -1179,6 +1381,7 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
             get(stage_logs).post(add_stage_logs),
         )
         .route("/reactions/list/{group}/{pipeline}/", get(list))
+        .route("/reactions/list/{pipeline}/", get(list_new))
         .route(
             "/reactions/list/{group}/{pipeline}/details/",
             get(list_details),
@@ -1187,11 +1390,13 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
             "/reactions/status/{group}/{pipeline}/{status}/",
             get(list_status),
         )
+        .route("/reactions/status/{pipeline}/{status}/", get(list_status_new))
         .route(
             "/reactions/status/{group}/{pipeline}/{status}/details/",
             get(list_status_details),
         )
         .route("/reactions/tag/{group}/{tag}/", get(list_tag))
+        .route("/reactions/tag/{tag}/", get(list_tag_new))
         .route(
             "/reactions/tag/{group}/{tag}/details/",
             get(list_tag_details),
@@ -1202,6 +1407,11 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
             get(list_group_set_details),
         )
         .route("/reactions/sub/{group}/{reaction}/", get(list_sub))
+        .route("/reactions/sub/{reaction}/", get(list_sub_new))
+        .route(
+            "/reactions/sub/{reaction}/status/{status}/",
+            get(list_sub_status_new),
+        )
         .route(
             "/reactions/sub/{group}/{reaction}/details/",
             get(list_sub_details),

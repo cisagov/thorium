@@ -609,6 +609,132 @@ impl ReactionListParams {
     }
 }
 
+/// The parameters for listing reactions across groups with a redis cursor
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct ReactionCursorParams {
+    /// The groups to list reactions from
+    #[serde(default)]
+    pub groups: Vec<String>,
+    /// The cursor id to use if one exists
+    pub cursor: Option<Uuid>,
+    /// The max number of reactions to return in a single page
+    #[serde(default = "default_list_limit")]
+    pub limit: usize,
+}
+
+impl Default for ReactionCursorParams {
+    /// Create a default reaction cursor params
+    fn default() -> Self {
+        ReactionCursorParams {
+            groups: Vec::default(),
+            cursor: None,
+            limit: default_list_limit(),
+        }
+    }
+}
+
+impl ReactionCursorParams {
+    /// Set the limit in a builder-like pattern
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - The limit to set
+    #[must_use]
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
+        self
+    }
+}
+
+/// The options that you can set when listing reactions across groups
+#[derive(Debug, Clone)]
+pub struct ReactionCursorOpts {
+    /// The cursor to use to continue this listing
+    pub cursor: Option<Uuid>,
+    /// The max number of objects to retrieve on a single page
+    pub page_size: usize,
+    /// The total number of objects to return with this cursor
+    pub limit: Option<usize>,
+    /// The groups to limit our listing to
+    pub groups: Vec<String>,
+}
+
+impl Default for ReactionCursorOpts {
+    /// Build a default reaction listing
+    fn default() -> Self {
+        ReactionCursorOpts {
+            cursor: None,
+            page_size: 50,
+            limit: None,
+            groups: Vec::default(),
+        }
+    }
+}
+
+impl ReactionCursorOpts {
+    /// Set the cursor to use when continuing this listing
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - The cursor id to use for this listing
+    #[must_use]
+    pub fn cursor(mut self, cursor: Uuid) -> Self {
+        // set the cursor for this listing
+        self.cursor = Some(cursor);
+        self
+    }
+
+    /// The max number of objects to retrieve in a single page
+    ///
+    /// # Arguments
+    ///
+    /// * `page_size` - The max number of objects to return in a single request
+    #[must_use]
+    pub fn page_size(mut self, page_size: usize) -> Self {
+        // set the page size for this listing
+        self.page_size = page_size;
+        self
+    }
+
+    /// Limit how many reactions this listing can return at once
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - The max number of objects to return over the lifetime of this cursor
+    #[must_use]
+    pub fn limit(mut self, limit: usize) -> Self {
+        // set the total limit for this listing
+        self.limit = Some(limit);
+        self
+    }
+
+    /// Add a single group to limit our listing to
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group to restrict our listing to
+    #[must_use]
+    pub fn group<T: Into<String>>(mut self, group: T) -> Self {
+        // add this group to our group restrictions
+        self.groups.push(group.into());
+        self
+    }
+
+    /// Limit what groups we list reactions from
+    ///
+    /// # Arguments
+    ///
+    /// * `groups` - The groups to restrict our listing to
+    #[must_use]
+    pub fn groups<T: Into<String>>(mut self, groups: Vec<T>) -> Self {
+        // convert these groups to strings and add them
+        self.groups
+            .extend(groups.into_iter().map(|group| group.into()));
+        self
+    }
+}
+
 /// A list of reaction names with a cursor
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
