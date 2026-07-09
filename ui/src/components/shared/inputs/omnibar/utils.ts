@@ -122,19 +122,26 @@ export function getDropdownOptions(
 }
 
 export function getSearchTextFromClauses(clauses: Clause[]): string {
-  let query = '';
+  const queryList: string[] = []
   const textSearch = clauses.filter((clause) => clause.field == 'text');
   if (textSearch.length > 0) {
-    query = textSearch
-      .map((clause) => {
-        if (ClauseIsMulti(clause)) {
-          return clause.value.values.join(' ');
-        }
-        return clause.value.value;
+    textSearch
+      .forEach((clause) => {
+        if (ClauseIsMulti(clause)) return;
+        queryList.push(`"${clause.value.value}"`)
       })
-      .join(' ');
   }
-  return query;
+
+  //add tags
+  clauses
+    .filter((clause) => clause.category == 'tag')
+    .forEach((clause) => {
+      if (ClauseIsMulti(clause)) return;
+      const search = `${clause.field}=${clause.value.value}`
+      queryList.push(`"${search}"`)
+    })
+
+  return queryList.join(" AND ");
 }
 
 export function getGroupsFromClauses(clauses: Clause[]): string[] {

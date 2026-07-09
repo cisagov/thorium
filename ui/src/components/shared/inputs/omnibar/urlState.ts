@@ -118,10 +118,10 @@ export function paramsToClauses(params: URLSearchParams, defaultClauses: Clause[
   }
 
   // tags[KEY]=value -> one `Is` clause per value
-  for (const key of params.keys()) {
+  for (const [key, value] of params.entries()) {
     const match = /^tags\[(.+)\]$/.exec(key);
     if (match) {
-      params.getAll(key).forEach((value) => clauses.push(makeClause('tag', match[1], ClauseCondition.Is, [value])));
+      clauses.push(makeClause('tag', match[1], ClauseCondition.Is, [value]));
     }
   }
 
