@@ -32,7 +32,7 @@ jobs:
   build-ui-bundle:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build UI Bundle
         run: |
           cd ui
@@ -41,7 +41,7 @@ jobs:
           npm run validate-style
           npm run build
       - name: Upload UI Bundle Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: thorium-ui-bundle
           path: ui/dist/

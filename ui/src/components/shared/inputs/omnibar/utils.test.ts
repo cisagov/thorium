@@ -31,7 +31,6 @@ describe('getSearchTextFromClauses', () => {
   it('returns the value of a single text clause', () => {
     expect(getSearchTextFromClauses([single('text', 'text', 'malware')])).toBe('"malware"');
   });
-
 });
 
 describe('getGroupsFromClauses', () => {
