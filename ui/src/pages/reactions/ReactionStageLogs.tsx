@@ -8,6 +8,7 @@ import Page from '@components/pages/Page';
 import { OverlayTipBottom } from '@components/shared/overlay/tips';
 import { useAuth } from '@utilities/auth';
 import { getReactionStageLogs } from '@thorpi/reactions';
+import { AnsiText } from './AnsiText';
 
 const ReactionStageLogs = () => {
   const { reactionID, group, stage } = useParams<{ reactionID: string; group: string; stage: string }>();
@@ -170,7 +171,7 @@ const ReactionStageLogs = () => {
             reactionStageLogs.map((line, idx) => (
               <div key={startLogLine + idx} className="raw-log-line" ref={endLogsRef}>
                 <i className="log-line-index secondary-text">{startLogLine + idx}&emsp;</i>
-                {line}
+                <AnsiText text={line}></AnsiText>
               </div>
             ))}
         </Card.Body>

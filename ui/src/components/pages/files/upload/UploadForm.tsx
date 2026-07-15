@@ -18,21 +18,14 @@ type UploadFieldProps = {
   disabled?: boolean;
   rowClassName?: string;
   children: ReactNode;
-}
+};
 
-const UploadField: React.FC<UploadFieldProps> = ({
-  label,
-  marker,
-  disabled = false,
-  rowClassName = 'mb-4',
-  children,
-}) => {
-
+const UploadField: React.FC<UploadFieldProps> = ({ label, marker, disabled = false, rowClassName = 'mb-4', children }) => {
   const title = (
     <Subtitle>
       {label} {marker && <sup>{marker}</sup>}
     </Subtitle>
-  )
+  );
 
   return (
     <>
@@ -45,8 +38,8 @@ const UploadField: React.FC<UploadFieldProps> = ({
         </Col>
       </Row>
     </>
-  )
-}
+  );
+};
 
 const UploadForm: React.FC = () => {
   const {
@@ -76,20 +69,11 @@ const UploadForm: React.FC = () => {
 
   return (
     <>
-      <UploadField
-        label='File'
-        marker='*'
-        disabled={uploadInProgress}
-      >
+      <UploadField label="File" marker="*" disabled={uploadInProgress}>
         <UploadDropzone onChange={setFilesArray} onError={setValidationErrors} selectedFiles={filesArray} width="100%" />
       </UploadField>
 
-      <UploadField
-        label='Groups'
-        marker='*'
-        disabled={uploadInProgress}
-        rowClassName='mb-4'
-      >
+      <UploadField label="Groups" marker="*" disabled={uploadInProgress} rowClassName="mb-4">
         <SelectInputArray
           isCreatable={false}
           options={userGroups}
@@ -98,7 +82,7 @@ const UploadForm: React.FC = () => {
         />
       </UploadField>
 
-      <UploadField label='Description' disabled={uploadInProgress}>
+      <UploadField label="Description" disabled={uploadInProgress}>
         <Form.Control
           style={{ minHeight: '200px' }}
           as="textarea"
@@ -111,19 +95,19 @@ const UploadForm: React.FC = () => {
         />
       </UploadField>
 
-      <UploadField label='Tags' disabled={uploadInProgress}>
+      <UploadField label="Tags" disabled={uploadInProgress}>
         <TagSelect tags={tags} setTags={setTags} placeholderText="Add Tags" />
       </UploadField>
 
-      <UploadField label='TLP' marker='T' disabled={uploadInProgress} >
+      <UploadField label="TLP" marker="T" disabled={uploadInProgress}>
         <TLPSelection selectedTLP={selectedTLP} onTLPChange={handleTLPChange} />
       </UploadField>
 
-      <UploadField label='Origin' marker='T' disabled={uploadInProgress}>
+      <UploadField label="Origin" marker="T" disabled={uploadInProgress}>
         <OriginForm />
       </UploadField>
 
-      <UploadField label='Run Pipelines' disabled={uploadInProgress}>
+      <UploadField label="Run Pipelines" disabled={uploadInProgress}>
         <SelectPipelines
           userInfo={userInfo}
           setReactionsList={setReactionsList}
@@ -132,19 +116,19 @@ const UploadForm: React.FC = () => {
         />
       </UploadField>
 
-      <UploadField label='' rowClassName=''>
+      <UploadField label="" rowClassName="">
         <p>
           <sup>*</sup> This field is required.
         </p>
       </UploadField>
-      <UploadField label='' rowClassName=''>
+      <UploadField label="" rowClassName="">
         <p>
           <sup>T</sup> This field also creates tags when specified.
         </p>
       </UploadField>
 
       <Row className="d-flex justify-content-center">
-        <UploadField label='' rowClassName=''>
+        <UploadField label="" rowClassName="">
           {uploadStatus && Object.entries(uploadStatus).length > 0 && (
             <Row className="upload-bar mt-3">
               {Object.entries(uploadStatus).map(([key, value]) => (
