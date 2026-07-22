@@ -7,7 +7,8 @@ use tracing::{Span, instrument};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
-use crate::models::{Group, Stream, StreamDepth, User};
+use crate::models::AuthedUser;
+use crate::models::{Group, Stream, StreamDepth};
 use crate::utils::{ApiError, AppState};
 
 /// Gets the number of obects between two points in a stream
@@ -40,7 +41,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::streams::depth", skip_all, err(Debug))]
 pub async fn depth(
-    user: User,
+    user: AuthedUser,
     Path((group, namespace, stream, start, end)): Path<(String, String, String, i64, i64)>,
     State(state): State<AppState>,
 ) -> Result<Json<StreamDepth>, ApiError> {
@@ -85,7 +86,7 @@ pub async fn depth(
 )]
 #[instrument(name = "routes::streams::depth_range", skip_all, err(Debug))]
 pub async fn depth_range(
-    user: User,
+    user: AuthedUser,
     Path((group, namespace, stream, start, end, split)): Path<(
         String,
         String,
@@ -155,7 +156,7 @@ pub struct MapParams {
 )]
 #[instrument(name = "routes::streams::map", skip_all, err(Debug))]
 pub async fn map(
-    user: User,
+    user: AuthedUser,
     Path((group, namespace, stream)): Path<(String, String, String)>,
     Query(params): Query<MapParams>,
     State(state): State<AppState>,

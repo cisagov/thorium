@@ -162,6 +162,14 @@ pub mod render;
 pub mod repos;
 
 /// Get a Thorium client or setup keys
+///
+/// If a scoped token has been activated in the Thorctl config then the
+/// returned client will authenticate with that scoped token instead of the
+/// users primary credentials.
+///
+/// # Arguments
+///
+/// * `args` - The arguments passed to Thorctl
 pub async fn get_client(args: &Args) -> Result<(CtlConf, Thorium), Error> {
     let (config, thorium) = match &args.keys {
         Some(keys_path) => {
@@ -176,7 +184,49 @@ pub async fn get_client(args: &Args) -> Result<(CtlConf, Thorium), Error> {
         None => {
             // load ctl conf
             let config = CtlConf::from_path(&args.config)?;
+            // check if a scoped token has been activated
+            let thorium = match &config.scoped_token {
+                // a scoped token is active so authenticate with it instead
+                Some(active) => {
+                    // clone our config so we can swap in our scoped token
+                    let mut scoped_config = config.clone();
+                    // swap our primary credentials for our scoped token
+                    scoped_config.keys = Keys::new_token(&config.keys.api, &active.token);
+                    // build our Thorium client with our scoped token
+                    Thorium::from_ctl_conf(scoped_config).await?
+                }
+                // no scoped token is active so use our primary credentials
+                None => Thorium::from_ctl_conf(config.clone()).await?,
+            };
+            (config, thorium)
+        }
+    };
+    Ok((config, thorium))
+}
+
+/// Get a Thorium client that always uses our primary credentials
+///
+/// This ignores any activated scoped token and is used for commands that
+/// cannot be performed with a scoped token like scoped token management.
+///
+/// # Arguments
+///
+/// * `args` - The arguments passed to Thorctl
+pub async fn get_primary_client(args: &Args) -> Result<(CtlConf, Thorium), Error> {
+    let (config, thorium) = match &args.keys {
+        Some(keys_path) => {
+            // parse the keys from the file
+            let keys = Keys::from_path(keys_path)?;
             // build our Thorium client based on our config
+            let thorium = Thorium::from_keys(keys.clone()).await?;
+            // build a base ctl conf containing the keys
+            let config = CtlConf::new(keys);
+            (config, thorium)
+        }
+        None => {
+            // load ctl conf
+            let config = CtlConf::from_path(&args.config)?;
+            // build our Thorium client with our primary credentials
             let thorium = Thorium::from_ctl_conf(config.clone()).await?;
             (config, thorium)
         }
@@ -517,7 +567,10 @@ mod tests {
             })
             .collect();
         // curated first (creator matched via *creator*), then unlisted keys sorted
-        assert_eq!(keys, ["name", "scaler", "*creator*", "alpha", "nested", "zeta"]);
+        assert_eq!(
+            keys,
+            ["name", "scaler", "*creator*", "alpha", "nested", "zeta"]
+        );
         // nested maps stay sorted (a before b)
         assert!(yaml.find("a: 2").unwrap() < yaml.find("b: 1").unwrap());
     }
@@ -542,7 +595,10 @@ mod tests {
             .filter(|l| l.starts_with("  \""))
             .filter_map(|l| l.trim().split('"').nth(1).map(String::from))
             .collect();
-        assert_eq!(keys, ["name", "scaler", "*creator*", "alpha", "nested", "zeta"]);
+        assert_eq!(
+            keys,
+            ["name", "scaler", "*creator*", "alpha", "nested", "zeta"]
+        );
         // nested objects stay sorted (a before b)
         assert!(json.find("\"a\"").unwrap() < json.find("\"b\"").unwrap());
     }

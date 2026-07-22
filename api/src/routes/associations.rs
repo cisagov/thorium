@@ -5,12 +5,13 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum::routing::post;
 
-use crate::models::{AssociationRequest, User};
+use crate::models::AssociationRequest;
+use crate::models::AuthedUser;
 use crate::utils::{ApiError, AppState};
 
 /// Associate an entity or object with another entity/object
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(req): Json<AssociationRequest>,
 ) -> Result<StatusCode, ApiError> {

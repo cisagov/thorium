@@ -10,11 +10,12 @@ use uuid::Uuid;
 
 use super::OpenApiSecurity;
 
+use crate::models::AuthedUser;
 use crate::models::{
     Checkpoint, CommitishKinds, Deadline, GenericJob, GenericJobArgs, GenericJobOpts,
     HandleJobResponse, ImageScaler, JobHandleStatus, JobListOpts, JobResetRequestor, JobResets,
     JobStatus, Pipeline, RawJob, RepoDependency, RunningJob, StageLogLine, StageLogsAdd,
-    SystemComponents, User, WorkerName,
+    SystemComponents, WorkerName,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -51,7 +52,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::jobs::claim", skip_all, err(Debug))]
 async fn claim(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline, stage, cluster, node, worker, limit)): Path<(
         String,
         String,
@@ -109,7 +110,7 @@ async fn claim(
 )]
 #[instrument(name = "routes::jobs::proceed", skip_all, err(Debug))]
 async fn proceed(
-    user: User,
+    user: AuthedUser,
     Path((id, runtime)): Path<(Uuid, u64)>,
     State(state): State<AppState>,
     Json(logs): Json<StageLogsAdd>,
@@ -150,7 +151,7 @@ async fn proceed(
 )]
 #[instrument(name = "routes::jobs::error", skip_all, fields(job = id.to_string()), err(Debug))]
 async fn error(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(logs): Json<StageLogsAdd>,
@@ -191,7 +192,7 @@ async fn error(
 )]
 #[instrument(name = "routes::jobs::sleep", skip_all, fields(job = id.to_string()), err(Debug))]
 async fn sleep(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(checkpoint): Json<Checkpoint>,
@@ -232,7 +233,7 @@ async fn sleep(
 )]
 #[instrument(name = "routes::jobs::checkpoint", skip_all, fields(job = id.to_string()), err(Debug))]
 async fn checkpoint(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(checkpoint): Json<Checkpoint>,
@@ -272,7 +273,7 @@ async fn checkpoint(
 )]
 #[instrument(name = "routes::jobs::bulk_reset", skip_all, err(Debug))]
 async fn bulk_reset(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(resets): Json<JobResets>,
 ) -> Result<StatusCode, ApiError> {
@@ -311,7 +312,7 @@ async fn bulk_reset(
 )]
 #[instrument(name = "routes::jobs::read_deadlines", skip_all, err(Debug))]
 async fn read_deadlines(
-    user: User,
+    user: AuthedUser,
     Path((scaler, start, end)): Path<(ImageScaler, i64, i64)>,
     Query(params): Query<JobListOpts>,
     State(state): State<AppState>,
@@ -359,7 +360,7 @@ async fn read_deadlines(
 )]
 #[instrument(name = "routes::jobs::bulk_running", skip_all, err(Debug))]
 async fn bulk_running(
-    user: User,
+    user: AuthedUser,
     Path((scaler, start, end)): Path<(ImageScaler, i64, i64)>,
     Query(params): Query<JobListOpts>,
     State(state): State<AppState>,

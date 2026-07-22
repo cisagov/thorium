@@ -86,6 +86,50 @@ where
     sha256
 }
 
+/// Convert a duration to a human readable string
+///
+/// humantime renders values like "1day 2h", so this inserts a space between
+/// each amount and its unit so it reads "1 day 2 h".
+///
+/// # Arguments
+///
+/// * `duration` - The duration to convert to a human readable string
+///
+/// # Examples
+///
+/// ```
+/// use thorium::utils::helpers;
+///
+/// // returns "1 day"
+/// helpers::human_duration(std::time::Duration::from_secs(86400));
+/// ```
+#[cfg(any(feature = "api", feature = "client"))]
+#[must_use]
+pub fn human_duration(duration: std::time::Duration) -> String {
+    // get this duration in a human readable format
+    let raw = humantime::format_duration(duration).to_string();
+    // build a human time formatted string with spaces
+    let mut human = String::with_capacity(raw.len() + 1);
+    // keep track the character before our current one
+    let mut prev: Option<char> = None;
+    // step over each character and add spaces when needed
+    for chr in raw.chars() {
+        // we will never add a space on the first digit
+        if let Some(prev) = prev {
+            // check if our last character was a digit and the current one is not
+            if prev.is_ascii_digit() && chr.is_ascii_alphabetic() {
+                // add a space to seperate the amount from the time visually
+                human.push(' ');
+            }
+        }
+        // add the next character
+        human.push(chr);
+        // keep track of our previous char
+        prev = Some(chr);
+    }
+    human
+}
+
 /// Get the sha256 of a file on disk
 #[cfg(feature = "client")]
 pub async fn sha256_file(

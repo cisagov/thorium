@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use super::OpenApiSecurity;
 use crate::bad;
+use crate::models::AuthedUser;
 use crate::models::backends::reactions::ReactionCursorParam;
 use crate::models::{
     Actions, ApiCursor, BulkReactionResponse, CommitishKinds, Group, HandleReactionResponse,
@@ -20,7 +21,6 @@ use crate::models::{
     ReactionCursorParams, ReactionDetailsList, ReactionIdResponse, ReactionList,
     ReactionListParams, ReactionRequest, ReactionStatus, ReactionUpdate, RepoDependency,
     RepoDependencyRequest, StageLogLine, StageLogs, StageLogsAdd, StatusUpdate, SystemComponents,
-    User,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -47,7 +47,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::reactions::create", skip_all, err(Debug))]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(req): Json<ReactionRequest>,
 ) -> Result<Json<ReactionIdResponse>, ApiError> {
@@ -89,7 +89,7 @@ async fn create(
 )]
 #[instrument(name = "routes::reactions::create_bulk", skip_all, err(Debug))]
 async fn create_bulk(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(reqs): Json<Vec<ReactionRequest>>,
 ) -> Result<Json<BulkReactionResponse>, ApiError> {
@@ -107,7 +107,7 @@ async fn create_bulk(
 /// * `req` - The reactions to create in bulk
 #[instrument(name = "routes::reactions::create_bulk_by_user", skip_all, err(Debug))]
 async fn create_bulk_by_user(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(reqs): Json<HashMap<String, Vec<ReactionRequest>>>,
 ) -> Result<Json<HashMap<String, BulkReactionResponse>>, ApiError> {
@@ -141,7 +141,7 @@ async fn create_bulk_by_user(
 )]
 #[instrument(name = "routes::reactions::get", skip_all, err(Debug))]
 async fn get_reaction(
-    user: User,
+    user: AuthedUser,
     Path((group, id)): Path<(String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<Json<Reaction>, ApiError> {
@@ -177,7 +177,7 @@ async fn get_reaction(
 )]
 #[instrument(name = "routes::reactions::update_cache", skip_all, err(Debug))]
 async fn update_cache(
-    user: User,
+    user: AuthedUser,
     Path((group, id)): Path<(String, Uuid)>,
     State(state): State<AppState>,
     Json(cache_update): Json<ReactionCacheUpdate>,
@@ -218,7 +218,7 @@ async fn update_cache(
 )]
 #[instrument(name = "routes::reactions::update_cache_files", skip_all, err(Debug))]
 async fn update_cache_files(
-    user: User,
+    user: AuthedUser,
     Path((group, id)): Path<(String, Uuid)>,
     State(state): State<AppState>,
     multipart: Multipart,
@@ -250,7 +250,7 @@ async fn update_cache_files(
 )]
 #[instrument(name = "routes::reactions::get_cache", skip_all, err(Debug))]
 async fn get_cache(
-    user: User,
+    user: AuthedUser,
     Path((group, id)): Path<(String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<Json<ReactionCache>, ApiError> {
@@ -288,7 +288,7 @@ async fn get_cache(
 //)]
 #[instrument(name = "routes::reactions::download_cache_file", skip_all, err(Debug))]
 async fn download_cache_file(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction, file_path)): Path<(String, Uuid, String)>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -332,7 +332,7 @@ async fn download_cache_file(
 )]
 #[instrument(name = "routes::reactions::handle", skip_all, err(Debug))]
 async fn handle(
-    user: User,
+    user: AuthedUser,
     Path((group, id, cmd)): Path<(String, Uuid, String)>,
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
@@ -378,7 +378,7 @@ async fn handle(
 )]
 #[instrument(name = "routes::reactions::logs", skip_all, err(Debug))]
 async fn logs(
-    user: User,
+    user: AuthedUser,
     Path((group, id)): Path<(String, Uuid)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -421,7 +421,7 @@ async fn logs(
 )]
 #[instrument(name = "routes::reactions::add_stage_logs", skip_all, err(Debug))]
 async fn add_stage_logs(
-    user: User,
+    user: AuthedUser,
     Path((group, id, stage)): Path<(String, Uuid, String)>,
     State(state): State<AppState>,
     Json(logs): Json<StageLogsAdd>,
@@ -462,7 +462,7 @@ async fn add_stage_logs(
 )]
 #[instrument(name = "routes::reactions::stage_logs", skip_all, err(Debug))]
 async fn stage_logs(
-    user: User,
+    user: AuthedUser,
     Path((group, id, stage)): Path<(String, Uuid, String)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -503,7 +503,7 @@ async fn stage_logs(
 )]
 #[instrument(name = "routes::reactions::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -542,7 +542,7 @@ async fn list(
 )]
 #[instrument(name = "routes::reactions::list_details", skip_all, err(Debug))]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -586,7 +586,7 @@ async fn list_details(
 )]
 #[instrument(name = "routes::reactions::list_status", skip_all, err(Debug))]
 async fn list_status(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline, status)): Path<(String, String, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -635,7 +635,7 @@ async fn list_status(
 )]
 #[instrument(name = "routes::reactions::list_status_details", skip_all, err(Debug))]
 async fn list_status_details(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline, status)): Path<(String, String, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -682,7 +682,7 @@ async fn list_status_details(
 )]
 #[instrument(name = "routes::reactions::list_new", skip_all, err(Debug))]
 async fn list_new(
-    user: User,
+    user: AuthedUser,
     Path(pipeline): Path<String>,
     params: ReactionCursorParams,
     State(state): State<AppState>,
@@ -721,7 +721,7 @@ async fn list_new(
 )]
 #[instrument(name = "routes::reactions::list_status_new", skip_all, err(Debug))]
 async fn list_status_new(
-    user: User,
+    user: AuthedUser,
     Path((pipeline, status)): Path<(String, ReactionStatus)>,
     params: ReactionCursorParams,
     State(state): State<AppState>,
@@ -764,7 +764,7 @@ async fn list_status_new(
 )]
 #[instrument(name = "routes::reactions::list_tag", skip_all, err(Debug))]
 async fn list_tag(
-    user: User,
+    user: AuthedUser,
     Path((group, tag)): Path<(String, String)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -802,7 +802,7 @@ async fn list_tag(
 )]
 #[instrument(name = "routes::reactions::list_tag_new", skip_all, err(Debug))]
 async fn list_tag_new(
-    user: User,
+    user: AuthedUser,
     Path(tag): Path<String>,
     params: ReactionCursorParams,
     State(state): State<AppState>,
@@ -841,7 +841,7 @@ async fn list_tag_new(
 )]
 #[instrument(name = "routes::reactions::list_tag_details", skip_all, err(Debug))]
 async fn list_tag_details(
-    user: User,
+    user: AuthedUser,
     Path((group, tag)): Path<(String, String)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -883,7 +883,7 @@ async fn list_tag_details(
 )]
 #[instrument(name = "routes::reactions::list_group_set", skip_all, err(Debug))]
 async fn list_group_set(
-    user: User,
+    user: AuthedUser,
     Path((group, status)): Path<(String, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -928,7 +928,7 @@ async fn list_group_set(
     err(Debug)
 )]
 async fn list_group_set_details(
-    user: User,
+    user: AuthedUser,
     Path((group, status)): Path<(String, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -971,7 +971,7 @@ async fn list_group_set_details(
 )]
 #[instrument(name = "routes::reactions::list_sub", skip_all, err(Debug))]
 async fn list_sub(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction)): Path<(String, Uuid)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -1012,7 +1012,7 @@ async fn list_sub(
 )]
 #[instrument(name = "routes::reactions::list_sub_status", skip_all, err(Debug))]
 async fn list_sub_status(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction, status)): Path<(String, Uuid, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -1056,7 +1056,7 @@ async fn list_sub_status(
 )]
 #[instrument(name = "routes::reactions::list_sub_new", skip_all, err(Debug))]
 async fn list_sub_new(
-    user: User,
+    user: AuthedUser,
     Path(reaction): Path<Uuid>,
     params: ReactionCursorParams,
     State(state): State<AppState>,
@@ -1098,7 +1098,7 @@ async fn list_sub_new(
 )]
 #[instrument(name = "routes::reactions::list_sub_status_new", skip_all, err(Debug))]
 async fn list_sub_status_new(
-    user: User,
+    user: AuthedUser,
     Path((reaction, status)): Path<(Uuid, ReactionStatus)>,
     params: ReactionCursorParams,
     State(state): State<AppState>,
@@ -1141,7 +1141,7 @@ async fn list_sub_status_new(
 )]
 #[instrument(name = "routes::reactions::list_sub_details", skip_all, err(Debug))]
 async fn list_sub_details(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction)): Path<(String, Uuid)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -1189,7 +1189,7 @@ async fn list_sub_details(
     err(Debug)
 )]
 async fn list_sub_status_details(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction, status)): Path<(String, Uuid, ReactionStatus)>,
     Query(params): Query<ReactionListParams>,
     State(state): State<AppState>,
@@ -1237,7 +1237,7 @@ async fn list_sub_status_details(
 )]
 #[instrument(name = "routes::reactions::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction)): Path<(String, Uuid)>,
     State(state): State<AppState>,
     Json(update): Json<ReactionUpdate>,
@@ -1279,7 +1279,7 @@ async fn update(
 )]
 #[instrument(name = "routes::reactions::delete_reaction", skip_all, err(Debug))]
 async fn delete_reaction(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction)): Path<(String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
@@ -1317,7 +1317,7 @@ async fn delete_reaction(
 )]
 #[instrument(name = "routes::reactions::download_ephemeral", skip_all, err(Debug))]
 async fn download_ephemeral(
-    user: User,
+    user: AuthedUser,
     Path((group, reaction, name)): Path<(String, Uuid, String)>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -1390,7 +1390,10 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
             "/reactions/status/{group}/{pipeline}/{status}/",
             get(list_status),
         )
-        .route("/reactions/status/{pipeline}/{status}/", get(list_status_new))
+        .route(
+            "/reactions/status/{pipeline}/{status}/",
+            get(list_status_new),
+        )
         .route(
             "/reactions/status/{group}/{pipeline}/{status}/details/",
             get(list_status_details),

@@ -114,4 +114,30 @@ impl UserKeys {
     pub fn analysts(shared: &Shared) -> String {
         format!("{ns}:analysts", ns = shared.config.thorium.namespace)
     }
+
+    /// The key to the global scoped token map
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    pub fn scoped_tokens(shared: &Shared) -> String {
+        format!(
+            "{ns}:scoped_token_map",
+            ns = shared.config.thorium.namespace
+        )
+    }
+
+    /// The key to a specific users scoped token data
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The username of the user to build a key for
+    /// * `shared` - Shared Thorium objects
+    pub fn scoped_data(user: &str, shared: &Shared) -> String {
+        format!(
+            "{ns}:scoped_tokens:{user}",
+            ns = shared.config.thorium.namespace,
+            user = user,
+        )
+    }
 }

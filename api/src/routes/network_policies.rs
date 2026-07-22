@@ -10,11 +10,12 @@ use uuid::Uuid;
 
 use super::OpenApiSecurity;
 use crate::is_admin;
+use crate::models::AuthedUser;
 use crate::models::{
     ApiCursor, Group, IpBlock, IpBlockRaw, Ipv4Block, Ipv6Block, NetworkPolicy,
     NetworkPolicyCustomK8sRule, NetworkPolicyCustomLabel, NetworkPolicyListLine,
     NetworkPolicyListParams, NetworkPolicyPort, NetworkPolicyRequest, NetworkPolicyRule,
-    NetworkPolicyRuleRaw, NetworkPolicyUpdate, NetworkProtocol, User,
+    NetworkPolicyRuleRaw, NetworkPolicyUpdate, NetworkProtocol,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -50,7 +51,7 @@ struct NetworkPolicyParams {
 )]
 #[instrument(name = "routes::network_policies::create", skip_all, err(Debug))]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(request): Json<NetworkPolicyRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -84,7 +85,7 @@ async fn create(
 )]
 #[instrument(name = "routes::network_policies::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     params: NetworkPolicyListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<NetworkPolicyListLine>>, ApiError> {
@@ -122,7 +123,7 @@ async fn list(
 #[instrument(name = "routes::network_policies::list_details", skip_all, err(Debug))]
 #[axum_macros::debug_handler]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     params: NetworkPolicyListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<NetworkPolicy>>, ApiError> {
@@ -172,7 +173,7 @@ async fn list_details(
     err(Debug)
 )]
 async fn get_network_policy(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Path(name): Path<String>,
     Query(params): Query<NetworkPolicyParams>,
@@ -209,7 +210,7 @@ async fn get_network_policy(
 )]
 #[instrument(name = "routes::network_policies::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Path(name): Path<String>,
     Query(params): Query<NetworkPolicyParams>,
@@ -250,7 +251,7 @@ async fn update(
 )]
 #[instrument(name = "routes::network_policies::delete", skip_all, err(Debug))]
 async fn delete(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Path(name): Path<String>,
     Query(params): Query<NetworkPolicyParams>,
@@ -291,7 +292,7 @@ async fn delete(
     err(Debug)
 )]
 async fn get_all_default(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<NetworkPolicyListLine>>, ApiError> {

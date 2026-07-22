@@ -20,13 +20,13 @@ use tracing::{Level, Span, event, instrument};
 use super::db;
 use crate::conf::Ldap;
 use crate::models::{
-    AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, Group, ImageScaler,
-    Key, ScrubbedUser, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate,
-    UserUpdate,
+    AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, AuthedUser, Group,
+    ImageScaler, Key, ScopedToken, ScopedTokenRequest, ScopedTokenUpdate, ScopedUser, ScrubbedUser,
+    UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::shared::EmailClient;
 use crate::utils::{ApiError, AppState, Shared, bounder};
-use crate::{bad, conflict, is_admin, ldap, unauthorized, unavailable, update};
+use crate::{bad, conflict, is_admin, ldap, not_found, unauthorized, unavailable, update};
 
 /// The header name for our secret key
 static SECRET_KEY_HEADER: HeaderName = HeaderName::from_static("secret-key");
@@ -111,25 +111,93 @@ macro_rules! token_expire {
 /// * `token` - The token to authenticate with
 /// * `shared` - Shared objects in Thorium
 #[instrument(name = "backends::user::token_auth", skip_all, err(Debug))]
-async fn token_auth<'a>(token: &str, shared: &Shared) -> Result<User, ApiError> {
-    // get user
-    let mut user = db::users::get_token(token, shared).await?;
-    // throw unauthorized if token doesn't match
-    // this should only happen if the token map is somehow wrong
+async fn token_auth(token: &str, shared: &Shared) -> Result<AuthedUser, ApiError> {
+    // look this token up in the primary and scoped token maps
+    match db::users::get_token_match(token, shared).await? {
+        // this token is a users primary token
+        db::users::TokenMatch::Primary(username) => {
+            // get this users data
+            let mut user = db::users::get(&username, shared).await?;
+            // throw unauthorized if token doesn't match
+            // this should only happen if the token map is somehow wrong
+            // which should never happen
+            if user.token != token {
+                event!(Level::ERROR, msg = "Token Map Corruption Likely");
+                return unauthorized!();
+            }
+            // Check if this users token has expired
+            if user.token_expiration < Utc::now() {
+                // token is expired so generate a new one and bounce this user
+                event!(Level::INFO, msg = "Regenerating Expired Token");
+                user.regen_token(shared).await?;
+                return unauthorized!();
+            }
+            // return authed user
+            Ok(AuthedUser::Full(user))
+        }
+        // this token is a scoped token so authenticate with it
+        db::users::TokenMatch::Scoped(scoped) => scoped_token_auth(scoped, token, shared).await,
+    }
+}
+
+/// Authenticate a user by a scoped token
+///
+/// The returned user has its groups limited to this scoped tokens scope and
+/// carries the scoped tokens value/expiration instead of the users primary
+/// token. Admins are demoted to the user role so scoped tokens cannot bypass
+/// group checks.
+///
+/// # Arguments
+///
+/// * `scoped` - The scoped token to authenticate with
+/// * `token` - The raw token value that was used to authenticate
+/// * `shared` - Shared objects in Thorium
+#[instrument(name = "backends::user::scoped_token_auth", skip_all, err(Debug))]
+async fn scoped_token_auth(
+    mut scoped: ScopedToken,
+    token: &str,
+    shared: &Shared,
+) -> Result<AuthedUser, ApiError> {
+    // throw unauthorized if the token doesn't match
+    // this should only happen if the scoped token map is somehow wrong
     // which should never happen
-    if user.token != token {
-        event!(Level::ERROR, msg = "Token Map Corruption Likely");
+    if scoped.token != token {
+        event!(Level::ERROR, msg = "Scoped Token Map Corruption Likely");
         return unauthorized!();
     }
-    // Check if this users token has expired
-    if user.token_expiration < Utc::now() {
-        // token is expired so generate a new one and bounce this user
-        event!(Level::INFO, msg = "Regenerating Expired Token");
-        user.regen_token(shared).await?;
+    // if this scoped token is ephemeral then check if it has permanently expired
+    if let Some(expires) = scoped.expires
+        && expires < Utc::now()
+    {
+        // this scoped token has permanently expired so remove it from redis
+        event!(Level::INFO, msg = "Deleting Expired Ephemeral Scoped Token");
+        db::users::delete_scoped_token(&scoped, shared).await?;
         return unauthorized!();
     }
-    // return authed user
-    Ok(user)
+    // check if this scoped tokens value has expired
+    if scoped.token_expiration < Utc::now() {
+        // this value is expired so rotate it and bounce this user
+        event!(Level::INFO, msg = "Rotating Expired Scoped Token");
+        scoped.rotate(shared).await?;
+        return unauthorized!();
+    }
+    // get the user this scoped token is tied to
+    let mut user = db::users::get(&scoped.owner, shared).await?;
+    // limit this users groups to this scoped tokens scope
+    user.groups.retain(|group| scoped.groups.contains(group));
+    // demote admins to the user role so scoped tokens cannot bypass group checks
+    if user.role == UserRole::Admin {
+        user.role = UserRole::User;
+    }
+    // replace this users primary token info with this scoped tokens info
+    user.token = scoped.token;
+    user.token_expiration = scoped.token_expiration;
+    // build our scoped user
+    let scoped_user = ScopedUser {
+        user,
+        name: scoped.name,
+    };
+    Ok(AuthedUser::Scoped(scoped_user))
 }
 
 /// Authenticate a user with basic auth stored in redis
@@ -352,13 +420,13 @@ impl AuthMethods {
         &self,
         verify_email: bool,
         shared: &Shared,
-    ) -> Result<User, ApiError> {
+    ) -> Result<AuthedUser, ApiError> {
         // try to authenticate this user
         let user = match self {
             Self::Token(token) => token_auth(token, shared).await,
-            Self::Password { username, password } => {
-                password_auth(username, password, shared).await
-            }
+            Self::Password { username, password } => password_auth(username, password, shared)
+                .await
+                .map(AuthedUser::Full),
         }?;
         // make sure this user's email has been verified
         if verify_email && !user.verified {
@@ -1037,37 +1105,6 @@ impl User {
         Ok(())
     }
 
-    /// Authenticate a user with the correct authentication method
-    ///
-    /// This gets the authorization data from the authorization header.
-    ///
-    /// # Arguments
-    ///
-    /// * `auth_header` - The auth header value to pull creds from
-    /// * `verify_email` - Whether to require a verified email or not
-    /// * `shared` - Shared objects in Thorium
-    #[instrument(name = "User::auth", skip_all, err(Debug))]
-    async fn auth(
-        auth_header: &str,
-        verify_email: bool,
-        shared: &Shared,
-    ) -> Result<Self, ApiError> {
-        // get our auth method
-        let method = check_unauth!(AuthMethods::from_str(auth_header));
-        // try to authenticate our user
-        match method.authenticate(verify_email, shared).await {
-            Ok(user) => {
-                event!(Level::INFO, user = &user.username);
-                Ok(user)
-            }
-            Err(error) => {
-                // we failed to auth this user due to an error
-                event!(Level::ERROR, error = true, error_msg = error.to_string());
-                Err(error)
-            }
-        }
-    }
-
     /// Authorize this user can access some groups or gets the groups they can
     ///
     /// For admins this will get all groups in the cluster
@@ -1152,6 +1189,296 @@ impl User {
     }
 }
 
+impl AuthedUser {
+    /// Authenticate a user with the correct authentication method
+    ///
+    /// This gets the authorization data from the authorization header.
+    ///
+    /// # Arguments
+    ///
+    /// * `auth_header` - The auth header value to pull creds from
+    /// * `verify_email` - Whether to require a verified email or not
+    /// * `shared` - Shared objects in Thorium
+    #[instrument(name = "AuthedUser::auth", skip_all, err(Debug))]
+    async fn auth(
+        auth_header: &str,
+        verify_email: bool,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
+        // get our auth method
+        let method = check_unauth!(AuthMethods::from_str(auth_header));
+        // try to authenticate our user
+        match method.authenticate(verify_email, shared).await {
+            Ok(user) => {
+                event!(Level::INFO, user = &user.username);
+                Ok(user)
+            }
+            Err(error) => {
+                // we failed to auth this user due to an error
+                event!(Level::ERROR, error = true, error_msg = error.to_string());
+                Err(error)
+            }
+        }
+    }
+
+    /// Require this user authenticated with their primary token or password
+    ///
+    /// This rejects scoped tokens and is used to guard sensitive routes like
+    /// account updates and scoped token management.
+    #[instrument(name = "AuthedUser::require_full", skip_all, err(Debug))]
+    pub fn require_full(self) -> Result<User, ApiError> {
+        // make sure this user did not authenticate with a scoped token
+        match self {
+            // this user is fully authenticated
+            AuthedUser::Full(user) => Ok(user),
+            // this user authenticated with a scoped token so reject them
+            AuthedUser::Scoped(scoped) => {
+                // log that a scoped token tried to access a restricted route
+                event!(
+                    Level::ERROR,
+                    user = &scoped.user.username,
+                    token = &scoped.name,
+                    msg = "Scoped tokens cannot access this route",
+                );
+                unauthorized!()
+            }
+        }
+    }
+}
+
+impl ScopedToken {
+    /// Create a new scoped token for a user
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user to create a scoped token for
+    /// * `req` - The scoped token request to build a scoped token from
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedToken::create", skip_all, fields(user = user.username, name = req.name), err(Debug))]
+    pub async fn create(
+        user: &User,
+        req: ScopedTokenRequest,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
+        // bounds check this scoped tokens name
+        bounder::string_lower(&req.name, "name", 1, 50)?;
+        // make sure this scoped token has at least one group in scope
+        if req.groups.is_empty() {
+            return bad!("Scoped tokens must be scoped to at least one group".to_owned());
+        }
+        // make sure this scope is a subset of this users groups
+        for group in &req.groups {
+            if !user.groups.contains(group) {
+                return unauthorized!(format!("{} is not one of your groups", group));
+            }
+        }
+        // if an expiration was set then make sure it is in the future
+        if let Some(expires) = req.expires
+            && expires < Utc::now()
+        {
+            return bad!("Scoped tokens cannot expire in the past".to_owned());
+        }
+        // build our new scoped token
+        let scoped = ScopedToken {
+            name: req.name,
+            owner: user.username.clone(),
+            groups: req.groups,
+            token: token!(),
+            token_expiration: token_expire!(shared),
+            expires: req.expires,
+        };
+        // save this scoped token to the backend
+        db::users::create_scoped_token(&scoped, shared).await?;
+        Ok(scoped)
+    }
+
+    /// Get one of a users scoped tokens by name
+    ///
+    /// If this scoped tokens value has expired then it will be rotated so
+    /// owners never retrieve an already expired value.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user to get a scoped token for
+    /// * `name` - The name of the scoped token to get
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedToken::get", skip(user, shared), fields(user = user.username), err(Debug))]
+    pub async fn get(user: &User, name: &str, shared: &Shared) -> Result<Self, ApiError> {
+        // get this scoped tokens data
+        let mut scoped = db::users::get_scoped_token(&user.username, name, shared).await?;
+        // if this scoped token is ephemeral then check if it has permanently expired
+        if let Some(expires) = scoped.expires
+            && expires < Utc::now()
+        {
+            // this scoped token has permanently expired so remove it from redis
+            db::users::delete_scoped_token(&scoped, shared).await?;
+            return not_found!(format!("Scoped token {name} not found"));
+        }
+        // rotate this scoped tokens value if it has expired
+        if scoped.token_expiration < Utc::now() {
+            scoped.rotate(shared).await?;
+        }
+        Ok(scoped)
+    }
+
+    /// Update one of a users scoped tokens by name
+    ///
+    /// Updates never change a scoped tokens value so activated tokens keep
+    /// working after an update.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user to update a scoped token for
+    /// * `name` - The name of the scoped token to update
+    /// * `update` - The update to apply to this scoped token
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedToken::update", skip(user, update, shared), fields(user = user.username), err(Debug))]
+    pub async fn update(
+        user: &User,
+        name: &str,
+        update: ScopedTokenUpdate,
+        shared: &Shared,
+    ) -> Result<Self, ApiError> {
+        // make sure this update isn't empty
+        if update.is_empty() {
+            return bad!("Scoped token updates cannot be empty".to_owned());
+        }
+        // make sure this update doesn't both set and clear an expiration
+        if update.expires.is_some() && update.clear_expires {
+            return bad!("Scoped token updates cannot both set and clear an expiration".to_owned());
+        }
+        // make sure any added groups are a subset of this users groups
+        for group in &update.add_groups {
+            if !user.groups.contains(group) {
+                return unauthorized!(format!("{} is not one of your groups", group));
+            }
+        }
+        // if a new expiration was set then make sure it is in the future
+        if let Some(expires) = update.expires
+            && expires < Utc::now()
+        {
+            return bad!("Scoped tokens cannot expire in the past".to_owned());
+        }
+        // get this scoped tokens data
+        let mut scoped = db::users::get_scoped_token(&user.username, name, shared).await?;
+        // if this scoped token is ephemeral then check if it has permanently expired
+        if let Some(expires) = scoped.expires
+            && expires < Utc::now()
+        {
+            // this scoped token has permanently expired so remove it from redis
+            db::users::delete_scoped_token(&scoped, shared).await?;
+            return not_found!(format!("Scoped token {name} not found"));
+        }
+        // add any new groups to this scoped tokens scope skipping duplicates
+        for group in update.add_groups {
+            if !scoped.groups.contains(&group) {
+                scoped.groups.push(group);
+            }
+        }
+        // remove any groups from this scoped tokens scope
+        scoped
+            .groups
+            .retain(|group| !update.remove_groups.contains(group));
+        // make sure this scoped token still has at least one group in scope
+        if scoped.groups.is_empty() {
+            return bad!("Scoped tokens must be scoped to at least one group".to_owned());
+        }
+        // apply any expiration updates
+        if update.clear_expires {
+            // clear this scoped tokens expiration date
+            scoped.expires = None;
+        } else if update.expires.is_some() {
+            // set this scoped tokens new expiration date
+            scoped.expires = update.expires;
+        }
+        // save this scoped tokens updated data to the backend
+        db::users::update_scoped_token(&scoped, shared).await?;
+        Ok(scoped)
+    }
+
+    /// List all of a users scoped tokens
+    ///
+    /// Any ephemeral scoped tokens that have permanently expired will be
+    /// deleted instead of listed.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user to list scoped tokens for
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedToken::list", skip_all, fields(user = user.username), err(Debug))]
+    pub async fn list(user: &User, shared: &Shared) -> Result<Vec<Self>, ApiError> {
+        // get all of this users scoped tokens
+        let tokens = db::users::list_scoped_tokens(&user.username, shared).await?;
+        // get the current timestamp to check for expired tokens
+        let now = Utc::now();
+        // crawl over these tokens and prune any that have permanently expired
+        let mut live = Vec::with_capacity(tokens.len());
+        for token in tokens {
+            match token.expires {
+                // this scoped token has permanently expired so remove it from redis
+                Some(expires) if expires < now => {
+                    db::users::delete_scoped_token(&token, shared).await?;
+                }
+                // this scoped token is still valid so list it
+                _ => live.push(token),
+            }
+        }
+        Ok(live)
+    }
+
+    /// Delete one of a users scoped tokens by name
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user to delete a scoped token for
+    /// * `name` - The name of the scoped token to delete
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedToken::delete", skip(user, shared), fields(user = user.username), err(Debug))]
+    pub async fn delete(user: &User, name: &str, shared: &Shared) -> Result<(), ApiError> {
+        // get this scoped tokens data so we can remove it from the token map
+        let scoped = db::users::get_scoped_token(&user.username, name, shared).await?;
+        // delete this scoped token
+        db::users::delete_scoped_token(&scoped, shared).await?;
+        Ok(())
+    }
+
+    /// Generate and save a new value for this scoped token
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedToken::rotate", skip_all, err(Debug))]
+    pub async fn rotate(&mut self, shared: &Shared) -> Result<(), ApiError> {
+        // get our old token value
+        let old = std::mem::replace(&mut self.token, token!());
+        // update when this new value expires
+        self.token_expiration = token_expire!(shared);
+        // save our new token value
+        db::users::save_scoped_token(self, &old, shared).await?;
+        Ok(())
+    }
+}
+
+impl ScopedUser {
+    /// Logout a user that authenticated with a scoped token
+    ///
+    /// This rotates only the scoped tokens value and leaves the owning users
+    /// primary token untouched.
+    ///
+    /// # Arguments
+    ///
+    /// * `shared` - Shared Thorium objects
+    #[instrument(name = "ScopedUser::logout", skip_all, err(Debug))]
+    pub async fn logout(&self, shared: &Shared) -> Result<(), ApiError> {
+        // get this scoped tokens data
+        let mut scoped =
+            db::users::get_scoped_token(&self.user.username, &self.name, shared).await?;
+        // rotate this scoped tokens value
+        scoped.rotate(shared).await?;
+        Ok(())
+    }
+}
+
 /// Base64 decode a string
 ///
 /// # Arguments
@@ -1173,7 +1500,7 @@ impl IntoResponse for AuthReject {
     }
 }
 
-impl<S> FromRequestParts<S> for User
+impl<S> FromRequestParts<S> for AuthedUser
 where
     AppState: FromRef<S>,
     S: Send + Sync,
@@ -1193,7 +1520,7 @@ where
             // try to cast our authorization header value to a str
             if let Ok(header_str) = header_val.to_str() {
                 // authenticate this user and make sure they have verified their email
-                if let Ok(user) = User::auth(header_str, true, &state.shared).await {
+                if let Ok(user) = AuthedUser::auth(header_str, true, &state.shared).await {
                     return Ok(user);
                 }
             }
@@ -1261,7 +1588,10 @@ where
             // try to cast our authorization header value to a str
             if let Ok(header_str) = header_val.to_str() {
                 // authenticate this user but don't require a verified email
-                if let Ok(user) = User::auth(header_str, false, &state.shared).await {
+                if let Ok(authed) = AuthedUser::auth(header_str, false, &state.shared).await {
+                    // get the effective user for this authed user
+                    // for scoped users this carries the scoped tokens value/expiration
+                    let user = authed.into_user();
                     // return the correct auth response based on if we have a verified email or not
                     let resp = if user.verified {
                         // this user has a verified email and has authenticated so return their token info

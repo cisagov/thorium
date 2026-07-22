@@ -12,8 +12,9 @@ use super::OpenApiSecurity;
 
 // our imports
 use crate::models::{
-    AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, Key, ScrubbedUser,
-    Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
+    AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, AuthedUser, Key,
+    ScopedToken, ScopedTokenRequest, ScopedTokenUpdate, ScrubbedUser, Theme, UnixInfo, User,
+    UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::{ApiError, AppState};
 use crate::{conflict, is_admin, unauthorized, unavailable};
@@ -69,9 +70,11 @@ pub(crate) enum ResendVerificationResponse {
 impl IntoResponse for ResendVerificationResponse {
     fn into_response(self) -> Response {
         match self {
-            ResendVerificationResponse::Sent { retry_after } => {
-                (StatusCode::OK, [(header::RETRY_AFTER, retry_after.to_string())]).into_response()
-            }
+            ResendVerificationResponse::Sent { retry_after } => (
+                StatusCode::OK,
+                [(header::RETRY_AFTER, retry_after.to_string())],
+            )
+                .into_response(),
             ResendVerificationResponse::Cooldown { retry_after } => (
                 StatusCode::TOO_MANY_REQUESTS,
                 [(header::RETRY_AFTER, retry_after.to_string())],
@@ -117,7 +120,10 @@ async fn resend_email_verification(
     // an already-verified user can't (and doesn't need to) resend — return a clear conflict before
     // the cooldown check so the response isn't shadowed by a misleading "wait N seconds" message
     if user.verified {
-        return conflict!(format!("{} has already verified their email", user.username));
+        return conflict!(format!(
+            "{} has already verified their email",
+            user.username
+        ));
     }
     // enforce the cooldown here so we can report the remaining time via the Retry-After header; this
     // lets the UI render an accurate countdown instead of scraping it out of an error message
@@ -228,7 +234,7 @@ async fn auth(resp: AuthResponse) -> Result<Json<AuthResponse>, ApiError> {
 )]
 #[instrument(name = "routes::users::get_user", skip_all, err(Debug))]
 async fn get_user(
-    user: User,
+    user: AuthedUser,
     Path(username): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<ScrubbedUser>, ApiError> {
@@ -238,7 +244,7 @@ async fn get_user(
         Ok(Json(ScrubbedUser::from(requested)))
     // were requesting info on ourselves so just return it
     } else if user.username == username {
-        Ok(Json(ScrubbedUser::from(user)))
+        Ok(Json(ScrubbedUser::from(user.into_user())))
     // were not an admin and not asking about ourselves reject it
     } else {
         unauthorized!()
@@ -266,7 +272,10 @@ async fn get_user(
     )
 )]
 #[instrument(name = "routes::users::list", skip_all, err(Debug))]
-async fn list(user: User, State(state): State<AppState>) -> Result<Json<Vec<String>>, ApiError> {
+async fn list(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<String>>, ApiError> {
     // list all users
     let users = user.list(&state.shared).await?;
     Ok(Json(users))
@@ -294,7 +303,7 @@ async fn list(user: User, State(state): State<AppState>) -> Result<Json<Vec<Stri
 )]
 #[instrument(name = "routes::users::list_details", skip_all, err(Debug))]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ScrubbedUser>>, ApiError> {
     // list all users with details
@@ -322,8 +331,8 @@ async fn list_details(
     )
 )]
 #[instrument(name = "routes::users::info", skip_all, err(Debug))]
-async fn info(user: User) -> Result<Json<ScrubbedUser>, ApiError> {
-    Ok(Json(ScrubbedUser::from(user)))
+async fn info(user: AuthedUser) -> Result<Json<ScrubbedUser>, ApiError> {
+    Ok(Json(ScrubbedUser::from(user.into_user())))
 }
 
 /// Updates our current user
@@ -350,10 +359,12 @@ async fn info(user: User) -> Result<Json<ScrubbedUser>, ApiError> {
 )]
 #[instrument(name = "routes::users::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(update): Json<UserUpdate>,
 ) -> Result<StatusCode, ApiError> {
+    // require a fully authed user since scoped tokens cannot update accounts
+    let user = user.require_full()?;
     // update user
     user.update(update, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -384,11 +395,13 @@ async fn update(
 )]
 #[instrument(name = "routes::users::update_user", skip_all, err(Debug))]
 async fn update_user(
-    user: User,
+    user: AuthedUser,
     Path(name): Path<String>,
     State(state): State<AppState>,
     Json(update): Json<UserUpdate>,
 ) -> Result<StatusCode, ApiError> {
+    // require a fully authed user since scoped tokens cannot update accounts
+    let user = user.require_full()?;
     // update user
     user.update_user(&name, update, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -415,9 +428,14 @@ async fn update_user(
     )
 )]
 #[instrument(name = "routes::users::logout", skip_all, err(Debug))]
-async fn logout(mut user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
-    // generate and save a new token
-    user.regen_token(&state.shared).await?;
+async fn logout(user: AuthedUser, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+    // logout based on how this user authenticated
+    match user {
+        // this user authenticated with their primary token so rotate that
+        AuthedUser::Full(mut user) => user.regen_token(&state.shared).await?,
+        // this user authenticated with a scoped token so only rotate that token
+        AuthedUser::Scoped(scoped) => scoped.logout(&state.shared).await?,
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -445,10 +463,12 @@ async fn logout(mut user: User, State(state): State<AppState>) -> Result<StatusC
 )]
 #[instrument(name = "routes::users::logout_user", skip_all, err(Debug))]
 async fn logout_user(
-    user: User,
+    user: AuthedUser,
     Path(target): Path<String>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
+    // require a fully authed user since scoped tokens cannot logout other users
+    let user = user.require_full()?;
     // only admins can logout other users
     is_admin!(user);
     // try to get the other user
@@ -484,10 +504,12 @@ async fn logout_user(
 )]
 #[instrument(name = "routes::users::delete_user", skip_all, err(Debug))]
 async fn delete_user(
-    user: User,
+    user: AuthedUser,
     Path(target): Path<String>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
+    // require a fully authed user since scoped tokens cannot delete users
+    let user = user.require_full()?;
     // try to delete this user
     User::delete(user, &target, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -512,17 +534,202 @@ async fn delete_user(
     )
 )]
 #[instrument(name = "routes::users::sync_ldap", skip_all, err(Debug))]
-async fn sync_ldap(user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn sync_ldap(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
     // sync all groups with ldap
     user.sync_all_unix_info(&state.shared).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Creates a new scoped token for the current user
+///
+/// Scoped tokens are limited to a subset of the current users groups and may
+/// optionally expire on a set date.
+///
+/// # Arguments
+///
+/// * `user` - The user to create a scoped token for
+/// * `state` - Shared Thorium objects
+/// * `req` - The scoped token to create
+#[utoipa::path(
+    post,
+    path = "/api/users/tokens/",
+    params(
+        ("req" = ScopedTokenRequest, description = "The scoped token to create"),
+    ),
+    responses(
+        (status = 200, description = "New scoped token created", body=ScopedToken),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::create_scoped_token", skip_all, err(Debug))]
+async fn create_scoped_token(
+    user: AuthedUser,
+    State(state): State<AppState>,
+    Json(req): Json<ScopedTokenRequest>,
+) -> Result<Json<ScopedToken>, ApiError> {
+    // require a fully authed user since scoped tokens cannot manage scoped tokens
+    let user = user.require_full()?;
+    // create this scoped token
+    let scoped = ScopedToken::create(&user, req, &state.shared).await?;
+    Ok(Json(scoped))
+}
+
+/// Lists all of the current users scoped tokens
+///
+/// # Arguments
+///
+/// * `user` - The user to list scoped tokens for
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/users/tokens/",
+    params(),
+    responses(
+        (status = 200, description = "The current users scoped tokens", body=Vec<ScopedToken>),
+        (status = 401, description = "This user is not authorized to access this route"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::list_scoped_tokens", skip_all, err(Debug))]
+async fn list_scoped_tokens(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ScopedToken>>, ApiError> {
+    // require a fully authed user since scoped tokens cannot manage scoped tokens
+    let user = user.require_full()?;
+    // list this users scoped tokens
+    let scoped = ScopedToken::list(&user, &state.shared).await?;
+    Ok(Json(scoped))
+}
+
+/// Gets one of the current users scoped tokens by name
+///
+/// If this scoped tokens value has expired then it will be rotated and the
+/// new value returned.
+///
+/// # Arguments
+///
+/// * `user` - The user to get a scoped token for
+/// * `name` - The name of the scoped token to get
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/users/tokens/:name",
+    params(
+        ("name" = String, Path, description = "The name of the scoped token to get"),
+    ),
+    responses(
+        (status = 200, description = "The requested scoped token", body=ScopedToken),
+        (status = 401, description = "This user is not authorized to access this route"),
+        (status = 404, description = "This scoped token does not exist"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::get_scoped_token", skip_all, err(Debug))]
+async fn get_scoped_token(
+    user: AuthedUser,
+    Path(name): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<ScopedToken>, ApiError> {
+    // require a fully authed user since scoped tokens cannot manage scoped tokens
+    let user = user.require_full()?;
+    // get this scoped token
+    let scoped = ScopedToken::get(&user, &name, &state.shared).await?;
+    Ok(Json(scoped))
+}
+
+/// Updates one of the current users scoped tokens by name
+///
+/// Updates never change a scoped tokens value so activated tokens keep
+/// working after an update.
+///
+/// # Arguments
+///
+/// * `user` - The user to update a scoped token for
+/// * `name` - The name of the scoped token to update
+/// * `state` - Shared Thorium objects
+/// * `update` - The update to apply to this scoped token
+#[utoipa::path(
+    patch,
+    path = "/api/users/tokens/:name",
+    params(
+        ("name" = String, Path, description = "The name of the scoped token to update"),
+        ("update" = ScopedTokenUpdate, description = "The update to apply to this scoped token"),
+    ),
+    responses(
+        (status = 200, description = "The updated scoped token", body=ScopedToken),
+        (status = 400, description = "This scoped token update is invalid"),
+        (status = 401, description = "This user is not authorized to access this route"),
+        (status = 404, description = "This scoped token does not exist"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::update_scoped_token", skip_all, err(Debug))]
+async fn update_scoped_token(
+    user: AuthedUser,
+    Path(name): Path<String>,
+    State(state): State<AppState>,
+    Json(update): Json<ScopedTokenUpdate>,
+) -> Result<Json<ScopedToken>, ApiError> {
+    // require a fully authed user since scoped tokens cannot manage scoped tokens
+    let user = user.require_full()?;
+    // update this scoped token
+    let scoped = ScopedToken::update(&user, &name, update, &state.shared).await?;
+    Ok(Json(scoped))
+}
+
+/// Deletes one of the current users scoped tokens by name
+///
+/// # Arguments
+///
+/// * `user` - The user to delete a scoped token for
+/// * `name` - The name of the scoped token to delete
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    delete,
+    path = "/api/users/tokens/:name",
+    params(
+        ("name" = String, Path, description = "The name of the scoped token to delete"),
+    ),
+    responses(
+        (status = 204, description = "Scoped token deleted"),
+        (status = 401, description = "This user is not authorized to access this route"),
+        (status = 404, description = "This scoped token does not exist"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::users::delete_scoped_token", skip_all, err(Debug))]
+async fn delete_scoped_token(
+    user: AuthedUser,
+    Path(name): Path<String>,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
+    // require a fully authed user since scoped tokens cannot manage scoped tokens
+    let user = user.require_full()?;
+    // delete this scoped token
+    ScopedToken::delete(&user, &name, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// The struct containing our openapi docs
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, create, update, resend_email_verification, verify_email, list_details, auth, get_user, update_user, info, logout, logout_user, delete_user, sync_ldap),
-    components(schemas(AuthResponse, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate, AiSettings, AiSettingsUpdate, AiEndpoint, AiEndpointUpdate)),
+    paths(list, create, update, resend_email_verification, verify_email, list_details, auth, get_user, update_user, info, logout, logout_user, delete_user, sync_ldap, create_scoped_token, list_scoped_tokens, get_scoped_token, update_scoped_token, delete_scoped_token),
+    components(schemas(AuthResponse, ScrubbedUser, Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate, AiSettings, AiSettingsUpdate, AiEndpoint, AiEndpointUpdate, ScopedToken, ScopedTokenRequest, ScopedTokenUpdate)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct UserApiDocs;
@@ -551,6 +758,16 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/users/details/", get(list_details))
         .route("/users/auth", post(auth))
+        .route(
+            "/users/tokens/",
+            get(list_scoped_tokens).post(create_scoped_token),
+        )
+        .route(
+            "/users/tokens/{name}",
+            get(get_scoped_token)
+                .patch(update_scoped_token)
+                .delete(delete_scoped_token),
+        )
         .route("/users/user/{username}", get(get_user).patch(update_user))
         .route("/users/whoami", get(info))
         .route("/users/logout", post(logout))
