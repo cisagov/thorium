@@ -1,7 +1,10 @@
 use base64::Engine as _;
 
 use super::{ClientSettings, Error, helpers};
-use crate::models::{AuthResponse, ScrubbedUser, UserCreate, UserUpdate};
+use crate::models::{
+    AuthResponse, ScopedToken, ScopedTokenRequest, ScopedTokenUpdate, ScrubbedUser, UserCreate,
+    UserUpdate,
+};
 use crate::{send, send_build};
 
 // import our static runtime if we need a blocking client
@@ -417,6 +420,201 @@ impl Users {
     pub async fn delete(&self, user: &str) -> Result<reqwest::Response, Error> {
         // build url for logging a user out
         let url = format!("{}/api/users/delete/{}", self.host, user);
+        // build request
+        let req = self
+            .client
+            .delete(&url)
+            .header("authorization", &self.token);
+        // send request
+        send!(self.client, req)
+    }
+
+    /// Creates a new scoped token for the current [`User`]
+    ///
+    /// Scoped tokens are limited to a subset of the current users groups and
+    /// may optionally expire on a set date.
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - The scoped token to create
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::models::ScopedTokenRequest;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // build a scoped token request
+    /// let req = ScopedTokenRequest::new("corn-harvester").group("CornPeeps");
+    /// // create a scoped token
+    /// let scoped = thorium.users.create_scoped_token(&req).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    pub async fn create_scoped_token(
+        &self,
+        req: &ScopedTokenRequest,
+    ) -> Result<ScopedToken, Error> {
+        // build url for creating a scoped token
+        let url = format!("{}/api/users/tokens/", self.host);
+        // build request
+        let req = self
+            .client
+            .post(&url)
+            .json(req)
+            .header("authorization", &self.token);
+        // send request and build a scoped token
+        send_build!(self.client, req, ScopedToken)
+    }
+
+    /// Lists all of the current [`User`]s scoped tokens
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // list our scoped tokens
+    /// let scoped = thorium.users.list_scoped_tokens().await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    pub async fn list_scoped_tokens(&self) -> Result<Vec<ScopedToken>, Error> {
+        // build url for listing scoped tokens
+        let url = format!("{}/api/users/tokens/", self.host);
+        // build request
+        let req = self.client.get(&url).header("authorization", &self.token);
+        // send request and build a list of scoped tokens
+        send_build!(self.client, req, Vec<ScopedToken>)
+    }
+
+    /// Gets one of the current [`User`]s scoped tokens by name
+    ///
+    /// If this scoped tokens value has expired then it will be rotated and
+    /// the new value returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the scoped token to get
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // get one of our scoped tokens
+    /// let scoped = thorium.users.get_scoped_token("corn-harvester").await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    pub async fn get_scoped_token(&self, name: &str) -> Result<ScopedToken, Error> {
+        // build url for getting a scoped token
+        let url = format!("{}/api/users/tokens/{}", self.host, name);
+        // build request
+        let req = self.client.get(&url).header("authorization", &self.token);
+        // send request and build a scoped token
+        send_build!(self.client, req, ScopedToken)
+    }
+
+    /// Updates one of the current [`User`]s scoped tokens by name
+    ///
+    /// Updates never change a scoped tokens value so activated tokens keep
+    /// working after an update.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the scoped token to update
+    /// * `update` - The update to apply to this scoped token
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// use thorium::models::ScopedTokenUpdate;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // build a scoped token update
+    /// let update = ScopedTokenUpdate::default().add_group("CornFans");
+    /// // update one of our scoped tokens
+    /// let scoped = thorium.users.update_scoped_token("corn-harvester", &update).await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    pub async fn update_scoped_token(
+        &self,
+        name: &str,
+        update: &ScopedTokenUpdate,
+    ) -> Result<ScopedToken, Error> {
+        // build url for updating a scoped token
+        let url = format!("{}/api/users/tokens/{}", self.host, name);
+        // build request
+        let req = self
+            .client
+            .patch(&url)
+            .json(update)
+            .header("authorization", &self.token);
+        // send request and build a scoped token
+        send_build!(self.client, req, ScopedToken)
+    }
+
+    /// Deletes one of the current [`User`]s scoped tokens by name
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the scoped token to delete
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::Thorium;
+    /// # use thorium::Error;
+    ///
+    /// # async fn exec() -> Result<(), Error> {
+    /// // create Thorium client
+    /// let thorium = Thorium::build("http://127.0.0.1").token("<token>").build().await?;
+    /// // delete one of our scoped tokens
+    /// thorium.users.delete_scoped_token("corn-harvester").await?;
+    /// # // allow test code to be compiled but don't unwrap as no API instance would be up
+    /// # Ok(())
+    /// # }
+    /// # tokio_test::block_on(async {
+    /// #    exec().await
+    /// # });
+    /// ```
+    pub async fn delete_scoped_token(&self, name: &str) -> Result<reqwest::Response, Error> {
+        // build url for deleting a scoped token
+        let url = format!("{}/api/users/tokens/{}", self.host, name);
         // build request
         let req = self
             .client

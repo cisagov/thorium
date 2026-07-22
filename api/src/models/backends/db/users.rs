@@ -5,11 +5,11 @@ use tracing::{Level, event, instrument};
 
 use super::helpers;
 use super::keys::{EventKeys, GroupKeys, SystemKeys, UserKeys};
-use crate::models::{UnixInfo, User, UserRole, UserSettings};
+use crate::models::{ScopedToken, UnixInfo, User, UserRole, UserSettings};
 use crate::utils::{ApiError, Shared};
 use crate::{
-    conflict, conn, deserialize_ext, deserialize_opt, extract, not_found, query, serialize,
-    unauthorized,
+    conflict, conn, deserialize, deserialize_ext, deserialize_opt, extract, not_found, query,
+    serialize, unauthorized,
 };
 
 /// Builds a user creation pipeline for Redis
@@ -362,24 +362,214 @@ pub async fn save_token(user: &User, old: &str, shared: &Shared) -> Result<(), A
     Ok(())
 }
 
-/// Gets a users token from Redis
+/// The different types of tokens a raw token value can match in Redis
+pub enum TokenMatch {
+    /// This token is a users primary token
+    Primary(String),
+    /// This token is a scoped token tied to a user
+    Scoped(ScopedToken),
+}
+
+/// Gets the user or scoped token tied to a token value from Redis
+///
+/// This checks the primary and scoped token maps in a single round trip.
 ///
 /// # Arguments
 ///
-/// * `token` - The token of the user to retrieve
+/// * `token` - The token value to look up
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::users::get_token", skip_all, err(Debug))]
-pub async fn get_token(token: &str, shared: &Shared) -> Result<User, ApiError> {
-    // build key to username/token map
-    let key = UserKeys::tokens(shared);
-    // get username for this token if it exists
-    let username: Option<String> = query!(cmd("hget").arg(&key).arg(token), shared).await?;
-    // if a username was found get it otherwise return unauthorized
-    match username {
-        // get this users data
-        Some(username) => get(&username, shared).await,
-        None => unauthorized!(),
+#[instrument(name = "db::users::get_token_match", skip_all, err(Debug))]
+pub async fn get_token_match(token: &str, shared: &Shared) -> Result<TokenMatch, ApiError> {
+    // build keys to the primary and scoped token maps
+    let primary_key = UserKeys::tokens(shared);
+    let scoped_key = UserKeys::scoped_tokens(shared);
+    // look for this token in both maps in a single round trip
+    let (primary, scoped): (Option<String>, Option<String>) = redis::pipe()
+        .cmd("hget")
+        .arg(&primary_key)
+        .arg(token)
+        .cmd("hget")
+        .arg(&scoped_key)
+        .arg(token)
+        .query_async(conn!(shared))
+        .await?;
+    // check if this token is a primary or scoped token
+    match (primary, scoped) {
+        // this token is a users primary token
+        (Some(username), _) => Ok(TokenMatch::Primary(username)),
+        // this token is a scoped token so get its data
+        (None, Some(entry)) => {
+            // deserialize the owner and name of this scoped token
+            let (owner, name): (String, String) = deserialize!(&entry);
+            // get this scoped tokens data
+            let scoped = get_scoped_token(&owner, &name, shared).await?;
+            Ok(TokenMatch::Scoped(scoped))
+        }
+        // this token doesn't exist so bounce this user
+        (None, None) => unauthorized!(),
     }
+}
+
+/// Creates a scoped token in Redis
+///
+/// # Arguments
+///
+/// * `token` - The scoped token to create
+/// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
+#[instrument(name = "db::users::create_scoped_token", skip_all, fields(user = token.owner, name = token.name), err(Debug))]
+pub async fn create_scoped_token(token: &ScopedToken, shared: &Shared) -> Result<(), ApiError> {
+    // build the keys to this users scoped token data and the scoped token map
+    let data_key = UserKeys::scoped_data(&token.owner, shared);
+    let map_key = UserKeys::scoped_tokens(shared);
+    // try to reserve this scoped tokens name for this user
+    let is_new: bool = redis::cmd("hsetnx").arg(&data_key).arg(&token.name).arg(serialize!(token))
+        .query_async(conn!(shared)).await?;
+    // if this name wasn't yet taken then proceed otherwise abort
+    if is_new {
+        // add this scoped token to the global scoped token map
+        match redis::cmd("hset").arg(&map_key).arg(&token.token)
+            .arg(serialize!(&(&token.owner, &token.name)))
+            .query_async::<()>(conn!(shared)).await
+        {
+            // we successfully created this scoped token
+            Ok(()) => Ok(()),
+            // we ran into a problem creating this scoped token
+            Err(error) => {
+                // log that we are rolling back reserving this scoped tokens name
+                event!(Level::INFO, msg = "Rollback scoped token reservation", name = &token.name);
+                // rollback reserving this scoped tokens name
+                // its likely this will fail since it probably means redis is down
+                redis::cmd("hdel").arg(&data_key).arg(&token.name)
+                    .query_async::<()>(conn!(shared)).await?;
+                // reemit our error
+                Err(error.into())
+            }
+        }
+    } else {
+        // this scoped token name is already taken so throw a conflict error
+        conflict!(format!("Scoped token {} already exists", token.name))
+    }
+}
+
+/// Gets a specific users scoped token from Redis
+///
+/// # Arguments
+///
+/// * `username` - The username of the user this scoped token is tied to
+/// * `name` - The name of the scoped token to get
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::users::get_scoped_token", skip(shared), err(Debug))]
+pub async fn get_scoped_token(
+    username: &str,
+    name: &str,
+    shared: &Shared,
+) -> Result<ScopedToken, ApiError> {
+    // build the key to this users scoped token data
+    let key = UserKeys::scoped_data(username, shared);
+    // get this scoped tokens data if it exists
+    let raw: Option<String> = query!(cmd("hget").arg(&key).arg(name), shared).await?;
+    // deserialize this scoped token if it exists
+    match raw {
+        Some(raw) => Ok(deserialize!(&raw)),
+        None => not_found!(format!("Scoped token {name} not found")),
+    }
+}
+
+/// Lists all of a users scoped tokens from Redis
+///
+/// # Arguments
+///
+/// * `username` - The username of the user to list scoped tokens for
+/// * `shared` - Shared Thorium objects
+#[instrument(name = "db::users::list_scoped_tokens", skip(shared), err(Debug))]
+pub async fn list_scoped_tokens(
+    username: &str,
+    shared: &Shared,
+) -> Result<Vec<ScopedToken>, ApiError> {
+    // build the key to this users scoped token data
+    let key = UserKeys::scoped_data(username, shared);
+    // get all of this users scoped tokens
+    let raw: HashMap<String, String> = query!(cmd("hgetall").arg(&key), shared).await?;
+    // deserialize each of this users scoped tokens
+    let mut tokens = Vec::with_capacity(raw.len());
+    for entry in raw.values() {
+        // deserialize this scoped token
+        tokens.push(deserialize!(entry));
+    }
+    Ok(tokens)
+}
+
+/// Saves a scoped tokens rotated value into Redis
+///
+/// # Arguments
+///
+/// * `token` - The scoped token to save
+/// * `old` - This scoped tokens old value
+/// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
+#[instrument(name = "db::users::save_scoped_token", skip_all, fields(user = token.owner, name = token.name), err(Debug))]
+pub async fn save_scoped_token(
+    token: &ScopedToken,
+    old: &str,
+    shared: &Shared,
+) -> Result<(), ApiError> {
+    // build the keys to this users scoped token data and the scoped token map
+    let data_key = UserKeys::scoped_data(&token.owner, shared);
+    let map_key = UserKeys::scoped_tokens(shared);
+    // build pipeline to save this scoped tokens new value
+    let _: () = redis::pipe().atomic()
+        // update this scoped tokens data
+        .cmd("hset").arg(&data_key).arg(&token.name).arg(serialize!(token))
+        // update the scoped token map
+        .cmd("hset").arg(&map_key).arg(&token.token)
+            .arg(serialize!(&(&token.owner, &token.name)))
+        .cmd("hdel").arg(&map_key).arg(old)
+        .query_async(conn!(shared)).await?;
+    Ok(())
+}
+
+/// Updates a scoped tokens data in Redis without changing its value
+///
+/// This must be used instead of [`save_scoped_token`] when a scoped tokens
+/// value is unchanged since that functions pipeline removes the old value
+/// from the scoped token map after adding the new one. With an unchanged
+/// value that would delete the entry that was just written and break auth
+/// for this scoped token.
+///
+/// # Arguments
+///
+/// * `token` - The scoped token to update
+/// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
+#[instrument(name = "db::users::update_scoped_token", skip_all, fields(user = token.owner, name = token.name), err(Debug))]
+pub async fn update_scoped_token(token: &ScopedToken, shared: &Shared) -> Result<(), ApiError> {
+    // build the key to this users scoped token data
+    let data_key = UserKeys::scoped_data(&token.owner, shared);
+    // update this scoped tokens data
+    let _: () = redis::cmd("hset").arg(&data_key).arg(&token.name).arg(serialize!(token))
+        .query_async(conn!(shared)).await?;
+    Ok(())
+}
+
+/// Deletes a scoped token from Redis
+///
+/// # Arguments
+///
+/// * `token` - The scoped token to delete
+/// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
+#[instrument(name = "db::users::delete_scoped_token", skip_all, fields(user = token.owner, name = token.name), err(Debug))]
+pub async fn delete_scoped_token(token: &ScopedToken, shared: &Shared) -> Result<(), ApiError> {
+    // build the keys to this users scoped token data and the scoped token map
+    let data_key = UserKeys::scoped_data(&token.owner, shared);
+    let map_key = UserKeys::scoped_tokens(shared);
+    // build pipeline to delete this scoped token
+    let _: () = redis::pipe().atomic()
+        .cmd("hdel").arg(&data_key).arg(&token.name)
+        .cmd("hdel").arg(&map_key).arg(&token.token)
+        .query_async(conn!(shared)).await?;
+    Ok(())
 }
 
 /// Gets the username associated with an email if it exists
@@ -528,12 +718,15 @@ pub async fn clear_verification_token(username: &str, shared: &Shared) -> Result
 ///
 /// # Arguments
 ///
+/// * `pipe` - The redis pipeline to add onto
 /// * `user` - The user to delete from redis
+/// * `scoped_tokens` - The scoped tokens to delete for this user
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
 pub fn build_delete(
     pipe: &mut redis::Pipeline,
     user: &User,
+    scoped_tokens: &[ScopedToken],
     shared: &Shared,
 ) {
     // remove this user from all of its groups and all possible roles
@@ -571,6 +764,14 @@ pub fn build_delete(
         // make sure this user is not in the analyst set
         pipe.cmd("srem").arg(analyst_key).arg(&user.username);
     }
+    // build the key to the global scoped token map
+    let scoped_map = UserKeys::scoped_tokens(shared);
+    // remove all of this users scoped tokens from the scoped token map
+    for scoped in scoped_tokens {
+        pipe.cmd("hdel").arg(&scoped_map).arg(&scoped.token);
+    }
+    // delete this users scoped token data
+    pipe.cmd("del").arg(UserKeys::scoped_data(&user.username, shared));
 }
 
 /// Delete a user from Redis
@@ -581,10 +782,12 @@ pub fn build_delete(
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::users::delete", skip_all, fields(user = user.username), err(Debug))]
 pub async fn delete(user: &User, shared: &Shared) -> Result<(), ApiError> {
-    // build pipeline to save a user into redis
+    // get this users scoped tokens so we can remove them from the scoped token map
+    let scoped_tokens = list_scoped_tokens(&user.username, shared).await?;
+    // build pipeline to delete this user from redis
     let mut pipe = redis::pipe();
-    build_delete(&mut pipe, user, shared);
-    // try to save user into redis
+    build_delete(&mut pipe, user, &scoped_tokens, shared);
+    // try to delete this user from redis
     let _: () = pipe.atomic().query_async(conn!(shared)).await?;
     Ok(())
 }

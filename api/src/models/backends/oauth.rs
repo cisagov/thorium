@@ -248,28 +248,10 @@ impl OAuthUserCreate {
             Url::parse_with_params(&base, &[("username", username), ("token", &link_token)])?;
         // build the subject for email verification email
         let subject = format!("Link Thorium account to new OAuth provider: {provider}");
-        // get the expiration of this link in a human readable format; humantime renders e.g. "1day",
-        // so insert a space between each value and its unit so it reads "1 day"
-        let raw = humantime::format_duration(std::time::Duration::from_secs(oauth.link_expire)).to_string();
-        // build a human time formatted string with spaces
-        let mut ttl = String::with_capacity(raw.len() + 1);
-        // keep track the character before our current one
-        let mut prev: Option<char> = None;
-        // step over each character and add spaces when needed
-        for chr in raw.chars() {
-            // we will never add a space on the first digit
-            if let Some(prev) = prev {
-                // check if our last character was a digit and the current one is not
-                if prev.is_ascii_digit() && chr.is_ascii_alphabetic() {
-                    // add a space to seperate the amount from the time visually
-                    ttl.push(' ');
-                }
-            }
-            // add the next character
-            ttl.push(chr);
-            // keep track of our previous char
-            prev = Some(chr);
-        }
+        // get the expiration of this link in a human readable format
+        let ttl = crate::utils::helpers::human_duration(std::time::Duration::from_secs(
+            oauth.link_expire,
+        ));
         // build a body with our verification email
         let body = format!(
             "If you would like to link your Thorium account to the {provider} OAuth provider then click on the following link in the next {ttl}:\n\n{link}"

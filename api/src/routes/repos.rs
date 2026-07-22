@@ -27,6 +27,7 @@ use utoipa::OpenApi;
 */
 
 use super::OpenApiSecurity;
+use crate::models::AuthedUser;
 use crate::models::backends::TagSupport;
 use crate::models::{
     ApiCursor, Branch, BranchDetails, BranchRequest, Commit, CommitDetails, CommitRequest,
@@ -34,7 +35,7 @@ use crate::models::{
     CommitishRequest, GitTag, GitTagDetails, GitTagRequest, Output, OutputFormBuilder, OutputKind,
     OutputMap, OutputResponse, Repo, RepoCheckout, RepoCreateResponse, RepoDataUploadResponse,
     RepoDownloadOpts, RepoListLine, RepoListParams, RepoRequest, RepoScheme, RepoSubmissionChunk,
-    ResultFileDownloadParams, ResultGetParams, TagDeleteRequest, TagRequest, User,
+    ResultFileDownloadParams, ResultGetParams, TagDeleteRequest, TagRequest,
 };
 use crate::utils::{ApiError, AppState, bounder};
 
@@ -61,7 +62,7 @@ use crate::utils::{ApiError, AppState, bounder};
 )]
 #[instrument(name = "routes::repos::create", skip_all, err(Debug))]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(req): Json<RepoRequest>,
 ) -> Result<Json<RepoCreateResponse>, ApiError> {
@@ -94,7 +95,7 @@ async fn create(
 // )]
 #[instrument(name = "routes::repos::get_repo", skip_all, err(Debug))]
 async fn get_repo(
-    user: User,
+    user: AuthedUser,
     Path(repo): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Repo>, ApiError> {
@@ -127,7 +128,7 @@ async fn get_repo(
 // )]
 #[instrument(name = "routes::repos::upload", skip_all, err(Debug))]
 async fn upload(
-    user: User,
+    user: AuthedUser,
     Path(repo_path): Path<String>,
     State(state): State<AppState>,
     multipart: Multipart,
@@ -164,7 +165,7 @@ async fn upload(
 // )]
 #[instrument(name = "routes::repos::update_commitishes", skip_all, err(Debug))]
 async fn update_commitishes(
-    user: User,
+    user: AuthedUser,
     Path((data, repo_path)): Path<(String, String)>,
     State(state): State<AppState>,
     Json(req): Json<CommitishMapRequest>,
@@ -203,7 +204,7 @@ async fn update_commitishes(
 // )]
 #[instrument(name = "routes::repos::tag", skip_all, err(Debug))]
 async fn tag(
-    user: User,
+    user: AuthedUser,
     Path(repo_path): Path<String>,
     State(state): State<AppState>,
     Json(tags): Json<TagRequest<Repo>>,
@@ -243,7 +244,7 @@ async fn tag(
 // )]
 #[instrument(name = "routes::repos::delete_tags", skip_all, err(Debug))]
 async fn delete_tags(
-    user: User,
+    user: AuthedUser,
     Path(repo_path): Path<String>,
     State(state): State<AppState>,
     Json(tags_del): Json<TagDeleteRequest<Repo>>,
@@ -282,7 +283,7 @@ async fn delete_tags(
 // )]
 #[instrument(name = "routes::repos::commitshes", skip_all, err(Debug))]
 async fn commitishes(
-    user: User,
+    user: AuthedUser,
     params: CommitishListParams,
     Path(path): Path<Vec<String>>,
     State(state): State<AppState>,
@@ -325,7 +326,7 @@ async fn commitishes(
 // )]
 #[instrument(name = "routes::repos::commitsh_details", skip_all, err(Debug))]
 async fn commitish_details(
-    user: User,
+    user: AuthedUser,
     params: CommitishListParams,
     Path(repo_path): Path<String>,
     State(state): State<AppState>,
@@ -364,7 +365,7 @@ async fn commitish_details(
 // )]
 #[instrument(name = "routes::repos::download", skip_all, err(Debug))]
 async fn download(
-    user: User,
+    user: AuthedUser,
     Path(repo_path): Path<String>,
     params: RepoDownloadOpts,
     State(state): State<AppState>,
@@ -404,7 +405,7 @@ async fn download(
 #[axum_macros::debug_handler]
 #[instrument(name = "routes::repos::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     params: RepoListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<RepoListLine>>, ApiError> {
@@ -436,7 +437,7 @@ async fn list(
 )]
 #[instrument(name = "routes::repos::list_details", skip_all, err(Debug))]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     params: RepoListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<Repo>>, ApiError> {
@@ -473,7 +474,7 @@ async fn list_details(
 // )]
 #[instrument(name = "routes::repos::upload_results", skip_all, err(Debug))]
 async fn upload_results(
-    user: User,
+    user: AuthedUser,
     Path(repo_path): Path<String>,
     State(state): State<AppState>,
     upload: Multipart,
@@ -515,7 +516,7 @@ async fn upload_results(
 // )]
 #[instrument(name = "routes::repos::get_results", skip_all, err(Debug))]
 async fn get_results(
-    user: User,
+    user: AuthedUser,
     Path(repo_path): Path<String>,
     params: ResultGetParams,
     State(state): State<AppState>,
@@ -554,7 +555,7 @@ async fn get_results(
 // )]
 #[instrument(name = "routes::repos::download_result_file", skip_all, err(Debug))]
 async fn download_result_file(
-    user: User,
+    user: AuthedUser,
     Path(path_params): Path<String>,
     params: ResultFileDownloadParams,
     State(state): State<AppState>,

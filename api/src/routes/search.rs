@@ -7,10 +7,11 @@ use tracing::instrument;
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
+use crate::models::AuthedUser;
 use crate::models::ElasticSearchParams;
 use crate::models::backends;
 use crate::models::elastic::ElasticIndex;
-use crate::models::{ApiCursor, ElasticDoc, User};
+use crate::models::{ApiCursor, ElasticDoc};
 use crate::utils::{ApiError, AppState};
 
 pub mod events;
@@ -38,7 +39,7 @@ pub mod events;
 )]
 #[instrument(name = "routes::search::search", skip_all, err(Debug))]
 async fn search(
-    user: User,
+    user: AuthedUser,
     params: ElasticSearchParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<ElasticDoc>>, ApiError> {

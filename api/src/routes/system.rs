@@ -6,6 +6,7 @@ use tracing::{Level, instrument, span};
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
+use crate::models::AuthedUser;
 use crate::models::images::{GenericBan, InvalidHostPathBan, InvalidUrlBan};
 use crate::models::pipelines::BannedImageBan;
 use crate::models::{
@@ -45,7 +46,7 @@ use crate::utils::{ApiError, AppState};
     )
 )]
 #[instrument(name = "routes::system::init", skip_all, err(Debug))]
-async fn init(user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn init(user: AuthedUser, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
     // init our system info
     SystemInfo::init(&user, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -76,7 +77,7 @@ async fn init(user: User, State(state): State<AppState>) -> Result<StatusCode, A
 )]
 #[instrument(name = "routes::system::info", skip_all, err(Debug))]
 async fn info(
-    user: User,
+    user: AuthedUser,
     Query(params): Query<SystemInfoParams>,
     State(state): State<AppState>,
 ) -> Result<Json<SystemInfo>, ApiError> {
@@ -104,7 +105,10 @@ async fn info(
     )
 )]
 #[instrument(name = "routes::system::stats", skip_all, err(Debug))]
-async fn stats(user: User, State(state): State<AppState>) -> Result<Json<SystemStats>, ApiError> {
+async fn stats(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<Json<SystemStats>, ApiError> {
     // start our get system stats route span
     let system_stats = SystemStats::get(&user, &state.shared).await?;
     Ok(Json(system_stats))
@@ -130,7 +134,7 @@ async fn stats(user: User, State(state): State<AppState>) -> Result<Json<SystemS
 )]
 #[instrument(name = "routes::system::settings", skip_all, err(Debug))]
 async fn settings(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
 ) -> Result<Json<SystemSettings>, ApiError> {
     // get system settings
@@ -161,7 +165,7 @@ async fn settings(
 )]
 #[instrument(name = "routes::system::settings_reset", skip_all, err(Debug))]
 async fn settings_reset(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Query(params): Query<SystemSettingsResetParams>,
 ) -> Result<StatusCode, ApiError> {
@@ -216,7 +220,7 @@ async fn settings_reset(
 )]
 #[instrument(name = "routes::system::settings_update", skip_all, err(Debug))]
 async fn settings_update(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Query(params): Query<SystemSettingsUpdateParams>,
     Json(update): Json<SystemSettingsUpdate>,
@@ -289,7 +293,7 @@ async fn settings_update(
 )]
 #[instrument(name = "routes::system::consistency_scan", skip_all, err(Debug))]
 async fn consistency_scan(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
     // get the current system settings
@@ -330,7 +334,7 @@ async fn consistency_scan(
     )
 )]
 #[instrument(name = "routes::system::cleanup", skip_all, err(Debug))]
-async fn cleanup(user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn cleanup(user: AuthedUser, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
     // clean up any expired reactions from status lists
     Reaction::expire_lists(&user, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -357,7 +361,10 @@ async fn cleanup(user: User, State(state): State<AppState>) -> Result<StatusCode
     )
 )]
 #[instrument(name = "routes::system::reset_cache", skip_all, err(Debug))]
-async fn reset_cache(user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn reset_cache(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
     // Set the scaler cache to be invalid
     SystemInfo::reset_cache(&user, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -384,7 +391,7 @@ async fn reset_cache(user: User, State(state): State<AppState>) -> Result<Status
     )
 )]
 #[instrument(name = "routes::system::backup", skip_all, err(Debug))]
-async fn backup(user: User, State(state): State<AppState>) -> Result<Json<Backup>, ApiError> {
+async fn backup(user: AuthedUser, State(state): State<AppState>) -> Result<Json<Backup>, ApiError> {
     // build a backup object
     let backup = Backup::new(&user, &state.shared).await?;
     Ok(Json(backup))
@@ -416,7 +423,7 @@ async fn backup(user: User, State(state): State<AppState>) -> Result<Json<Backup
 )]
 #[instrument(name = "routes::system::restore", skip_all, err(Debug))]
 async fn restore(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(backup): Json<Backup>,
 ) -> Result<StatusCode, ApiError> {
@@ -449,7 +456,7 @@ async fn restore(
 )]
 #[instrument(name = "routes::system::get_register", skip_all, err(Debug))]
 async fn register_node(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(registration): Json<NodeRegistration>,
 ) -> Result<StatusCode, ApiError> {
@@ -485,7 +492,7 @@ async fn register_node(
 )]
 #[instrument(name = "routes::system::get_node", skip_all, err(Debug))]
 async fn get_node(
-    user: User,
+    user: AuthedUser,
     params: NodeGetParams,
     Path((cluster, node)): Path<(String, String)>,
     State(state): State<AppState>,
@@ -522,7 +529,7 @@ async fn get_node(
 )]
 #[instrument(name = "routes::system::update_node", skip_all, err(Debug))]
 async fn update_node(
-    user: User,
+    user: AuthedUser,
     Path((cluster, node)): Path<(String, String)>,
     State(state): State<AppState>,
     Json(update): Json<NodeUpdate>,
@@ -560,7 +567,7 @@ async fn update_node(
 )]
 #[instrument(name = "routes::system::list_nodes", skip_all, err(Debug))]
 async fn list_nodes(
-    user: User,
+    user: AuthedUser,
     params: NodeListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<NodeListLine>>, ApiError> {
@@ -593,7 +600,7 @@ async fn list_nodes(
 )]
 #[instrument(name = "routes::system::list_node_details", skip_all, err(Debug))]
 async fn list_node_details(
-    user: User,
+    user: AuthedUser,
     params: NodeListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<Node>>, ApiError> {
@@ -627,7 +634,7 @@ async fn list_node_details(
 )]
 #[instrument(name = "routes::system::register_worker", skip_all, err(Debug))]
 async fn register_worker(
-    user: User,
+    user: AuthedUser,
     Path(scaler): Path<ImageScaler>,
     State(state): State<AppState>,
     Json(workers): Json<WorkerRegistrationList>,
@@ -663,7 +670,7 @@ async fn register_worker(
 )]
 #[instrument(name = "routes::system::get_worker", skip_all, err(Debug))]
 async fn get_worker(
-    user: User,
+    user: AuthedUser,
     Path(name): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Worker>, ApiError> {
@@ -698,7 +705,7 @@ async fn get_worker(
 )]
 #[instrument(name = "routes::system::update_worker", skip_all, err(Debug))]
 async fn update_worker(
-    user: User,
+    user: AuthedUser,
     Path(name): Path<String>,
     State(state): State<AppState>,
     Json(update): Json<WorkerUpdate>,
@@ -735,7 +742,7 @@ async fn update_worker(
 )]
 #[instrument(name = "routes::system::delete_workers", skip_all, err(Debug))]
 async fn delete_workers(
-    user: User,
+    user: AuthedUser,
     Path(scaler): Path<ImageScaler>,
     State(state): State<AppState>,
     Json(deletes): Json<WorkerDeleteMap>,

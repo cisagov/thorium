@@ -7,8 +7,9 @@ use axum::{Json, extract::State};
 use tracing::instrument;
 use utoipa::OpenApi;
 
+use crate::models::AuthedUser;
 use crate::models::{
-    SearchEvent, SearchEventBackend, SearchEventPopOpts, SearchEventStatus, TagSearchEvent, User,
+    SearchEvent, SearchEventBackend, SearchEventPopOpts, SearchEventStatus, TagSearchEvent,
 };
 use crate::routes::docs::OpenApiSecurity;
 use crate::utils::{ApiError, AppState};
@@ -36,7 +37,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::search::events::tags::pop", skip_all, err(Debug))]
 async fn pop(
-    user: User,
+    user: AuthedUser,
     params: SearchEventPopOpts,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<TagSearchEvent>>, ApiError> {
@@ -67,7 +68,7 @@ async fn pop(
 )]
 #[instrument(name = "routes::search::events::tags::status", skip_all, err(Debug))]
 async fn status(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(status): Json<SearchEventStatus>,
 ) -> Result<StatusCode, ApiError> {
@@ -98,7 +99,10 @@ async fn status(
     )
 )]
 #[instrument(name = "routes::search::events::tags::reset_all", skip_all, err(Debug))]
-async fn reset_all(user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn reset_all(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
     // reset all in-flight search events
     TagSearchEvent::reset_all(&user, &state.shared).await?;
     Ok(StatusCode::NO_CONTENT)

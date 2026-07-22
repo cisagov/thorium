@@ -11,6 +11,7 @@ use utoipa::OpenApi;
 use uuid::Uuid;
 
 use super::OpenApiSecurity;
+use crate::models::AuthedUser;
 use crate::models::backends::{CommentSupport, TagSupport};
 use crate::models::{
     ApiCursor, Association, AssociationListParams, AssociationTargetColumn, CarvedOrigin, Comment,
@@ -19,7 +20,7 @@ use crate::models::{
     OutputFormBuilder, OutputHandler, OutputKind, OutputMap, OutputResponse, PcapNetworkProtocol,
     ResultFileDownloadParams, ResultGetParams, Sample, SampleCheck, SampleCheckResponse,
     SampleListLine, SampleSubmissionResponse, SubmissionChunk, SubmissionUpdate, TagCounts,
-    TagDeleteRequest, TagRequest, User, ZipDownloadParams,
+    TagDeleteRequest, TagRequest, ZipDownloadParams,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -63,7 +64,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::files::upload", skip_all, err(Debug))]
 async fn upload(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     multipart: Multipart,
 ) -> Result<Json<SampleSubmissionResponse>, ApiError> {
@@ -95,7 +96,7 @@ async fn upload(
 )]
 #[instrument(name = "routes::files::get_sample", skip_all, err(Debug))]
 async fn get_sample(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Sample>, ApiError> {
@@ -127,7 +128,7 @@ async fn get_sample(
 )]
 #[instrument(name = "routes::files::exists", skip_all, err(Debug))]
 async fn exists(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(check): Json<SampleCheck>,
 ) -> Result<Json<SampleCheckResponse>, ApiError> {
@@ -159,7 +160,7 @@ async fn exists(
 )]
 #[instrument(name = "routes::files::download", skip_all, err(Debug))]
 async fn download(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -194,7 +195,7 @@ async fn download(
 )]
 #[instrument(name = "routes::files::download_as_zip", skip_all, err(Debug))]
 async fn download_as_zip(
-    user: User,
+    user: AuthedUser,
     params: ZipDownloadParams,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
@@ -228,7 +229,7 @@ async fn download_as_zip(
 )]
 #[instrument(name = "routes::files::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
     Json(update): Json<SubmissionUpdate>,
@@ -266,7 +267,7 @@ async fn update(
 )]
 #[instrument(name = "routes::files::delete_sample", skip_all, err(Debug))]
 async fn delete_sample(
-    user: User,
+    user: AuthedUser,
     params: DeleteSampleParams,
     Path((sha256, submission)): Path<(String, Uuid)>,
     State(state): State<AppState>,
@@ -305,7 +306,7 @@ async fn delete_sample(
 )]
 #[instrument(name = "routes::files::tag", skip_all, err(Debug))]
 async fn tag(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
     Json(tags): Json<TagRequest<Sample>>,
@@ -342,7 +343,7 @@ async fn tag(
 )]
 #[instrument(name = "routes::files::delete_tags", skip_all, err(Debug))]
 async fn delete_tags(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
     Json(tags_del): Json<TagDeleteRequest<Sample>>,
@@ -378,7 +379,7 @@ async fn delete_tags(
 )]
 #[instrument(name = "routes::files::create_comment", skip_all, err(Debug))]
 async fn create_comment(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
     multipart: Multipart,
@@ -419,7 +420,7 @@ async fn create_comment(
 )]
 #[instrument(name = "routes::files::delete_comment", skip_all, err(Debug))]
 async fn delete_comment(
-    user: User,
+    user: AuthedUser,
     params: DeleteCommentParams,
     Path((sha256, id)): Path<(String, Uuid)>,
     State(state): State<AppState>,
@@ -460,7 +461,7 @@ async fn delete_comment(
 )]
 #[instrument(name = "routes::files::download_attachment", skip_all, err(Debug))]
 async fn download_attachment(
-    user: User,
+    user: AuthedUser,
     Path((sha256, comment, attachment)): Path<(String, Uuid, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -498,7 +499,7 @@ async fn download_attachment(
 )]
 #[instrument(name = "routes::files::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     params: FileListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<SampleListLine>>, ApiError> {
@@ -531,7 +532,7 @@ async fn list(
 #[instrument(name = "routes::files::list_details", skip_all, err(Debug))]
 #[axum_macros::debug_handler]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     params: FileListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<Sample>>, ApiError> {
@@ -566,7 +567,7 @@ async fn list_details(
 )]
 #[instrument(name = "routes::files::list_associations", skip_all, err(Debug))]
 async fn list_associations(
-    user: User,
+    user: AuthedUser,
     params: AssociationListParams,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
@@ -603,7 +604,7 @@ async fn list_associations(
 )]
 #[instrument(name = "routes::files::count", skip_all, err(Debug))]
 async fn count(
-    user: User,
+    user: AuthedUser,
     params: FileListParams,
     State(state): State<AppState>,
 ) -> Result<Json<TagCounts>, ApiError> {
@@ -636,7 +637,7 @@ async fn count(
 )]
 #[instrument(name = "routes::files::upload_results", skip_all, err(Debug))]
 async fn upload_results(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     State(state): State<AppState>,
     upload: Multipart,
@@ -677,7 +678,7 @@ async fn upload_results(
 )]
 #[instrument(name = "routes::files::get_results", skip_all, err(Debug))]
 async fn get_results(
-    user: User,
+    user: AuthedUser,
     Path(sha256): Path<String>,
     params: ResultGetParams,
     State(state): State<AppState>,
@@ -714,7 +715,7 @@ async fn get_results(
 )]
 #[instrument(name = "routes::files::download_result_file", skip_all, err(Debug))]
 async fn download_result_file(
-    user: User,
+    user: AuthedUser,
     Path((sha256, tool, result_id)): Path<(String, String, Uuid)>,
     params: ResultFileDownloadParams,
     State(state): State<AppState>,
@@ -755,7 +756,7 @@ async fn download_result_file(
  )]
 #[instrument(name = "routes::files::download_result_entities", skip_all, err(Debug))]
 async fn download_result_entities(
-    user: User,
+    user: AuthedUser,
     Path((sha256, tool, result_id, entity_kind)): Path<(String, String, Uuid, EntityKinds)>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {

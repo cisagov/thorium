@@ -20,6 +20,7 @@ use self::{
     results::Results,
     run::Run,
     tags::Tags,
+    tokens::{ActivateScopedToken, Tokens},
     trees::Trees,
     uncart::Uncart,
 };
@@ -40,6 +41,7 @@ pub mod repos;
 pub mod results;
 pub mod run;
 pub mod tags;
+pub mod tokens;
 pub mod toolbox;
 mod traits;
 pub mod trees;
@@ -126,6 +128,15 @@ pub enum SubCommands {
     /// Perform result related tasks
     #[clap(version, author, subcommand)]
     Results(Results),
+    /// Perform scoped token related tasks
+    #[clap(version, author, subcommand)]
+    Tokens(Tokens),
+    /// Activate a scoped token making Thorctl authenticate with it
+    #[clap(version, author)]
+    Activate(ActivateScopedToken),
+    /// Deactivate the currently activated scoped token
+    #[clap(version, author)]
+    Deactivate,
     /// Perform tag related tasks
     #[clap(version, author, subcommand)]
     Tags(Tags),

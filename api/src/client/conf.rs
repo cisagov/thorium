@@ -161,6 +161,15 @@ impl std::fmt::Display for ContainerRuntime {
     }
 }
 
+/// An activated scoped token for Thorctl to authenticate with
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ActiveScopedToken {
+    /// The name of the activated scoped token
+    pub name: String,
+    /// The value of the activated scoped token
+    pub token: String,
+}
+
 /// A config for running Thorctl in user mode
 ///
 /// This will not give the user the ability to deploy clusters/agents
@@ -188,6 +197,13 @@ pub struct CtlConf {
     pub container_runtime: Option<ContainerRuntime>,
     /// The settings to use when using AI
     pub ai: Option<AISettings>,
+    /// The currently activated scoped token if one is active
+    ///
+    /// When set Thorctl will authenticate with this scoped token instead of
+    /// the users primary credentials for all commands except scoped token
+    /// management.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scoped_token: Option<ActiveScopedToken>,
 }
 
 impl CtlConf {
@@ -207,6 +223,7 @@ impl CtlConf {
             default_editor: default_default_editor(),
             container_runtime: None,
             ai: None,
+            scoped_token: None,
         }
     }
 

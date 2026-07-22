@@ -9,10 +9,11 @@ use utoipa::OpenApi;
 use super::OpenApiSecurity;
 // our imports
 use crate::is_admin;
+use crate::models::AuthedUser;
 use crate::models::{
     Group, GroupAllowAction, GroupAllowed, GroupAllowedUpdate, GroupDetailsList, GroupList,
     GroupListParams, GroupMap, GroupRequest, GroupStats, GroupUpdate, GroupUsers,
-    GroupUsersRequest, GroupUsersUpdate, PipelineStats, Roles, StageStats, User,
+    GroupUsersRequest, GroupUsersUpdate, PipelineStats, Roles, StageStats,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -39,7 +40,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::groups::create", skip_all, err(Debug))]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(group): Json<GroupRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -71,7 +72,7 @@ async fn create(
 )]
 #[instrument(name = "routes::groups::get_group", skip_all, err(Debug))]
 async fn get_group(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Group>, ApiError> {
@@ -104,7 +105,7 @@ async fn get_group(
 )]
 #[instrument(name = "routes::groups::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     Query(params): Query<GroupListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<GroupList>, ApiError> {
@@ -137,7 +138,7 @@ async fn list(
 )]
 #[instrument(name = "routes::groups::list_details", skip_all, err(Debug))]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     Query(params): Query<GroupListParams>,
     State(state): State<AppState>,
 ) -> Result<Json<GroupDetailsList>, ApiError> {
@@ -171,7 +172,7 @@ async fn list_details(
 )]
 #[instrument(name = "routes::groups::update", skip(user, state, update), err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     State(state): State<AppState>,
     Json(update): Json<GroupUpdate>,
@@ -206,7 +207,7 @@ async fn update(
 )]
 #[instrument(name = "routes::groups::delete_group", skip(user, state), err(Debug))]
 async fn delete_group(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
@@ -236,7 +237,10 @@ async fn delete_group(
     )
 )]
 #[instrument(name = "routes::groups::sync_ldap", skip(user, state), err(Debug))]
-async fn sync_ldap(user: User, State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+async fn sync_ldap(
+    user: AuthedUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
     // make sure we are an admin
     is_admin!(user);
     // sync all groups with ldap
@@ -268,7 +272,7 @@ async fn sync_ldap(user: User, State(state): State<AppState>) -> Result<StatusCo
 )]
 #[instrument(name = "routes::groups::get_stats", skip_all, err(Debug))]
 async fn get_stats(
-    user: User,
+    user: AuthedUser,
     Query(params): Query<GroupListParams>,
     Path(group): Path<String>,
     State(state): State<AppState>,

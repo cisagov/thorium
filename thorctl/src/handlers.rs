@@ -19,6 +19,7 @@ pub mod repos;
 pub mod results;
 pub mod run;
 pub mod tags;
+pub mod tokens;
 pub mod toolbox;
 pub mod trees;
 pub mod uncart;

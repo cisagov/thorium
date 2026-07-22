@@ -10,10 +10,11 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use super::shared::graphics;
+use crate::models::AuthedUser;
 use crate::models::backends::{GraphicSupport, TagSupport};
 use crate::models::{
     ApiCursor, Entity, EntityListLine, EntityListParams, EntityResponse, TagDeleteRequest,
-    TagRequest, User,
+    TagRequest,
 };
 use crate::not_found;
 use crate::utils::{ApiError, AppState};
@@ -40,7 +41,7 @@ use crate::utils::{ApiError, AppState};
 #[instrument(name = "routes::entities::create", skip_all, err(Debug))]
 #[axum_macros::debug_handler]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     form: Multipart,
 ) -> Result<Json<EntityResponse>, ApiError> {
@@ -73,7 +74,7 @@ async fn create(
 )]
 #[instrument(name = "routes::entities::get", skip_all, err(Debug))]
 async fn get(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Entity>, ApiError> {
@@ -106,7 +107,7 @@ async fn get(
 //)]
 #[instrument(name = "routes::entities::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     params: EntityListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<EntityListLine>>, ApiError> {
@@ -139,7 +140,7 @@ async fn list(
 )]
 #[instrument(name = "routes::entities::list_details", skip_all, err(Debug))]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     params: EntityListParams,
     State(state): State<AppState>,
 ) -> Result<Json<ApiCursor<Entity>>, ApiError> {
@@ -175,7 +176,7 @@ async fn list_details(
 )]
 #[instrument(name = "routes::entities::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     form: Multipart,
@@ -211,7 +212,7 @@ async fn update(
 )]
 #[instrument(name = "routes::entities::delete", skip_all, err(Debug))]
 async fn delete(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
@@ -247,7 +248,7 @@ async fn delete(
 )]
 #[instrument(name = "routes::entities::tag", skip_all, err(Debug))]
 async fn tag(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(tags): Json<TagRequest<Entity>>,
@@ -284,7 +285,7 @@ async fn tag(
 )]
 #[instrument(name = "routes::files::delete_tags", skip_all, err(Debug))]
 async fn delete_tags(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
     Json(tags_del): Json<TagDeleteRequest<Entity>>,
@@ -325,7 +326,7 @@ async fn delete_tags(
 )]
 #[axum_macros::debug_handler]
 async fn get_image(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {

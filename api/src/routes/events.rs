@@ -7,8 +7,9 @@ use tracing::instrument;
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
+use crate::models::AuthedUser;
 use crate::models::{
-    Event, EventCacheStatus, EventCacheStatusOpts, EventIds, EventPopOpts, EventType, User,
+    Event, EventCacheStatus, EventCacheStatusOpts, EventIds, EventPopOpts, EventType,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -37,7 +38,7 @@ use crate::utils::{ApiError, AppState};
     )
 )]
 async fn pop(
-    user: User,
+    user: AuthedUser,
     Path(kind): Path<EventType>,
     params: EventPopOpts,
     State(state): State<AppState>,
@@ -73,7 +74,7 @@ async fn pop(
     )
 )]
 async fn clear(
-    user: User,
+    user: AuthedUser,
     Path(kind): Path<EventType>,
     State(state): State<AppState>,
     Json(id_list): Json<EventIds>,
@@ -107,7 +108,7 @@ async fn clear(
     )
 )]
 async fn reset_all(
-    user: User,
+    user: AuthedUser,
     Path(kind): Path<EventType>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
@@ -135,7 +136,7 @@ async fn reset_all(
 )]
 #[instrument(name = "routes::events::get_cache_status", skip_all, err(Debug))]
 async fn get_cache_status(
-    user: User,
+    user: AuthedUser,
     Query(params): Query<EventCacheStatusOpts>,
     State(state): State<AppState>,
 ) -> Result<Json<EventCacheStatus>, ApiError> {

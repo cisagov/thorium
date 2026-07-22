@@ -22,6 +22,7 @@ serde_json = { workspace = true }
 serde_norway = { workspace = true }
 colored = "3"
 owo-colors = "4"
+tabled = "0.21"
 http = "1.3"
 uuid = { version = "1", features = ["serde", "v4"] }
 toml = "0.8"

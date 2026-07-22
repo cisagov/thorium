@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::OpenApiSecurity;
 // our imports
+use crate::models::AuthedUser;
 use crate::models::images::{GenericBan, InvalidHostPathBan, InvalidUrlBan};
 use crate::models::{
     ArgStrategy, AutoTag, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate,
@@ -25,7 +26,7 @@ use crate::models::{
     Resources, ResourcesRequest, ResourcesUpdate, ResultDependencySettings,
     ResultDependencySettingsUpdate, SampleDependencySettings, SampleDependencySettingsUpdate,
     Secret, SecurityContext, SecurityContextUpdate, SpawnLimits, TagDependencySettings,
-    TagDependencySettingsUpdate, User, Volume, VolumeTypes,
+    TagDependencySettingsUpdate, Volume, VolumeTypes,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -52,7 +53,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::images::create", skip_all, err(Debug))]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(image_request): Json<ImageRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -86,7 +87,7 @@ async fn create(
 )]
 #[instrument(name = "routes::images::get_image", skip_all, err(Debug))]
 async fn get_image(
-    user: User,
+    user: AuthedUser,
     Path((group, image)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Json<Image>, ApiError> {
@@ -120,7 +121,7 @@ async fn get_image(
 )]
 #[instrument(name = "routes::images::list", skip_all, err(Debug))]
 async fn list(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     params: ImageListParams,
     State(state): State<AppState>,
@@ -158,7 +159,7 @@ async fn list(
 #[axum_macros::debug_handler]
 #[instrument(name = "routes::images::list_details", skip_all, err(Debug))]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     params: ImageListParams,
     State(state): State<AppState>,
@@ -199,7 +200,7 @@ async fn list_details(
 )]
 #[instrument(name = "routes::images::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     Path((group, image)): Path<(String, String)>,
     State(state): State<AppState>,
     Json(update): Json<ImageUpdate>,
@@ -238,7 +239,7 @@ async fn update(
 )]
 #[instrument(name = "routes::images::delete_image", skip_all, err(Debug))]
 async fn delete_image(
-    user: User,
+    user: AuthedUser,
     Path((group, image)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
@@ -269,7 +270,7 @@ async fn delete_image(
 )]
 #[instrument(name = "routes::images::runtimes_update", skip_all, err(Debug))]
 async fn runtimes_update(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
     // crawl groups and calculate and update their images average runtimes
@@ -306,7 +307,7 @@ async fn runtimes_update(
 )]
 #[instrument(name = "routes::images::create_notification", skip_all, err(Debug))]
 async fn create_notification(
-    user: User,
+    user: AuthedUser,
     Path((group, image)): Path<(String, String)>,
     State(state): State<AppState>,
     params: NotificationParams,
@@ -347,7 +348,7 @@ async fn create_notification(
 )]
 #[instrument(name = "routes::images::get_notifications", skip_all, err(Debug))]
 async fn get_notifications(
-    user: User,
+    user: AuthedUser,
     Path((group, image)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<Notification<Image>>>, ApiError> {
@@ -386,7 +387,7 @@ async fn get_notifications(
 )]
 #[instrument(name = "routes::images::delete_notification", skip_all, err(Debug))]
 async fn delete_notification(
-    user: User,
+    user: AuthedUser,
     Path((group, image, id)): Path<(String, String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {

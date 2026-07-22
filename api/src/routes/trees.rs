@@ -6,7 +6,8 @@ use axum::routing::{get, post};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::models::{Tree, TreeGrowQuery, TreeParams, TreeQuery, User};
+use crate::models::AuthedUser;
+use crate::models::{Tree, TreeGrowQuery, TreeParams, TreeQuery};
 use crate::utils::{ApiError, AppState};
 
 /// Start building a tree of data in Thorium from some starting points
@@ -34,7 +35,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::trees::start_tree", skip_all, err(Debug))]
 async fn start_tree(
-    user: User,
+    user: AuthedUser,
     params: TreeParams,
     State(state): State<AppState>,
     Json(query): Json<TreeQuery>,
@@ -78,7 +79,7 @@ async fn start_tree(
 )]
 #[instrument(name = "routes::trees::grow_tree", skip_all, err(Debug))]
 async fn grow_tree(
-    user: User,
+    user: AuthedUser,
     params: TreeParams,
     Path(cursor): Path<Uuid>,
     State(state): State<AppState>,
@@ -124,7 +125,7 @@ async fn grow_tree(
 )]
 #[instrument(name = "routes::trees::get", skip_all, err(Debug))]
 async fn get_tree(
-    user: User,
+    user: AuthedUser,
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> Result<Json<Tree>, ApiError> {

@@ -10,11 +10,12 @@ use crate::is_admin;
 use utoipa::OpenApi;
 
 use super::OpenApiSecurity;
+use crate::models::AuthedUser;
 use crate::models::pipelines::{BannedImageBan, GenericBan};
 use crate::models::{
     EventTrigger, Group, Notification, NotificationParams, NotificationRequest, Pipeline,
     PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineDetailsList, PipelineKey,
-    PipelineList, PipelineListParams, PipelineRequest, PipelineUpdate, TagType, User,
+    PipelineList, PipelineListParams, PipelineRequest, PipelineUpdate, TagType,
 };
 use crate::utils::{ApiError, AppState};
 
@@ -41,7 +42,7 @@ use crate::utils::{ApiError, AppState};
 )]
 #[instrument(name = "routes::pipelines::create", skip_all, err(Debug))]
 async fn create(
-    user: User,
+    user: AuthedUser,
     State(state): State<AppState>,
     Json(request): Json<PipelineRequest>,
 ) -> Result<StatusCode, ApiError> {
@@ -75,7 +76,7 @@ async fn create(
 )]
 #[instrument(name = "routes::pipelines::get", skip_all, err(Debug))]
 async fn get_pipeline(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Json<Pipeline>, ApiError> {
@@ -112,7 +113,7 @@ async fn get_pipeline(
     err(Debug)
 )]
 async fn list(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     Query(params): Query<PipelineListParams>,
     State(state): State<AppState>,
@@ -152,7 +153,7 @@ async fn list(
     err(Debug)
 )]
 async fn list_details(
-    user: User,
+    user: AuthedUser,
     Path(group): Path<String>,
     Query(params): Query<PipelineListParams>,
     State(state): State<AppState>,
@@ -193,7 +194,7 @@ async fn list_details(
 )]
 #[instrument(name = "routes::pipelines::update", skip_all, err(Debug))]
 async fn update(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     State(state): State<AppState>,
     Json(update): Json<PipelineUpdate>,
@@ -238,7 +239,7 @@ async fn update(
     err(Debug)
 )]
 async fn delete_pipeline(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
@@ -277,7 +278,7 @@ async fn delete_pipeline(
 )]
 #[instrument(name = "routes::pipelines::create_notification", skip_all, err(Debug))]
 async fn create_notification(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     State(state): State<AppState>,
     params: NotificationParams,
@@ -318,7 +319,7 @@ async fn create_notification(
 )]
 #[instrument(name = "routes::pipelines::get_notifications", skip_all, err(Debug))]
 async fn get_notifications(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<Notification<Pipeline>>>, ApiError> {
@@ -357,7 +358,7 @@ async fn get_notifications(
 )]
 #[instrument(name = "routes::pipelines::delete_notification", skip_all, err(Debug))]
 async fn delete_notification(
-    user: User,
+    user: AuthedUser,
     Path((group, pipeline, id)): Path<(String, String, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
