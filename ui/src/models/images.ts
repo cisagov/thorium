@@ -297,7 +297,9 @@ export type ImageRequest = {
 };
 
 export type ImageBanKind =
-  { Generic: { msg: string } } | { InvalidImageUrl: { url: string } } | { InvalidHostPath: { volume_name: string; host_path: string } };
+  | { Generic: { msg: string } }
+  | { InvalidImageUrl: { url: string } }
+  | { InvalidHostPath: { volume_name: string; host_path: string } };
 
 export type ImageBan = {
   id: string;
