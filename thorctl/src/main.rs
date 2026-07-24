@@ -30,6 +30,7 @@ async fn main() {
         SubCommands::Results(results) => handlers::results::handle(&args, results).await,
         SubCommands::Tags(tags) => handlers::tags::handle(&args, tags).await,
         SubCommands::Repos(repos) => handlers::repos::handle(&args, repos).await,
+        SubCommands::Trees(trees) => handlers::trees::handle(&args, trees).await,
         SubCommands::NetworkPolicies(network_policies) => {
             handlers::network_policies::handle(&args, network_policies).await
         }

@@ -20,6 +20,7 @@ pub mod results;
 pub mod run;
 pub mod tags;
 pub mod toolbox;
+pub mod trees;
 pub mod uncart;
 pub mod update;
 mod worker;
