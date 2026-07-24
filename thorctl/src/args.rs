@@ -20,6 +20,7 @@ use self::{
     results::Results,
     run::Run,
     tags::Tags,
+    trees::Trees,
     uncart::Uncart,
 };
 use crate::{args::toolbox::Toolbox, utils::repos::validate_repo_url};
@@ -41,6 +42,7 @@ pub mod run;
 pub mod tags;
 pub mod toolbox;
 mod traits;
+pub mod trees;
 pub mod uncart;
 
 pub use traits::describe::DescribeCommand;
@@ -81,7 +83,7 @@ pub struct Args {
     /// Don't check for updates from the API
     #[clap(long)]
     pub skip_update: bool,
-    /// The command string to follow (files, images, pipelines, reactions, install, admins, agents, cart, uncart, update, config)
+    /// The command string to follow (files, images, pipelines, reactions, trees, install, admins, agents, cart, uncart, update, config)
     #[clap(subcommand)]
     pub cmd: SubCommands,
     /// The number of parallel async actions to process at once
@@ -130,6 +132,9 @@ pub enum SubCommands {
     /// Perform repository related tasks
     #[clap(version, author, subcommand)]
     Repos(Repos),
+    /// Perform tree related tasks
+    #[clap(version, author, subcommand)]
+    Trees(Trees),
     /// Perform network policy related tasks
     #[clap(version, author, subcommand, visible_alias = "netpols")]
     NetworkPolicies(NetworkPolicies),
