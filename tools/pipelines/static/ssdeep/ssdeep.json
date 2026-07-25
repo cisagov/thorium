@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "ssdeep",
+  "group": "static",
   "order": [
     [
       "ssdeep"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

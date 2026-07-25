@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "sqlitedump",
+  "group": "static",
   "order": [
     [
       "sqlitedump"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

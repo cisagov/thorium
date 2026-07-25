@@ -1,6 +1,6 @@
 {
-  "group": "static",
   "name": "strings",
+  "group": "static",
   "order": [
     [
       "xorstrings",
@@ -14,9 +14,9 @@
       "strings-32le"
     ]
   ],
+  "description": null,
   "sla": 640800,
- "triggers": {
+  "triggers": {
     "RunOnNewSamples": "NewSample"
-  },
-  "description": null
+  }
 }

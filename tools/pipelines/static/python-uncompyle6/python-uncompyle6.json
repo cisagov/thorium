@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "python-uncompyle6",
+  "group": "static",
   "order": [
     [
       "python-uncompyle6"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

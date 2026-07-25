@@ -1,7 +1,5 @@
-
 name = "capa"
 type = "pipeline"
-description = "https://github.com/mandiant/capa"
 version = "latest"
 config_from = "capa.json"
 

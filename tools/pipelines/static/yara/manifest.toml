@@ -1,7 +1,5 @@
-
 name = "yara"
 type = "pipeline"
-description = "Run YARA scanner using open source rules"
 version = "latest"
 config_from = "yara.json"
 

@@ -1,14 +1,14 @@
 {
-  "group": "static",
   "name": "antivirus",
+  "group": "static",
   "order": [
     [
       "clamav"
     ]
   ],
+  "description": null,
   "sla": 640800,
   "triggers": {
     "RunOnNewSamples": "NewSample"
-  },
-  "description": null
+  }
 }

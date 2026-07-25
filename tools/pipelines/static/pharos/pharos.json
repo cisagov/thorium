@@ -1,12 +1,15 @@
 {
-  "group": "static",
   "name": "pharos",
+  "group": "static",
   "order": [
     [
-      "pharos-apianalyzer", "pharos-callanalyzer", "pharos-fn2hash", "pharos-ooanalyzer"
+      "pharos-apianalyzer",
+      "pharos-callanalyzer",
+      "pharos-fn2hash",
+      "pharos-ooanalyzer"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

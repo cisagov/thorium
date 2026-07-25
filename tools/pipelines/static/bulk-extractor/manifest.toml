@@ -1,7 +1,5 @@
-
 name = "bulk-extractor"
 type = "pipeline"
-description = "https://github.com/owasp-dep-scan/blint"
 version = "latest"
 config_from = "bulk-extractor.json"
 

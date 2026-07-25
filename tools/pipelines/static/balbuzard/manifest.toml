@@ -1,7 +1,5 @@
-
 name = "balbuzard"
 type = "pipeline"
-description = "https://github.com/decalage2/balbuzard"
 version = "latest"
 config_from = "balbuzard.json"
 

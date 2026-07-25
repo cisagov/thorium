@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "auto-volatility3-worker",
+  "group": "static",
   "order": [
     [
       "auto-volatility3-worker"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }
