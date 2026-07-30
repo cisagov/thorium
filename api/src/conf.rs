@@ -2048,6 +2048,21 @@ impl Default for Graphics {
     }
 }
 
+/// Helps serde default the number of seconds to wait when connecting to s3
+fn default_s3_connect_timeout() -> u64 {
+    30
+}
+
+/// Helps serde default the number of seconds a single s3 API attempt may take
+fn default_s3_attempt_timeout() -> u64 {
+    300
+}
+
+/// Helps serde default the maximum number of attempts for an s3 API call
+fn default_s3_max_attempts() -> u32 {
+    5
+}
+
 /// The settings for saving/Carting files to the backend
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct S3 {
@@ -2065,6 +2080,20 @@ pub struct S3 {
     /// Whether the operator should skip bucket creation or not
     #[serde(default)]
     pub skip_bucket_auto_create: bool,
+    /// The number of seconds to wait when establishing a connection to s3
+    #[serde(default = "default_s3_connect_timeout")]
+    pub connect_timeout: u64,
+    /// The number of seconds a single s3 API attempt (e.g. one `upload_part`) may take
+    /// before it times out and is retried
+    ///
+    /// This is intentionally generous so large multipart uploads over a slow-but-healthy
+    /// link are not aborted, while still bounding a stalled attempt so it can be retried
+    /// instead of hanging or failing the entire upload.
+    #[serde(default = "default_s3_attempt_timeout")]
+    pub attempt_timeout: u64,
+    /// The maximum number of times an s3 API call should be attempted before giving up
+    #[serde(default = "default_s3_max_attempts")]
+    pub max_attempts: u32,
 }
 
 /// Helps serde default the max size an incoming json body can be in mebibytes

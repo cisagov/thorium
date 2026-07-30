@@ -77,6 +77,10 @@ pub struct AssociationListRow {
     pub extra_source: Option<String>,
     /// Any extra info needed for the target column in this row
     pub extra_other: Option<String>,
+    /// The submission id tied to the source side of this row if it is a file/sample
+    pub submissions_source: Option<Uuid>,
+    /// The submission id tied to the other side of this row if it is a file/sample
+    pub submissions_other: Option<Uuid>,
 }
 
 /// An association with a specific piece of data
@@ -96,6 +100,10 @@ pub struct ListableAssociation {
     pub direction: Directionality,
     /// Any extra info needed for the target column in this row
     pub extra_other: Option<String>,
+    /// The submission id tied to the source side of this row if it is a file/sample
+    pub submissions_source: Option<Uuid>,
+    /// The submission id tied to the other side of this row if it is a file/sample
+    pub submissions_other: Option<Uuid>,
 }
 
 impl ListableAssociation {
@@ -153,6 +161,8 @@ impl From<AssociationListRow> for ListableAssociation {
             created: row.created,
             direction: row.direction,
             extra_other: row.extra_other,
+            submissions_source: row.submissions_source,
+            submissions_other: row.submissions_other,
         }
     }
 }
@@ -170,6 +180,13 @@ impl TryFrom<ListableAssociation> for Association {
         let other_column: AssociationTargetColumn = crate::deserialize!(&row.other);
         // convert the column into a full target
         let other = other_column.to_target(row.extra_other)?;
+        // build our submission links if either side has one set
+        let submissions = match (row.submissions_source, row.submissions_other) {
+            // neither side has a submission id so don't set any submission links
+            (None, None) => None,
+            // at least one side has a submission id so build our submission links
+            (source, other) => Some(crate::models::AssociatedSubmissions { source, other }),
+        };
         // invert our source/target if inverted is set
         let association = Association {
             kind: row.kind,
@@ -178,6 +195,7 @@ impl TryFrom<ListableAssociation> for Association {
             groups: row.groups,
             created: row.created,
             direction: row.direction,
+            submissions,
         };
         Ok(association)
     }

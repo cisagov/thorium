@@ -80,6 +80,113 @@ async fn download() -> Result<(), thorium::Error> {
     Ok(())
 }
 
+/// Samples are carted as they stream into s3 and the carted output is uploaded across multiple
+/// parts. Make sure a large sample survives that carted multipart upload, that its hashes are
+/// computed correctly over the whole stream, and that it uncarts back byte for byte identically.
+#[tokio::test]
+async fn download_large() -> Result<(), thorium::Error> {
+    // build a sample large enough that carting it spans several multipart parts, exercising
+    // the carted upload path, part ordering, and hashing across the whole stream
+    let mut random_data = vec![0u8; 40 * 1024 * 1024];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut random_data);
+    // hash our data so we can check the hashes the api calculated while streaming
+    let mut sha256_hasher = Sha256::new();
+    sha256_hasher.update(&random_data);
+    let sha256 = HEXLOWER.encode(&sha256_hasher.finalize());
+    // save our uploaded size so we can compare it after we hand our data off
+    let uploaded_size = random_data.len();
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // build a sample request
+    let file_req = SampleRequest::new_buffer(Buffer::new(random_data), vec![group])
+        .description("large test file")
+        .tag("corn", "yes");
+    // upload this file
+    let resp = client.files.create(file_req).await?;
+    // make sure the api hashed the whole stream and not just part of it
+    is!(resp.sha256, sha256);
+    // download the file and check that it's valid
+    let temp_path = std::env::temp_dir().join("UNCARTED_LARGE_MAL");
+    // build the options for downloading this file
+    let mut opts = FileDownloadOpts::default().uncart();
+    // download this file
+    client
+        .files
+        .download(&resp.sha256, &temp_path, &mut opts)
+        .await?;
+    // read in our uncarted file
+    let data = tokio::fs::read(&temp_path).await?;
+    // delete the uncarted malware file
+    tokio::fs::remove_file(&temp_path).await?;
+    // make sure our uncarted file is the same size as what we uploaded
+    is!(data.len(), uploaded_size);
+    // compare digests instead of the raw bytes so a mismatch doesn't dump 40 MiB of output
+    let mut downloaded_hasher = Sha256::new();
+    downloaded_hasher.update(&data);
+    let downloaded_sha256 = HEXLOWER.encode(&downloaded_hasher.finalize());
+    is!(downloaded_sha256, sha256);
+    Ok(())
+}
+
+/// Carted samples flush a part every 16 MiB, so `download_large` only spans a couple of parts and
+/// can't catch a bug that only shows up once several parts are in flight at the same time. This
+/// uploads a sample large enough to saturate the concurrency limit and hold the read loop on the
+/// upload semaphore, which is the path a stalled production upload actually takes.
+///
+/// This is ignored by default because it moves 256 MiB through s3; run it with
+/// `cargo test -p thorium-api --features test-utilities --test files upload_saturates_parts -- --ignored`.
+#[tokio::test]
+#[ignore = "moves 256 MiB through s3, run manually when touching the multipart upload path"]
+async fn upload_saturates_parts() -> Result<(), thorium::Error> {
+    // build a sample large enough that its carted parts outnumber the concurrency limit, so the
+    // read loop has to block on the upload semaphore instead of just queueing every part at once
+    let mut random_data = vec![0u8; 256 * 1024 * 1024];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut random_data);
+    // hash our data so we can check the hashes the api calculated while streaming
+    let mut sha256_hasher = Sha256::new();
+    sha256_hasher.update(&random_data);
+    let sha256 = HEXLOWER.encode(&sha256_hasher.finalize());
+    // save our uploaded size so we can compare it after we hand our data off
+    let uploaded_size = random_data.len();
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // build a sample request
+    let file_req = SampleRequest::new_buffer(Buffer::new(random_data), vec![group])
+        .description("saturating test file")
+        .tag("corn", "yes");
+    // upload this file
+    let resp = client.files.create(file_req).await?;
+    // make sure the api hashed the whole stream and not just part of it
+    is!(resp.sha256, sha256);
+    // download the file and check that it's valid
+    let temp_path = std::env::temp_dir().join("UNCARTED_SATURATING_MAL");
+    // build the options for downloading this file
+    let mut opts = FileDownloadOpts::default().uncart();
+    // download this file
+    client
+        .files
+        .download(&resp.sha256, &temp_path, &mut opts)
+        .await?;
+    // read in our uncarted file
+    let data = tokio::fs::read(&temp_path).await?;
+    // delete the uncarted malware file
+    tokio::fs::remove_file(&temp_path).await?;
+    // make sure our uncarted file is the same size as what we uploaded
+    is!(data.len(), uploaded_size);
+    // compare digests instead of the raw bytes so a mismatch doesn't dump 256 MiB of output
+    let mut downloaded_hasher = Sha256::new();
+    downloaded_hasher.update(&data);
+    let downloaded_sha256 = HEXLOWER.encode(&downloaded_hasher.finalize());
+    is!(downloaded_sha256, sha256);
+    Ok(())
+}
+
 #[tokio::test]
 async fn get() -> Result<(), thorium::Error> {
     // get admin client
@@ -837,6 +944,211 @@ async fn create_result_files() -> Result<(), thorium::Error> {
     let output = client.files.get_results(&hashes.sha256, &params).await?;
     // make sure our output requests matches
     is!(output, output_req);
+    Ok(())
+}
+
+/// Result files larger than the s3 multipart part size are uploaded to s3 across multiple
+/// parts. Make sure a large result file survives that multipart upload and downloads back
+/// byte for byte identically.
+#[tokio::test]
+async fn create_large_result_file() -> Result<(), thorium::Error> {
+    // build a result file larger than the 16 MiB multipart part size so the upload spans
+    // several parts, exercising the concurrent multipart upload path and part ordering
+    let mut data = vec![0u8; 40 * 1024 * 1024];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut data);
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // upload a sample to attach a result to
+    let file_req = SampleRequest::new_buffer(Buffer::new("LargeResultFileSample"), vec![group])
+        .description("test file")
+        .tag("test", "file");
+    let hashes = client.files.create(file_req).await?;
+    // the name to store this large result file under
+    let file_name = "large_result.bin";
+    // build a result with this large result file attached
+    let output_req = OutputRequest::new(
+        hashes.sha256.clone(),
+        "TestTool",
+        "large result file",
+        OutputDisplayType::String,
+    )
+    .buffer(Buffer::new(data.clone()).name(file_name))
+    .tool_version(ImageVersion::SemVer(
+        semver::Version::parse("1.0.0").unwrap(),
+    ));
+    // send this result to the API (streams the result file to s3 as a multipart upload)
+    let resp = client.files.create_result(output_req).await?;
+    // download the result file back out of s3
+    let attachment = client
+        .files
+        .download_result_file(&hashes.sha256, "TestTool", &resp.id, file_name)
+        .await?;
+    // make sure the downloaded result file is byte for byte identical to what we uploaded
+    is!(attachment.data.len(), data.len());
+    // compare digests instead of the raw bytes so a mismatch doesn't dump 40 MiB of output
+    let mut original_hasher = Sha256::new();
+    original_hasher.update(&data);
+    let original = HEXLOWER.encode(&original_hasher.finalize());
+    let mut downloaded_hasher = Sha256::new();
+    downloaded_hasher.update(&attachment.data);
+    let downloaded = HEXLOWER.encode(&downloaded_hasher.finalize());
+    is!(downloaded, original);
+    Ok(())
+}
+
+/// Get the sha256 of a buffer
+///
+/// Result files are compared by digest instead of by their raw bytes so a mismatch doesn't dump
+/// tens of megabytes of output.
+///
+/// # Arguments
+///
+/// * `data` - The data to digest
+fn sha256_hex(data: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    HEXLOWER.encode(&hasher.finalize())
+}
+
+/// Write a file of random data to disk and get its sha256
+///
+/// Every file gets its own random content so a crossed stream or a swapped part fails on a digest
+/// instead of quietly passing.
+///
+/// # Arguments
+///
+/// * `path` - The path to write our random data to
+/// * `size` - The number of bytes of random data to write
+async fn write_random_file(path: &std::path::Path, size: usize) -> Result<String, thorium::Error> {
+    // build a buffer of random data for this file
+    let mut data = vec![0u8; size];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut data);
+    // digest our data before we hand it off
+    let sha256 = sha256_hex(&data);
+    // make sure the directory we are writing into exists
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    // write our random data out to disk
+    tokio::fs::write(path, data).await?;
+    Ok(sha256)
+}
+
+/// Result files added by path are streamed off of disk into the request's multipart form, which
+/// is an entirely different client path from the in memory buffers `create_large_result_file`
+/// covers. Upload several by path files in a single request, two of them larger than the s3 part
+/// size, and make sure every one of them comes back byte for byte identically.
+#[tokio::test]
+async fn create_large_result_files_on_disk() -> Result<(), thorium::Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // upload a sample to attach a result to
+    let file_req = SampleRequest::new_buffer(Buffer::new("OnDiskResultFilesSample"), vec![group])
+        .description("test file")
+        .tag("test", "file");
+    let hashes = client.files.create(file_req).await?;
+    // build a directory to write our result files into
+    let root_dir =
+        std::env::temp_dir().join(format!("thorium-result-file-tests-{}", Uuid::new_v4()));
+    tokio::fs::create_dir_all(&root_dir).await?;
+    // the result files to upload with two of them larger than the 16 MiB multipart part size
+    let names = ["small.json", "big_one.bin", "big_two.bin"];
+    let sizes = [4 * 1024, 20 * 1024 * 1024, 20 * 1024 * 1024];
+    // write each of our result files out to disk with its own random content
+    let mut uploaded = Vec::with_capacity(names.len());
+    let mut on_disk = Vec::with_capacity(names.len());
+    for (name, size) in names.iter().zip(sizes) {
+        // write this result file out and save the digest we expect to get back
+        let path = root_dir.join(name);
+        uploaded.push(write_random_file(&path, size).await?);
+        // the API rejects absolute paths so trim our temp dir off of this files name
+        on_disk.push(OnDiskFile::new(path).trim_prefix(&root_dir));
+    }
+    // build a result with all of our on disk result files attached
+    let output_req = OutputRequest::new(
+        hashes.sha256.clone(),
+        "TestTool",
+        "on disk result files",
+        OutputDisplayType::String,
+    )
+    .files(on_disk);
+    // send this result to the API (streams each result file to s3 as a multipart upload)
+    let resp = client.files.create_result(output_req).await?;
+    // download each result file back out of s3 and make sure it survived the round trip
+    for (name, original) in names.iter().zip(uploaded) {
+        let attachment = client
+            .files
+            .download_result_file(&hashes.sha256, "TestTool", &resp.id, name)
+            .await?;
+        let downloaded = sha256_hex(&attachment.data);
+        is!(downloaded, original);
+    }
+    // clean up the result files we wrote to disk
+    tokio::fs::remove_dir_all(&root_dir).await?;
+    Ok(())
+}
+
+/// Thorctl uploads a tool's result files with that tool's directory trimmed off, so the name the
+/// API stores them under is a multi component relative path rather than a bare file name. Make
+/// sure that trimmed name really is the key the file lands under, since it is also the field our
+/// client and API upload events join on.
+#[tokio::test]
+async fn create_nested_result_files_on_disk() -> Result<(), thorium::Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // upload a sample to attach a result to
+    let file_req =
+        SampleRequest::new_buffer(Buffer::new("NestedResultFilesSample"), vec![group.clone()])
+            .description("test file")
+            .tag("test", "file");
+    let hashes = client.files.create(file_req).await?;
+    // build a directory to write our result files into
+    let root_dir =
+        std::env::temp_dir().join(format!("thorium-result-file-tests-{}", Uuid::new_v4()));
+    // write a result file nested a few directories deep in our temp dir
+    let nested_name = "nested/deeper/report.json";
+    let nested_path = root_dir.join(nested_name);
+    let original = write_random_file(&nested_path, 8 * 1024).await?;
+    // build a result with our nested result file attached under its trimmed name
+    let output_req = OutputRequest::new(
+        hashes.sha256.clone(),
+        "TestTool",
+        "nested on disk result file",
+        OutputDisplayType::String,
+    )
+    .files(vec![OnDiskFile::new(nested_path).trim_prefix(&root_dir)]);
+    // send this result to the API
+    let resp = client.files.create_result(output_req).await?;
+    // download our result file back using the name we trimmed it down to
+    let attachment = client
+        .files
+        .download_result_file(&hashes.sha256, "TestTool", &resp.id, nested_name)
+        .await?;
+    let downloaded = sha256_hex(&attachment.data);
+    is!(downloaded, original);
+    // make sure the API listed this result file under that same trimmed name
+    let params = ResultGetParams::default();
+    let output = client.files.get_results(&hashes.sha256, &params).await?;
+    let result = match output
+        .results
+        .get("TestTool")
+        .and_then(|results| results.first())
+    {
+        Some(result) => result,
+        None => return Err(thorium::Error::new("No results were returned for TestTool")),
+    };
+    let nested_owned = nested_name.to_owned();
+    contains!(result.files, &nested_owned);
+    // clean up the result files we wrote to disk
+    tokio::fs::remove_dir_all(&root_dir).await?;
     Ok(())
 }
 

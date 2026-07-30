@@ -40,7 +40,12 @@ pub trait ResultsClientHelper: GenericClient {
             .client()
             .post(&url)
             .multipart(output_req.to_form().await?)
-            .header("authorization", self.token());
+            .header("authorization", self.token())
+            // result files can be large, so use a generous timeout like our other
+            // large upload endpoints to avoid aborting slow-but-healthy uploads
+            .timeout(std::time::Duration::from_secs(
+                crate::client::helpers::LARGE_UPLOAD_TIMEOUT_SECS,
+            ));
         // send this request
         send_build!(self.client(), req, OutputResponse)
     }

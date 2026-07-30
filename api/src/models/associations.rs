@@ -161,6 +161,40 @@ impl From<(EntityKinds, EntityKinds)> for AssociationKind {
     }
 }
 
+/// The specific submissions tied to each side of an association
+///
+/// This lets an association point at the exact submission on either side when that side is a file/sample.
+/// For example a `FileIn` association can record which submission placed a file in a folder, allowing that
+/// submission's file name to be recovered losslessly.
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Default)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct AssociatedSubmissions {
+    /// The submission id for the source side of this association, if it is a file/sample
+    pub source: Option<Uuid>,
+    /// The submission id for the other side of this association, if it is a file/sample
+    pub other: Option<Uuid>,
+}
+
+impl AssociatedSubmissions {
+    /// Check if this has no submission ids set on either side
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        // we are empty if neither side has a submission id
+        self.source.is_none() && self.other.is_none()
+    }
+
+    /// Get the opposite view of these submissions with source and other swapped
+    ///
+    /// This is used when storing/reading the inverted (other -> source) row for an association.
+    #[must_use]
+    pub fn swapped(&self) -> Self {
+        AssociatedSubmissions {
+            source: self.other,
+            other: self.source,
+        }
+    }
+}
+
 /// An association with a specific piece of data
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -177,6 +211,9 @@ pub struct Association {
     pub created: DateTime<Utc>,
     /// The direction for this association
     pub direction: Directionality,
+    /// The specific submissions tied to each side of this association if any are known
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submissions: Option<AssociatedSubmissions>,
 }
 
 /// A request to associate one piece of data with another
@@ -193,6 +230,12 @@ pub struct AssociationRequest {
     pub groups: Vec<String>,
     /// Whether this is a bidirecitonal relationship or not
     pub is_bidirectional: bool,
+    /// The specific submissions tied to each side of this association if any are known
+    ///
+    /// When more than one target is set the `other` submission is applied to every target, so this is only
+    /// meaningful for single target requests (the common case for filesystem links).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submissions: Option<AssociatedSubmissions>,
 }
 
 impl AssociationRequest {
@@ -210,6 +253,7 @@ impl AssociationRequest {
             targets: Vec::default(),
             groups: Vec::default(),
             is_bidirectional: false,
+            submissions: None,
         }
     }
 
@@ -232,6 +276,7 @@ impl AssociationRequest {
             targets: Vec::with_capacity(capacity),
             groups: Vec::with_capacity(capacity),
             is_bidirectional: false,
+            submissions: None,
         }
     }
 
@@ -265,6 +310,44 @@ impl AssociationRequest {
     /// Set this association to be bidirectional
     pub fn biderectional(mut self) -> Self {
         self.is_bidirectional = true;
+        self
+    }
+
+    /// Set the submissions tied to each side of this association
+    ///
+    /// # Arguments
+    ///
+    /// * `submissions` - The submissions to tie to this association
+    #[must_use]
+    pub fn submissions(mut self, submissions: AssociatedSubmissions) -> Self {
+        // set the submissions for this association
+        self.submissions = Some(submissions);
+        self
+    }
+
+    /// Tie a specific submission to the other/target side of this association
+    ///
+    /// This is a convenience for the common single target case (e.g. linking a file into a folder).
+    ///
+    /// # Arguments
+    ///
+    /// * `submission` - The submission id to tie to the other side of this association
+    #[must_use]
+    pub fn submission_other(mut self, submission: Uuid) -> Self {
+        // get an entry to our submissions or insert a default and set the other side
+        self.submissions.get_or_insert_with(AssociatedSubmissions::default).other = Some(submission);
+        self
+    }
+
+    /// Tie a specific submission to the source side of this association
+    ///
+    /// # Arguments
+    ///
+    /// * `submission` - The submission id to tie to the source side of this association
+    #[must_use]
+    pub fn submission_source(mut self, submission: Uuid) -> Self {
+        // get an entry to our submissions or insert a default and set the source side
+        self.submissions.get_or_insert_with(AssociatedSubmissions::default).source = Some(submission);
         self
     }
 }

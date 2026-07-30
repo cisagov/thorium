@@ -773,7 +773,7 @@ impl ScopedTokenUpdate {
     /// # Examples
     ///
     /// ```
-    /// use thorium::models::{ScopedTokenRequest, ScopedTokenRole};
+    /// use thorium::models::{ScopedTokenUpdate, ScopedTokenRole};
     ///
     /// ScopedTokenUpdate::default().role(ScopedTokenRole::User);
     /// ```

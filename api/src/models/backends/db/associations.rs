@@ -5,15 +5,18 @@ use futures::stream::{self, StreamExt};
 use scylla::errors::ExecutionError;
 use tracing::instrument;
 
+use uuid::Uuid;
+
 use super::{ScyllaCursor, keys};
 use crate::models::{
-    AssociationKind, AssociationListParams, AssociationTarget, AssociationTargetColumn,
-    Directionality, ListableAssociation, User,
+    AssociatedSubmissions, AssociationKind, AssociationListParams, AssociationTarget,
+    AssociationTargetColumn, Directionality, ListableAssociation, User,
 };
 use crate::serialize;
 use crate::utils::{ApiError, Shared, helpers};
 
 #[instrument(name = "db::associations::create_helper", skip_all, err(Debug))]
+#[expect(clippy::too_many_arguments)]
 async fn create_helper(
     user: &User,
     group: &String,
@@ -25,6 +28,8 @@ async fn create_helper(
     target_str: String,
     extra_source: Option<String>,
     extra_target: Option<String>,
+    submissions_source: Option<Uuid>,
+    submissions_target: Option<Uuid>,
     direction: Directionality,
     shared: &Shared,
 ) -> Result<(), ExecutionError> {
@@ -46,12 +51,14 @@ async fn create_helper(
                 &user.username,
                 &extra_source,
                 &extra_target,
+                submissions_source,
+                submissions_target,
             ),
         )
         .await?;
     // get our opposite direction
     let opposite_dir = direction.opposite();
-    // This row is in the target  -> source direction
+    // This row is in the target  -> source direction so swap our source/target info
     shared
         .scylla
         .session
@@ -69,6 +76,8 @@ async fn create_helper(
                 &user.username,
                 extra_target,
                 extra_source,
+                submissions_target,
+                submissions_source,
             ),
         )
         .await?;
@@ -80,15 +89,21 @@ async fn create_helper(
     skip(user, targets, shared),
     err(Debug)
 )]
+#[expect(clippy::too_many_arguments)]
 pub async fn create(
     user: &User,
     size_hint: usize,
     kind: AssociationKind,
     source: AssociationTarget,
     targets: &Vec<(AssociationTarget, Vec<String>)>,
+    submissions: Option<AssociatedSubmissions>,
     direction: Directionality,
     shared: &Shared,
 ) -> Result<(), ApiError> {
+    // get the submission ids tied to each side of this association if any are set
+    // the other submission is applied to every target so this is only meaningful for single target requests
+    let submissions_source = submissions.as_ref().and_then(|subs| subs.source);
+    let submissions_other = submissions.as_ref().and_then(|subs| subs.other);
     // get the current time for when we are inserting these rows
     let now = Utc::now();
     // get the current year
@@ -142,6 +157,8 @@ pub async fn create(
                 target_str.clone(),
                 extra_src.clone(),
                 extra_targ.clone(),
+                submissions_source,
+                submissions_other,
                 direction,
                 shared,
             );

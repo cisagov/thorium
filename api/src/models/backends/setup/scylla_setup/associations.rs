@@ -61,6 +61,8 @@ async fn setup_associations_table(session: &Session, config: &Conf) {
           submitter TEXT, \
           extra_source TEXT, \
           extra_target TEXT, \
+          submissions_source UUID, \
+          submissions_other UUID, \
           PRIMARY KEY ((group, year, bucket, source), created, target, direction))
           WITH CLUSTERING ORDER BY (created DESC)",
         ns = &config.thorium.namespace
@@ -82,8 +84,8 @@ async fn insert(session: &Session, config: &Conf) -> PreparedStatement {
     session
         .prepare(format!(
             "INSERT INTO {}.associations \
-                (group, year, bucket, created, direction, kind, source, target, submitter, extra_source, extra_target) \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (group, year, bucket, created, direction, kind, source, target, submitter, extra_source, extra_target, submissions_source, submissions_other) \
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             &config.thorium.namespace
         ))
         .await
@@ -124,7 +126,7 @@ async fn list_ties(session: &Session, config: &Conf) -> PreparedStatement {
     // build associations list ties prepared statement
     session
         .prepare(format!(
-            "SELECT group, kind, source, target, submitter, created, direction, extra_source, extra_target \
+            "SELECT group, kind, source, target, submitter, created, direction, extra_source, extra_target, submissions_source, submissions_other \
                 FROM {}.associations \
                 WHERE group = ? \
                 AND year = ? \
@@ -149,7 +151,7 @@ async fn list_pull(session: &Session, config: &Conf) -> PreparedStatement {
     // build associations list ties prepared statement
     session
         .prepare(format!(
-            "SELECT group, kind, source, target, submitter, created, direction, extra_source, extra_target \
+            "SELECT group, kind, source, target, submitter, created, direction, extra_source, extra_target, submissions_source, submissions_other \
                 FROM {}.associations \
                 WHERE group = ? \
                 AND year = ? \

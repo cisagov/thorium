@@ -5,7 +5,8 @@ use thorium::models::{
     AutoTag, AutoTagUpdate, CacheDependencySettings, CacheDependencySettingsUpdate, ChildFilters,
     ChildFiltersUpdate, ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup,
     CleanupUpdate, Dependencies, DependenciesUpdate, EphemeralDependencySettings,
-    EphemeralDependencySettingsUpdate, FilesHandler, FilesHandlerUpdate,
+    EphemeralDependencySettingsUpdate, FileSystemDependencySettings,
+    FileSystemDependencySettingsUpdate, FilesHandler, FilesHandlerUpdate,
     GenericCacheDependencySettingsUpdate, ImageArgs, ImageArgsUpdate, ImageNetworkPolicyUpdate,
     Kvm, KvmUpdate, OutputCollection, OutputCollectionUpdate, RepoDependencySettings,
     RepoDependencySettingsUpdate, ResultDependencySettings, ResultDependencySettingsUpdate,
@@ -217,6 +218,31 @@ fn calculate_childen_dependencies_update(
     }
 }
 
+/// Calculate a filesystem dependencies update by diffing old and
+/// new filesystem dependencies settings
+///
+/// # Arguments
+///
+/// * `old` - The old filesystem dependencies settings
+/// * `new` - The new filesystem dependencies settings
+#[allow(clippy::needless_pass_by_value)]
+fn calculate_filesystem_dependencies_update(
+    mut old: FileSystemDependencySettings,
+    mut new: FileSystemDependencySettings,
+) -> FileSystemDependencySettingsUpdate {
+    // calculate which images to remove/add
+    let (remove_images, add_images) = calc_remove_add_vec!(old.images, new.images);
+    FileSystemDependencySettingsUpdate {
+        enabled: set_modified!(old.enabled, new.enabled),
+        remove_images,
+        add_images,
+        location: set_modified!(old.location, new.location),
+        clear_kwarg: set_clear!(old.kwarg, new.kwarg),
+        kwarg: set_modified_opt!(old.kwarg, new.kwarg),
+        strategy: set_modified!(old.strategy, new.strategy),
+    }
+}
+
 /// Calculate a cache dependencies update by diffing old and
 /// new cache dependencies settings
 ///
@@ -260,6 +286,7 @@ pub fn calculate_dependencies_update(old: Dependencies, new: Dependencies) -> De
     let repos = calculate_repo_dependencies_update(old.repos, new.repos);
     let tags = calculate_tags_dependencies_update(old.tags, new.tags);
     let children = calculate_childen_dependencies_update(old.children, new.children);
+    let filesystems = calculate_filesystem_dependencies_update(old.filesystems, new.filesystems);
     let cache = calculate_cache_dependencies_update(old.cache, new.cache);
     // build our dependencies update
     DependenciesUpdate {
@@ -269,6 +296,7 @@ pub fn calculate_dependencies_update(old: Dependencies, new: Dependencies) -> De
         repos,
         tags,
         children,
+        filesystems,
         cache,
     }
 }

@@ -2549,6 +2549,369 @@ impl ChildrenDependencySettingsUpdate {
     }
 }
 
+/// The default location the agent should reconstruct prior filesystems too
+fn default_filesystems_location() -> String {
+    "/tmp/thorium/prior-filesystems".to_owned()
+}
+
+/// The default filesystem dependency pass strategy to set
+fn default_filesystems_strategy() -> DependencyPassStrategy {
+    DependencyPassStrategy::Directory
+}
+
+/// The settings the agent should use when reconstructing prior filesystems for tools
+///
+/// Unlike [`ChildrenDependencySettings`], which downloads loose children flat, this reconstructs the
+/// directory structure of filesystems dumped by earlier tools before passing them to the tool.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct FileSystemDependencySettings {
+    /// Whether filesystem dependencies should be enabled or not
+    pub enabled: bool,
+    /// The prior images to restrict filesystem collection too
+    #[serde(default)]
+    pub images: Vec<String>,
+    /// Where the agent should reconstruct downloaded filesystems
+    #[serde(default = "default_filesystems_location")]
+    pub location: String,
+    /// The kwarg to pass these filesystems in with if one is set (otherwise use positional args)
+    pub kwarg: Option<String>,
+    /// The strategy the agent should use when passing reconstructed filesystems to jobs
+    #[serde(default = "default_filesystems_strategy")]
+    pub strategy: DependencyPassStrategy,
+}
+
+impl Default for FileSystemDependencySettings {
+    /// Create a default filesystem dependency settings
+    fn default() -> Self {
+        FileSystemDependencySettings {
+            enabled: false,
+            images: Vec::default(),
+            location: default_filesystems_location(),
+            kwarg: None,
+            strategy: default_filesystems_strategy(),
+        }
+    }
+}
+
+impl FileSystemDependencySettings {
+    /// Create a new [`FileSystemDependencySettings`]
+    ///
+    /// Specifying an empty list of images will mean filesystems from all tools get reconstructed.
+    ///
+    /// # Arguments
+    ///
+    /// * `images` - The images we depend on filesystems from
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{FileSystemDependencySettings, DependencyPassStrategy};
+    ///
+    /// FileSystemDependencySettings::new(vec!("unpack"))
+    ///    .image("carve")
+    ///    .location("/tmp/thorium/prior-filesystems")
+    ///    .kwarg("--filesystems")
+    ///    .strategy(DependencyPassStrategy::Directory);
+    /// ```
+    pub fn new<T, I>(images: I) -> Self
+    where
+        T: Into<String>,
+        I: IntoIterator<Item = T>,
+    {
+        FileSystemDependencySettings {
+            enabled: true,
+            images: images.into_iter().map(Into::into).collect(),
+            location: default_filesystems_location(),
+            kwarg: None,
+            strategy: default_filesystems_strategy(),
+        }
+    }
+
+    /// Enable filesystem dependencies
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FileSystemDependencySettings;
+    ///
+    /// FileSystemDependencySettings::new(["unpack"])
+    ///   .enable();
+    /// ```
+    #[must_use]
+    pub fn enable(mut self) -> Self {
+        self.enabled = true;
+        self
+    }
+
+    /// Disable filesystem dependencies
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FileSystemDependencySettings;
+    ///
+    /// FileSystemDependencySettings::new(["unpack"])
+    ///   .disable();
+    /// ```
+    #[must_use]
+    pub fn disable(mut self) -> Self {
+        self.enabled = false;
+        self
+    }
+
+    /// Add a new image to this filesystem dependency settings object
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FileSystemDependencySettings;
+    ///
+    /// FileSystemDependencySettings::new(vec!("unpack"))
+    ///    .image("carve");
+    /// ```
+    #[must_use]
+    pub fn image<T: Into<String>>(mut self, image: T) -> Self {
+        self.images.push(image.into());
+        self
+    }
+
+    /// Add new images to this filesystem dependency settings object
+    ///
+    /// # Arguments
+    ///
+    /// * `images` - The images to add
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FileSystemDependencySettings;
+    ///
+    /// FileSystemDependencySettings::new(vec!("unpack"))
+    ///    .images(vec!("carve", "extract"));
+    /// ```
+    #[must_use]
+    pub fn images<T: Into<String>>(mut self, images: Vec<T>) -> Self {
+        self.images.extend(images.into_iter().map(Into::into));
+        self
+    }
+
+    /// Change the location to reconstruct filesystems to
+    ///
+    /// # Arguments
+    ///
+    /// * `location` - The location to reconstruct downloaded filesystems to
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FileSystemDependencySettings;
+    ///
+    /// FileSystemDependencySettings::default().location("/data/filesystems");
+    /// ```
+    #[must_use]
+    pub fn location<T: Into<String>>(mut self, location: T) -> Self {
+        // convert our location to a string and set it
+        self.location = location.into();
+        self
+    }
+
+    /// Set the kwarg to pass these dependencies in with if one exists
+    ///
+    /// This should include the '--' characters.
+    ///
+    /// # Arguments
+    ///
+    /// * `kwarg` - The kwarg arg to pass dependencies in with
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::FileSystemDependencySettings;
+    ///
+    /// FileSystemDependencySettings::default().kwarg("--filesystems");
+    /// ```
+    #[must_use]
+    pub fn kwarg<T: Into<String>>(mut self, kwarg: T) -> Self {
+        // convert our kwarg to a string and set it
+        self.kwarg = Some(kwarg.into());
+        self
+    }
+
+    /// Change the strategy used to pass dependencies into jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The strategy to use when passing dependencies to jobs
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{FileSystemDependencySettings, DependencyPassStrategy};
+    ///
+    /// FileSystemDependencySettings::default().strategy(DependencyPassStrategy::Directory);
+    /// ```
+    #[must_use]
+    pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
+        // update our dependency passing strategy
+        self.strategy = strategy;
+        self
+    }
+}
+
+/// The updated settings the agent should use when reconstructing prior filesystems for tools
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct FileSystemDependencySettingsUpdate {
+    /// Whether filesystem dependencies should be enabled or not
+    pub enabled: Option<bool>,
+    /// The prior images to reconstruct filesystems from
+    #[serde(default)]
+    pub add_images: Vec<String>,
+    /// The images to stop reconstructing filesystems from
+    #[serde(default)]
+    pub remove_images: Vec<String>,
+    /// Where the agent should reconstruct downloaded filesystems
+    pub location: Option<String>,
+    /// The kwarg to pass these filesystems in with if one is set (otherwise use positional args)
+    pub kwarg: Option<String>,
+    /// Whether to clear the kwarg setting or not
+    #[serde(default)]
+    pub clear_kwarg: bool,
+    /// The strategy the agent should use when passing reconstructed filesystems to jobs
+    pub strategy: Option<DependencyPassStrategy>,
+}
+
+impl PartialEq<FileSystemDependencySettingsUpdate> for FileSystemDependencySettings {
+    /// Check if a [`FileSystemDependencySettings`] contains all the updates from a [`FileSystemDependencySettingsUpdate`]
+    ///
+    /// # Arguments
+    ///
+    /// * `update` - The `FileSystemDependencySettingsUpdate` to compare against
+    fn eq(&self, update: &FileSystemDependencySettingsUpdate) -> bool {
+        // make sure any updates were propagated
+        matches_update!(self.enabled, update.enabled);
+        matches_adds!(self.images, update.add_images);
+        matches_removes!(self.images, update.remove_images);
+        matches_update!(self.location, update.location);
+        matches_update_opt!(self.kwarg, update.kwarg);
+        matches_clear!(self.kwarg, update.clear_kwarg);
+        matches_update!(self.strategy, update.strategy);
+        true
+    }
+}
+
+impl FileSystemDependencySettingsUpdate {
+    /// Enable filesystem dependencies
+    #[must_use]
+    pub fn enable(mut self) -> Self {
+        self.enabled = Some(true);
+        self
+    }
+
+    /// Disable filesystem dependencies
+    #[must_use]
+    pub fn disable(mut self) -> Self {
+        self.enabled = Some(false);
+        self
+    }
+
+    /// Add a new image to this filesystem dependency settings update
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image to add
+    #[must_use]
+    pub fn image<T: Into<String>>(mut self, image: T) -> Self {
+        self.add_images.push(image.into());
+        self
+    }
+
+    /// Add new images to this filesystem dependency settings update
+    ///
+    /// # Arguments
+    ///
+    /// * `images` - The images to add
+    #[must_use]
+    pub fn images<T: Into<String>>(mut self, images: Vec<T>) -> Self {
+        self.add_images.extend(images.into_iter().map(Into::into));
+        self
+    }
+
+    /// Remove an image from this filesystem dependency settings update
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image to remove
+    #[must_use]
+    pub fn remove_image<T: Into<String>>(mut self, image: T) -> Self {
+        self.remove_images.push(image.into());
+        self
+    }
+
+    /// Remove images from this filesystem dependency settings update
+    ///
+    /// # Arguments
+    ///
+    /// * `images` - The images to remove
+    #[must_use]
+    pub fn remove_images<T: Into<String>>(mut self, images: Vec<T>) -> Self {
+        self.remove_images
+            .extend(images.into_iter().map(Into::into));
+        self
+    }
+
+    /// Change the location to reconstruct filesystems to
+    ///
+    /// # Arguments
+    ///
+    /// * `location` - The location to reconstruct downloaded filesystems to
+    #[must_use]
+    pub fn location<T: Into<String>>(mut self, location: T) -> Self {
+        // convert our location to a string and set it
+        self.location = Some(location.into());
+        self
+    }
+
+    /// Update the kwarg to pass these dependencies in with if one exists
+    ///
+    /// This should include the '--' characters.
+    ///
+    /// # Arguments
+    ///
+    /// * `kwarg` - The kwarg arg to pass dependencies in with
+    #[must_use]
+    pub fn kwarg<T: Into<String>>(mut self, kwarg: T) -> Self {
+        // convert our kwarg to a string and set it
+        self.kwarg = Some(kwarg.into());
+        self
+    }
+
+    /// Clear the kwarg arg value
+    #[must_use]
+    pub fn clear_kwarg(mut self) -> Self {
+        // set the clear kwarg flag to true
+        self.clear_kwarg = true;
+        self
+    }
+
+    /// Change the strategy used to pass dependencies into jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The strategy to use when passing dependencies to jobs
+    #[must_use]
+    pub fn strategy(mut self, strategy: DependencyPassStrategy) -> Self {
+        // update our dependency passing strategy
+        self.strategy = Some(strategy);
+        self
+    }
+}
+
 /// The settings for the agent downloading samples for jobs
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
@@ -3748,6 +4111,9 @@ pub struct Dependencies {
     /// The settings the agent should use when passing children files from past tools
     #[serde(default)]
     pub children: ChildrenDependencySettings,
+    /// The settings the agent should use when reconstructing filesystems dumped by past tools
+    #[serde(default)]
+    pub filesystems: FileSystemDependencySettings,
     /// The settings to use when getting cache info
     #[serde(default)]
     pub cache: CacheDependencySettings,
@@ -3832,6 +4198,26 @@ impl Dependencies {
         self.repos = repos;
         self
     }
+
+    /// Sets the filesystems settings
+    ///
+    /// # Arguments
+    ///
+    /// * `filesystems` - The settings to use for filesystem dependencies
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{Dependencies, FileSystemDependencySettings};
+    ///
+    /// Dependencies::default()
+    ///     .filesystems(FileSystemDependencySettings::new(vec!("unpack")));
+    /// ```
+    #[must_use]
+    pub fn filesystems(mut self, filesystems: FileSystemDependencySettings) -> Self {
+        self.filesystems = filesystems;
+        self
+    }
 }
 
 impl PartialEq<DependenciesUpdate> for Dependencies {
@@ -3846,6 +4232,7 @@ impl PartialEq<DependenciesUpdate> for Dependencies {
         same!(self.ephemeral, update.ephemeral);
         same!(self.results, update.results);
         same!(self.repos, update.repos);
+        same!(self.filesystems, update.filesystems);
         true
     }
 }
@@ -3872,6 +4259,9 @@ pub struct DependenciesUpdate {
     /// The settings the agent should use when passing children files from past tools
     #[serde(default)]
     pub children: ChildrenDependencySettingsUpdate,
+    /// The settings the agent should use when reconstructing filesystems dumped by past tools
+    #[serde(default)]
+    pub filesystems: FileSystemDependencySettingsUpdate,
     /// The updated settings to use for a reactions cache
     #[serde(default)]
     pub cache: CacheDependencySettingsUpdate,
@@ -3990,6 +4380,29 @@ impl DependenciesUpdate {
     #[must_use]
     pub fn tags(mut self, tags: TagDependencySettingsUpdate) -> Self {
         self.tags = tags;
+        self
+    }
+
+    /// Sets the filesystem settings that should be updated
+    ///
+    /// # Arguments
+    ///
+    /// * `filesystems` - The settings to update in this images filesystem dependencies
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{DependenciesUpdate, FileSystemDependencySettingsUpdate, DependencyPassStrategy};
+    ///
+    /// DependenciesUpdate::default()
+    ///     .filesystems(FileSystemDependencySettingsUpdate::default()
+    ///         .enable()
+    ///         .location("/data/filesystems")
+    ///         .strategy(DependencyPassStrategy::Directory));
+    /// ```
+    #[must_use]
+    pub fn filesystems(mut self, filesystems: FileSystemDependencySettingsUpdate) -> Self {
+        self.filesystems = filesystems;
         self
     }
 }

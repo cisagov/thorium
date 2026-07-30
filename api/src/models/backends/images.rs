@@ -370,6 +370,38 @@ impl DependenciesUpdate {
             .children
             .images
             .extend(self.children.add_images);
+        // filesystems settings
+        update!(
+            image.dependencies.filesystems.enabled,
+            self.filesystems.enabled
+        );
+        update!(
+            image.dependencies.filesystems.location,
+            self.filesystems.location
+        );
+        update_opt!(
+            image.dependencies.filesystems.kwarg,
+            self.filesystems.kwarg
+        );
+        update_clear!(
+            image.dependencies.filesystems.kwarg,
+            self.filesystems.clear_kwarg
+        );
+        update!(
+            image.dependencies.filesystems.strategy,
+            self.filesystems.strategy
+        );
+        // update filesystems images
+        image
+            .dependencies
+            .filesystems
+            .images
+            .retain(|image| !self.filesystems.remove_images.contains(image));
+        image
+            .dependencies
+            .filesystems
+            .images
+            .extend(self.filesystems.add_images);
     }
 }
 

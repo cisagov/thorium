@@ -86,10 +86,11 @@ impl Repos {
             .post(&url)
             .header("authorization", &self.token)
             .json(req)
-            // use a really long timeout for really large repos
-            // this is probably done better some otherway
-            // 86,400 seconds == a day
-            .timeout(std::time::Duration::from_secs(86_400));
+            // repos can be large, so use a generous timeout to avoid aborting
+            // slow-but-healthy uploads
+            .timeout(std::time::Duration::from_secs(
+                super::helpers::LARGE_UPLOAD_TIMEOUT_SECS,
+            ));
         // send this request
         send_build!(self.client, req, RepoCreateResponse)
     }

@@ -2,6 +2,14 @@ use reqwest::{Certificate, ClientBuilder, NoProxy, Proxy};
 
 use super::{ClientSettings, Error};
 
+/// The per-request timeout (in seconds) to use for large file transfers
+///
+/// Large bodies (samples, repos, result files, and cache files) can take far longer to
+/// upload or download than the default client timeout allows. These endpoints override
+/// the per-request timeout with this generous value (24 hours) so that a slow-but-healthy
+/// transfer is never aborted by the client's default deadline.
+pub(crate) const LARGE_UPLOAD_TIMEOUT_SECS: u64 = 86_400;
+
 /// Apply our proxy settings to a [`reqwest::ClientBuilder`]
 ///
 /// The precedence is:
@@ -394,6 +402,8 @@ macro_rules! multipart_file {
         let file = tokio::fs::File::open(&$path).await?;
         // get the length of this file so we can size our buffer correctly
         let len = file.metadata().await?.len();
+        // get the name this file is going to be uploaded under
+        let file_name = $path.to_string_lossy().to_string();
         // convert our file into a framed read stream
         let codec = tokio_util::codec::BytesCodec::new();
         let stream = tokio_util::codec::FramedRead::new(file, codec);
@@ -403,7 +413,7 @@ macro_rules! multipart_file {
         let file_part = reqwest::multipart::Part::stream_with_length(body, len)
             .mime_str("multipart/form-data")?
             // set this files name
-            .file_name($path.to_string_lossy().to_string());
+            .file_name(file_name);
         // add the file to upload
         let form = $form.part($key, file_part);
         form
@@ -413,6 +423,11 @@ macro_rules! multipart_file {
         let file = tokio::fs::File::open(&$path).await?;
         // get the length of this file so we can size our buffer correctly
         let len = file.metadata().await?.len();
+        // get the name this file is going to be uploaded under trimming any prefix that was set
+        let file_name = match $prefix {
+            Some(prefix) => $path.strip_prefix(prefix)?.to_string_lossy().to_string(),
+            None => $path.to_string_lossy().to_string(),
+        };
         // convert our file into a framed read stream
         let codec = tokio_util::codec::BytesCodec::new();
         let stream = tokio_util::codec::FramedRead::new(file, codec);
@@ -420,14 +435,9 @@ macro_rules! multipart_file {
         let body = reqwest::Body::wrap_stream(stream);
         // build the form part that contains this file
         let file_part = reqwest::multipart::Part::stream_with_length(body, len)
-            .mime_str("multipart/form-data")?;
-        // if a trim prefix was set then trim it
-        let file_part = match $prefix {
-            Some(prefix) => {
-                file_part.file_name($path.strip_prefix(prefix)?.to_string_lossy().to_string())
-            }
-            None => file_part.file_name($path.to_string_lossy().to_string()),
-        };
+            .mime_str("multipart/form-data")?
+            // set this files name
+            .file_name(file_name);
         // add the file to upload
         let form = $form.part($key, file_part);
         form

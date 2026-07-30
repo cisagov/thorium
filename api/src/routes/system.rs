@@ -12,7 +12,8 @@ use crate::models::pipelines::BannedImageBan;
 use crate::models::{
     ActiveJob, ApiCursor, ArgStrategy, AutoTag, AutoTagLogic, Backup, ChildFilters,
     ChildFiltersUpdate, ChildrenDependencySettings, Cleanup, ConfigMap, Dependencies,
-    DependencyPassStrategy, EphemeralDependencySettings, EventTrigger, FilesHandler, Group,
+    DependencyPassStrategy, EphemeralDependencySettings, EventTrigger, FileSystemDependencySettings,
+    FilesHandler, Group,
     GroupAllowed, GroupStats, GroupUsers, HostPath, HostPathTypes, HostPathWhitelistUpdate, Image,
     ImageArgs, ImageBan, ImageBanKind, ImageBanUpdate, ImageLifetime, ImageScaler, ImageVersion,
     Kvm, KwargDependency, NFS, Node, NodeGetParams, NodeHealth, NodeListLine, NodeListParams,
@@ -756,7 +757,7 @@ async fn delete_workers(
 #[derive(OpenApi)]
 #[openapi(
     paths(init, info, stats, settings, settings_update, consistency_scan, settings_reset, cleanup, reset_cache, backup, restore, register_node, list_nodes, list_node_details, get_node, update_node, register_worker, delete_workers, get_worker, update_worker),
-    components(schemas(ActiveJob, ApiCursor<NodeListLine>, ArgStrategy, AutoTag, AutoTagLogic, Backup, BannedImageBan, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings, Cleanup, ConfigMap, Dependencies, DependencyPassStrategy, EphemeralDependencySettings, EventTrigger, FilesHandler, GenericBan, Group, GroupAllowed, GroupStats, GroupUsers, HostPath, HostPathTypes, HostPathWhitelistUpdate, Image, ImageArgs, ImageBan, ImageBanKind, ImageBanUpdate, ImageLifetime, ImageScaler, ImageVersion, InvalidHostPathBan, InvalidUrlBan, Kvm, KwargDependency, NFS, Node, NodeGetParams, NodeHealth, NodeListLine, NodeListParams, NodeRegistration, NodeUpdate, OutputCollection, OutputDisplayType, OutputHandler, Pipeline, PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineStats, Pools, RepoDependencySettings, Resources, ResultDependencySettings, SampleDependencySettings, ScalerStats, Secret, SecurityContext, SpawnLimits, StageStats, SystemInfo, SystemInfoParams, SystemSettings, SystemSettingsUpdate, SystemSettingsResetParams, SystemSettingsUpdateParams, SystemStats, TagDependencySettings, TagType, Theme, UnixInfo, User, UserRole, UserSettings, Volume, VolumeTypes, Worker, WorkerDeleteMap, WorkerDelete, WorkerRegistration, WorkerRegistrationList, WorkerStatus, WorkerUpdate)),
+    components(schemas(ActiveJob, ApiCursor<NodeListLine>, ArgStrategy, AutoTag, AutoTagLogic, Backup, BannedImageBan, ChildFilters, ChildFiltersUpdate, ChildrenDependencySettings, Cleanup, ConfigMap, Dependencies, DependencyPassStrategy, EphemeralDependencySettings, EventTrigger, FileSystemDependencySettings, FilesHandler, GenericBan, Group, GroupAllowed, GroupStats, GroupUsers, HostPath, HostPathTypes, HostPathWhitelistUpdate, Image, ImageArgs, ImageBan, ImageBanKind, ImageBanUpdate, ImageLifetime, ImageScaler, ImageVersion, InvalidHostPathBan, InvalidUrlBan, Kvm, KwargDependency, NFS, Node, NodeGetParams, NodeHealth, NodeListLine, NodeListParams, NodeRegistration, NodeUpdate, OutputCollection, OutputDisplayType, OutputHandler, Pipeline, PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineStats, Pools, RepoDependencySettings, Resources, ResultDependencySettings, SampleDependencySettings, ScalerStats, Secret, SecurityContext, SpawnLimits, StageStats, SystemInfo, SystemInfoParams, SystemSettings, SystemSettingsUpdate, SystemSettingsResetParams, SystemSettingsUpdateParams, SystemStats, TagDependencySettings, TagType, Theme, UnixInfo, User, UserRole, UserSettings, Volume, VolumeTypes, Worker, WorkerDeleteMap, WorkerDelete, WorkerRegistration, WorkerRegistrationList, WorkerStatus, WorkerUpdate)),
     modifiers(&OpenApiSecurity),
 )]
 pub struct SystemApiDocs;
