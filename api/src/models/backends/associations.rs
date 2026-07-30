@@ -113,6 +113,7 @@ impl AssociationRequest {
             self.kind,
             self.source,
             &target_list,
+            self.submissions,
             direction,
             shared,
         )

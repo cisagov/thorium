@@ -10,7 +10,7 @@ use thorium::models::{
     AssociationKind, AssociationRequest, AssociationTarget, Buffer, Confidence, Entity,
     EntityKinds, EntityListOpts, EntityMetadataRequest, EntityRequest, FileSystemEntityBuilder,
     Flag, OriginRequest, Sample, SampleRequest, Tree, TreeGrowQuery, TreeOpts, TreeQuery,
-    TreeSupport, WindowsProcessEntity, WindowsProcessTreeEntity,
+    TreeRelationships, TreeSupport, WindowsProcessEntity, WindowsProcessTreeEntity,
 };
 
 /// Generate a buffer of random bytes so every test run uploads unique samples
@@ -726,6 +726,102 @@ async fn filesystem() -> Result<(), thorium::Error> {
         has_branch(&tree, entity_hash(&bin_id), sample_hash(&busybox_sha)),
         true,
         "bin <-> busybox branch"
+    );
+    Ok(())
+}
+
+/// Find the submission id tied to the `FileIn` association for a file in a tree
+///
+/// # Arguments
+///
+/// * `tree` - The tree to search for the file's association
+/// * `file_sha256` - The sha256 of the file to find the submission link for
+fn file_in_submission(tree: &Tree, file_sha256: &str) -> Option<Uuid> {
+    // crawl every set of branches in our tree
+    for branches in tree.branches.values() {
+        // check each branch for a file in association pointing at our file
+        for branch in branches {
+            // only look at association relationships
+            if let TreeRelationships::Association(association) = &branch.relationship {
+                // only look at file in associations pointing at our file
+                if association.kind == AssociationKind::FileIn
+                    && association.other == AssociationTarget::File(file_sha256.to_owned())
+                {
+                    // return the submission this file was linked with if one is set
+                    if let Some(submissions) = &association.submissions {
+                        if let Some(submission) = submissions.other {
+                            return Some(submission);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Test that a filesystem's files are linked to the exact submission they came from
+///
+/// This guards the submission linked associations feature: when a filesystem is dumped, each
+/// `FileIn` association must record the specific submission its file was uploaded under so the
+/// file's original name can be recovered losslessly when the filesystem is reconstructed later.
+#[tokio::test]
+async fn filesystem_submissions() -> Result<(), thorium::Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // Create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // upload a firmware sample to carve a filesystem from
+    let firmware = client.files.create(gen_root(&group)).await?.sha256;
+    // build an on disk filesystem to ingest
+    let root_dir = std::env::temp_dir().join(format!("thorium-tree-tests-{}", Uuid::new_v4()));
+    // create the folders in our filesystem
+    tokio::fs::create_dir_all(root_dir.join("etc")).await?;
+    tokio::fs::create_dir_all(root_dir.join("bin")).await?;
+    // build the paths to the files in our filesystem
+    let passwd = root_dir.join("etc/passwd");
+    let busybox = root_dir.join("bin/busybox");
+    // write random data to our files so reruns don't collide
+    tokio::fs::write(&passwd, random_buffer()).await?;
+    tokio::fs::write(&busybox, random_buffer()).await?;
+    // the groups to build this filesystem in
+    let groups = vec![group.clone()];
+    // upload our filesystem's files as samples and track their sha256s and submission ids
+    let passwd_resp = client
+        .files
+        .create(SampleRequest::new(&passwd, groups.clone()))
+        .await?;
+    let busybox_resp = client
+        .files
+        .create(SampleRequest::new(&busybox, groups.clone()))
+        .await?;
+    // build our filesystem entity
+    let mut fs_builder = FileSystemEntityBuilder::new("tree-tests-fs-subs", &root_dir)?;
+    // add our files to this filesystem
+    fs_builder.file(&passwd)?;
+    fs_builder.file(&busybox)?;
+    // tie each file to the submission it was uploaded under
+    fs_builder.add_submission(passwd.clone(), passwd_resp.id);
+    fs_builder.add_submission(busybox.clone(), busybox_resp.id);
+    // ingest this filesystem into Thorium
+    fs_builder
+        .create(&"tree-tests".to_owned(), &firmware, &groups, &client)
+        .await?;
+    // clean up our on disk filesystem
+    tokio::fs::remove_dir_all(&root_dir).await?;
+    // start a tree from our firmware sample
+    let tree = client
+        .trees
+        .start(&TreeOpts::default(), &start_query(&group, &firmware))
+        .await?;
+    // make sure each file's association carries the exact submission it was uploaded under
+    is!(
+        file_in_submission(&tree, &passwd_resp.sha256),
+        Some(passwd_resp.id)
+    );
+    is!(
+        file_in_submission(&tree, &busybox_resp.sha256),
+        Some(busybox_resp.id)
     );
     Ok(())
 }

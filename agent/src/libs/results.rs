@@ -124,8 +124,19 @@ impl RawResults {
                     }
                     // results is too large to be stored in the DB
                     len if len > 1_000_000 => {
-                        // read in our results
-                        let results = tokio::fs::read_to_string(path).await?;
+                        // this result will be streamed to s3 as a result file, so the only
+                        // thing that reads the in memory copy is auto tag extraction. Only
+                        // buffer the whole (potentially very large) file when auto tagging
+                        // is actually configured, otherwise we would read hundreds of MiB
+                        // into memory just to discard it
+                        let results = if image.output_collection.auto_tag.is_empty() {
+                            String::new()
+                        } else {
+                            // read in our results, decoding lossily so a non utf8 result
+                            // file doesn't fail the entire submission
+                            let bytes = tokio::fs::read(path).await?;
+                            String::from_utf8_lossy(&bytes).into_owned()
+                        };
                         // build our result file to store
                         let file = OnDiskFile::new(path)
                             .trim_prefix(path.parent().unwrap_or_else(|| Path::new("/")));

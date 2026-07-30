@@ -227,6 +227,8 @@ pub struct FileSystemEntityBuilder {
     pub contents: BTreeMap<PathBuf, BTreeMap<String, Option<PathBuf>>>,
     /// A map of paths and their sha256s
     sha256s: BTreeMap<PathBuf, String>,
+    /// A map of paths and the submission id they were uploaded under (if known)
+    submissions: BTreeMap<PathBuf, Uuid>,
     /// The root of this filesystem
     pub root: PathBuf,
 }
@@ -250,6 +252,7 @@ impl FileSystemEntityBuilder {
             files: Vec::with_capacity(100),
             contents: BTreeMap::default(),
             sha256s: BTreeMap::default(),
+            submissions: BTreeMap::default(),
             root: root.clone(),
         };
         // add a root directory
@@ -374,6 +377,19 @@ impl FileSystemEntityBuilder {
     /// Add a files sha256 to this filesystem
     pub fn add_sha256(&mut self, path: PathBuf, sha256: String) {
         self.sha256s.insert(path, sha256);
+    }
+
+    /// Add the submission id a file was uploaded under to this filesystem
+    ///
+    /// This lets the `FileIn` association for this file point at the exact submission it came from so the
+    /// file's name can be recovered losslessly when the filesystem is reconstructed later.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the file this submission id is for
+    /// * `submission` - The submission id this file was uploaded under
+    pub fn add_submission(&mut self, path: PathBuf, submission: Uuid) {
+        self.submissions.insert(path, submission);
     }
 
     /// Remove a file from this filesystem
@@ -670,7 +686,12 @@ impl FileSystemEntityBuilder {
         // build the target of this association
         let target = AssociationTarget::File(sha256);
         // build a base association request
-        let assoc_req = AssociationRequest::new(AssociationKind::FileIn, source).target(target);
+        let mut assoc_req = AssociationRequest::new(AssociationKind::FileIn, source).target(target);
+        // tie this file to the specific submission it came from if we know it so its name can be
+        // recovered losslessly when this filesystem is reconstructed
+        if let Some(submission) = self.submissions.get(path) {
+            assoc_req = assoc_req.submission_other(*submission);
+        }
         // create this association
         thorium.associations.create(&assoc_req).await?;
         Ok(())

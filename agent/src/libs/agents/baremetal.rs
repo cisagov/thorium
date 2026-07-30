@@ -58,6 +58,8 @@ pub struct BareMetal {
     pub tags_dep_path: PathBuf,
     /// The path to write children dependencies to
     pub children_dep_path: PathBuf,
+    /// The path to reconstruct filesystem dependencies to
+    pub filesystems_dep_path: PathBuf,
     /// The path to write results to
     pub results_path: PathBuf,
     /// The path to write result files to
@@ -80,6 +82,8 @@ pub struct BareMetal {
     tags: Vec<PathBuf>,
     /// The paths to any downloaded children
     children: Vec<PathBuf>,
+    /// The paths to any reconstructed filesystem files
+    filesystems: Vec<PathBuf>,
     /// The paths to any downloaded cache info
     cache: DownloadedCache,
 }
@@ -96,6 +100,8 @@ impl BareMetal {
         let results_dep_path = isolate(&target.image.dependencies.results.location, &id)?;
         let tags_dep_path = isolate(&target.image.dependencies.tags.location, &id)?;
         let children_dep_path = isolate(&target.image.dependencies.children.location, &id)?;
+        let filesystems_dep_path =
+            isolate(&target.image.dependencies.filesystems.location, &id)?;
         let results_path = isolate(&target.image.output_collection.files.results, &id)?;
         let result_files_path = isolate(&target.image.output_collection.files.result_files, &id)?;
         let tags_path = isolate(&target.image.output_collection.files.tags, &id)?;
@@ -111,6 +117,7 @@ impl BareMetal {
             results_dep_path,
             tags_dep_path,
             children_dep_path,
+            filesystems_dep_path,
             results_path,
             result_files_path,
             tags_path,
@@ -122,6 +129,7 @@ impl BareMetal {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            filesystems: Vec::default(),
             cache: DownloadedCache::default(),
         };
         Ok(bare_metal)
@@ -184,6 +192,7 @@ impl AgentExecutor for BareMetal {
         purge!(self.result_files_path);
         purge!(self.tags_path);
         purge!(self.children_path);
+        purge!(self.filesystems_dep_path);
         // setup dependendency base paths that are isolated by job ids
         std::fs::create_dir_all(&self.samples_path)?;
         std::fs::create_dir_all(&self.ephemerals_path)?;
@@ -265,6 +274,18 @@ impl AgentExecutor for BareMetal {
             )
             .await?;
         }
+        // only reconstruct prior filesystems if its enabled
+        if image.dependencies.filesystems.enabled {
+            // reconstruct any prior filesystems
+            self.filesystems = setup::download_filesystems(
+                &self.thorium,
+                image,
+                job,
+                &self.filesystems_dep_path,
+                &mut self.logs,
+            )
+            .await?;
+        }
         Ok(())
     }
 
@@ -317,6 +338,7 @@ impl AgentExecutor for BareMetal {
             .await?
             .add_tags(&self.tags, &dep_conf.tags)
             .add_children(&self.children, &dep_conf.children)
+            .add_filesystems(&self.filesystems, &dep_conf.filesystems)
             .add_cache(&self.cache, &dep_conf.cache)
             .build(image, Some(&results), Some(&result_files))?;
         // cast our command to a str

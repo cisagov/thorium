@@ -40,6 +40,8 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
     /// * `kind` - The kind of entity we are uploading
     /// * `field` - The field to upload an entity file from
     /// * `shared` - Shared Thorium objects
+    #[rustfmt::skip]
+    #[instrument(name = "OutputForm::upload_entities_file", skip(self, field, shared), fields(kind = kind.to_string()), err(Debug))]
     async fn upload_entities_file<'a>(
         &mut self,
         kind: EntityKinds,
@@ -53,6 +55,8 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         // we don't need to validate this path because we completely control it
         // build the path to save this attachment at in s3
         let s3_path = format!("{id}/{THORIUM_PREFIX}entities/{kind}.json", id = self.id);
+        // log which entities file we are uploading so a stalled upload can be traced to it
+        event!(Level::INFO, msg = "Uploading entities file", s3_path);
         // cart and stream this file into s3
         shared.s3.results.stream(&s3_path, field).await?;
         // add this entity kind to our form and set its count to 0 if it doesn't
@@ -68,6 +72,7 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
     /// * `result_id` - The id of the result we are uploading a result file for
     /// * `field` - The field to upload a result file from
     /// * `shared` - Shared Thorium objects
+    #[instrument(name = "OutputForm::upload_result_file", skip_all, err(Debug))]
     async fn upload_result_file<'a>(
         &mut self,
         field: Field<'a>,
@@ -89,6 +94,13 @@ impl<O: OutputSupport> OutputFormBuilder<O> {
         }
         // build the path to save this attachment at in s3
         let s3_path = format!("{}/{}", self.id, file_name);
+        // log which result file we are uploading so a stalled upload can be traced to it
+        event!(
+            Level::INFO,
+            msg = "Uploading result file",
+            file_name,
+            s3_path
+        );
         // cart and stream this file into s3
         shared.s3.results.stream(&s3_path, field).await?;
         // add this file name to our form

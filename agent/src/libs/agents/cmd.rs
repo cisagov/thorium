@@ -7,8 +7,8 @@ use thorium::{
     Error,
     models::{
         ArgStrategy, ChildrenDependencySettings, DependencyPassStrategy,
-        EphemeralDependencySettings, GenericJob, GenericJobKwargs, GenericJobOpts, Image,
-        KwargDependency, OutputHandler, RepoDependency, RepoDependencySettings,
+        EphemeralDependencySettings, FileSystemDependencySettings, GenericJob, GenericJobKwargs,
+        GenericJobOpts, Image, KwargDependency, OutputHandler, RepoDependency,
         ResultDependencySettings, SampleDependencySettings, TagDependencySettings,
         images::CacheDependencySettings,
     },
@@ -368,6 +368,42 @@ impl CmdBuilder {
                 .map(|name| name.to_string_lossy().to_string())
                 .collect(),
             // just return a list containing our directory name
+            DependencyPassStrategy::Directory => {
+                vec![settings.location.clone()]
+            }
+            // don't return anything and short circuit
+            DependencyPassStrategy::Disabled => return self,
+        };
+        // add this arg as a kwarg if we kwarg settings
+        self.add_maybe_kwargs(settings.kwarg.as_ref(), args);
+        self
+    }
+
+    /// Add either positional or keyword args for reconstructed filesystems
+    ///
+    /// # Arguments
+    ///
+    /// * `paths` - The paths to any reconstructed filesystem files
+    /// * `settings` - The settings to use for adding filesystem dependencies to our command
+    pub fn add_filesystems(
+        mut self,
+        paths: &[PathBuf],
+        settings: &FileSystemDependencySettings,
+    ) -> Self {
+        // get the filesystem args formatted correctly
+        let args = match settings.strategy {
+            // convert the paths to our reconstructed files to strings
+            DependencyPassStrategy::Paths => paths
+                .iter()
+                .map(|path| path.to_string_lossy().to_string())
+                .collect(),
+            // get the file names for all of our reconstructed files
+            DependencyPassStrategy::Names => paths
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|name| name.to_string_lossy().to_string())
+                .collect(),
+            // just return a list containing our filesystem directory name
             DependencyPassStrategy::Directory => {
                 vec![settings.location.clone()]
             }

@@ -34,8 +34,8 @@ mod version;
 mod volumes;
 
 pub use associations::{
-    Association, AssociationKind, AssociationListOpts, AssociationListParams, AssociationRequest,
-    AssociationSupport, AssociationTarget,
+    AssociatedSubmissions, Association, AssociationKind, AssociationListOpts, AssociationListParams,
+    AssociationRequest, AssociationSupport, AssociationTarget,
 };
 pub use deadlines::Deadline;
 pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchParams};
@@ -87,7 +87,8 @@ pub use images::{
     CacheDependencySettings, CacheDependencySettingsUpdate, ChildFilters, ChildFiltersUpdate,
     ChildrenDependencySettings, ChildrenDependencySettingsUpdate, Cleanup, CleanupUpdate,
     Dependencies, DependenciesUpdate, DependencyPassStrategy, EphemeralDependencySettings,
-    EphemeralDependencySettingsUpdate, FileNamingStrategy, GenericCacheDependencySettings,
+    EphemeralDependencySettingsUpdate, FileNamingStrategy, FileSystemDependencySettings,
+    FileSystemDependencySettingsUpdate, GenericCacheDependencySettings,
     GenericCacheDependencySettingsUpdate, Image, ImageArgs, ImageArgsUpdate, ImageBan,
     ImageBanKind, ImageBanUpdate, ImageDetailsList, ImageJobInfo, ImageLifetime, ImageList,
     ImageListParams, ImageNetworkPolicyUpdate, ImageRequest, ImageScaler, ImageUpdate,

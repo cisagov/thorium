@@ -7,7 +7,8 @@ use futures::{StreamExt, TryStreamExt, stream};
 use thorium::models::{
     ArgStrategy, AutoTagLogic, AutoTagUpdate, ChildFilters, ChildFiltersUpdate, CleanupUpdate,
     DependenciesUpdate, DependencyPassStrategy, EphemeralDependencySettingsUpdate,
-    FilesHandlerUpdate, GroupUpdate, GroupUsersUpdate, HostPathWhitelistUpdate, ImageBan,
+    FileSystemDependencySettingsUpdate, FilesHandlerUpdate, GroupUpdate, GroupUsersUpdate,
+    HostPathWhitelistUpdate, ImageBan,
     ImageBanKind, ImageBanUpdate, ImageLifetime, ImageNetworkPolicyUpdate, ImageScaler,
     ImageUpdate, ImageVersion, NetworkPolicyRequest, NotificationLevel, NotificationParams,
     NotificationRequest, OutputCollectionUpdate, OutputDisplayType, OutputHandler, PipelineRequest,
@@ -422,6 +423,14 @@ async fn update() -> Result<(), Error> {
                         .location("/new/location")
                         .kwarg("--new-repos")
                         .strategy(DependencyPassStrategy::Disabled),
+                )
+                .filesystems(
+                    FileSystemDependencySettingsUpdate::default()
+                        .enable()
+                        .image("unpack")
+                        .location("/updated/filesystems")
+                        .kwarg("--filesystems")
+                        .strategy(DependencyPassStrategy::Directory),
                 ),
         )
         .display_type(OutputDisplayType::Json)

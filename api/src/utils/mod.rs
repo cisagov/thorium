@@ -16,13 +16,13 @@ mod utils_api_reexport {
 #[cfg(feature = "api")]
 pub use utils_api_reexport::*;
 
-#[cfg(feature = "tracing")]
+#[cfg(feature = "trace")]
 #[path = ""]
 mod trace_reexport {
     pub mod trace;
 }
 
-#[cfg(feature = "tracing")]
+#[cfg(feature = "trace")]
 pub use trace_reexport::*;
 
 pub mod helpers;

@@ -37,6 +37,8 @@ pub struct K8s {
     tags: Vec<PathBuf>,
     /// The paths to any downloaded children
     children: Vec<PathBuf>,
+    /// The paths to any reconstructed filesystem files
+    filesystems: Vec<PathBuf>,
     /// The paths to any downloaded cache info
     cache: DownloadedCache,
     /// whether this is a windows container or not
@@ -66,6 +68,7 @@ impl K8s {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            filesystems: Vec::default(),
             cache: DownloadedCache::default(),
             windows: false,
         };
@@ -100,6 +103,7 @@ impl K8s {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            filesystems: Vec::default(),
             cache: DownloadedCache::default(),
             windows: true,
         };
@@ -135,6 +139,7 @@ impl K8s {
             results: Vec::default(),
             tags: Vec::default(),
             children: Vec::default(),
+            filesystems: Vec::default(),
             cache: DownloadedCache::default(),
             // KVM can run Windows or Linux jobs, so detect what's expected based
             // on what OS this agent was compiled for
@@ -214,6 +219,7 @@ impl AgentExecutor for K8s {
         std::fs::create_dir_all(&image.dependencies.ephemeral.location)?;
         std::fs::create_dir_all(&image.dependencies.repos.location)?;
         std::fs::create_dir_all(&image.dependencies.children.location)?;
+        std::fs::create_dir_all(&image.dependencies.filesystems.location)?;
         std::fs::create_dir_all(&image.dependencies.tags.location)?;
         // setup result base paths
         std::fs::create_dir_all(&image.output_collection.files.result_files)?;
@@ -307,6 +313,18 @@ impl AgentExecutor for K8s {
             )
             .await?;
         }
+        // only reconstruct prior filesystems if its enabled
+        if image.dependencies.filesystems.enabled {
+            // reconstruct any prior filesystems
+            self.filesystems = setup::download_filesystems(
+                &self.thorium,
+                image,
+                job,
+                &image.dependencies.filesystems.location,
+                &mut self.logs,
+            )
+            .await?;
+        }
         Ok(())
     }
 
@@ -344,6 +362,7 @@ impl AgentExecutor for K8s {
             .await?
             .add_tags(&self.tags, &dep_conf.tags)
             .add_children(&self.children, &dep_conf.children)
+            .add_filesystems(&self.filesystems, &dep_conf.filesystems)
             .add_cache(&self.cache, &dep_conf.cache)
             // if this is a windows job then change our command to run in windows
             .windows(self.windows)
@@ -465,6 +484,7 @@ impl AgentExecutor for K8s {
         purge!(image.dependencies.results.location);
         purge!(image.dependencies.repos.location);
         purge!(image.dependencies.tags.location);
+        purge!(image.dependencies.filesystems.location);
         purge!(image.dependencies.cache.location);
         // remove any results files/dirs
         purge!(image.output_collection.files.results);

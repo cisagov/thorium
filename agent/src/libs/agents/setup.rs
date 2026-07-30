@@ -2,15 +2,17 @@
 
 use crossbeam::channel::Sender;
 use futures::{StreamExt, stream};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use thorium::Error;
 use thorium::Thorium;
 use thorium::client::ResultsClient;
 use thorium::models::{
-    DependencyPassStrategy, FileDownloadOpts, FileNamingStrategy, GenericJob, Image, ReactionCache,
-    RepoDownloadOpts, ResultGetParams,
+    Association, AssociationKind, AssociationTarget, DependencyPassStrategy, Directionality,
+    EntityKinds, EntityListOpts, EntityMetadata, FileDownloadOpts, FileNamingStrategy,
+    FileSystemDependencySettings, GenericJob, Image, ReactionCache, RepoDownloadOpts,
+    ResultGetParams, TreeNode, TreeOpts, TreeQuery, TreeRelationships,
 };
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -933,4 +935,326 @@ pub async fn download_children<P: Into<PathBuf>>(
         }
     }
     Ok(downloaded)
+}
+
+/// Reconstruct any prior filesystems this image depends on from Thorium
+///
+/// Unlike [`download_children`], which downloads loose children flat, this rebuilds the directory
+/// structure of filesystems dumped by earlier tools so later tools see the original layout. The
+/// structure is walked via the trees API and each files original name is recovered from the
+/// submission its `FileIn` association was linked with.
+///
+/// # Arguments
+///
+/// * `thorium` - A client for Thorium
+/// * `image` - The image our job is based on
+/// * `job` - The job we are reconstructing filesystems for
+/// * `target` - The target folder to reconstruct these filesystems under
+/// * `logs` - The channel to use when sending logs to Thorium
+#[instrument(name = "setup::download_filesystems", skip_all, err(Debug))]
+pub async fn download_filesystems<P: Into<PathBuf>>(
+    thorium: &Thorium,
+    image: &Image,
+    job: &GenericJob,
+    target: P,
+    logs: &mut Sender<String>,
+) -> Result<Vec<PathBuf>, Error> {
+    // get our filesystem dependency settings
+    let settings = &image.dependencies.filesystems;
+    // build the root path to reconstruct filesystems under
+    let root = target.into();
+    // create a list of the paths to our reconstructed files
+    let mut downloaded = Vec::new();
+    // build the options for downloading files
+    let mut opts = FileDownloadOpts::default().uncart();
+    // track the dirs we have already created while reconstructing
+    let mut created_dirs = HashSet::new();
+    // reconstruct filesystems for each sample we depend on
+    for sha256 in &job.samples {
+        reconstruct_sample_filesystems(
+            thorium,
+            settings,
+            sha256,
+            &root,
+            &mut opts,
+            &mut created_dirs,
+            &mut downloaded,
+            logs,
+        )
+        .await?;
+    }
+    Ok(downloaded)
+}
+
+/// Find and reconstruct all filesystems that were dumped for a single sample
+///
+/// # Arguments
+///
+/// * `thorium` - A client for Thorium
+/// * `settings` - The filesystem dependency settings for our image
+/// * `sha256` - The sha256 of the sample to reconstruct filesystems for
+/// * `root` - The root path to reconstruct filesystems under
+/// * `opts` - The options to use when downloading files
+/// * `created_dirs` - The set of directories we've already created
+/// * `downloaded` - The paths to our reconstructed files
+/// * `logs` - The channel to use when sending logs to Thorium
+#[expect(clippy::too_many_arguments)]
+async fn reconstruct_sample_filesystems(
+    thorium: &Thorium,
+    settings: &FileSystemDependencySettings,
+    sha256: &str,
+    root: &Path,
+    opts: &mut FileDownloadOpts,
+    created_dirs: &mut HashSet<PathBuf>,
+    downloaded: &mut Vec<PathBuf>,
+    logs: &mut Sender<String>,
+) -> Result<(), Error> {
+    // list all filesystem entities that were dumped for this sample
+    let list_opts = EntityListOpts::default()
+        .tag("Parent", sha256)
+        .kinds([EntityKinds::FileSystem]);
+    // get a cursor over these filesystem entities
+    let mut cursor = thorium.entities.list_details(&list_opts).await?;
+    // crawl over all of the filesystem entities for this sample
+    loop {
+        // reconstruct each filesystem entity on this page
+        for entity in &cursor.data {
+            // only handle filesystem entities
+            if let EntityMetadata::FileSystem(filesystem) = &entity.metadata {
+                // skip filesystems that weren't dumped by one of our restricted images if we have any
+                if !settings.images.is_empty()
+                    && !filesystem
+                        .tools
+                        .iter()
+                        .any(|tool| settings.images.contains(tool))
+                {
+                    continue;
+                }
+                // log that we are reconstructing this filesystem
+                log!(
+                    logs,
+                    "Reconstructing filesystem {} for {}",
+                    entity.name,
+                    sha256
+                );
+                // reconstruct this filesystem on disk
+                reconstruct_filesystem(
+                    thorium,
+                    settings,
+                    sha256,
+                    entity.id,
+                    &entity.name,
+                    root,
+                    opts,
+                    created_dirs,
+                    downloaded,
+                    logs,
+                )
+                .await?;
+            }
+        }
+        // stop crawling once our cursor is exhausted
+        if cursor.exhausted() {
+            break;
+        }
+        // get the next page of filesystem entities
+        cursor.refill().await?;
+    }
+    Ok(())
+}
+
+/// Reconstruct a single filesystem on disk by walking its tree
+///
+/// # Arguments
+///
+/// * `thorium` - A client for Thorium
+/// * `settings` - The filesystem dependency settings for our image
+/// * `sha256` - The sha256 of the sample this filesystem was dumped for
+/// * `fs_id` - The id of the root filesystem entity to reconstruct
+/// * `fs_name` - The name of the filesystem being reconstructed
+/// * `root` - The root path to reconstruct filesystems under
+/// * `opts` - The options to use when downloading files
+/// * `created_dirs` - The set of directories we've already created
+/// * `downloaded` - The paths to our reconstructed files
+/// * `logs` - The channel to use when sending logs to Thorium
+#[expect(clippy::too_many_arguments)]
+async fn reconstruct_filesystem(
+    thorium: &Thorium,
+    settings: &FileSystemDependencySettings,
+    sha256: &str,
+    fs_id: Uuid,
+    fs_name: &str,
+    root: &Path,
+    opts: &mut FileDownloadOpts,
+    created_dirs: &mut HashSet<PathBuf>,
+    downloaded: &mut Vec<PathBuf>,
+    logs: &mut Sender<String>,
+) -> Result<(), Error> {
+    // build the tree options limiting how deep we grow and skipping parents
+    let tree_opts = TreeOpts::default().gather_parents(false).limit(1024);
+    // build a query starting from this filesystem entity bounded to just this filesystem so its
+    // folders and files auto expand instead of being hinted
+    let mut query = TreeQuery::default().entity(fs_id);
+    query.bounds.filesystem = vec![fs_id];
+    // materialize the whole filesystem tree in one shot
+    let tree = thorium.trees.start(&tree_opts, &query).await?;
+    // warn if the filesystem was too deep to fully materialize so we don't silently truncate
+    if !tree.growable.is_empty() {
+        log!(
+            logs,
+            "Filesystem {} was too deep to fully reconstruct - some files may be missing",
+            fs_name
+        );
+    }
+    // find the root node for this filesystem in our tree
+    let fs_root_hash = tree.data_map.iter().find_map(|(hash, node)| match node {
+        TreeNode::Entity(entity)
+            if entity.id == fs_id && matches!(entity.metadata, EntityMetadata::FileSystem(_)) =>
+        {
+            Some(*hash)
+        }
+        _ => None,
+    });
+    // get our root node hash or give up on this filesystem if its missing from the tree
+    let fs_root_hash = match fs_root_hash {
+        Some(hash) => hash,
+        None => {
+            log!(
+                logs,
+                "Could not find the root of filesystem {} in its tree",
+                fs_name
+            );
+            return Ok(());
+        }
+    };
+    // build the base path all files in this filesystem will be reconstructed under
+    let base = root.join(sha256).join(fs_name);
+    // track the reconstructed path for each folder node as we walk down the tree
+    let mut folder_paths: HashMap<u64, PathBuf> = HashMap::new();
+    // the filesystem root maps to our base path
+    folder_paths.insert(fs_root_hash, base);
+    // walk the filesystem tree breadth first from its root
+    let mut queue = VecDeque::new();
+    queue.push_back(fs_root_hash);
+    while let Some(node_hash) = queue.pop_front() {
+        // get the reconstructed path for this folder node
+        let parent_path = match folder_paths.get(&node_hash) {
+            Some(path) => path.clone(),
+            None => continue,
+        };
+        // get the branches leaving this node if it has any
+        let branches = match tree.branches.get(&node_hash) {
+            Some(branches) => branches,
+            None => continue,
+        };
+        // step over every branch leaving this node
+        for branch in branches {
+            // only follow branches to our children (folders/files in this folder)
+            if branch.direction != Directionality::To {
+                continue;
+            }
+            // only follow filesystem association branches
+            let association = match &branch.relationship {
+                TreeRelationships::Association(association) => association,
+                _ => continue,
+            };
+            // handle this branch based on the kind of thing it points too
+            match association.kind {
+                // this branch points to a child folder in this folder
+                AssociationKind::FolderIn => {
+                    // get the child folder node
+                    if let Some(TreeNode::Entity(child)) = tree.data_map.get(&branch.node) {
+                        // only descend into folders that belong to this filesystem
+                        if let EntityMetadata::Folder(folder) = &child.metadata {
+                            // skip folders from other filesystems
+                            if folder.filesystem_id != fs_id {
+                                continue;
+                            }
+                            // the special "/" root folder maps to our current path, others get appended
+                            let child_path = if child.name == "/" {
+                                parent_path.clone()
+                            } else {
+                                parent_path.join(&child.name)
+                            };
+                            // record this folders path and queue it for walking
+                            folder_paths.insert(branch.node, child_path);
+                            queue.push_back(branch.node);
+                        }
+                    }
+                }
+                // this branch points to a file in this folder
+                AssociationKind::FileIn => {
+                    // get the sha256 of the file to download
+                    let file_sha256 = match &association.other {
+                        AssociationTarget::File(file_sha256) => file_sha256,
+                        // this file in association doesn't point at a file so skip it
+                        _ => continue,
+                    };
+                    // resolve this files original name from the submission it was linked with,
+                    // falling back to its sha256 for older filesystems that lack a submission link
+                    let name = resolve_file_name(association, branch.node, &tree.data_map)
+                        .unwrap_or_else(|| file_sha256.clone());
+                    // build the path to reconstruct this file at
+                    let file_path = parent_path.join(name);
+                    // create any parent dirs for this file
+                    create_parents(&file_path, created_dirs).await?;
+                    // log that we are reconstructing this file
+                    log!(
+                        logs,
+                        "Reconstructing {} at {}",
+                        file_sha256,
+                        file_path.display()
+                    );
+                    // download this file to its reconstructed path
+                    thorium.files.download(file_sha256, &file_path, opts).await?;
+                    // only pass in reconstructed files if its enabled
+                    if settings.strategy != DependencyPassStrategy::Disabled {
+                        downloaded.push(file_path);
+                    }
+                }
+                // ignore any other association kinds
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolve a files original name from the submission its association was linked with
+///
+/// Falls back to any submission that has a name so reconstruction still works for older filesystems
+/// that predate submission linked associations.
+///
+/// # Arguments
+///
+/// * `association` - The `FileIn` association linking this file to its folder
+/// * `file_hash` - The tree node hash of the file
+/// * `data_map` - The map of node hashes to their tree nodes
+fn resolve_file_name(
+    association: &Association,
+    file_hash: u64,
+    data_map: &HashMap<u64, TreeNode>,
+) -> Option<String> {
+    // get the sample node for this file
+    let sample = match data_map.get(&file_hash) {
+        Some(TreeNode::Sample(sample)) => sample,
+        // this file isn't a sample node so we can't resolve its name
+        _ => return None,
+    };
+    // get the submission this file was linked with if we know it
+    let linked = association.submissions.as_ref().and_then(|subs| subs.other);
+    // try to find the exact submission this file was placed under
+    if let Some(submission_id) = linked {
+        // look for the linked submission and use its name if it has one
+        if let Some(name) = sample
+            .submissions
+            .iter()
+            .find(|sub| sub.id == submission_id)
+            .and_then(|sub| sub.name.clone())
+        {
+            return Some(name);
+        }
+    }
+    // fall back to any submission that has a name
+    sample.submissions.iter().find_map(|sub| sub.name.clone())
 }

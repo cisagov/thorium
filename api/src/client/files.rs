@@ -129,10 +129,11 @@ impl Files {
             .post(&url)
             .multipart(file_req.to_form().await?)
             .header("authorization", &self.token)
-            // use a really long timeout for really large files
-            // this is probably done better some otherway
-            // 86,400 seconds == a day
-            .timeout(std::time::Duration::from_secs(86_400));
+            // samples can be large, so use a generous timeout to avoid aborting
+            // slow-but-healthy uploads
+            .timeout(std::time::Duration::from_secs(
+                super::helpers::LARGE_UPLOAD_TIMEOUT_SECS,
+            ));
         // send this request
         send_build!(self.client, req, SampleSubmissionResponse)
     }

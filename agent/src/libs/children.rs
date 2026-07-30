@@ -369,7 +369,8 @@ macro_rules! submit {
                             resp.sha256,
                             resp.id
                         );
-                        Ok(resp.sha256)
+                        // return this childs sha256 and the submission id it was uploaded under
+                        Ok((resp.sha256, Some(resp.id)))
                     }
                     // this child failed to submit so log an error
                     Err(err) => {
@@ -382,8 +383,8 @@ macro_rules! submit {
                                     Some(msg) => {
                                         // get the sha256 from our error message
                                         match serde_json::from_str(&msg) {
-                                            // return this already uploaded samples sha256
-                                            Ok(SampleUploadConflict { error }) => Ok(error),
+                                            // return this already uploaded samples sha256 (its submission is unknown)
+                                            Ok(SampleUploadConflict { error }) => Ok((error, None)),
                                             Err(error) => Err(Error::Serde(error)),
                                         }
                                     }
@@ -397,7 +398,7 @@ macro_rules! submit {
                         }
                     }
                 })
-                .collect::<Result<Vec<_>, _>>()
+                .collect::<Result<Vec<(String, Option<Uuid>)>, _>>()
         }
     };
 }
@@ -748,9 +749,13 @@ impl Children {
                     // add tags so that we know this filesystem came from the source origin
                     builder.tag_mut("FileSystemOriginKind", "Source");
                     // add all sha256s for all files
-                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                    for (path, (sha256, submission)) in paths.clone().into_iter().zip(resps) {
                         // add this paths sha256
-                        builder.add_sha256(path, sha256);
+                        builder.add_sha256(path.clone(), sha256);
+                        // tie this path to the submission it was uploaded under if we know it
+                        if let Some(submission) = submission {
+                            builder.add_submission(path, submission);
+                        }
                     }
                     // create this filesystem for each sample
                     for sample in &job.samples {
@@ -821,9 +826,13 @@ impl Children {
                     // add tags so that we know this filesystem came from the source origin
                     builder.tag_mut("FileSystemOriginKind", "Unpacked");
                     // add all sha256s for all files
-                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                    for (path, (sha256, submission)) in paths.clone().into_iter().zip(resps) {
                         // add this paths sha256
-                        builder.add_sha256(path, sha256);
+                        builder.add_sha256(path.clone(), sha256);
+                        // tie this path to the submission it was uploaded under if we know it
+                        if let Some(submission) = submission {
+                            builder.add_submission(path, submission);
+                        }
                     }
                     // create this filesystem for each sample
                     for sample in &job.samples {
@@ -1000,9 +1009,13 @@ impl Children {
                     // add tags so that we know this filesystem came from the source origin
                     builder.tag_mut("FileSystemOriginKind", "CarvedPcap");
                     // add all sha256s for all files
-                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                    for (path, (sha256, submission)) in paths.clone().into_iter().zip(resps) {
                         // add this paths sha256
-                        builder.add_sha256(path, sha256);
+                        builder.add_sha256(path.clone(), sha256);
+                        // tie this path to the submission it was uploaded under if we know it
+                        if let Some(submission) = submission {
+                            builder.add_submission(path, submission);
+                        }
                     }
                     // create this filesystem for each sample
                     for sample in &job.samples {
@@ -1044,9 +1057,13 @@ impl Children {
                     // add tags so that we know this filesystem came from the source origin
                     builder.tag_mut("FileSystemOriginKind", "CarvedUnknown");
                     // add all sha256s for all files
-                    for (path, sha256) in paths.clone().into_iter().zip(resps) {
+                    for (path, (sha256, submission)) in paths.clone().into_iter().zip(resps) {
                         // add this paths sha256
-                        builder.add_sha256(path, sha256);
+                        builder.add_sha256(path.clone(), sha256);
+                        // tie this path to the submission it was uploaded under if we know it
+                        if let Some(submission) = submission {
+                            builder.add_submission(path, submission);
+                        }
                     }
                     // create this filesystem for each sample
                     for sample in &job.samples {
