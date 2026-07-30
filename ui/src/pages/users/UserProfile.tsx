@@ -1,6 +1,4 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Col, Container, Form, Modal, Row } from 'react-bootstrap';
+import { Badge, Col, Container, Form, Row } from 'react-bootstrap';
 import styled from 'styled-components';
 import { FaCircleUser } from 'react-icons/fa6';
 
@@ -11,38 +9,17 @@ import { useAuth } from '@utilities/auth';
 import { getThoriumRoleBadge } from '@utilities/role';
 import { updateUser } from '@thorpi/users';
 import { ThoriumRole } from '@models/users';
+import TokenView from '@components/pages/users/TokenView';
 
 const ProfileCard = styled.div`
-  width: 50rem;
   border: none;
   background-color: var(--thorium-body-bg);
   flex: column;
   justify-content-center;
   align-items: center;
   padding: 1rem;
-
-  // hidden token
-  .hidden {
-    color: var(--thorium-secondary-text);
-  }
-
-  .wrap-token {
-    overflow-wrap: anywhere;
-  }
-
-  /*$grid-breakpoints: (
-    xs: 0,
-    sm: 576px,
-    md: 768px,
-    lg: 992px,
-    xl: 1200px,
-    xxl: 1400px
-  );*/
-
-  // 576px
-  @media (max-width: 576px) {
-    width: 400px;
-  }
+  max-width: 1250px;
+  min-width: 480px;
 `;
 
 const Themes = ['Dark', 'Light', 'Ocean', 'Crab', 'Automatic'];
@@ -71,33 +48,6 @@ const Role: React.FC<RoleProps> = ({ role }) => {
   );
 };
 
-const RevokeTokenModal = ({ show, onHide }: { show: boolean; onHide: () => void }) => {
-  const { revoke } = useAuth();
-  const navigate = useNavigate();
-  // call thorium logout route and then
-  const handleRevoke = () => {
-    void revoke().then(() => {
-      void navigate('/');
-    });
-  };
-  return (
-    <Modal show={show} onHide={onHide}>
-      <Modal.Header closeButton>
-        <Modal.Title>Revoke Your Token?</Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        Revoking your token will automatically log you out of this page and any currently running or queued analysis jobs (reactions) may
-        fail. Are you sure?
-      </Modal.Body>
-      <Modal.Footer className="d-flex justify-content-center">
-        <Button className="danger-btn" onClick={() => handleRevoke()}>
-          Confirm
-        </Button>
-      </Modal.Footer>
-    </Modal>
-  );
-};
-
 const Groups = ({ groups }: { groups: string[] | undefined }) => {
   return (
     <Container>
@@ -108,64 +58,18 @@ const Groups = ({ groups }: { groups: string[] | undefined }) => {
         <Col>
           {groups &&
             [...groups].sort().map((group: string, idx: number) => (
-              <Badge key={idx} pill bg="" className="bg-blue px-3 py-2 me-1">
+              <Badge
+                key={idx}
+                pill
+                bg=""
+                className="bg-blue px-3 py-2 me-1"
+                style={{ textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' }}
+              >
                 {group}
               </Badge>
             ))}
         </Col>
       </Row>
-    </Container>
-  );
-};
-
-const Token = () => {
-  const [showRevokeTokenModal, setShowRevokeTokenModal] = useState(false);
-  const [tokenShowing, setTokenShowing] = useState(false);
-  const { userInfo } = useAuth();
-
-  // toggle display of revoke token model from previous value
-  const handleToggleRevokeTokenModalDisplay = () => {
-    setShowRevokeTokenModal((prev) => !prev);
-  };
-  return (
-    <Container>
-      <Row>
-        <Col xs={2}>
-          <Subtitle>Token</Subtitle>
-        </Col>
-        <Col xs={10}>
-          <Row>
-            <Col>
-              <div className="wrap-token">
-                {tokenShowing ? (
-                  <p>{userInfo?.token}</p>
-                ) : (
-                  <p className="hidden">****************************************************************</p>
-                )}
-              </div>
-            </Col>
-          </Row>
-        </Col>
-      </Row>
-      <Row>
-        <Col className="d-flex justify-content-center pt-2">
-          <Button className="primary-btn" onClick={() => setTokenShowing(!tokenShowing)}>
-            {tokenShowing ? 'Hide' : 'Show'}
-          </Button>
-          <Button className="danger-btn" onClick={() => handleToggleRevokeTokenModalDisplay()}>
-            Revoke
-          </Button>
-        </Col>
-      </Row>
-      <Row className="pt-3">
-        <Col xs={2}>
-          <Subtitle>Expiry</Subtitle>
-        </Col>
-        <Col>
-          <p>{userInfo?.token_expiration}</p>
-        </Col>
-      </Row>
-      <RevokeTokenModal show={showRevokeTokenModal} onHide={handleToggleRevokeTokenModalDisplay} />
     </Container>
   );
 };
@@ -275,8 +179,8 @@ const UserProfile = () => {
         {/* Thorium role (not group role) */}
         {userInfo && <Role role={userInfo.role} />}
         <hr />
-        {/* User Token */}
-        <Token />
+        {/* User Token + Scoped Tokens */}
+        <TokenView />
         <hr />
         {/* Sign-in methods (local password / SSO + verification status) */}
         <SignInMethods local={userInfo?.local} verified={userInfo?.verified} />

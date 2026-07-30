@@ -8,6 +8,7 @@ import { OverlayTipRight } from '@components/shared/overlay/tips';
 import { clearTagDataFromLocalStorage } from '@utilities/tags';
 import { useAuth } from '@utilities/auth';
 import { getApiUrl } from '@utilities/url';
+import { Badge } from 'react-bootstrap';
 
 const StyledNavbar = styled.nav`
   display: flex;
@@ -126,7 +127,7 @@ const DropdownLink = styled(Link)`
 `;
 
 const NavBanner = () => {
-  const { userInfo, logout } = useAuth();
+  const { userInfo, logout, scopedToken } = useAuth();
   const navigate = useNavigate();
   const apiURL = getApiUrl();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -167,6 +168,11 @@ const NavBanner = () => {
         </OverlayTipRight>
       </HomeLink>
       <NavActions>
+        {scopedToken && (
+          <>
+            <Badge className="py-2 px-3">Token: {scopedToken.name}</Badge>
+          </>
+        )}
         <DocsLink href={`${apiURL}/docs/user/index.html`}>
           <FaQuestion size={22} />
         </DocsLink>

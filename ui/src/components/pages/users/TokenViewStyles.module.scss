@@ -1,0 +1,189 @@
+.badge_tip {
+  white-space: pre-line;
+  padding: 0;
+}
+
+.group_check {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.token_section {
+  border: 1px solid var(--thorium-panel-border);
+  border-radius: 8px;
+  padding: 10px;
+  overflow: hidden;
+  background-color: var(--thorium-panel-bg);
+  color: var(--thorium-text);
+}
+
+.token_section_header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--thorium-panel-border);
+}
+
+.token_view_table {
+  gap: 5px;
+  margin: 0;
+
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 1100px;
+}
+
+.table_wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Header cells */
+.token_view_table thead th {
+  padding: 0.75rem 1rem;
+
+  border-bottom: 1px solid var(--thorium-panel-border);
+  background: var(--thorium-secondary-panel-bg);
+
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+
+  white-space: nowrap;
+}
+
+/* Body cells */
+.token_view_table tbody td {
+  padding: 0.875rem 1rem;
+
+  border-bottom: 1px solid var(--thorium-secondary-text);
+
+  vertical-align: middle;
+}
+
+/* Remove border from final row */
+.token_view_table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.token_view_table tbody tr:hover {
+  background: var(--thorium-highlight-panel-bg);
+}
+
+.selected_row {
+  background: var(--thorium-secondary-panel-bg);
+}
+
+.token_view_table th:nth-child(1),
+.token_view_table td:nth-child(1) {
+  width: 18%;
+}
+
+.token_view_table th:nth-child(2),
+.token_view_table td:nth-child(2) {
+  width: 16%;
+}
+
+.token_view_table th:nth-child(3),
+.token_view_table td:nth-child(3) {
+  width: 15%;
+}
+
+.token_view_table th:nth-child(4),
+.token_view_table td:nth-child(4) {
+  width: 25%;
+}
+
+.token_view_table th:nth-child(5),
+.token_view_table td:nth-child(5) {
+  width: 14%;
+}
+
+.token_view_table th:nth-child(6),
+.token_view_table td:nth-child(6) {
+  width: 10%;
+}
+
+.token_view_table th:nth-child(7),
+.token_view_table td:nth-child(7) {
+  width: 10%;
+}
+
+/* Individual cells */
+.name_cell {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.token_cell {
+  white-space: nowrap;
+}
+
+.masked_token {
+  font-family: ui-monospace, SFMono-Regular, SFMono, monospace;
+  color: var(--thorium-secondary-text);
+}
+
+.groups_cell {
+  min-width: 0;
+}
+
+.group_list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.group_badge {
+  max-width: 12rem;
+  padding: 0.4rem 0.65rem;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  font-weight: 500;
+}
+
+.expiry_cell {
+  white-space: nowrap;
+}
+
+.actions_header {
+  text-align: right;
+}
+
+.actions_cell {
+  white-space: nowrap;
+}
+
+.action_buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+/* root token styles */
+
+.button_row {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.auto_overflow {
+  overflow: auto;
+}
+
+.developer_question {
+  margin-left: 3px;
+  align-content: center;
+  justify-content: center;
+}
