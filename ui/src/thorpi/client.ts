@@ -1,3 +1,4 @@
+import { ScopedToken } from '@models/users';
 import axios, { AxiosResponse } from 'axios';
 import JSONbig from 'json-bigint';
 
@@ -60,6 +61,45 @@ const client = axios.create({
   baseURL: apiURL,
 });
 
+export function getScopedFromSession(): ScopedToken | undefined {
+  try {
+    const scoped = sessionStorage.getItem('THORIUM_SCOPED_TOKEN');
+    if (!scoped) return undefined;
+    const parsed = JSON.parse(scoped) as ScopedToken;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+export function setScopedSession(token: ScopedToken) {
+  sessionStorage.setItem('THORIUM_SCOPED_TOKEN', JSON.stringify(token));
+}
+
+export function clearScopedSession() {
+  sessionStorage.removeItem('THORIUM_SCOPED_TOKEN');
+}
+
+function buildAuthHeader(): string {
+  const scoped = getScopedFromSession();
+  const activeToken = scoped ? scoped.token : getCookie('THORIUM_TOKEN');
+  return 'token ' + btoa(activeToken);
+}
+
+function buildCookieAuthHeader(): string {
+  const activeToken = getCookie('THORIUM_TOKEN');
+  return 'token ' + btoa(activeToken);
+}
+
+//override for scoped token routes
+export function thoriumCookieAuthConfig() {
+  return {
+    headers: {
+      Authorization: buildCookieAuthHeader(),
+    },
+  };
+}
+
 client.interceptors.request.use((config) => {
   if (CONFIG.headers) {
     for (const header in CONFIG.headers) {
@@ -69,7 +109,7 @@ client.interceptors.request.use((config) => {
     }
   }
   if (typeof config.headers.Authorization === 'undefined') {
-    config.headers.Authorization = 'token ' + btoa(getCookie('THORIUM_TOKEN'));
+    config.headers.Authorization = buildAuthHeader();
   }
   return config;
 });
@@ -96,7 +136,7 @@ bigIntClient.interceptors.request.use((config) => {
     }
   }
   if (typeof config.headers.Authorization === 'undefined') {
-    config.headers.Authorization = 'token ' + btoa(getCookie('THORIUM_TOKEN'));
+    config.headers.Authorization = buildAuthHeader();
   }
   return config;
 });

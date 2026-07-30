@@ -3,8 +3,9 @@ import { Navigate } from 'react-router-dom';
 
 // project imports
 import { authUserPass, createUser, logout, whoami } from '@thorpi/users';
-import { UserInfo, RoleKey } from '@models/users';
+import { UserInfo, RoleKey, ScopedToken } from '@models/users';
 import { clearTagDataFromLocalStorage, fetchLocalStorageTags } from './tags';
+import { clearScopedSession, getScopedFromSession, setScopedSession } from '@thorpi/client';
 
 /// The outcome of a password login attempt.
 export enum LoginOutcome {
@@ -29,6 +30,7 @@ export enum RegisterOutcome {
 type AuthContextType = {
   userInfo: UserInfo | null;
   token: string | undefined;
+  scopedToken: ScopedToken | undefined;
   refreshUserInfo: (force?: boolean) => Promise<void>;
   checkCookie: () => Promise<unknown>;
   login: (username: string, password: string, handleError: (error: string) => void) => Promise<LoginOutcome>;
@@ -43,6 +45,8 @@ type AuthContextType = {
   revoke: () => Promise<unknown>;
   impersonate: (userToken: string, tokenExpires: string) => void;
   completeOAuth: (token: string, expires: string) => void;
+  setScopedToken: (token: ScopedToken) => void;
+  clearScopedToken: () => void;
 };
 
 // auth context to store info about auth state across app
@@ -80,9 +84,9 @@ export function buildRevokeCookie() {
  */
 function useAuthProvider() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [token, setToken] = useState(getCookie('THORIUM_TOKEN'));
-  // set time of last userInfo update
+  const [token, setToken] = useState(getCookie('THORIUM_TOKEN')); // set time of last userInfo update
   const [lastUpdateDate, setLastUpdateDate] = useState(Date.now());
+  const [activeScopedToken, setActiveScopedToken] = useState<ScopedToken | undefined>(getScopedFromSession());
 
   // options for set/get of a secure cookie
   const getUserInfo = async () => {
@@ -122,11 +126,12 @@ function useAuthProvider() {
   useEffect(() => {
     void getUserInfo();
     // need to run whoami to get user info after login
-  }, [token]);
+  }, [token, activeScopedToken]);
 
   return {
     userInfo,
     token,
+    scopedToken: activeScopedToken,
     // verify userInfo is not out-of-date
     async refreshUserInfo(force = false) {
       // check if userInfo is fresher than 60 seconds (60k msec)
@@ -173,6 +178,7 @@ function useAuthProvider() {
     logout() {
       return new Promise((resolve) => {
         setToken(undefined);
+        clearScopedSession();
         setUserInfo(null);
         document.cookie = buildRevokeCookie();
         resolve(true);
@@ -222,6 +228,14 @@ function useAuthProvider() {
     completeOAuth(token: string, expires: string) {
       document.cookie = buildCookie(token, expires);
       setToken(token);
+    },
+    setScopedToken(token: ScopedToken) {
+      setActiveScopedToken(token);
+      setScopedSession(token);
+    },
+    clearScopedToken() {
+      setActiveScopedToken(undefined);
+      clearScopedSession();
     },
   };
 }

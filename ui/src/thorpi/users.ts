@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
-import client, { parseRequestError } from './client';
+import client, { parseRequestError, thoriumCookieAuthConfig } from './client';
 
 // project imports
 import {
@@ -9,6 +9,9 @@ import {
   RawAuthResponse,
   ResendVerificationResult,
   ResendVerificationStatus,
+  ScopedToken,
+  ScopedTokenRequest,
+  ScopedTokenUpdate,
   UserInfo,
 } from '@models/users';
 
@@ -281,7 +284,7 @@ export async function logout(): Promise<AxiosResponse> {
  */
 export async function updateUser(data: Record<string, unknown>, errorHandler: (error: string) => void): Promise<boolean> {
   return client
-    .patch(`/users/`, data)
+    .patch(`/users/`, data, thoriumCookieAuthConfig())
     .then((res) => {
       if (res?.status == 204) {
         return true;
@@ -363,6 +366,123 @@ export async function deleteUser(user: string, errorHandler: (error: string) => 
     })
     .catch((error: unknown) => {
       parseRequestError(error, errorHandler, 'Delete User');
+      return false;
+    });
+}
+
+/**
+ * List all scoped tokens for the current user (`GET /users/tokens/`).
+ *
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns An array of {@link ScopedToken}, or `null` if the request failed.
+ */
+export async function listScopedTokens(errorHandler: (error: string) => void): Promise<ScopedToken[] | null> {
+  return client
+    .get<ScopedToken[]>('/users/tokens/', thoriumCookieAuthConfig())
+    .then((res) => {
+      if (res?.status == 200 && res.data) {
+        return res.data;
+      }
+      return null;
+    })
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'List Scoped Tokens');
+      return null;
+    });
+}
+
+/**
+ * Create a new scoped token (`POST /users/tokens/`).
+ *
+ * @param data - The token name, groups scope, and optional permanent expiration.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The created {@link ScopedToken}, or `null` if the request failed.
+ */
+export async function createScopedToken(data: ScopedTokenRequest, errorHandler: (error: string) => void): Promise<ScopedToken | null> {
+  return client
+    .post<ScopedToken>('/users/tokens/', data, thoriumCookieAuthConfig())
+    .then((res) => {
+      if (res?.status == 200 && res.data) {
+        return res.data;
+      }
+      return null;
+    })
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Create Scoped Token');
+      return null;
+    });
+}
+
+/**
+ * Get a specific scoped token by name (`GET /users/tokens/{name}`).
+ *
+ * The backend auto-rotates the token value if it has expired, so the returned token
+ * may carry a new value.
+ *
+ * @param name - The token name.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The {@link ScopedToken}, or `null` if not found or the request failed.
+ */
+export async function getScopedToken(name: string, errorHandler: (error: string) => void): Promise<ScopedToken | null> {
+  return client
+    .get<ScopedToken>(`/users/tokens/${encodeURIComponent(name)}`, thoriumCookieAuthConfig())
+    .then((res) => {
+      if (res?.status == 200 && res.data) {
+        return res.data;
+      }
+      return null;
+    })
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Get Scoped Token');
+      return null;
+    });
+}
+
+/**
+ * Update a scoped token's groups or expiration (`PATCH /users/tokens/{name}`).
+ *
+ * @param name - The token name.
+ * @param data - Groups to add/remove and expiration changes.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns The updated {@link ScopedToken}, or `null` if the request failed.
+ */
+export async function updateScopedToken(
+  name: string,
+  data: ScopedTokenUpdate,
+  errorHandler: (error: string) => void,
+): Promise<ScopedToken | null> {
+  return client
+    .patch<ScopedToken>(`/users/tokens/${encodeURIComponent(name)}`, data, thoriumCookieAuthConfig())
+    .then((res) => {
+      if (res?.status == 200 && res.data) {
+        return res.data;
+      }
+      return null;
+    })
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Update Scoped Token');
+      return null;
+    });
+}
+
+/**
+ * Delete a scoped token by name (`DELETE /users/tokens/{name}`).
+ *
+ * @param name - The token name.
+ * @param errorHandler - Called with a formatted message if the request fails.
+ * @returns `true` if the token was deleted (HTTP 204), otherwise `false`.
+ */
+export async function deleteScopedToken(name: string, errorHandler: (error: string) => void): Promise<boolean> {
+  return client
+    .delete(`/users/tokens/${encodeURIComponent(name)}`, thoriumCookieAuthConfig())
+    .then((res) => {
+      if (res?.status == 204) {
+        return true;
+      }
+      return false;
+    })
+    .catch((error: unknown) => {
+      parseRequestError(error, errorHandler, 'Delete Scoped Token');
       return false;
     });
 }

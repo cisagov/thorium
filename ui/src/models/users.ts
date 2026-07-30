@@ -10,8 +10,13 @@ export enum RoleKey {
   User = 'User',
 }
 
+export enum ScopedTokenRoleKey {
+  Developer = 'Developer',
+  User = 'User',
+}
+
 /// The developer role's sub-permissions
-type ThoriumDeveloperRoleValue = { k8s: boolean; bare_metal: boolean; windows: boolean; external: boolean; kvm: boolean };
+export type ThoriumDeveloperRoleValue = { k8s: boolean; bare_metal: boolean; windows: boolean; external: boolean; kvm: boolean };
 
 export type Role = {
   Admin: RoleKey.Admin;
@@ -71,8 +76,10 @@ export type UserInfo = {
   role: ThoriumRole;
   /// This users email
   email: string;
-  /// The groups this user is in
+  /// The groups this user is in (or all groups for admin)
   groups: string[];
+  /// Admin-only list of groups admin user is 'actually' in
+  actual_groups?: string[];
   /// The token for this user
   token: string;
   /// When this users token expires
@@ -142,3 +149,49 @@ export enum EmailVerifyStatus {
   /// An unexpected failure occurred (network error, unexpected status)
   Error = 'error',
 }
+
+/// A scoped token belonging to the current user (mirrors the backend `ScopedToken` struct)
+export type ScopedToken = {
+  /// The token name (unique per user, 1-50 lowercase characters)
+  name: string;
+  /// Username of the owner
+  owner: string;
+  /// Role for scoped token
+  role: ScopedTokenRole;
+  /// Groups this token is limited to
+  groups: string[];
+  /// Current token value (hex-encoded); rotates on expiration
+  token: string;
+  /// When the current token value expires (ISO datetime); triggers auto-rotation
+  token_expiration: string;
+  /// Optional permanent expiration after which the token is deleted (ISO datetime or null)
+  expires: string | null;
+};
+
+/// Request body for creating a scoped token (mirrors `ScopedTokenRequest`)
+export type ScopedTokenRequest = {
+  /// Name of the scoped token
+  name: string;
+  /// Role for scoped token
+  role: ScopedTokenRole;
+  /// List of groups for scoped token
+  groups: string[];
+  /// Optional expiry datetime
+  expires?: string;
+};
+
+/// Request body for updating a scoped token (mirrors `ScopedTokenUpdate`)
+export type ScopedTokenUpdate = {
+  /// Role for scoped token
+  role: ScopedTokenRole;
+  add_groups: string[];
+  remove_groups: string[];
+  expires?: string;
+  clear_expires: boolean;
+};
+
+export type ScopedTokenRole =
+  | {
+      Developer: ThoriumDeveloperRoleValue;
+    }
+  | ScopedTokenRoleKey.User;
