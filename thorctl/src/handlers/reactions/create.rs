@@ -518,8 +518,10 @@ async fn create_file_list(
     batch: &Option<String>,
     args_info: &Option<ReactionArgsInfo>,
 ) -> Result<(), Error> {
+    // get the limit if we have one
+    let limit = if cmd.no_limit { None } else { Some(cmd.limit) };
     // get the set of all lines from the file
-    let lines = utils::fs::lines_set_from_file(file_list).await?;
+    let lines = utils::fs::lines_set_from_file(file_list, limit).await?;
     // convert each line to bundles of SHA256's
     let bundles = parse_bundles(lines);
     // create requests for each bundle

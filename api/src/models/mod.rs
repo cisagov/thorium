@@ -150,8 +150,8 @@ pub use trees::{
 };
 pub use users::{
     AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, AuthedUser, Key,
-    ScopedToken, ScopedTokenRequest, ScopedTokenUpdate, ScopedUser, ScrubbedUser, Theme, UnixInfo,
-    User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
+    ScopedToken, ScopedTokenRequest, ScopedTokenRole, ScopedTokenUpdate, ScopedUser, ScrubbedUser,
+    Theme, UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
 };
 pub use version::{Arch, Component, Os, Version};
 pub use volumes::{ConfigMap, HostPath, HostPathTypes, NFS, Secret, Volume, VolumeTypes};

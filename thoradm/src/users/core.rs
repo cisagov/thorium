@@ -261,6 +261,7 @@ mod tests {
             role: UserRole::User,
             email: email.to_string(),
             groups: Vec::new(),
+            actual_groups: Vec::default(),
             token: String::new(),
             token_expiration: Utc::now(),
             unix: None,

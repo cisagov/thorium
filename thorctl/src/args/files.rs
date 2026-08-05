@@ -98,7 +98,7 @@ impl UploadFilesTargets {
     pub async fn into_targets(self) -> Result<Vec<PathBuf>, Error> {
         // get the set of lines from the file if we're given one
         let paths_from_file = if let Some(file) = &self.from_file {
-            let lines = crate::utils::fs::lines_set_from_file(file)
+            let lines = crate::utils::fs::lines_set_from_file(file, None)
                 .await
                 .map_err(|err| {
                     Error::new(format!(

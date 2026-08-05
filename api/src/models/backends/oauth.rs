@@ -307,6 +307,7 @@ impl OAuthUserCreate {
             password: None,
             email: self.email,
             groups: Vec::default(),
+            actual_groups: Vec::default(),
             role: UserRole::User,
             token: token!(),
             unix: None,
