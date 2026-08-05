@@ -152,6 +152,7 @@ pub(super) fn cast(
         password: helpers::extract_opt(&mut raw, "password"),
         role: deserialize_ext!(raw, "role"),
         groups,
+        actual_groups: Vec::default(),
         unix: deserialize_opt!(raw, "unix"),
         token: extract!(raw, "token"),
         token_expiration: deserialize_ext!(raw, "token_expiration"),
@@ -197,6 +198,8 @@ pub async fn get(username: &str, shared: &Shared) -> Result<User, ApiError> {
         let groups_key = GroupKeys::set(shared);
         // get all groups in Thorium
         let all_groups = query!(cmd("smembers").arg(&groups_key), shared).await?;
+        // swap this users groups to the actual groups before replacing it
+        std::mem::swap(&mut user.groups, &mut user.actual_groups);
         // replace our users groups with
         user.groups = all_groups;
     }

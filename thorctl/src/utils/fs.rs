@@ -169,7 +169,11 @@ async fn filter_entry(entry: &DirEntry, include_hidden: bool) -> Filtering {
 /// # Arguments
 ///
 /// * `path` - The path to the file to read from
-pub async fn lines_set_from_file(path: &Path) -> Result<HashSet<String>, Error> {
+/// * `limit` - A limit to set on the number of bundles to parse if one is set
+pub async fn lines_set_from_file(
+    path: &Path,
+    limit: Option<usize>,
+) -> Result<HashSet<String>, Error> {
     // read the file into a raw String
     let raw = match tokio::fs::read_to_string(path).await {
         Ok(raw) => raw,
@@ -181,12 +185,17 @@ pub async fn lines_set_from_file(path: &Path) -> Result<HashSet<String>, Error> 
             )));
         }
     };
-    // separate the file by lines, filter out all empty lines, and collect to a set
-    Ok(raw
+    // build an iter that will skip any empty lines and cast to a String
+    let raw_iter = raw
         .lines()
         .filter(|&line| !line.is_empty())
-        .map(str::to_string)
-        .collect())
+        .map(str::to_string);
+    // if we have a limit then only gather that many bundles to submit
+    if let Some(limit) = limit {
+        Ok(raw_iter.take(limit).collect())
+    } else {
+        Ok(raw_iter.collect())
+    }
 }
 
 /// Prepend "./" or ".\" to relative paths to make it clearer that the

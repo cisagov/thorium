@@ -107,6 +107,7 @@ async fn initial_settings_consistency_scan(
         // make this user an admin
         role: crate::models::UserRole::Admin,
         groups: Vec::default(),
+        actual_groups: Vec::default(),
         token: String::default(),
         token_expiration: chrono::Utc::now(),
         unix: Option::default(),

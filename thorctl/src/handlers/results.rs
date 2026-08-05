@@ -428,8 +428,10 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
         })
         .await;
     if let Some(file_list) = &cmd.file_list {
+        // get the limit if we have one
+        let limit = if cmd.no_limit { None } else { Some(cmd.limit) };
         // if a file list path was given, get results for all SHA256's in the file
-        let sha256s: HashSet<String> = utils::fs::lines_set_from_file(file_list).await?;
+        let sha256s: HashSet<String> = utils::fs::lines_set_from_file(file_list, limit).await?;
         stream::iter(sha256s.into_iter())
             .for_each_concurrent(Some(workers), |sha256| {
                 let params = &params;
@@ -445,8 +447,10 @@ async fn get(thorium: &Thorium, cmd: &GetResults, workers: usize) -> Result<(), 
             .await;
     }
     if let Some(repo_list) = &cmd.repo_list {
+        // get the limit if we have one
+        let limit = if cmd.no_limit { None } else { Some(cmd.limit) };
         // if a repo list path was given, get results for all repos in the file
-        let repos: HashSet<String> = utils::fs::lines_set_from_file(repo_list).await?;
+        let repos: HashSet<String> = utils::fs::lines_set_from_file(repo_list, limit).await?;
         stream::iter(repos.into_iter())
             .for_each_concurrent(Some(workers), |repo| {
                 let params = &params;

@@ -489,6 +489,8 @@ pub struct User {
     pub role: UserRole,
     /// The groups this user is in
     pub groups: Vec<String>,
+    /// If this user is an admin this will be the groups they are actually in
+    pub actual_groups: Vec<String>,
     /// The token for this user
     pub token: String,
     /// When this users token expires
@@ -519,6 +521,9 @@ pub struct ScrubbedUser {
     pub email: String,
     /// The groups this user is in
     pub groups: Vec<String>,
+    /// If this user is an admin this will be the groups they are actually in
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actual_groups: Vec<String>,
     /// The token for this user
     pub token: String,
     /// When this users token expires
@@ -580,12 +585,35 @@ pub enum AuthResponse {
     VerifyEmail(String),
 }
 
+/// The roles a scoped token can have
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub enum ScopedTokenRole {
+    /// A developer can create tools
+    Developer {
+        #[serde(default)]
+        k8s: bool,
+        #[serde(default)]
+        bare_metal: bool,
+        #[serde(default)]
+        windows: bool,
+        #[serde(default)]
+        external: bool,
+        #[serde(default)]
+        kvm: bool,
+    },
+    /// A user can upload files and run jobs
+    User,
+}
+
 /// A request to create a scoped token limited to a subset of a users groups
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ScopedTokenRequest {
     /// The name of this scoped token
     pub name: String,
+    /// The role for this scoped token
+    pub role: ScopedTokenRole,
     /// The groups this scoped token is limited to
     pub groups: Vec<String>,
     /// When this scoped token permanently expires if it is ephemeral
@@ -610,9 +638,29 @@ impl ScopedTokenRequest {
     pub fn new<T: Into<String>>(name: T) -> Self {
         ScopedTokenRequest {
             name: name.into(),
+            role: ScopedTokenRole::User,
             groups: Vec::default(),
             expires: None,
         }
+    }
+
+    /// Sets the role for this scoped token
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - The role to set for this scoped tokens scope
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{ScopedTokenRequest, ScopedTokenRole};
+    ///
+    /// ScopedTokenRequest::new("corn-harvester")
+    ///     .role(ScopedTokenRole::User);
+    /// ```
+    pub fn role(mut self, role: ScopedTokenRole) -> Self {
+        self.role = role;
+        self
     }
 
     /// Adds a group to limit this scoped token to
@@ -688,6 +736,8 @@ impl ScopedTokenRequest {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ScopedTokenUpdate {
+    /// The new role for this scoped token
+    pub role: Option<ScopedTokenRole>,
     /// The groups to add to this scoped tokens scope
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub add_groups: Vec<String>,
@@ -712,6 +762,24 @@ impl ScopedTokenUpdate {
     pub fn is_empty(&self) -> bool {
         // an update is empty if it matches the default update
         *self == Self::default()
+    }
+
+    /// Sets the role for this scoped token
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - The role to set for this scoped tokens scope
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use thorium::models::{ScopedTokenRequest, ScopedTokenRole};
+    ///
+    /// ScopedTokenUpdate::default().role(ScopedTokenRole::User);
+    /// ```
+    pub fn role(mut self, role: ScopedTokenRole) -> Self {
+        self.role = Some(role);
+        self
     }
 
     /// Add a group to this scoped tokens scope
@@ -841,6 +909,8 @@ pub struct ScopedToken {
     pub name: String,
     /// The username of the user this scoped token is tied to
     pub owner: String,
+    /// The role for this scoped token
+    pub role: ScopedTokenRole,
     /// The groups this scoped token is limited to
     pub groups: Vec<String>,
     /// The current value of this scoped token

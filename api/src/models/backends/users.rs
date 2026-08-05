@@ -21,8 +21,9 @@ use super::db;
 use crate::conf::Ldap;
 use crate::models::{
     AiEndpoint, AiEndpointUpdate, AiSettings, AiSettingsUpdate, AuthResponse, AuthedUser, Group,
-    ImageScaler, Key, ScopedToken, ScopedTokenRequest, ScopedTokenUpdate, ScopedUser, ScrubbedUser,
-    UnixInfo, User, UserCreate, UserRole, UserSettings, UserSettingsUpdate, UserUpdate,
+    ImageScaler, Key, ScopedToken, ScopedTokenRequest, ScopedTokenRole, ScopedTokenUpdate,
+    ScopedUser, ScrubbedUser, UnixInfo, User, UserCreate, UserRole, UserSettings,
+    UserSettingsUpdate, UserUpdate,
 };
 use crate::utils::shared::EmailClient;
 use crate::utils::{ApiError, AppState, Shared, bounder};
@@ -691,6 +692,7 @@ impl User {
             password,
             email: req.email,
             groups: Vec::default(),
+            actual_groups: Vec::default(),
             role: req.role,
             token: token!(),
             unix,
@@ -1246,6 +1248,74 @@ impl AuthedUser {
     }
 }
 
+/// Check if a user has the permisisons to gived a scoped token powers to deploy tools
+/// to a target environment
+///
+/// # Arguments
+///
+/// * `scoped_role` - The scoped role that we want to set
+/// * `user_role` - The role for this environment that this unscoped user has
+/// * `environment` - The name of the environment this role is for
+macro_rules! validate_developer_role {
+    ($scoped_role:expr, $user_role:expr, $environment:expr) => {
+        if *$scoped_role && *$user_role == false {
+            return unauthorized!(format!(
+                "Developer roles cannot be given for the {} environment",
+                $environment
+            ));
+        }
+    };
+}
+
+impl ScopedTokenRole {
+    /// Make sure this scoped token role can be set by this user
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that wants to set this role
+    pub fn validate(&self, user: &User) -> Result<(), ApiError> {
+        match (self, &user.role) {
+            // a user scoped token is always okay
+            (ScopedTokenRole::User, _) => Ok(()),
+            // a user with the user role cannot make a scoped token with the developer role
+            (ScopedTokenRole::Developer { .. }, UserRole::User) => {
+                unauthorized!(
+                    "Users with the User role cannot create a scoped token with developer roles"
+                        .to_owned()
+                )
+            }
+            // a developer token for developers is only okay if it has the
+            // same or lesser permissions as its user
+            (
+                ScopedTokenRole::Developer {
+                    k8s: scoped_k8s,
+                    bare_metal: scoped_bare_metal,
+                    windows: scoped_windows,
+                    external: scoped_external,
+                    kvm: scoped_kvm,
+                },
+                UserRole::Developer {
+                    k8s: user_k8s,
+                    bare_metal: user_bare_metal,
+                    windows: user_windows,
+                    external: user_external,
+                    kvm: user_kvm,
+                },
+            ) => {
+                // check all of the different environments for perms
+                validate_developer_role!(scoped_k8s, user_k8s, "K8s");
+                validate_developer_role!(scoped_bare_metal, user_bare_metal, "Bare Metal");
+                validate_developer_role!(scoped_windows, user_windows, "Windows");
+                validate_developer_role!(scoped_external, user_external, "External");
+                validate_developer_role!(scoped_kvm, user_kvm, "Kvm");
+                Ok(())
+            }
+            // Admins and Analysts can deploy tools to all clusters
+            (ScopedTokenRole::Developer { .. }, UserRole::Admin | UserRole::Analyst) => Ok(()),
+        }
+    }
+}
+
 impl ScopedToken {
     /// Create a new scoped token for a user
     ///
@@ -1266,10 +1336,26 @@ impl ScopedToken {
         if req.groups.is_empty() {
             return bad!("Scoped tokens must be scoped to at least one group".to_owned());
         }
+        // since scoped tokens are never admins we have to check against their actual groups
+        let user_groups = if user.role == UserRole::Admin {
+            // this user is an admin so check their actual groups
+            // not all groups in Thorium
+            &user.actual_groups
+        } else {
+            &user.groups
+        };
         // make sure this scope is a subset of this users groups
         for group in &req.groups {
-            if !user.groups.contains(group) {
-                return unauthorized!(format!("{} is not one of your groups", group));
+            if !user_groups.contains(group) {
+                // if we are an admin then give a more helpful log
+                if user.role == UserRole::Admin {
+                    return unauthorized!(format!(
+                        "Admins must actually be in groups to scope a token to that group. You are not in {group}."
+                    ));
+                } else {
+                    // we are not an admin so just use the standard unauthorized message
+                    return unauthorized!(format!("{} is not one of your groups", group));
+                }
             }
         }
         // if an expiration was set then make sure it is in the future
@@ -1278,10 +1364,13 @@ impl ScopedToken {
         {
             return bad!("Scoped tokens cannot expire in the past".to_owned());
         }
+        // validate that this user can create a scoped token with this role
+        req.role.validate(user)?;
         // build our new scoped token
         let scoped = ScopedToken {
             name: req.name,
             owner: user.username.clone(),
+            role: req.role,
             groups: req.groups,
             token: token!(),
             token_expiration: token_expire!(shared),
@@ -1368,6 +1457,13 @@ impl ScopedToken {
             // this scoped token has permanently expired so remove it from redis
             db::users::delete_scoped_token(&scoped, shared).await?;
             return not_found!(format!("Scoped token {name} not found"));
+        }
+        // if a new role was set then validate and update that
+        if let Some(role) = update.role {
+            // validate that this user can create a scoped token with this role
+            role.validate(user)?;
+            // set our updated role
+            scoped.role = role;
         }
         // add any new groups to this scoped tokens scope skipping duplicates
         for group in update.add_groups {
@@ -1537,6 +1633,7 @@ impl From<User> for ScrubbedUser {
             email: user.email,
             role: user.role,
             groups: user.groups,
+            actual_groups: user.actual_groups,
             token: user.token,
             token_expiration: user.token_expiration,
             unix: user.unix,
