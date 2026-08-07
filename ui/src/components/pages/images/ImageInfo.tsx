@@ -156,6 +156,8 @@ const ImageInfo: FC<ImageInfoProps> = ({ ref, images, image, setImages, inEditMo
       return;
     }
 
+    console.log(editorObj, currentImage, result);
+
     if (await updateImage(result.group, result.name, result.data, setUpdateError)) {
       // Refetch only the saved image and re-seed both the view (currentImage) and the form
       // (editorObj) from the fresh data before leaving edit mode, so re-opening the form

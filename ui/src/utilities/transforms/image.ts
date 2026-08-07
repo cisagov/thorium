@@ -1,3 +1,36 @@
+import {
+  ArgStrategy,
+  CacheDependencySettings,
+  ChildFilters,
+  ChildrenDependencySettings,
+  Dependencies,
+  EphemeralDependencySettings,
+  GenericCacheDependencySettings,
+  ImageArgs,
+  RepoDependencySettings,
+  Resources,
+  ResultDependencySettings,
+  SampleDependencySettings,
+  SecurityContext,
+  TagDependencySettings,
+} from '@models/images';
+import {
+  CacheDependencySettingsUpdate,
+  ChildFiltersUpdate,
+  ChildrenDependencySettingsUpdate,
+  DependenciesUpdate,
+  EphemeralDependencySettingsUpdate,
+  GenericCacheDependencySettingsUpdate,
+  ImageArgsUpdate,
+  ImageUpdate,
+  RepoDependencySettingsUpdate,
+  ResourcesUpdate,
+  ResultDependencySettingsUpdate,
+  SampleDependencySettingsUpdate,
+  SecurityContextUpdate,
+  TagDependencySettingsUpdate,
+} from '@models/images_update';
+
 const READ_ONLY_FIELDS = ['creator', 'runtime', 'used_by', 'bans'];
 const OPTIONAL_STRING_FIELDS = ['image', 'modifiers', 'description'];
 
@@ -12,12 +45,7 @@ const SIMPLE_UPDATE_FIELDS = [
   'collect_logs',
   'generator',
   'modifiers',
-  'resources',
-  'args',
-  'dependencies',
   'output_collection',
-  'security_context',
-  'child_filters',
   'clean_up',
   'kvm',
 ];
@@ -54,10 +82,10 @@ const KVM_ONLY_FIELDS = ['kvm'] as const;
  *
  * @param result - The image request object to prune (modified in place).
  */
-function stripScalerIrrelevantFields(result: Record<string, unknown>): void {
-  const scaler = typeof result['scaler'] === 'string' ? result['scaler'] : '';
-  const isK8s = scaler === 'K8s' || scaler === '';
-  const isKvm = scaler === 'Kvm';
+function stripScalerIrrelevantFields(result: Record<string, unknown>, scaler?: string): void {
+  const effectiveScaler = scaler ?? (typeof result['scaler'] === 'string' ? result['scaler'] : '');
+  const isK8s = effectiveScaler === 'K8s' || effectiveScaler === '';
+  const isKvm = effectiveScaler === 'Kvm';
 
   if (!isK8s) {
     for (const field of K8S_ONLY_FIELDS) delete result[field];
@@ -66,6 +94,7 @@ function stripScalerIrrelevantFields(result: Record<string, unknown>): void {
       for (const field of K8S_ONLY_RESOURCE_FIELDS) delete res[field];
     }
   }
+
   if (!isKvm) {
     for (const field of KVM_ONLY_FIELDS) delete result[field];
   }
@@ -235,12 +264,12 @@ function valuesEqual(a: unknown, b: unknown): boolean {
 export function editorObjectToImageUpdate(
   obj: Record<string, unknown>,
   originalImage: Record<string, unknown>,
-): { group: string; name: string; data: Record<string, unknown> } | null {
+): { group: string; name: string; data: ImageUpdate } | null {
   const group = (originalImage['group'] as string) || '';
   const name = (originalImage['name'] as string) || '';
   if (!group || !name) return null;
 
-  const data: Record<string, unknown> = {};
+  const data: ImageUpdate = {};
 
   for (const key of SIMPLE_UPDATE_FIELDS) {
     if (obj[key] === undefined && !hasValue(originalImage[key])) continue;
@@ -257,6 +286,19 @@ export function editorObjectToImageUpdate(
     }
   }
 
+  if (!valuesEqual(obj['resources'], originalImage.resources)) {
+    const resources = toResourcesUpdate(obj['resources'] as Resources | Partial<Resources> | undefined);
+    if (resources) data.resources = resources;
+  }
+  const args = toImageArgsUpdate(obj['args'] as Partial<ImageArgs> | undefined, originalImage.args as Partial<ImageArgs> | undefined);
+  if (args) data.args = args;
+
+  const securityContext = toSecurityContextUpdate(
+    obj['security_context'] as Partial<SecurityContext> | undefined,
+    originalImage.security_context as Partial<SecurityContext> | undefined,
+  );
+  if (securityContext) data.security_context = securityContext;
+
   if (obj['description'] && typeof obj['description'] === 'string' && obj['description'].trim()) {
     if (!valuesEqual(obj['description'], originalImage['description'])) {
       data['description'] = obj['description'];
@@ -264,6 +306,19 @@ export function editorObjectToImageUpdate(
   } else if (originalImage['description']) {
     data['clear_description'] = true;
   }
+
+  const childFilters = toChildFiltersUpdate(
+    obj['child_filters'] as Partial<ChildFilters> | undefined,
+    originalImage.child_filters as Partial<ChildFilters> | undefined,
+  );
+  if (childFilters) data.child_filters = childFilters;
+
+  const dependencies = toDependenciesUpdate(
+    obj['dependencies'] as Partial<Dependencies> | undefined,
+    originalImage.dependencies as Partial<Dependencies> | undefined,
+  );
+
+  if (dependencies) data.dependencies = dependencies;
 
   const scaler =
     typeof obj['scaler'] === 'string' ? obj['scaler'] : typeof originalImage['scaler'] === 'string' ? originalImage['scaler'] : '';
@@ -285,7 +340,339 @@ export function editorObjectToImageUpdate(
   delete data['volumes'];
   delete data['env'];
 
-  stripScalerIrrelevantFields(data);
+  stripScalerIrrelevantFields(data as Record<string, unknown>, scaler);
 
   return { group, name, data };
+}
+
+function toResourcesUpdate(resources: Resources | Partial<Resources> | undefined): ResourcesUpdate | undefined {
+  if (!resources) return undefined;
+
+  const update: ResourcesUpdate = {};
+
+  if (resources.cpu !== undefined) update.cpu = resources.cpu;
+  if (resources.memory !== undefined) update.memory = resources.memory;
+  if (resources.ephemeral_storage !== undefined) update.ephemeral_storage = resources.ephemeral_storage;
+  if (resources.nvidia_gpu !== undefined) update.nvidia_gpu = resources.nvidia_gpu;
+  if (resources.amd_gpu !== undefined) update.amd_gpu = resources.amd_gpu;
+  if (resources.burstable !== undefined) update.burstable = resources.burstable;
+
+  return Object.keys(update).length > 0 ? update : undefined;
+}
+
+function toImageArgsUpdate(newArgs: Partial<ImageArgs> | undefined, oldArgs: Partial<ImageArgs> | undefined): ImageArgsUpdate | undefined {
+  const update: ImageArgsUpdate = {};
+  const next = newArgs ?? {};
+  const prev = oldArgs ?? {};
+
+  if (!valuesEqual(next.entrypoint, prev.entrypoint)) {
+    if (hasValue(next.entrypoint)) update.entrypoint = next.entrypoint;
+    else if (hasValue(prev.entrypoint)) update.clear_entrypoint = true;
+  }
+
+  if (!valuesEqual(next.command, prev.command)) {
+    if (hasValue(next.command)) update.command = next.command;
+    else if (hasValue(prev.command)) update.clear_command = true;
+  }
+
+  if (!valuesEqual(next.reaction, prev.reaction)) {
+    if (hasValue(next.reaction)) update.reaction = next.reaction;
+    else if (hasValue(prev.reaction)) update.clear_reaction = true;
+  }
+
+  if (!valuesEqual(next.repo, prev.repo)) {
+    if (hasValue(next.repo)) update.repo = next.repo;
+    else if (hasValue(prev.repo)) update.clear_repo = true;
+  }
+
+  if (!valuesEqual(next.commit, prev.commit)) {
+    if (hasValue(next.commit)) update.commit = next.commit;
+    else if (hasValue(prev.commit)) update.clear_commit = true;
+  }
+
+  if (!valuesEqual(next.output, prev.output) && hasValue(next.output)) {
+    update.output = next.output as ArgStrategy | undefined;
+  }
+
+  if (!valuesEqual(next.output_files, prev.output_files) && hasValue(next.output_files)) {
+    update.output_files = next.output_files as ArgStrategy | undefined;
+  }
+
+  return Object.keys(update).length > 0 ? update : undefined;
+}
+
+function toSecurityContextUpdate(
+  next: Partial<SecurityContext> | undefined,
+  prev: Partial<SecurityContext> | undefined,
+): SecurityContextUpdate | undefined {
+  const update: SecurityContextUpdate = {};
+  const newSc = next ?? {};
+  const oldSc = prev ?? {};
+
+  if (!valuesEqual(newSc.user, oldSc.user)) {
+    if (newSc.user !== undefined && newSc.user !== null) update.user = newSc.user;
+    else if (oldSc.user !== undefined && oldSc.user !== null) update.clear_user = true;
+  }
+
+  if (!valuesEqual(newSc.group, oldSc.group)) {
+    if (newSc.group !== undefined && newSc.group !== null) update.group = newSc.group;
+    else if (oldSc.group !== undefined && oldSc.group !== null) update.clear_group = true;
+  }
+
+  if (!valuesEqual(newSc.allow_privilege_escalation, oldSc.allow_privilege_escalation)) {
+    update.allow_privilege_escalation = newSc.allow_privilege_escalation ?? null;
+  }
+
+  return Object.keys(update).length > 0 ? update : undefined;
+}
+
+function arrayDiff<T>(next: T[] = [], prev: T[] = []): { added: T[]; removed: T[] } {
+  return {
+    added: next.filter((item) => !prev.includes(item)),
+    removed: prev.filter((item) => !next.includes(item)),
+  };
+}
+
+function toChildFiltersUpdate(
+  next: Partial<ChildFilters> | undefined,
+  prev: Partial<ChildFilters> | undefined,
+): ChildFiltersUpdate | undefined {
+  const update: ChildFiltersUpdate = {};
+  const newCf = next ?? {};
+  const oldCf = prev ?? {};
+
+  const mime = arrayDiff(newCf.mime, oldCf.mime);
+  if (mime.added.length > 0) update.add_mime = mime.added;
+  if (mime.removed.length > 0) update.remove_mime = mime.removed;
+
+  const fileName = arrayDiff(newCf.file_name, oldCf.file_name);
+  if (fileName.added.length > 0) update.add_file_name = fileName.added;
+  if (fileName.removed.length > 0) update.remove_file_name = fileName.removed;
+
+  const fileExtension = arrayDiff(newCf.file_extension, oldCf.file_extension);
+  if (fileExtension.added.length > 0) update.add_file_extension = fileExtension.added;
+  if (fileExtension.removed.length > 0) update.remove_file_extension = fileExtension.removed;
+
+  if (!valuesEqual(newCf.submit_non_matches, oldCf.submit_non_matches)) {
+    update.submit_non_matches = newCf.submit_non_matches ?? null;
+  }
+
+  return Object.keys(update).length > 0 ? update : undefined;
+}
+
+function nonEmpty<T extends object>(obj: T): T | undefined {
+  return Object.keys(obj).length > 0 ? obj : undefined;
+}
+
+function assignUpdateField<T extends object, K extends keyof T>(update: T, key: K, value: T[K]): void {
+  update[key] = value;
+}
+
+function setChangedString<T extends object, K extends keyof T>(
+  update: T,
+  key: K,
+  next: string | undefined | null,
+  prev: string | undefined | null,
+): void {
+  if (!valuesEqual(next, prev) && hasValue(next)) {
+    assignUpdateField(update, key, next as T[K]);
+  }
+}
+
+function setChangedValue<T extends object, K extends keyof T>(update: T, key: K, next: T[K] | undefined | null, prev: unknown): void {
+  if (!valuesEqual(next, prev) && next !== undefined && next !== null) {
+    assignUpdateField(update, key, next as T[K]);
+  }
+}
+
+function applyStringKwargUpdate(
+  update: { kwarg?: string | null; clear_kwarg?: boolean },
+  next: string | undefined | null,
+  prev: string | undefined | null,
+): void {
+  if (valuesEqual(next, prev)) return;
+  if (hasValue(next)) update.kwarg = next;
+  else if (hasValue(prev)) update.clear_kwarg = true;
+}
+
+function toSampleDependencySettingsUpdate(
+  next: Partial<SampleDependencySettings> | undefined,
+  prev: Partial<SampleDependencySettings> | undefined,
+): SampleDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: SampleDependencySettingsUpdate = {};
+
+  setChangedString(update, 'location', next.location, prev?.location);
+  applyStringKwargUpdate(update, next.kwarg, prev?.kwarg);
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+  setChangedValue(update, 'naming', next.naming, prev?.naming);
+
+  return nonEmpty(update);
+}
+
+function toEphemeralDependencySettingsUpdate(
+  next: Partial<EphemeralDependencySettings> | undefined,
+  prev: Partial<EphemeralDependencySettings> | undefined,
+): EphemeralDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: EphemeralDependencySettingsUpdate = {};
+
+  setChangedString(update, 'location', next.location, prev?.location);
+  applyStringKwargUpdate(update, next.kwarg, prev?.kwarg);
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+
+  const names = arrayDiff(next.names ?? [], prev?.names ?? []);
+  if (names.added.length > 0) update.add_names = names.added;
+  if (names.removed.length > 0) update.remove_names = names.removed;
+
+  return nonEmpty(update);
+}
+
+function toResultDependencySettingsUpdate(
+  next: Partial<ResultDependencySettings> | undefined,
+  prev: Partial<ResultDependencySettings> | undefined,
+): ResultDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: ResultDependencySettingsUpdate = {};
+
+  const images = arrayDiff(next.images ?? [], prev?.images ?? []);
+  if (images.added.length > 0) update.add_images = images.added;
+  if (images.removed.length > 0) update.remove_images = images.removed;
+
+  setChangedString(update, 'location', next.location, prev?.location);
+
+  if (!valuesEqual(next.kwarg, prev?.kwarg)) {
+    if (next.kwarg !== undefined && next.kwarg !== null) {
+      update.kwarg = next.kwarg;
+    } else if (prev?.kwarg !== undefined && prev.kwarg !== null) {
+      update.kwarg = 'None';
+    }
+  }
+
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+
+  const names = arrayDiff(next.names ?? [], prev?.names ?? []);
+  if (names.added.length > 0) update.add_names = names.added;
+  if (names.removed.length > 0) update.remove_names = names.removed;
+
+  return nonEmpty(update);
+}
+
+function toRepoDependencySettingsUpdate(
+  next: Partial<RepoDependencySettings> | undefined,
+  prev: Partial<RepoDependencySettings> | undefined,
+): RepoDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: RepoDependencySettingsUpdate = {};
+
+  setChangedString(update, 'location', next.location, prev?.location);
+  applyStringKwargUpdate(update, next.kwarg, prev?.kwarg);
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+
+  return nonEmpty(update);
+}
+
+function toTagDependencySettingsUpdate(
+  next: Partial<TagDependencySettings> | undefined,
+  prev: Partial<TagDependencySettings> | undefined,
+): TagDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: TagDependencySettingsUpdate = {};
+
+  setChangedValue(update, 'enabled', next.enabled, prev?.enabled);
+  setChangedString(update, 'location', next.location, prev?.location);
+  applyStringKwargUpdate(update, next.kwarg, prev?.kwarg);
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+
+  return nonEmpty(update);
+}
+
+function toChildrenDependencySettingsUpdate(
+  next: Partial<ChildrenDependencySettings> | undefined,
+  prev: Partial<ChildrenDependencySettings> | undefined,
+): ChildrenDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: ChildrenDependencySettingsUpdate = {};
+
+  setChangedValue(update, 'enabled', next.enabled, prev?.enabled);
+
+  const images = arrayDiff(next.images ?? [], prev?.images ?? []);
+  if (images.added.length > 0) update.add_images = images.added;
+  if (images.removed.length > 0) update.remove_images = images.removed;
+
+  setChangedString(update, 'location', next.location, prev?.location);
+  applyStringKwargUpdate(update, next.kwarg, prev?.kwarg);
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+
+  return nonEmpty(update);
+}
+
+function toGenericCacheDependencySettingsUpdate(
+  next: Partial<GenericCacheDependencySettings> | undefined,
+  prev: Partial<GenericCacheDependencySettings> | undefined,
+): GenericCacheDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: GenericCacheDependencySettingsUpdate = {};
+
+  applyStringKwargUpdate(update, next.kwarg, prev?.kwarg);
+  setChangedValue(update, 'strategy', next.strategy, prev?.strategy);
+
+  return nonEmpty(update);
+}
+
+function toCacheDependencySettingsUpdate(
+  next: Partial<CacheDependencySettings> | undefined,
+  prev: Partial<CacheDependencySettings> | undefined,
+): CacheDependencySettingsUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: CacheDependencySettingsUpdate = {};
+
+  setChangedString(update, 'location', next.location, prev?.location);
+  setChangedValue(update, 'use_parent_cache', next.use_parent_cache, prev?.use_parent_cache);
+  setChangedValue(update, 'enabled', next.enabled, prev?.enabled);
+
+  const generic = toGenericCacheDependencySettingsUpdate(next.generic, prev?.generic);
+  if (generic) update.generic = generic;
+
+  return nonEmpty(update);
+}
+
+function toDependenciesUpdate(
+  next: Partial<Dependencies> | undefined,
+  prev: Partial<Dependencies> | undefined,
+): DependenciesUpdate | undefined {
+  if (!next) return undefined;
+
+  const update: DependenciesUpdate = {};
+
+  const samples = toSampleDependencySettingsUpdate(next.samples, prev?.samples);
+  if (samples) update.samples = samples;
+
+  const ephemeral = toEphemeralDependencySettingsUpdate(next.ephemeral, prev?.ephemeral);
+  if (ephemeral) update.ephemeral = ephemeral;
+
+  const results = toResultDependencySettingsUpdate(next.results, prev?.results);
+  if (results) update.results = results;
+
+  const repos = toRepoDependencySettingsUpdate(next.repos, prev?.repos);
+  if (repos) update.repos = repos;
+
+  const tags = toTagDependencySettingsUpdate(next.tags, prev?.tags);
+  if (tags) update.tags = tags;
+
+  const children = toChildrenDependencySettingsUpdate(next.children, prev?.children);
+  if (children) update.children = children;
+
+  const cache = toCacheDependencySettingsUpdate(next.cache, prev?.cache);
+  if (cache) update.cache = cache;
+
+  return nonEmpty(update);
 }
