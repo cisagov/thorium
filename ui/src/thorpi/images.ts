@@ -1,3 +1,4 @@
+import { ImageUpdate } from '@models/images_update';
 import client, { parseRequestError } from './client';
 
 // project imports
@@ -130,7 +131,7 @@ export async function listImages(
 export async function updateImage(
   group: string,
   image: string,
-  data: Partial<ImageRequest>,
+  data: ImageUpdate,
   errorHandler: (error: string) => void,
 ): Promise<boolean> {
   const url = '/images/' + group + '/' + image;
