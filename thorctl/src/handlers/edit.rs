@@ -42,10 +42,7 @@ pub trait EditableEntity {
     async fn fetch(thorium: &Thorium, group: &str, name: &str) -> Result<Self::Data, Error>;
 
     /// Compute the update from the current entity and the editor-resolved view
-    fn calculate_update(
-        data: Self::Data,
-        view: Self::View,
-    ) -> Result<Option<Self::Update>, Error>;
+    fn calculate_update(data: Self::Data, view: Self::View) -> Result<Option<Self::Update>, Error>;
 
     /// Apply the update in Thorium
     async fn send_update(

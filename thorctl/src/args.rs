@@ -105,31 +105,31 @@ pub struct Args {
 #[derive(Parser, Debug)]
 pub enum SubCommands {
     /// Manage Thorium clusters
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "cluster")]
     Clusters(Clusters),
     /// Login to Thorium interactively
     #[clap(version, author)]
     Login(Login),
     /// Perform group related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "group")]
     Groups(Groups),
     /// Perform file related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "file")]
     Files(Files),
     /// Perform image related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "image")]
     Images(Images),
     /// Perform pipeline related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "pipeline")]
     Pipelines(Pipelines),
     /// Perform reaction related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "reaction")]
     Reactions(Reactions),
     /// Perform result related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "result")]
     Results(Results),
     /// Perform scoped token related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "token")]
     Tokens(Tokens),
     /// Activate a scoped token making Thorctl authenticate with it
     #[clap(version, author)]
@@ -138,13 +138,13 @@ pub enum SubCommands {
     #[clap(version, author)]
     Deactivate,
     /// Perform tag related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "tag")]
     Tags(Tags),
     /// Perform repository related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "repo")]
     Repos(Repos),
     /// Perform tree related tasks
-    #[clap(version, author, subcommand)]
+    #[clap(version, author, subcommand, alias = "tree")]
     Trees(Trees),
     /// Perform network policy related tasks
     #[clap(version, author, subcommand, visible_alias = "netpols")]

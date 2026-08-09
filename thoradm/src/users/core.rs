@@ -268,6 +268,7 @@ mod tests {
             settings: UserSettings::default(),
             local: false,
             verified: true,
+            has_image: false,
         }
     }
 

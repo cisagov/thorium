@@ -2556,7 +2556,7 @@ fn default_filesystems_location() -> String {
 
 /// The default filesystem dependency pass strategy to set
 fn default_filesystems_strategy() -> DependencyPassStrategy {
-    DependencyPassStrategy::Directory
+    DependencyPassStrategy::Paths
 }
 
 /// The settings the agent should use when reconstructing prior filesystems for tools
