@@ -288,11 +288,12 @@ const ResourceFields: React.FC<{
       <OverlayTipRight tip={TOOLTIPS.cpu}>
         <InputRow>
           <Input
-            type="text"
+            type="number"
             value={form.cpu}
             placeholder={form.cpu_units === CpuUnit.mCPU ? '1000' : '1'}
             $error={!!errors.cpu}
             onChange={(e) => update('cpu', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('cpu', '0')}
           />
           <UnitSelect value={form.cpu_units} onChange={(e) => update('cpu_units', e.target.value)}>
             <option value="CPU">CPU</option>
@@ -306,11 +307,12 @@ const ResourceFields: React.FC<{
       <OverlayTipRight tip={TOOLTIPS.memory}>
         <InputRow>
           <Input
-            type="text"
+            type="number"
             value={form.memory}
             placeholder={form.memory_units === MemoryUnit.Mi ? '2048' : '2'}
             $error={!!errors.memory}
             onChange={(e) => update('memory', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('memory', '0')}
           />
           <UnitSelect value={form.memory_units} onChange={(e) => update('memory_units', e.target.value)}>
             <option value="Gi">GiB</option>
@@ -324,10 +326,11 @@ const ResourceFields: React.FC<{
       <OverlayTipRight tip={TOOLTIPS.ephemeral_storage}>
         <InputRow>
           <Input
-            type="text"
+            type="number"
             value={form.ephemeral_storage}
             placeholder={form.ephemeral_storage_units === MemoryUnit.Mi ? '8192' : '8'}
             onChange={(e) => update('ephemeral_storage', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('ephemeral_storage', '0')}
           />
           <UnitSelect value={form.ephemeral_storage_units} onChange={(e) => update('ephemeral_storage_units', e.target.value)}>
             <option value="Gi">GiB</option>
@@ -340,10 +343,11 @@ const ResourceFields: React.FC<{
       <OverlayTipRight tip={TOOLTIPS.nvidia_gpu}>
         <InputRow>
           <Input
-            type="text"
+            type="number"
             value={form.nvidia_gpu}
             placeholder="nvidia gpu"
             onChange={(e) => update('nvidia_gpu', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('nvidia_gpu', '0')}
           />
         </InputRow>
       </OverlayTipRight>
@@ -351,7 +355,13 @@ const ResourceFields: React.FC<{
       <FieldLabel>amd gpu: </FieldLabel>
       <OverlayTipRight tip={TOOLTIPS.amd_gpu}>
         <InputRow>
-          <Input type="text" value={form.amd_gpu} placeholder="amd gpu" onChange={(e) => update('amd_gpu', numericOnly(e.target.value))} />
+          <Input
+            type="number"
+            value={form.amd_gpu}
+            placeholder="amd gpu"
+            onChange={(e) => update('amd_gpu', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('amd_gpu', '0')}
+          />
         </InputRow>
       </OverlayTipRight>
 
@@ -359,10 +369,11 @@ const ResourceFields: React.FC<{
       <OverlayTipRight tip={TOOLTIPS.burstable_cpu}>
         <InputRow>
           <Input
-            type="text"
+            type="number"
             value={form.burstable_cpu}
             placeholder={form.burstable_cpu_units === CpuUnit.mCPU ? '2000' : '2'}
             onChange={(e) => update('burstable_cpu', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('burstable_cpu', '0')}
           />
           <UnitSelect value={form.burstable_cpu_units} onChange={(e) => update('burstable_cpu_units', e.target.value)}>
             <option value="CPU">CPU</option>
@@ -375,10 +386,11 @@ const ResourceFields: React.FC<{
       <OverlayTipRight tip={TOOLTIPS.burstable_memory}>
         <InputRow>
           <Input
-            type="text"
+            type="number"
             value={form.burstable_memory}
             placeholder={form.burstable_memory_units === MemoryUnit.Mi ? '4096' : '4'}
             onChange={(e) => update('burstable_memory', numericOnly(e.target.value))}
+            onBlur={(e) => e.target.value === '' && update('burstable_memory', '0')}
           />
           <UnitSelect value={form.burstable_memory_units} onChange={(e) => update('burstable_memory_units', e.target.value)}>
             <option value="Gi">GiB</option>
