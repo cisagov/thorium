@@ -22,6 +22,11 @@ pub type ImageInfoCache = HashMap<String, HashMap<String, Image>>;
 /// Hashmap of vectors of docker info by group
 pub type DockerInfoCache = HashMap<String, HashMap<String, DockerInfo>>;
 
+/// Whether a group can contain user jobs that the scaler should schedule.
+fn should_cache_group(name: &str) -> bool {
+    name != "thorium"
+}
+
 /// Reads in the Thorium keys and refreshes the client if its needed
 ///
 /// # Arguments
@@ -190,8 +195,9 @@ impl Cache {
         // build a set of all groups we have users for
         for user in self.users.values() {
             for name in &user.groups {
-                // skip any system groups
-                if !["system", "thorium"].contains(&&name[..]) {
+                // The system group can contain runnable images; only skip Thorium's
+                // internal group.
+                if should_cache_group(name) {
                     self.groups.insert(name.to_owned());
                 }
             }
@@ -528,5 +534,20 @@ impl Cache {
                     .collect()
             })
             .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_cache_group;
+
+    #[test]
+    fn system_group_is_schedulable() {
+        assert!(should_cache_group("system"));
+    }
+
+    #[test]
+    fn thorium_internal_group_is_not_schedulable() {
+        assert!(!should_cache_group("thorium"));
     }
 }
