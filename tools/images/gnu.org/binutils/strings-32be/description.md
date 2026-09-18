@@ -1,0 +1,1 @@
+See `strings` image description.

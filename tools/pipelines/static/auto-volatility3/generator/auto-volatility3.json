@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "auto-volatility3",
+  "group": "static",
   "order": [
     [
       "auto-volatility3"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

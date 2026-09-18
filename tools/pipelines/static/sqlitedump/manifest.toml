@@ -1,6 +1,5 @@
 name = "sqlitedump"
 type = "pipeline"
-description = ""
 version = "latest"
 config_from = "sqlitedump.json"
 

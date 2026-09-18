@@ -1,7 +1,5 @@
-
 name = "ssdeep"
 type = "pipeline"
-description = "https://github.com/ssdeep-project/ssdeep"
 version = "latest"
 config_from = "ssdeep.json"
 

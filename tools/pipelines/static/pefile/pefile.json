@@ -1,39 +1,39 @@
 {
-  "group": "static",
   "name": "pefile",
+  "group": "static",
   "order": [
     [
       "pefile"
     ]
   ],
+  "description": null,
   "sla": 30,
   "triggers": {
-    "RunOnExe": {
-      "Tag": {
-        "tag_types": [
-          "Files"
-        ],
-        "required": {
-          "FileTypeExtension": [
-            "exe"
-          ]
-        },
-        "not": {}
-      }
-    },
     "RunOnDll": {
       "Tag": {
-        "tag_types": [
-          "Files"
-        ],
+        "not": {},
         "required": {
           "FileTypeExtension": [
             "dll"
           ]
         },
-        "not": {}
+        "tag_types": [
+          "Files"
+        ]
+      }
+    },
+    "RunOnExe": {
+      "Tag": {
+        "not": {},
+        "required": {
+          "FileTypeExtension": [
+            "exe"
+          ]
+        },
+        "tag_types": [
+          "Files"
+        ]
       }
     }
-  },
-  "description": null
+  }
 }

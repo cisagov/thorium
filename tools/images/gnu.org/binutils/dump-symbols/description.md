@@ -1,0 +1,1 @@
+Dump symbols to a result-file using `nm`. Sets `HasSymbols` tag to `True` or `False`.

@@ -1,7 +1,5 @@
-
 name = "unblob"
 type = "pipeline"
-description = "https://github.com/onekey-sec/unblob"
 version = "latest"
 config_from = "unblob.json"
 

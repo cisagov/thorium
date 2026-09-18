@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "surfactant",
+  "group": "static",
   "order": [
     [
       "surfactant"
     ]
   ],
+  "description": "https://github.com/LLNL/Surfactant",
   "sla": 640800,
-  "triggers": {},
-  "description": "https://github.com/LLNL/Surfactant"
+  "triggers": {}
 }

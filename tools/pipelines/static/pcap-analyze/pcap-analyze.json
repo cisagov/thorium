@@ -1,6 +1,6 @@
 {
-  "group": "static",
   "name": "pcap-analyze",
+  "group": "static",
   "order": [
     [
       "zeek-dump",
@@ -9,7 +9,7 @@
       "suricata"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

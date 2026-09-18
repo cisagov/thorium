@@ -1,4 +1,4 @@
-ARG IMAGE="ubuntu:22.04"
+ARG IMAGE="ubuntu:24.04"
 FROM $IMAGE AS clone 
 
 WORKDIR "/tmp"

@@ -1,0 +1,5 @@
+name = "ghidra-base"
+type = "image"
+build_path = "./"
+image_name = "tools/ghidra-base"
+version = "11.2"

@@ -1,7 +1,5 @@
-
 name = "signify"
 type = "pipeline"
-description = "https://github.com/ralphje/signify"
 version = "latest"
 config_from = "signify.json"
 

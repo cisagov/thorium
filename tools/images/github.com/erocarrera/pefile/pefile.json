@@ -1,93 +1,109 @@
 {
-  "group": "static",
   "name": "pefile",
+  "group": "static",
   "scaler": "K8s",
   "image": "",
   "timeout": 300,
-  "resources": {
-    "cpu": "1000m",
-    "memory": "4096Mi",
-    "ephemeral_storage": "0Mi",
-    "nvidia_gpu": 0,
-    "amd_gpu": 0
-  },
+  "display_type": "JSON",
   "spawn_limit": "Unlimited",
-  "volumes": [],
-  "env": {},
-  "args": {
-    "entrypoint": null,
-    "command": null,
-    "reaction": null,
-    "repo": null,
-    "commit": null,
-    "output": "None"
-  },
-  "description": null,
-  "security_context": {
-    "user": null,
-    "group": null,
-    "allow_privilege_escalation": false
-  },
   "collect_logs": true,
   "generator": false,
+  "resources": {
+    "amd_gpu": 0,
+    "burstable": {
+      "cpu": 0,
+      "memory": "0Gi"
+    },
+    "cpu": 1,
+    "ephemeral_storage": "0Gi",
+    "memory": "4Gi",
+    "nvidia_gpu": 0
+  },
+  "args": {
+    "command": null,
+    "commit": null,
+    "entrypoint": null,
+    "output": "None",
+    "output_files": "None",
+    "reaction": null,
+    "repo": null
+  },
+  "output_collection": {
+    "as_filesystem": false,
+    "auto_tag": {},
+    "children": "/tmp/thorium/children",
+    "files": {
+      "entities": "/tmp/thorium/entities.json",
+      "names": [],
+      "result_files": "/tmp/thorium/result-files",
+      "results": "/tmp/thorium/results",
+      "tags": "/tmp/thorium/tags"
+    },
+    "groups": [],
+    "handler": "Files"
+  },
+  "child_filters": {
+    "file_extension": [],
+    "file_name": [],
+    "mime": [],
+    "submit_non_matches": false
+  },
   "dependencies": {
-    "samples": {
-      "location": "/tmp/thorium/samples",
-      "kwarg": null,
-      "strategy": "Paths"
-    },
-    "ephemeral": {
-      "location": "/tmp/thorium/ephemeral",
-      "kwarg": null,
-      "strategy": "Paths",
-      "names": []
-    },
-    "results": {
-      "images": [],
-      "location": "/tmp/thorium/prior-results",
-      "kwarg": "None",
-      "strategy": "Paths",
-      "names": []
-    },
-    "repos": {
-      "location": "/tmp/thorium/repos",
-      "kwarg": null,
-      "strategy": "Paths"
-    },
-    "tags": {
-      "enabled": false,
-      "location": "/tmp/thorium/prior-tags",
-      "kwarg": null,
-      "strategy": "Paths"
+    "cache": {
+      "enabled": true,
+      "generic": {
+        "kwarg": null,
+        "strategy": "Disabled"
+      },
+      "location": "/tmp/thorium/cache",
+      "use_parent_cache": false
     },
     "children": {
       "enabled": false,
       "images": [],
-      "location": "/tmp/thorium/prior-children",
       "kwarg": null,
+      "location": "/tmp/thorium/prior-children",
+      "strategy": "Paths"
+    },
+    "ephemeral": {
+      "kwarg": null,
+      "location": "/tmp/thorium/ephemeral",
+      "names": [],
+      "strategy": "Paths"
+    },
+    "repos": {
+      "kwarg": null,
+      "location": "/tmp/thorium/repos",
+      "strategy": "Paths"
+    },
+    "results": {
+      "images": [],
+      "kwarg": "None",
+      "location": "/tmp/thorium/prior-results",
+      "names": [],
+      "strategy": "Paths"
+    },
+    "samples": {
+      "kwarg": null,
+      "location": "/tmp/thorium/samples",
+      "naming": "Sha256",
+      "strategy": "Paths"
+    },
+    "tags": {
+      "enabled": false,
+      "kwarg": null,
+      "location": "/tmp/thorium/prior-tags",
       "strategy": "Paths"
     }
   },
-  "display_type": "JSON",
-  "output_collection": {
-    "handler": "Files",
-    "files": {
-      "results": "/tmp/thorium/results",
-      "result_files": "/tmp/thorium/result-files",
-      "tags": "/tmp/thorium/tags",
-      "names": []
-    },
-    "children": "/tmp/thorium/children",
-    "auto_tag": {},
-    "groups": []
-  },
-  "child_filters": {
-    "mime": [],
-    "file_name": [],
-    "file_extension": [],
-    "submit_non_matches": false
-  },
+  "env": {},
+  "volumes": [],
+  "network_policies": [],
   "clean_up": null,
   "kvm": null,
-  "network_policies": []
+  "security_context": {
+    "allow_privilege_escalation": false,
+    "group": null,
+    "user": null
+  }
 }

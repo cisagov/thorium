@@ -1,12 +1,12 @@
 {
-  "group": "static",
   "name": "dump-symbols",
+  "group": "static",
   "order": [
     [
       "dump-symbols"
     ]
   ],
+  "description": null,
   "sla": 640800,
-  "triggers": {},
-  "description": null
+  "triggers": {}
 }

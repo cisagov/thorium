@@ -1,0 +1,28 @@
+---
+`Binwalk (v3)` is a file extraction (file carving) tool. It is used for identifying and/or extracting files and data that have been embedded inside of other files. It was originally written to analyze firmware files by ReFirmLabs, which was acquired by Microsoft.
+
+---
+##### Usage
+
+Use `binwalk` on any sample with suspected embedded files. Valid target samples may include disk images, archive files, or PCAPs. This tool will not work on samples that have been encrypted. You can see a full list of supported signatures used for extraction here: [https://github.com/ReFirmLabs/binwalk/wiki/Supported-Signatures](https://github.com/ReFirmLabs/binwalk/wiki/Supported-Signatures).
+
+---
+##### Status
+
+Binwalk is actively maintained and the project receives daily updates.
+
+---
+#### Documentation
+
+[https://github.com/ReFirmLabs/binwalk](https://github.com/ReFirmLabs/binwalk)
+
+---
+#### License
+
+MIT License
+
+&nbsp;
+
+Copyright (c) 2024 devttys0
+
+---

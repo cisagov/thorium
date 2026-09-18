@@ -1,7 +1,5 @@
-
 name = "trufflehog"
 type = "pipeline"
-description = ""
 version = "latest"
 config_from = "trufflehog.json"
 

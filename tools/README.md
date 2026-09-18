@@ -1,20 +1,26 @@
 # Overview
 
-Welcome to the Thorium toolbox (curated on behalf of CISA by Sandia National Laboratories)! This portion of the Thorium code repository contains pipeline and image configurations as well as the docker context to build those tools. These configurations and associated toolbox manifests will allow your `thorctl` command-line tool to quickly browse and import existing publicly available tools to your local Thorium deployment. Also included here is a set of helper scripts that are used to generate a Thorium "toolbox" of tools (`toolbox.json`) and build those tool container images using our example [Github actions pipeline](../.github/workflows/tools.yml). Using the example tools, actions pipeline, and helper scripts you too can create your own Thorium tool toolbox!
+Welcome to the Thorium toolbox (curated on behalf of CISA by Sandia National Laboratories)! This portion of the Thorium code repository contains pipeline and image configurations as well as the docker context to build those tools. These configurations and associated toolbox manifests will allow your `thorctl` command-line tool to quickly browse and import existing publicly available tools to your local Thorium deployment. Also included here is a set of helper scripts that are used to build those tool container images using our example [Github actions pipeline](../.github/workflows/tools.yml). Using the example tools, actions pipeline, and `thorctl` you too can create your own Thorium tool toolbox!
+
+> For the full toolbox lifecycle (`init`, `build`, `export`, `import`, and offline image bundles) see the [Toolboxes](../api/docs/src/developers/toolbox.md) documentation.
+
+### Building the toolbox manifest
+
+To (re)generate the `toolbox.json` file before committing changes, run `thorctl toolbox build` from
+this directory (it reads `config.toml` by default):
+
+```bash
+thorctl toolbox build -c config.toml
+```
+
+This replaces the legacy `scripts/build-toolbox-manifest.py` helper, which produced the same
+`toolbox.json` and remains only for reference.
 
 ### Scripts
 
 #### build-actions-matrix.py
 
 The `build-actions-matrix.py` script is used by our gitlab actions pipeline to dynamically generate a set of parallel actions that builds tool container images. These images are stored in the target container registry based on the toolbox configuration contained in `config.toml`. When forking this repository to modify/add your own tools, you will want to update the `config.toml` so that tools get pushed to your forked repository's container registry.
-
-#### build-toolbox-manifest.py
-
-To update the `toolbox.json` file before committing changes, run the `build-toolbox-manifest.py`:
-
-```bash
-python3 scripts/build-toolbox-manifest.py -c config.toml
-```
 
 ### Toolbox Config (`config.toml`)
 

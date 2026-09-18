@@ -1,7 +1,5 @@
-
 name = "uefi-extract"
 type = "pipeline"
-description = ""
 version = "latest"
 config_from = "uefi-extract.json"
 

@@ -1,0 +1,1 @@
+Converts pdf documents to text.

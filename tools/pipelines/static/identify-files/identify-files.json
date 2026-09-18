@@ -1,6 +1,6 @@
 {
-  "group": "static",
   "name": "identify-files",
+  "group": "static",
   "order": [
     [
       "exiftool",
@@ -13,9 +13,9 @@
       "magika"
     ]
   ],
+  "description": null,
   "sla": 640800,
   "triggers": {
     "RunOnNewSamples": "NewSample"
-  },
-  "description": null
+  }
 }
