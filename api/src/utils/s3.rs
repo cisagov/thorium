@@ -69,6 +69,41 @@ const MAX_CONCURRENT_UPLOADS: usize = 8;
 /// its own task so a stalled upload keeps reporting which parts it is waiting on.
 const STALL_LOG_INTERVAL: Duration = Duration::from_secs(30);
 
+/// The maximum object size, in bytes, that [`S3Client::download_as_zip`] may buffer in memory
+///
+/// The zip download path uncarts the whole object into a growable `Vec` and then copies it into an
+/// in-memory zip, holding roughly twice the object size in RAM per request. Uploads are unbounded
+/// (streaming multipart supports ~163 GiB files), so without a cap a handful of concurrent zip
+/// requests on a large sample can exhaust the API's memory and OOM-kill the pod. This caps
+/// a single in-memory zip download at 512 MiB.
+const MAX_ZIP_DOWNLOAD_SIZE: i64 = 512 << 20;
+
+/// Reject a zip download whose object is too large to safely buffer entirely in memory
+///
+/// [`S3Client::download_as_zip`] buffers the entire uncarted object plus the resulting zip in RAM,
+/// so an arbitrarily large object turns a single authenticated request into an out-of-memory DoS.
+/// This gate rejects objects over [`MAX_ZIP_DOWNLOAD_SIZE`] before any buffer is
+/// allocated. A missing/negative content length is treated as unknown and rejected, since the whole
+/// point is to avoid buffering an object of unbounded size.
+///
+/// # Arguments
+///
+/// * `content_length` - The object's content length as reported by S3, if known
+fn enforce_zip_download_limit(content_length: Option<i64>) -> Result<(), ApiError> {
+    // only accept objects whose known content length fits under the in-memory cap; an
+    // unknown (missing/negative) length is rejected since we cannot bound how much would be buffered
+    match content_length {
+        // the object is small enough to safely buffer entirely in memory
+        Some(len) if (0..=MAX_ZIP_DOWNLOAD_SIZE).contains(&len) => Ok(()),
+        // the object is too large to buffer, so reject it before allocating anything
+        Some(len) => bad!(format!(
+            "object is too large to download as a zip: {len} bytes exceeds the {MAX_ZIP_DOWNLOAD_SIZE} byte limit"
+        )),
+        // an unknown content length could be arbitrarily large, so reject it too
+        None => bad!("cannot download an object with an unknown content length as a zip".to_owned()),
+    }
+}
+
 /// A tuple of hashes (sha256, sha1, md5)
 pub type Hashes = (String, String, String);
 
@@ -1487,15 +1522,18 @@ impl S3Client {
         params: ZipDownloadParams,
         shared: &Shared,
     ) -> Result<Vec<u8>, ApiError> {
-        // start downloading this file and stream it to the user
-        let body = self
+        // fetch the object, whose response carries the content length before we buffer any bytes
+        let object = self
             .client
             .get_object()
             .bucket(&self.bucket)
             .key(path)
             .send()
-            .await?
-            .body;
+            .await?;
+        // reject files too large to safely buffer entirely in memory before we allocate for them
+        enforce_zip_download_limit(object.content_length())?;
+        // take the streaming body now that the size guard has passed
+        let body = object.body;
         // get the password to use
         let password = params.get_password(shared).as_bytes();
         // setup our zip options
@@ -1656,5 +1694,44 @@ impl GraphicsS3Client {
             &config.thorium.s3,
         )?;
         Ok(Self { client })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_ZIP_DOWNLOAD_SIZE, enforce_zip_download_limit};
+
+    /// an object far larger than the in-memory zip cap must be rejected before it is
+    /// buffered, so a single authenticated request cannot OOM the API.
+    #[test]
+    fn zip_download_rejects_oversized_object() {
+        // an object several times the cap would buffer to multiple GiB of API memory
+        let oversized = MAX_ZIP_DOWNLOAD_SIZE * 8;
+        // the size gate must reject an object this large
+        assert!(
+            enforce_zip_download_limit(Some(oversized)).is_err(),
+            "zip download accepted an oversized object that could OOM the API"
+        );
+    }
+
+    /// an object with an unknown content length must also be rejected, since the guard
+    /// cannot bound the memory a missing size would consume.
+    #[test]
+    fn zip_download_rejects_unknown_size() {
+        // an unknown content length must not be allowed to buffer unbounded data
+        assert!(
+            enforce_zip_download_limit(None).is_err(),
+            "zip download accepted an object with an unknown size"
+        );
+    }
+
+    /// A small object within the cap must still be allowed so ordinary zip downloads keep working.
+    #[test]
+    fn zip_download_allows_small_object() {
+        // a modest one mebibyte object is well within the in-memory cap
+        assert!(
+            enforce_zip_download_limit(Some(1 << 20)).is_ok(),
+            "zip download rejected a normally sized object"
+        );
     }
 }

@@ -461,28 +461,12 @@ impl CmdBuilder {
     }
 
     // modify our args for running in windows
-    pub fn windows(mut self, is_windows: bool) -> Self {
-        // if this is not a windows agent then don't do anything
-        if !is_windows {
-            return self;
-        }
-        // if we have an override command then just modify that
-        if let Some(override_cmd) = &mut self.opts.override_cmd {
-            // build the windows prepend command
-            let mut prepended = vec!["C:\\Windows\\system32\\cmd.exe".to_owned(), "/C".to_owned()];
-            // add our built commands back in
-            prepended.append(override_cmd);
-            // now replace our prependend override command
-            *override_cmd = prepended;
-        } else {
-            // we don't have an override but we do need to override our entrypoint
-            // build the windows prepend command
-            let mut prepended = vec!["C:\\Windows\\system32\\cmd.exe".to_owned(), "/C".to_owned()];
-            // add our built commands back in
-            prepended.append(&mut self.entrypoint);
-            // replace our entrypoint
-            self.entrypoint = prepended;
-        }
+    pub fn windows(self, _is_windows: bool) -> Self {
+        // Previously this prepended `["cmd.exe", "/C", ...]` on Windows. Because the argv is
+        // later re-joined into a single command line for `cmd.exe`, a whitespace-free user positional
+        // like `&powershell` was re-parsed by the shell as a second command (metacharacter
+        // injection). We now spawn the tool binary directly — exactly as the Linux path does — so the
+        // OS passes each positional as a discrete argument and no shell re-parses them.
         self
     }
 
@@ -2117,6 +2101,62 @@ mod tests {
                 "--fertilizer=blue",
                 "nested"
             )
+        );
+    }
+
+    /// The interpreter path a shell-wrapped Windows command would start with
+    ///
+    /// `CmdBuilder::windows` historically prepended this interpreter and `/C`
+    /// to the built argv. Because the argv is later re-joined into a single command
+    /// line for `cmd.exe`, a whitespace-free user positional like `&powershell` is
+    /// parsed by `cmd.exe` as a second command (metacharacter injection). Spawning the
+    /// tool binary directly (as the Linux path already does) neutralizes this.
+    const WINDOWS_SHELL: &str = "C:\\Windows\\system32\\cmd.exe";
+
+    /// Regression: a Windows-built command must not wrap the tool in `cmd.exe /C`
+    ///
+    /// A non-developer group user can supply plain positionals on a Windows-scaled
+    /// pipeline. Those positionals are appended to the argv verbatim. If the argv is
+    /// prefixed with `["cmd.exe", "/C"]`, an argument containing `cmd.exe`
+    /// metacharacters (`&`, `|`, `;`, backtick) is interpreted by the shell as a new
+    /// command. The fix runs the tool directly, so the built command must neither start
+    /// with the Windows shell nor contain the `/C` shell switch, and the malicious
+    /// positional must survive as its own discrete argv element.
+    #[tokio::test]
+    async fn windows_does_not_shell_wrap_user_args() {
+        // generate an image
+        let image = generate_image();
+        // generate a job carrying a malicious, whitespace-free positional that would be
+        // parsed as a second command if it ever reached `cmd.exe /C`
+        let mut job = generate_job();
+        job.args = job.args.positionals(vec!["&powershell", "-nop", "-enc", "ZQBjAGgAbwA="]);
+        // build the command the way the Windows executor does: overlay args, then apply
+        // the windows transform, then finalize
+        let cmd = CmdBuilder::new(
+            &image,
+            &job,
+            slice_string!["tool.exe"],
+            slice_string!["scan"],
+        )
+        .windows(true)
+        .build(&image, None, None)
+        .unwrap();
+        // the tool must be spawned directly, not through the Windows shell interpreter
+        assert_ne!(
+            cmd.first().map(String::as_str),
+            Some(WINDOWS_SHELL),
+            "windows command must not be wrapped in the cmd.exe shell: {cmd:?}"
+        );
+        // the `/C` shell switch must not be present anywhere in the argv
+        assert!(
+            !cmd.iter().any(|arg| arg == "/C"),
+            "windows command must not pass the cmd.exe /C shell switch: {cmd:?}"
+        );
+        // the malicious positional must survive as its own discrete argv element so the
+        // OS passes it as a single argument to the tool rather than a shell re-parsing it
+        assert!(
+            cmd.iter().any(|arg| arg == "&powershell"),
+            "the user positional should be preserved as a discrete argv element: {cmd:?}"
         );
     }
 }

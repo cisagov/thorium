@@ -3002,6 +3002,74 @@ pub struct ElasticCursor {
     pub new: bool,
 }
 
+/// Build the tenant-isolation group filter for an elastic search
+///
+/// The group filter is the ONLY tenant boundary on the search path, so it must never collapse to a
+/// query that matches every document. In Elasticsearch a `bool` query with zero `should` clauses is
+/// rewritten to `match_all`, so a caller that reaches this helper with an empty group list would
+/// otherwise search every tenant's documents. This helper is therefore safe by
+/// construction: it rejects an empty group list rather than emitting an all-matching filter.
+///
+/// # Arguments
+///
+/// * `groups` - The groups this search is scoped to
+fn build_group_filter(groups: &[String]) -> Result<serde_json::Value, ApiError> {
+    // an empty group list must never produce an empty `should` array, which Elasticsearch
+    // rewrites to `match_all` and would leak every tenant's documents. Reject it here so the
+    // tenant-isolation filter can never degrade into an all-matching query.
+    if groups.is_empty() {
+        // refuse to build a filter that would match all documents
+        return internal_err!(
+            "Refusing to build an elastic group filter with no groups".to_owned()
+        );
+    }
+    // build one exact-match clause per group so only documents in these groups can match
+    let group_filters = groups
+        .iter()
+        .map(|group| {
+            // match this group exactly with no fuzziness or synonym expansion
+            serde_json::json!({
+                "match": {
+                    "group": {
+                        "query": group,
+                        "minimum_should_match": "100%",
+                        "fuzziness": "0",
+                        "fuzzy_transpositions": false,
+                        "auto_generate_synonyms_phrase_query": false
+                    }
+                }
+            })
+        })
+        .collect::<serde_json::Value>();
+    Ok(group_filters)
+}
+
+/// Build the `query_string` clause for a user supplied elastic search query
+///
+/// The raw user query is embedded as the `must` clause of the search. Elasticsearch's `query_string`
+/// defaults leave leading wildcards, regex syntax, and unbounded boolean clause chaining enabled
+/// across all fields, so a single crafted query can force per-shard term-dictionary enumeration and
+/// exhaust the shared cluster's search threadpools. This helper centralizes the clause so
+/// the cost-bounding options can be enforced in one place.
+///
+/// # Arguments
+///
+/// * `query` - The raw user supplied query string
+fn build_query_string_clause(query: &str) -> serde_json::Value {
+    // disable leading wildcards so a single query cannot force per-shard term-dictionary
+    // enumeration, and bound the automaton expansion of regex/fuzzy terms so a crafted query cannot
+    // exhaust the shared cluster's search threadpools
+    serde_json::json!({
+        "query_string": {
+            "query": query,
+            // reject leading `*`/`?` wildcards that scan the entire term dictionary
+            "allow_leading_wildcard": false,
+            // cap the states a single regex/fuzzy term can expand into
+            "max_determinized_states": 10_000,
+        }
+    })
+}
+
 impl ElasticCursor {
     /// Create or get an elastic cursor based on search params
     ///
@@ -3108,35 +3176,16 @@ impl ElasticCursor {
             event!(Level::WARN, msg = "User has no groups");
             return Ok(());
         }
-        // build the group filters
-        let group_filters = self
-            .retain
-            .groups
-            .iter()
-            .map(|group| {
-                serde_json::json!({
-                    "match": {
-                        "group": {
-                            "query": group,
-                            "minimum_should_match": "100%",
-                            "fuzziness": "0",
-                            "fuzzy_transpositions": false,
-                            "auto_generate_synonyms_phrase_query": false
-                        }
-                    }
-                })
-            })
-            .collect::<serde_json::Value>();
+        // build the group filters, rejecting an empty group list that would match all documents
+        let group_filters = build_group_filter(&self.retain.groups)?;
+        // build the user-query clause with whatever cost bounding is enforced
+        let query_clause = build_query_string_clause(&self.retain.query);
         // build the correct body depending on if we have any previous sort info or not
         let mut body = serde_json::json!({
             "pit": { "id": self.retain.pit, "keep_alive": "1d" },
             "query": {
                 "bool": {
-                    "must": {
-                        "query_string": {
-                            "query": &self.retain.query,
-                        }
-                    },
+                    "must": query_clause,
                     "filter": [
                         {
                             "bool": {
@@ -3603,5 +3652,58 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
             let _: () = query!(cmd("set").arg(key).arg(data).arg("EX").arg(ttl), shared).await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_group_filter, build_query_string_clause};
+
+    /// the group filter must reject an empty group list rather than emit an empty `should`
+    /// array that Elasticsearch rewrites to `match_all` (a full cross-tenant search read).
+    #[test]
+    fn group_filter_rejects_empty_groups() {
+        // building a filter with no groups must fail rather than match every tenant's documents
+        assert!(
+            build_group_filter(&[]).is_err(),
+            "empty group list produced a filter (match_all cross-tenant leak)"
+        );
+    }
+
+    /// A normal, non-empty group list must still build one exact-match clause per group so tenant
+    /// isolation works for the common case.
+    #[test]
+    fn group_filter_builds_a_clause_per_group() {
+        // build a filter scoped to two groups
+        let filter = build_group_filter(&["team-a".to_owned(), "team-b".to_owned()])
+            .expect("non-empty group list should build a filter");
+        // the filter must be an array with exactly one clause per group
+        let clauses = filter
+            .as_array()
+            .expect("group filter should be a JSON array of match clauses");
+        assert_eq!(
+            clauses.len(),
+            2,
+            "expected one match clause per group in the tenant-isolation filter"
+        );
+    }
+
+    /// the user `query_string` clause must be cost-bounded so a single crafted query cannot
+    /// enumerate the entire term dictionary of the shared indexes and exhaust the search
+    /// threadpools. At minimum leading wildcards must be disabled.
+    #[test]
+    fn query_string_clause_disables_leading_wildcards() {
+        // build the clause for an arbitrary user query
+        let clause = build_query_string_clause("password OR flag");
+        // dig into the query_string options the clause carries
+        let options = clause
+            .get("query_string")
+            .expect("clause should carry a query_string object");
+        // leading wildcards must be explicitly disabled to bound multi-term expansion cost
+        assert_eq!(
+            options.get("allow_leading_wildcard"),
+            Some(&serde_json::Value::Bool(false)),
+            "query_string clause did not disable leading wildcards (DoS)"
+        );
     }
 }

@@ -794,9 +794,19 @@ impl Group {
                 return conflict!("You cannot update a group to have no owners".to_owned());
             }
         } else {
-            // only check manager if we are doing more then just removing ourselves
-            if !update.removes_only_user(&user.username) {
-                // we are removing more then just ourselves so check for arbitrary delete perms
+            // changing group-wide settings (the description or the `allowed` flags) is an
+            // owner/manager action, so treat a settings-only update as privileged too. Otherwise the
+            // `modifiable` check below is skipped whenever the update touches no role membership, and
+            // any member — even a read-only monitor — could flip group settings or deface the
+            // description.
+            let changes_settings = update.description.is_some()
+                || update.clear_description
+                || !update.allowed.is_empty();
+            // only check manager if we are doing more then just removing ourselves, or the update
+            // changes group settings
+            if changes_settings || !update.removes_only_user(&user.username) {
+                // we are doing more than removing ourselves (or changing settings) so require
+                // owner/manager perms
                 self.modifiable(user)?;
             }
         }

@@ -2340,6 +2340,11 @@ fn default_namespace_blacklist() -> HashSet<String> {
         "jaeger".to_string(),
         "quickwit".to_string(),
         "kube-system".to_string(),
+        // also blacklist the remaining privileged/built-in k8s namespaces so Thorium images
+        // cannot be scheduled into them and inherit their elevated service accounts or defaults
+        "kube-public".to_string(),
+        "kube-node-lease".to_string(),
+        "default".to_string(),
     ]
     .into_iter()
     .collect()
@@ -2706,5 +2711,27 @@ impl Conf {
         // update this configs namespace
         self.thorium.namespace = namespace.into();
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_namespace_blacklist;
+
+    #[test]
+    fn default_namespace_blacklist_covers_privileged_namespaces() {
+        // build the default blacklist Thorium ships with
+        let blacklist = default_namespace_blacklist();
+        // the privileged, cluster-critical Kubernetes namespaces must never be creatable or
+        // schedulable into by Thorium. `kube-public` and `kube-node-lease` are world-readable /
+        // node-owned control-plane namespaces and `default` is where unscoped workloads land, so
+        // omitting any of them lets a group name collide with a sensitive namespace. This fails
+        // until the default blacklist is expanded to include them.
+        for namespace in ["kube-system", "kube-public", "kube-node-lease", "default"] {
+            assert!(
+                blacklist.contains(namespace),
+                "default namespace blacklist is missing the privileged namespace '{namespace}'"
+            );
+        }
     }
 }

@@ -444,6 +444,47 @@ impl OutputMap {
     }
 }
 
+/// Build the S3 object key for a result file, containing it under its result id's prefix
+///
+/// The `file_path` here is the fully user-controlled `result_file` query parameter. Per-result
+/// authorization is checked one step earlier against `result_id` only, so the constructed key must
+/// stay under the `{result_id}/` prefix — otherwise a `..` segment, absolute path, or empty
+/// component could resolve to another result's file on any object store or proxy that normalizes
+/// dot-segments.
+///
+/// # Arguments
+///
+/// * `result_id` - The result id whose prefix contains the file
+/// * `file_path` - The user-supplied relative path to the result file
+fn build_result_file_key(result_id: &Uuid, file_path: &std::path::Path) -> Result<String, ApiError> {
+    // only accept a path built entirely from plain relative components so the key can never
+    // escape the `{result_id}/` prefix. A backslash is an ordinary character on Linux, so a
+    // Windows-style path (`..\11..\report.json`) parses as one innocent `Normal` component here;
+    // reject any component carrying a backslash as well, mirroring the `..` guard the S3 upload path
+    // already enforces.
+    for part in file_path.components() {
+        match part {
+            // a normal component is only safe if it has no embedded backslash separator
+            std::path::Component::Normal(normal) => {
+                // reject the component if it smuggles a Windows path separator
+                if normal.to_string_lossy().contains('\\') {
+                    return bad!(format!(
+                        "result file path component contains a backslash: {file_path:?}"
+                    ));
+                }
+            }
+            // reject `..`, root `/`, drive prefixes, and `.` that can escape the result prefix
+            _ => {
+                return bad!(format!(
+                    "result file path contains an unsafe component: {file_path:?}"
+                ));
+            }
+        }
+    }
+    // every component was a plain, separator-free name so the key stays under the result prefix
+    Ok(format!("{}/{}", result_id, file_path.to_string_lossy()))
+}
+
 impl Output {
     /// Downloads a result file
     ///
@@ -473,8 +514,8 @@ impl Output {
             // we are not an admin so make sure we can see this result
             db::results::authorize(kind, &user.groups, key, tool, result_id, shared).await?;
         }
-        // build the path to this file in s3
-        let s3_path = format!("{}/{}", result_id, file_path.to_string_lossy());
+        // build the path to this file in s3, containing it under this result id's prefix
+        let s3_path = build_result_file_key(result_id, &file_path)?;
         // download this result file
         shared.s3.results.download(&s3_path).await
     }
@@ -666,5 +707,55 @@ where
         } else {
             bad!("result file query paramter required but was not given".to_string())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_result_file_key;
+    use std::path::Path;
+    use uuid::Uuid;
+
+    /// Assert that a hostile result-file path is rejected instead of escaping the result prefix
+    ///
+    /// # Arguments
+    ///
+    /// * `component` - The malicious `result_file` value to feed the key builder
+    fn assert_rejected(component: &str) {
+        // use a fixed result id so the assertion focuses on the path component
+        let result_id = Uuid::nil();
+        // a hostile path must not produce a usable key that could escape the prefix
+        assert!(
+            build_result_file_key(&result_id, Path::new(component)).is_err(),
+            "build_result_file_key accepted hostile path {component:?}"
+        );
+    }
+
+    #[test]
+    fn result_file_key_rejects_parent_traversal() {
+        // a `..` segment could resolve to another result's files on a normalizing store
+        assert_rejected("../11111111111111111111111111111111/report.json");
+    }
+
+    #[test]
+    fn result_file_key_rejects_absolute_paths() {
+        // an absolute path ignores the result id prefix entirely
+        assert_rejected("/etc/passwd");
+    }
+
+    #[test]
+    fn result_file_key_rejects_windows_traversal() {
+        // backslash traversal must be rejected on all platforms, not just interpreted literally
+        assert_rejected("..\\11111111111111111111111111111111\\report.json");
+    }
+
+    #[test]
+    fn result_file_key_allows_normal_names() {
+        // a well behaved relative path must still build a key under the result id prefix
+        let result_id = Uuid::nil();
+        let key = build_result_file_key(&result_id, Path::new("entities/pe.json"))
+            .expect("a normal result file path should build a key");
+        // the key must stay under the result id's prefix
+        assert_eq!(key, format!("{result_id}/entities/pe.json"));
     }
 }

@@ -114,6 +114,20 @@ fn cast_paths<'a>(path: &'a PathBuf) -> Result<(String, &'a str), Error> {
     Ok((keys_mount, keys_path_str))
 }
 
+/// Builds the docker `-v` bind-mount spec for the host agent directory
+///
+/// The host agent directory (`C:\Thorium\agent`) is mounted into every tool container at
+/// `C:\Thorium`. Because the attacker-supplied tool shares the container with the agent, a
+/// read-write mount would let it overwrite `C:\Thorium\thorium-agent.exe`, writing through to the
+/// host binary that both every subsequent tenant's container and the reactor's own periodic
+/// host-side update task then execute — a Hyper-V-sandbox-to-host escape that defeats
+/// `--isolation=hyperv`. Mounting read-only closes that write-through path.
+fn agent_dir_mount() -> &'static str {
+    // append the `:ro` suffix so the host agent directory is mounted read-only and a tool
+    // container cannot trojan the shared agent binary
+    "C:\\Thorium\\agent:C:\\Thorium:ro"
+}
+
 #[async_trait::async_trait]
 impl Launcher for Windows {
     // The Windows launcher has no data to resolve after a launch
@@ -160,7 +174,7 @@ impl Launcher for Windows {
             "--rm",
             "--isolation=hyperv",
             "-v",
-            "C:\\Thorium\\agent:C:\\Thorium",
+            agent_dir_mount(),
             "-v",
             &keys_mount,
             "--entrypoint",
@@ -328,4 +342,29 @@ async fn kill_containers(containers: &HashSet<String>) -> Result<(), std::io::Er
         .output()
         .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::agent_dir_mount;
+
+    /// the host agent directory bind-mounted into every Windows tool container must be
+    /// read-only. Without a `:ro` suffix a malicious tool sharing the container with the agent can
+    /// overwrite the host `thorium-agent.exe`, which is then executed both by every subsequent
+    /// tenant's container and by the reactor's own host-side update loop — a Hyper-V sandbox escape
+    /// that defeats `--isolation=hyperv`.
+    ///
+    /// This test only builds/runs on Windows because the launcher module is
+    /// `#[cfg(target_os = "windows")]`.
+    #[test]
+    fn agent_dir_mount_is_read_only() {
+        // build the docker -v spec exactly as the launcher injects it
+        let mount = agent_dir_mount();
+        // the host agent directory mount must be read-only
+        assert!(
+            mount.ends_with(":ro"),
+            "the host agent directory is bind-mounted read-write into tool containers, allowing a \
+             tool to trojan the agent binary and escape to the host"
+        );
+    }
 }

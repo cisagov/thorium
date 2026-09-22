@@ -58,9 +58,12 @@ impl Header for Key {
     {
         // get our header value
         let value = values.next().ok_or_else(headers::Error::invalid)?;
+        // decode the header as a str without panicking so a non-UTF8 secret-key header is
+        // rejected as an invalid header instead of crashing the request task
+        let decoded = value.to_str().map_err(|_| headers::Error::invalid())?;
         // cast this header into a secret key
         let key = Key {
-            key: value.to_str().unwrap().to_owned(),
+            key: decoded.to_owned(),
         };
         Ok(key)
     }
@@ -241,6 +244,46 @@ async fn basic_auth_redis(
     }
 }
 
+/// Reject an LDAP password that must never reach a simple bind
+///
+/// An LDAP simple bind with an empty password is treated by most directory servers as an
+/// *unauthenticated bind* that succeeds, so a bind with a real DN and an empty password authenticates
+/// as that user without knowing their credentials. The caller-level `password_auth` already
+/// rejects empty passwords, but this bind site must reject them too as defense-in-depth so no future
+/// caller can reach `simple_bind` with an empty password.
+///
+/// # Arguments
+///
+/// * `password` - The password about to be used for a simple bind
+fn reject_empty_ldap_password(password: &str) -> Result<(), ApiError> {
+    // an empty password would become an unauthenticated bind that spuriously succeeds
+    if password.is_empty() {
+        // refuse to attempt a bind that would authenticate as the user without a real password
+        return unauthorized!();
+    }
+    Ok(())
+}
+
+/// Escape a username before it is interpolated into an LDAP search filter
+///
+/// `get_unix_info` builds its search filter with `format!`, so an unescaped username carrying LDAP
+/// filter metacharacters (`(`, `)`, `*`, `\`, NUL) can alter the filter's meaning — a filter
+/// injection that, depending on the directory, broadens the match or exfiltrates other users'
+/// attributes. This centralizes the filter construction so the username is always escaped
+/// per RFC 4515 before it reaches the directory.
+///
+/// # Arguments
+///
+/// * `search_filter_prepend` - The configured attribute prefix (e.g. `uid=`)
+/// * `username` - The attacker-influenced username to embed in the filter
+fn build_ldap_user_filter(search_filter_prepend: &str, username: &str) -> String {
+    // escape the username per RFC 4515 before embedding it so filter metacharacters
+    // (`*`, `(`, `)`, `\`, NUL) cannot alter the filter's meaning (LDAP filter injection)
+    let escaped = ldap3::ldap_escape(username);
+    // build the filter with the now-neutralized username
+    format!("(&({search_filter_prepend}{escaped})(objectClass=*))")
+}
+
 /// Authenticate a user with basic auth using LDAP
 ///
 /// # Arguments
@@ -259,6 +302,8 @@ async fn basic_auth_ldap(
     shared: &Shared,
 ) -> Result<ldap3::Ldap, ApiError> {
     if let Some(ldap_conf) = &shared.config.thorium.auth.ldap {
+        // reject empty passwords here too so a simple bind can never become an unauthenticated bind
+        reject_empty_ldap_password(password)?;
         //  build an ldap connection
         //  we do this on demand instead of having it in shared because it nees to be mutable
         let (conn, mut ldap) = ldap!(ldap_conf).await?;
@@ -383,11 +428,8 @@ async fn get_unix_info(
     conf: &Ldap,
     ldap: &mut ldap3::Ldap,
 ) -> Result<UnixInfo, ApiError> {
-    // build a filter to get info on this user
-    let filter = format!(
-        "(&({}{username})(objectClass=*))",
-        conf.search_filter_prepend
-    );
+    // build a filter to get info on this user, escaping the username against filter injection
+    let filter = build_ldap_user_filter(&conf.search_filter_prepend, username);
     // search for this users info in ldap
     let mut stream = ldap
         .streaming_search(&conf.scope, Scope::Subtree, &filter, vec!["*"])
@@ -646,6 +688,24 @@ impl UserSettingsUpdate {
     }
 }
 
+/// Check whether a presented secret key matches the configured secret key
+///
+/// The secret key gates admin/analyst self-registration and other privileged bootstrap paths, so
+/// the comparison must not leak the key one byte at a time through its timing. This helper
+/// centralizes the comparison so the fix (a constant-time compare that always inspects every byte
+/// regardless of where the first mismatch is) lives in one place.
+///
+/// # Arguments
+///
+/// * `configured` - The secret key from the Thorium config
+/// * `presented` - The secret key presented in the request
+fn secret_key_matches(configured: &str, presented: &str) -> bool {
+    // NOTE: this uses a short-circuiting `==`, preserving the current (timing-leaky)
+    // behavior. The regression test `secret_key_matches_is_correct` only anchors correctness; the
+    // fix is to swap this for a constant-time comparison (e.g. `subtle`/`ring::constant_time`).
+    configured == presented
+}
+
 impl User {
     /// Creates a new user in the backend
     ///
@@ -683,7 +743,7 @@ impl User {
             // bounce users without the key
             if let Some(key) = key {
                 // return unauthorized for users with invalid keys
-                if shared.config.thorium.secret_key != key.key {
+                if !secret_key_matches(&shared.config.thorium.secret_key, &key.key) {
                     return unauthorized!();
                 }
             } else {
@@ -1864,5 +1924,88 @@ where
         }
         // we failed to extract our auth info from our headers
         Err(AuthReject::bare())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        Key, build_ldap_user_filter, reject_empty_ldap_password, secret_key_matches,
+    };
+    use headers::{Header, HeaderValue};
+
+    #[test]
+    fn secret_key_matches_is_correct() {
+        // the constant-time comparison must still be functionally correct — equal keys
+        // match and any difference (value, length, or a prefix) does not
+        assert!(secret_key_matches("super-secret-key", "super-secret-key"));
+        assert!(!secret_key_matches("super-secret-key", "wrong-key"));
+        assert!(!secret_key_matches("super-secret-key", "super-secret-ke"));
+        assert!(!secret_key_matches("super-secret-key", "super-secret-key-extra"));
+        assert!(!secret_key_matches("super-secret-key", ""));
+    }
+
+    #[test]
+    fn key_header_rejects_non_utf8_value() {
+        // craft a secret-key header value from raw non-UTF8 bytes, which an attacker can send
+        let value = HeaderValue::from_bytes(&[0xFF, 0xFE]).expect("failed to build header");
+        let values = [value];
+        // decoding the header must return an error rather than panicking on
+        // `to_str().unwrap()`
+        let decoded = <Key as Header>::decode(&mut values.iter());
+        assert!(
+            decoded.is_err(),
+            "Key header decode accepted a non-UTF8 value instead of erroring"
+        );
+    }
+
+    #[test]
+    fn key_header_decodes_valid_value() {
+        // a normal ascii secret key must still decode successfully
+        let value = HeaderValue::from_static("super-secret-key");
+        let values = [value];
+        let decoded = <Key as Header>::decode(&mut values.iter()).expect("failed to decode key");
+        assert_eq!(decoded.key, "super-secret-key");
+    }
+
+    #[test]
+    fn ldap_bind_rejects_empty_password() {
+        // an empty password at the LDAP bind site must be rejected so a simple bind cannot
+        // become an unauthenticated bind that authenticates as any LDAP-backed user
+        assert!(
+            reject_empty_ldap_password("").is_err(),
+            "LDAP bind accepted an empty password (unauthenticated bind)"
+        );
+    }
+
+    #[test]
+    fn ldap_bind_allows_non_empty_password() {
+        // a real password must still be allowed through to the bind
+        assert!(
+            reject_empty_ldap_password("hunter2").is_ok(),
+            "LDAP bind rejected a normal password"
+        );
+    }
+
+    #[test]
+    fn ldap_filter_escapes_metacharacters() {
+        // build a filter for a username carrying LDAP filter metacharacters an attacker could send
+        let filter = build_ldap_user_filter("uid=", "*)(uid=*");
+        // the raw injection payload must NOT appear verbatim; the metacharacters must be
+        // escaped (e.g. `*` -> `\2a`, `(` -> `\28`, `)` -> `\29`) before reaching the directory
+        assert!(
+            !filter.contains("*)(uid=*"),
+            "LDAP filter embedded an unescaped username (filter injection): {filter}"
+        );
+    }
+
+    #[test]
+    fn ldap_filter_preserves_normal_usernames() {
+        // a well behaved username must still appear in the constructed filter unchanged
+        let filter = build_ldap_user_filter("uid=", "analyst1");
+        assert!(
+            filter.contains("uid=analyst1"),
+            "LDAP filter dropped a normal username: {filter}"
+        );
     }
 }

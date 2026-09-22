@@ -94,6 +94,58 @@ fn isolate<P: AsRef<Path>>(raw: P, id: &str) -> Result<String, Error> {
     }
 }
 
+/// Describes the OS-level isolation applied to a bare-metal tool process before it is spawned
+///
+/// NOTE: today this policy is empty. The agent — and therefore the attacker-supplied tool
+/// it execs (`agent/src/libs/agents/baremetal.rs`) — is launched with a plain
+/// `Command::new(...).spawn()` as the reactor's own uid, with no privilege drop, user separation,
+/// mount/pid namespaces, or seccomp. The only confinement is a cpu/memory cgroup. Because the
+/// reactor runs as an admin identity and caches every user's token world-readable under
+/// `/opt/thorium-keys`, any tool code (or malware that compromises a tool) can read those
+/// credentials and impersonate every tenant. The fix is to populate this policy (drop to an
+/// unprivileged uid/gid, enter fresh namespaces, etc.) and apply it to the spawned `Command`; the
+/// regression test `baremetal_worker_drops_privileges` fails until a privilege drop is enforced.
+#[derive(Debug, Default)]
+pub(crate) struct BareMetalIsolation {
+    /// The uid the tool process should be dropped to before exec, if any
+    pub uid: Option<u32>,
+    /// The gid the tool process should be dropped to before exec, if any
+    pub gid: Option<u32>,
+}
+
+impl BareMetalIsolation {
+    /// Builds the isolation policy applied to a bare-metal worker before spawning it
+    fn for_worker() -> Self {
+        // NOTE: no privilege drop is applied to bare-metal tool processes today
+        BareMetalIsolation::default()
+    }
+
+    /// Returns whether this policy actually drops the tool process below the reactor's privileges
+    ///
+    /// A meaningful drop requires reassigning the tool process to a non-root, unprivileged uid so
+    /// it can no longer read the reactor's admin keys or the cached tokens of other tenants.
+    fn drops_privileges(&self) -> bool {
+        // a privilege drop requires reassigning the uid to a non-root user
+        matches!(self.uid, Some(uid) if uid != 0)
+    }
+
+    /// Applies this isolation policy to a command that is about to be spawned
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to constrain before it is spawned
+    fn apply(&self, command: &mut Command) {
+        // drop to the configured gid before exec if one is set
+        if let Some(gid) = self.gid {
+            command.gid(gid);
+        }
+        // drop to the configured uid before exec if one is set
+        if let Some(uid) = self.uid {
+            command.uid(uid);
+        }
+    }
+}
+
 /// A currently active bare metal worker
 pub struct ActiveWorker {
     /// The control group this worker is tied too
@@ -141,10 +193,15 @@ impl ActiveWorker {
             keys_str,
             "bare-metal",
         ];
+        // build the isolation policy applied to this bare-metal tool process
+        let isolation = BareMetalIsolation::for_worker();
+        // build the command to spawn our agent
+        let mut command = Command::new("/opt/thorium/thorium-agent");
+        command.args(args);
+        // apply our isolation policy before spawning the tool process
+        isolation.apply(&mut command);
         // spawn our agent
-        let child = Command::new("/opt/thorium/thorium-agent")
-            .args(args)
-            .spawn()?;
+        let child = command.spawn()?;
         // get the pid of the process we just spawned if it has one
         if let Some(pid) = child.id() {
             // add this pid to our cgroup
@@ -532,5 +589,27 @@ impl Launcher for BareMetal {
                 .await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BareMetalIsolation;
+
+    /// bare-metal tool processes must not run with the reactor's own (admin, typically
+    /// root) privileges. The reactor holds an admin token and caches every user's token
+    /// world-readable under `/opt/thorium-keys`, so a tool running as the reactor's uid can read
+    /// those credentials and impersonate every tenant. The isolation policy applied before spawning
+    /// the agent must drop the tool process to an unprivileged, non-root uid.
+    #[test]
+    fn baremetal_worker_drops_privileges() {
+        // build the isolation policy applied to a bare-metal worker before it is spawned
+        let isolation = BareMetalIsolation::for_worker();
+        // the tool process must be dropped below the reactor's privileges
+        assert!(
+            isolation.drops_privileges(),
+            "bare-metal tool processes run with the reactor's own privileges, letting a tool read \
+             the reactor's admin token and every cached tenant token"
+        );
     }
 }

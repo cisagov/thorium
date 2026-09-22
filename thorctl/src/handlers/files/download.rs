@@ -50,45 +50,101 @@ impl FilesDownloadWorker {
     ///
     /// * `target` - The submission chunk to build the provenance path for
     fn get_provenance_paths(&self, target: &SubmissionChunk) -> Result<PathBuf, Error> {
+        // delegate to the pure builder so this stays unit-testable without a live worker
+        Self::provenance_path(&self.base, target)
+    }
+
+    /// Push an untrusted provenance segment onto a save path
+    ///
+    /// The provenance path is built from origin fields (hostnames, parent sha256s, tool names,
+    /// repo/commit strings) that originate from other users' uploads. A hostile value containing
+    /// `..`, an absolute path, or a Windows drive/backslash component would let the download escape
+    /// the user's chosen output directory and clobber arbitrary files. This helper
+    /// centralizes pushing untrusted segments so every origin branch is guarded the same way.
+    ///
+    /// # Arguments
+    ///
+    /// * `save_path` - The provenance save path being built
+    /// * `segment` - The untrusted origin segment to append
+    fn push_segment(save_path: &mut PathBuf, segment: &str) -> Result<(), Error> {
+        // a `..`, an absolute path, or a Windows drive/backslash component in an origin field
+        // would let the push escape the chosen output directory, so validate the segment before
+        // appending it. A backslash is an ordinary filename character on Linux, so a Windows-style
+        // name (`C:\Windows`, `..\..\secrets`) parses as one innocent `Normal` component here; reject
+        // any segment carrying a backslash so those names cannot escape on a Windows host.
+        for part in Path::new(segment).components() {
+            match part {
+                // a normal segment is only safe if it carries no embedded backslash separator
+                std::path::Component::Normal(normal) => {
+                    // reject the segment if it smuggles a Windows path separator
+                    if normal.to_string_lossy().contains('\\') {
+                        return Err(Error::new(format!(
+                            "refusing to append origin segment with a backslash: '{segment}'"
+                        )));
+                    }
+                }
+                // anything else (`..`, root `/`, a `C:` drive prefix, `.`) can walk out of the base
+                _ => {
+                    return Err(Error::new(format!(
+                        "refusing to append unsafe origin segment: '{segment}'"
+                    )));
+                }
+            }
+        }
+        // the segment is a plain, separator-free name so appending it stays within the base
+        save_path.push(segment);
+        Ok(())
+    }
+
+    /// Build the path to save a submission's file to based on its provenance
+    ///
+    /// This is the pure core of [`Self::get_provenance_paths`], split out so it can be unit-tested
+    /// with hostile origin fields without standing up a worker or a live API.
+    ///
+    /// # Arguments
+    ///
+    /// * `base` - The base output directory chosen by the user
+    /// * `target` - The submission chunk to build the provenance path for
+    fn provenance_path(base: &Path, target: &SubmissionChunk) -> Result<PathBuf, Error> {
         match &target.origin {
             Origin::Downloaded { url, name } => {
                 // if the users specified a name then use that
                 let hostname = match name {
-                    Some(name) => name,
+                    Some(name) => name.as_str(),
                     None => utils::get_hostname(url)?,
                 };
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("Downloaded");
                 // add our hostname onto this path
-                save_path.push(hostname);
+                Self::push_segment(&mut save_path, hostname)?;
                 Ok(save_path)
             }
             Origin::Unpacked { tool, parent, .. } => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("Unpacked");
                 // add the parent sha256
-                save_path.push(parent);
+                Self::push_segment(&mut save_path, parent)?;
                 // add the tool that unpacked this or set Unknown
                 match tool {
-                    Some(tool) => save_path.push(tool),
+                    Some(tool) => Self::push_segment(&mut save_path, tool)?,
                     None => save_path.push("Unknown"),
                 }
                 Ok(save_path)
             }
             Origin::Transformed { tool, parent, .. } => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("Transformed");
                 // add the parent sha256
-                save_path.push(parent);
+                Self::push_segment(&mut save_path, parent)?;
                 // add the tool that transformed this or set Unknown
                 match tool {
-                    Some(tool) => save_path.push(tool),
+                    Some(tool) => Self::push_segment(&mut save_path, tool)?,
                     None => save_path.push("Unknown"),
                 }
                 Ok(save_path)
@@ -99,19 +155,19 @@ impl FilesDownloadWorker {
                 destination,
             } => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("Wire");
                 // add the sniffer
-                save_path.push(sniffer);
+                Self::push_segment(&mut save_path, sniffer)?;
                 // add the source this file came from
                 match source {
-                    Some(source) => save_path.push(source),
+                    Some(source) => Self::push_segment(&mut save_path, source)?,
                     None => save_path.push("Unknown"),
                 }
                 // add the destination this file was going too
                 match destination {
-                    Some(destination) => save_path.push(destination),
+                    Some(destination) => Self::push_segment(&mut save_path, destination)?,
                     None => save_path.push("Unknown"),
                 }
                 Ok(save_path)
@@ -120,25 +176,25 @@ impl FilesDownloadWorker {
                 incident, machine, ..
             } => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("Incident");
                 // add the sniffer
-                save_path.push(incident);
+                Self::push_segment(&mut save_path, incident)?;
                 // if machine is set then set that
                 match machine {
-                    Some(machine) => save_path.push(machine),
+                    Some(machine) => Self::push_segment(&mut save_path, machine)?,
                     None => save_path.push("Unknown"),
                 }
                 Ok(save_path)
             }
             Origin::MemoryDump { parent, .. } => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("MemoryDump");
                 // add the sniffer
-                save_path.push(parent);
+                Self::push_segment(&mut save_path, parent)?;
                 Ok(save_path)
             }
             Origin::Source {
@@ -149,15 +205,15 @@ impl FilesDownloadWorker {
                 ..
             } => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("Source");
                 // add the repo this was built from
-                save_path.push(repo);
+                Self::push_segment(&mut save_path, repo)?;
                 // add the commit this was built from
-                save_path.push(commit);
+                Self::push_segment(&mut save_path, commit)?;
                 // add the build system that was used
-                save_path.push(system);
+                Self::push_segment(&mut save_path, system)?;
                 // add whether this is a supporting build file or not
                 if *supporting {
                     save_path.push("Supporting");
@@ -166,7 +222,7 @@ impl FilesDownloadWorker {
             }
             Origin::None => {
                 // clone our base path
-                let mut save_path = self.base.clone();
+                let mut save_path = base.to_path_buf();
                 // add the origin type
                 save_path.push("None");
                 Ok(save_path)
@@ -178,7 +234,7 @@ impl FilesDownloadWorker {
                 ..
             } => {
                 // add the origin type
-                let mut save_path = self.base.join("Carved");
+                let mut save_path = base.join("Carved");
                 // add the carved origin type
                 match carved_origin {
                     CarvedOrigin::Pcap { .. } => {
@@ -187,10 +243,10 @@ impl FilesDownloadWorker {
                     CarvedOrigin::Unknown => save_path.push("Unknown"),
                 }
                 // add the parent SHA256
-                save_path.push(parent);
+                Self::push_segment(&mut save_path, parent)?;
                 // add the tool that carved this file or set to unknown
                 match tool {
-                    Some(tool) => save_path.push(tool),
+                    Some(tool) => Self::push_segment(&mut save_path, tool)?,
                     None => save_path.push("Unknown"),
                 }
                 Ok(save_path)
@@ -428,5 +484,73 @@ impl Worker for FilesDownloadWorker {
         }
         // finish our progress bar
         self.bar.finish_and_clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FilesDownloadWorker;
+    use std::path::Path;
+    use thorium::models::{Origin, SubmissionChunk};
+    use uuid::Uuid;
+
+    /// Build a submission chunk whose origin carries the given hostile parent value
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - The hostile parent sha256 string to embed in the origin
+    fn chunk_with_unpacked_parent(parent: &str) -> SubmissionChunk {
+        SubmissionChunk {
+            id: Uuid::new_v4(),
+            name: None,
+            description: None,
+            groups: Vec::new(),
+            submitter: "attacker".to_owned(),
+            uploaded: chrono::Utc::now(),
+            origin: Origin::Unpacked {
+                tool: None,
+                parent: parent.to_owned(),
+                dangling: false,
+                direct: true,
+            },
+        }
+    }
+
+    /// Assert that a provenance path built from a hostile origin segment is rejected
+    ///
+    /// A raw `PathBuf::push` can't be trusted to contain traversal: on Linux a `..` segment stays a
+    /// lexical prefix of the base and a Windows backslash name is just an ordinary file name, so
+    /// the secure builder must reject the hostile origin field rather than append it; building a
+    /// path from such an origin must return an error.
+    ///
+    /// # Arguments
+    ///
+    /// * `parent` - The hostile parent sha256 string to embed in the origin
+    fn assert_rejected(parent: &str) {
+        let base = Path::new("/home/user/thorium-downloads");
+        let chunk = chunk_with_unpacked_parent(parent);
+        assert!(
+            FilesDownloadWorker::provenance_path(base, &chunk).is_err(),
+            "provenance path accepted the hostile origin '{parent}' instead of rejecting it"
+        );
+    }
+
+    #[test]
+    fn provenance_path_rejects_parent_traversal() {
+        // a `..` in an origin field must not walk up out of the chosen output directory
+        assert_rejected("../../../../etc/cron.d");
+    }
+
+    #[test]
+    fn provenance_path_rejects_absolute_origin() {
+        // an absolute origin field must not replace the base output directory entirely
+        assert_rejected("/etc/cron.d");
+    }
+
+    #[test]
+    fn provenance_path_rejects_windows_origin() {
+        // Windows drive/backslash origin fields must be contained on all platforms
+        assert_rejected("C:\\Windows\\system32");
+        assert_rejected("..\\..\\secrets");
     }
 }

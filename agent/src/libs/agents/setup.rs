@@ -22,6 +22,50 @@ use uuid::Uuid;
 use crate::libs::DownloadedCache;
 use crate::{log, purge};
 
+/// Safely join an untrusted path component onto a trusted base directory
+///
+/// The agent reconstructs sample/result/repo files on disk using names that ultimately come from
+/// the API (submission file names, reaction cache file lists, result file names, filesystem folder
+/// names). A hostile name containing `..`, an absolute path, or a Windows drive/backslash component
+/// would let the write escape the job's scratch directory and clobber arbitrary files on the worker
+/// entirely. This helper centralizes joining so every sink rejects those escapes on all
+/// platforms.
+///
+/// # Arguments
+///
+/// * `base` - The trusted base directory to join onto
+/// * `component` - The untrusted path component to append
+fn safe_join(base: &Path, component: impl AsRef<Path>) -> Result<PathBuf, Error> {
+    // borrow the untrusted component as a path so we can inspect its pieces
+    let component = component.as_ref();
+    // validate every piece so the join cannot escape the base directory on any
+    // platform. A backslash is an ordinary character on Linux, so a Windows-style name like
+    // `C:\Windows\system32` or `..\..\SAM` parses as one innocent-looking `Normal` component here;
+    // reject any component carrying a backslash so those names cannot slip through and later escape
+    // when the file is written on a Windows worker.
+    for part in component.components() {
+        match part {
+            // a normal segment is only safe if it carries no embedded backslash separator
+            std::path::Component::Normal(segment) => {
+                // reject the segment if it smuggles a Windows path separator
+                if segment.to_string_lossy().contains('\\') {
+                    return Err(Error::new(format!(
+                        "refusing to join path component with a backslash: {component:?}"
+                    )));
+                }
+            }
+            // anything else (`..`, root `/`, a `C:` drive prefix, `.`) can walk out of the base
+            _ => {
+                return Err(Error::new(format!(
+                    "refusing to join unsafe path component: {component:?}"
+                )))
+            }
+        }
+    }
+    // every component was a plain, separator-free name so the join stays within the base
+    Ok(base.join(component))
+}
+
 /// Create any required parent dirs for this file
 ///
 /// # Arguments
@@ -155,8 +199,8 @@ pub async fn download_cache_files(
         let mut futs = Vec::with_capacity(cache.files.len());
         // build a future for downloading all of our cache files
         for sub in &cache.files {
-            // get the path to write this file to on disk
-            let write_path = file_root.join(sub);
+            // get the path to write this file to on disk, rejecting any traversal in the name
+            let write_path = safe_join(&file_root, sub)?;
             // add this path to our downloaded paths
             downloaded.files.push(write_path.clone());
             // clone our logs channel
@@ -283,8 +327,8 @@ pub async fn build_sample_path(
                             }
                         }
                     } else {
-                        // add the relative path
-                        base.join(name_path)
+                        // add the relative path, rejecting any traversal in the submission name
+                        safe_join(base, &name_path)?
                     }
                 }
                 None => {
@@ -809,8 +853,8 @@ async fn download_results_helper(
                             .await?
                     }
                 };
-                // build the path to write this result file off to disk at
-                let target_path = nested.join(result_file);
+                // build the path to write this result file off to disk at, rejecting traversal
+                let target_path = safe_join(&nested, result_file)?;
                 // create any needed parent dirs for this result file
                 create_parents(&target_path, created_dirs).await?;
                 // create a file handle for this file
@@ -1170,11 +1214,12 @@ async fn reconstruct_filesystem(
                             if folder.filesystem_id != fs_id {
                                 continue;
                             }
-                            // the special "/" root folder maps to our current path, others get appended
+                            // the special "/" root folder maps to our current path, others get
+                            // appended, rejecting any traversal in the folder name
                             let child_path = if child.name == "/" {
                                 parent_path.clone()
                             } else {
-                                parent_path.join(&child.name)
+                                safe_join(&parent_path, &child.name)?
                             };
                             // record this folders path and queue it for walking
                             folder_paths.insert(branch.node, child_path);
@@ -1194,8 +1239,8 @@ async fn reconstruct_filesystem(
                     // falling back to its sha256 for older filesystems that lack a submission link
                     let name = resolve_file_name(association, branch.node, &tree.data_map)
                         .unwrap_or_else(|| file_sha256.clone());
-                    // build the path to reconstruct this file at
-                    let file_path = parent_path.join(name);
+                    // build the path to reconstruct this file at, rejecting traversal in the name
+                    let file_path = safe_join(&parent_path, &name)?;
                     // create any parent dirs for this file
                     create_parents(&file_path, created_dirs).await?;
                     // log that we are reconstructing this file
@@ -1257,4 +1302,60 @@ fn resolve_file_name(
     }
     // fall back to any submission that has a name
     sample.submissions.iter().find_map(|sub| sub.name.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_join;
+    use std::path::Path;
+
+    /// The trusted base directory every join must stay inside of
+    const BASE: &str = "/tmp/thorium-job/scratch";
+
+    /// Assert that joining a hostile `component` onto the base is rejected
+    ///
+    /// A raw `Path::join` can't be trusted to contain traversal: on Linux a `..` component stays a
+    /// lexical prefix of the base and a Windows backslash name is just an ordinary file name, so
+    /// only rejecting the component outright reliably contains the write on every platform. The
+    /// secure helper must therefore return an error rather than join these names.
+    ///
+    /// # Arguments
+    ///
+    /// * `component` - The hostile path component to attempt to join
+    fn assert_rejected(component: &str) {
+        let base = Path::new(BASE);
+        assert!(
+            safe_join(base, component).is_err(),
+            "safe_join accepted the hostile component '{component}' instead of rejecting it"
+        );
+    }
+
+    #[test]
+    fn safe_join_rejects_parent_traversal() {
+        // a `..` component must not walk up out of the scratch directory
+        assert_rejected("../../etc/passwd");
+        assert_rejected("nested/../../../etc/passwd");
+    }
+
+    #[test]
+    fn safe_join_rejects_absolute_paths() {
+        // an absolute component must not replace the base directory entirely
+        assert_rejected("/etc/passwd");
+    }
+
+    #[test]
+    fn safe_join_rejects_windows_components() {
+        // Windows drive letters and backslash separators must be rejected on all platforms,
+        // since a name crafted for a Windows worker would otherwise escape when run there
+        assert_rejected("C:\\Windows\\system32\\cmd.exe");
+        assert_rejected("..\\..\\Windows\\system32\\config\\SAM");
+    }
+
+    #[test]
+    fn safe_join_allows_normal_names() {
+        // a benign relative name must still be joined so legitimate downloads keep working
+        let base = Path::new(BASE);
+        let joined = safe_join(base, "results/output.json").expect("benign name was rejected");
+        assert_eq!(joined, base.join("results/output.json"));
+    }
 }

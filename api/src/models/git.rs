@@ -16,6 +16,9 @@ pub use repos::{
     UntarredRepo,
 };
 
+// re-export the tar containment gate so the client unpack path can enforce it too
+pub(crate) use repos::tar_entry_is_contained;
+
 pub use branches::{Branch, BranchDetails};
 
 #[cfg(feature = "api")]

@@ -760,6 +760,30 @@ impl PartialEq<RepoRequest> for Repo {
     }
 }
 
+/// Check that a tar entry's path stays within the directory it is being unpacked into
+///
+/// A malicious repo tarball can contain entries with absolute paths or `..` components that, when
+/// extracted, write outside the intended target directory — overwriting files on the agent host or
+/// analyst machine (made worse by the unmaintained tar crate in use). This predicate is the
+/// single containment gate the unpack loop consults before extracting each entry.
+///
+/// # Arguments
+///
+/// * `entry_path` - The path the tar entry wants to be written to, relative to the target dir
+#[must_use]
+pub(crate) fn tar_entry_is_contained(entry_path: &Path) -> bool {
+    // only accept entries built entirely from plain relative components so an archive can
+    // never escape the target directory. A backslash is an ordinary character on Linux, so a
+    // Windows-style entry (`..\..\evil`, `C:\evil`) parses as one innocent `Normal` component here;
+    // reject any component carrying a backslash as well so those entries cannot escape either.
+    entry_path.components().all(|part| match part {
+        // a normal component is only contained if it has no embedded backslash separator
+        std::path::Component::Normal(normal) => !normal.to_string_lossy().contains('\\'),
+        // reject `..`, root `/`, and drive prefixes that can walk out of the target dir
+        _ => false,
+    })
+}
+
 /// A tarred and downloaded repo
 #[derive(Debug)]
 pub struct TarredRepo {
@@ -784,8 +808,30 @@ impl TarredRepo {
         let uncart = cart_rs::UncartStream::new(BufReader::new(file));
         // cast our target to a path
         let target = target.as_ref();
-        // untar this repo to disk
-        Archive::new(uncart).unpack(target).await?;
+        // untar this repo to disk, validating each entry's path stays within the target dir. The
+        // underlying tar crate is unmaintained, so containment is enforced here rather
+        // than trusting the crate's own extraction logic.
+        use futures::stream::StreamExt;
+        // build the archive and iterate its entries so each path can be checked before extraction
+        let mut archive = Archive::new(uncart);
+        let mut entries = archive.entries()?;
+        // crawl over each entry in the tarball
+        while let Some(entry) = entries.next().await {
+            // get a mutable handle to this entry
+            let mut entry = entry?;
+            // resolve the path this entry wants to be written to
+            let entry_path = entry.path()?.into_owned();
+            // reject any entry whose path would escape the target directory
+            if !tar_entry_is_contained(&entry_path) {
+                // refuse to extract a traversing entry rather than writing outside the target
+                return Err(Error::new(format!(
+                    "Refusing to unpack tar entry '{}' that escapes the target directory",
+                    entry_path.to_string_lossy()
+                )));
+            }
+            // this entry is contained so extract it into the target directory
+            entry.unpack_in(target).await?;
+        }
         // build the path to this repo
         let mut path = PathBuf::from(target);
         path.push(&self.name);
@@ -1479,5 +1525,43 @@ impl crate::models::CensusSupport for Repo {
             group = row.group,
             year = row.year,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tar_entry_is_contained;
+    use std::path::Path;
+
+    /// a tar entry using `..` to climb out of the target directory must be rejected so a
+    /// malicious repo tarball cannot overwrite files outside the unpack directory.
+    #[test]
+    fn tar_entry_rejects_parent_traversal() {
+        // an entry that climbs up and writes into an ssh config must not be extracted
+        assert!(
+            !tar_entry_is_contained(Path::new("../../../home/user/.ssh/authorized_keys")),
+            "tar unpack accepted a parent-traversal entry"
+        );
+    }
+
+    /// a tar entry with an absolute path must be rejected so it cannot write to a fixed
+    /// location outside the target directory.
+    #[test]
+    fn tar_entry_rejects_absolute_path() {
+        // an absolute-path entry must not be allowed to escape the target dir
+        assert!(
+            !tar_entry_is_contained(Path::new("/etc/cron.d/pwn")),
+            "tar unpack accepted an absolute-path entry"
+        );
+    }
+
+    /// A normal relative entry inside the repo must still be accepted so ordinary repos unpack.
+    #[test]
+    fn tar_entry_allows_contained_path() {
+        // a well behaved relative path inside the repo must be extracted
+        assert!(
+            tar_entry_is_contained(Path::new("myrepo/src/main.rs")),
+            "tar unpack rejected a normal contained entry"
+        );
     }
 }

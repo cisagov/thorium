@@ -9,7 +9,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
-use thorium::models::{Arch, Component, NodeGetParams, Os, Version, Worker, WorkerStatus};
+use thorium::models::{
+    Arch, Component, NodeGetParams, Os, ScrubbedUser, Version, Worker, WorkerStatus,
+};
 use thorium::{Keys, Thorium};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -55,6 +57,28 @@ macro_rules! try_ban {
             }
         }
     };
+}
+
+/// Selects the API token that gets written into a worker's keys file
+///
+/// The keys file is copied verbatim into every executor's tool context: mounted into k8s tool
+/// pods and, for the KVM launcher, transferred into the detonation guest at the fixed path
+/// `/thorium-keys.yml` / `C:\thorium-keys.yml` where live malware runs.
+///
+/// NOTE: this returns the user's primary, full-privilege API token (`user.token`),
+/// the same credential accepted by `token_auth` as `AuthedUser::Full`. Any code that runs in the
+/// tool context — a detonated sample, or a malicious tool image — can read this token and
+/// impersonate the submitting user across all of their groups until the token's normal expiration.
+/// The fix is to mint a job-/group-scoped, short-lived token here (Thorium already has a
+/// scoped-token mechanism) instead of the primary token; the regression test
+/// `worker_token_is_not_the_primary_token` fails until that happens.
+///
+/// # Arguments
+///
+/// * `user` - The user whose worker keys file is being written
+fn select_worker_token(user: &ScrubbedUser) -> &str {
+    // NOTE: the primary full-privilege token is used, not a job-scoped credential
+    &user.token
 }
 
 /// The daemon that will monitor this nodes worker and spawn them
@@ -223,8 +247,10 @@ impl<L: Launcher> Reactor<L> {
                     try_ban!(tokio::fs::create_dir_all(parent).await, name, bans);
                 }
                 // we need to create this users keys since they don't exist
+                // select the credential to write into this worker's keys file
+                let token = select_worker_token(&user);
                 // build the keys object for this user
-                let keys = Keys::new_token(&self.thorium.host, &user.token);
+                let keys = Keys::new_token(&self.thorium.host, token);
                 // serialize our keys
                 let serialized = try_ban!(serde_norway::to_string(&keys), name, bans);
                 // write our serialized keys to disk
@@ -456,5 +482,55 @@ impl<L: Launcher> Reactor<L> {
             tokio::time::sleep(dwell).await;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_worker_token;
+    use thorium::models::{ScrubbedUser, UserRole, UserSettings};
+
+    /// Builds a minimal [`ScrubbedUser`] fixture with a known primary token
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - The primary API token to embed in the fixture user
+    fn user_with_token(token: &str) -> ScrubbedUser {
+        // build a scrubbed user carrying the given primary token
+        ScrubbedUser {
+            username: "analyst".to_owned(),
+            role: UserRole::Analyst,
+            email: "analyst@example.com".to_owned(),
+            groups: vec!["corn".to_owned()],
+            actual_groups: Vec::default(),
+            token: token.to_owned(),
+            token_expiration: chrono::Utc::now(),
+            unix: None,
+            settings: UserSettings::default(),
+            local: true,
+            verified: true,
+            has_image: false,
+        }
+    }
+
+    /// the token written into a worker's keys file must not be the submitting
+    /// user's primary, full-privilege API token. That keys file is copied into the KVM detonation
+    /// guest at a fixed, world-known path where live malware executes (and mounted into k8s tool
+    /// pods), so any code running there could otherwise steal the token and impersonate the user
+    /// across every group. The credential handed to a worker must be a job-/group-scoped token.
+    #[test]
+    fn worker_token_is_not_the_primary_token() {
+        // use a distinctive primary token so we can detect it verbatim
+        let primary_token = "PRIMARY-FULL-PRIVILEGE-TOKEN";
+        // build the fixture user carrying that primary token
+        let user = user_with_token(primary_token);
+        // select the token that would be written into the worker's keys file
+        let token = select_worker_token(&user);
+        // the worker credential must not be the user's primary token
+        assert_ne!(
+            token, primary_token,
+            "the worker keys file carries the submitting user's primary API token, which malware \
+             detonated in a KVM guest (or a malicious tool) can steal and reuse"
+        );
     }
 }

@@ -418,8 +418,27 @@ impl Repos {
         let reader = StreamReader::new(stream);
         // start uncarting this stream of data
         let uncart = UncartStream::new(reader);
-        // untar this repo to disk
-        Archive::new(uncart).unpack(&path).await?;
+        // untar this repo to disk, validating each entry stays within the target dir. The tar crate
+        // is unmaintained, so containment is enforced here rather than trusting the crate.
+        let mut archive = Archive::new(uncart);
+        let mut entries = archive.entries()?;
+        // crawl over each entry in the tarball
+        while let Some(entry) = entries.next().await {
+            // get a mutable handle to this entry
+            let mut entry = entry?;
+            // resolve the path this entry wants to be written to
+            let entry_path = entry.path()?.into_owned();
+            // reject any entry whose path would escape the target directory
+            if !crate::models::git::tar_entry_is_contained(&entry_path) {
+                // refuse to extract a traversing entry rather than writing outside the target
+                return Err(Error::new(format!(
+                    "Refusing to unpack tar entry '{}' that escapes the target directory",
+                    entry_path.to_string_lossy()
+                )));
+            }
+            // this entry is contained so extract it into the target directory
+            entry.unpack_in(&path).await?;
+        }
         // clone our target path to add in the repo name
         let mut target = path.clone();
         // get the final name of the repo

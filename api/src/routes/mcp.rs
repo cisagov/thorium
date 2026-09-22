@@ -45,8 +45,13 @@ impl McpConfig {
         // get our authorizaton header if it exists
         match parts.headers.get("Authorization") {
             Some(value) => {
-                // get our value as a str
-                let value_str = value.to_str().unwrap();
+                // decode the header as a str without panicking so a non-UTF8 Authorization
+                // header returns a clean INVALID_PARAMS error instead of crashing the request task
+                let value_str = value.to_str().map_err(|_| ErrorData {
+                    code: rmcp::model::ErrorCode::INVALID_PARAMS,
+                    message: "Authorization header is not valid UTF-8".into(),
+                    data: None,
+                })?;
                 // split this on spaces and get our token
                 // if there isn't a space then assume they passed just a token
                 match value_str.split_once(' ') {
@@ -144,4 +149,47 @@ pub fn mount(router: Router<AppState>, conf: &Conf) -> Router<AppState> {
     let mcp_router = Router::<AppState>::new().fallback_service(service);
     // nest our router
     router.nest("/mcp", mcp_router)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::McpConfig;
+    use axum::http::request::Parts;
+    use axum::http::{HeaderValue, Request};
+
+    /// Build request parts carrying the given raw Authorization header bytes
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The raw bytes to set as the Authorization header value
+    fn parts_with_auth(value: &[u8]) -> Parts {
+        // craft a header value straight from bytes so we can inject non-UTF8 input
+        let header = HeaderValue::from_bytes(value).expect("failed to build header value");
+        // build a request carrying that header and tear off just its parts
+        Request::builder()
+            .header("Authorization", header)
+            .body(())
+            .expect("failed to build request")
+            .into_parts()
+            .0
+    }
+
+    #[test]
+    fn grab_token_rejects_non_utf8_authorization() {
+        // a non-UTF8 Authorization header is attacker controlled and must not crash the API
+        let parts = parts_with_auth(&[0xFF, 0xFE]);
+        // grabbing the token must return an error instead of panicking on `to_str().unwrap()`
+        assert!(
+            McpConfig::grab_token(&parts).is_err(),
+            "grab_token accepted a non-UTF8 Authorization header instead of erroring"
+        );
+    }
+
+    #[test]
+    fn grab_token_extracts_bearer_token() {
+        // a well formed bearer header must still yield the token after the space
+        let parts = parts_with_auth(b"Bearer deadbeefcafe");
+        let token = McpConfig::grab_token(&parts).expect("failed to grab a valid token");
+        assert_eq!(token, "deadbeefcafe");
+    }
 }

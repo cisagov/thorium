@@ -220,6 +220,25 @@ impl Containers {
         }
     }
 
+    /// Injects a security context into the raw container json
+    ///
+    /// The k8s [`Container`] struct deserializes its security context from the
+    /// camelCase key `securityContext`; a snake_case `security_context` key is
+    /// silently ignored, which would drop `allowPrivilegeEscalation=false` and
+    /// every other hardening flag. This helper centralizes the key so the
+    /// production path and its regression test can never drift apart.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw` - The raw container json object to inject the security context into
+    /// * `security_context` - The k8s security context to inject
+    fn inject_security_context(raw: &mut serde_json::Value, security_context: &SecurityContext) {
+        // use the camelCase `securityContext` key the k8s Container struct expects, so the
+        // context (including `allowPrivilegeEscalation: false`) survives deserialization instead of
+        // being silently dropped and leaving the container able to escalate privileges
+        raw["securityContext"] = json!(security_context);
+    }
+
     /// Generate the container struct
     ///
     /// # Arguments
@@ -272,7 +291,7 @@ impl Containers {
         // get our limbo as a string
         let limbo = cache.conf.thorium.scaler.k8s.limbo.to_string();
         // build container json
-        let raw = json!({
+        let mut raw = json!({
             "name": &spawn.req.stage,
             "image": &image.image,
             "command": ["/opt/thorium/thorium-agent"],
@@ -306,8 +325,10 @@ impl Containers {
                 "requests": Self::request_conv(&image.resources)?,
                 "limits": Self::limit_conv(&image.resources)?
             },
-            "security_context": Self::build_security_context(image),
         });
+        // inject this container's security context into the raw json; done through a
+        // helper so both production and tests exercise the exact same key mapping
+        Self::inject_security_context(&mut raw, &Self::build_security_context(image));
         // cast to container strcut
         let mut container: Container = serde_json::from_value(raw)?;
         // inject volume mounts
@@ -319,7 +340,8 @@ impl Containers {
 #[cfg(test)]
 mod tests {
     use super::Containers;
-    use k8s_openapi::api::core::v1::EnvVar;
+    use k8s_openapi::api::core::v1::{Container, EnvVar, SecurityContext};
+    use serde_json::json;
 
     /// Build an [`EnvVar`] for a test environment
     fn env_var(name: &str, value: Option<&str>) -> EnvVar {
@@ -429,5 +451,38 @@ mod tests {
         Containers::merge_no_proxy(&mut env, Some(&docker_env), &["api.thorium".to_owned()]);
         assert_eq!(env.len(), 1);
         assert_eq!(value_of(&env, "NO_PROXY"), "thorium.example,api.thorium");
+    }
+
+    #[test]
+    fn security_context_survives_deserialization() {
+        // build a locked-down security context exactly as the production path does and inject it
+        // into the same raw container json that `generate` builds before casting to a Container
+        let security_context = SecurityContext {
+            allow_privilege_escalation: Some(false),
+            ..Default::default()
+        };
+        let mut raw = json!({
+            "name": "test-stage",
+            "image": "test-image",
+            "command": ["/opt/thorium/thorium-agent"],
+        });
+        // inject the security context through the shared helper so this test exercises the exact
+        // same key mapping as `generate`
+        Containers::inject_security_context(&mut raw, &security_context);
+        // cast to the k8s Container struct the same way production does
+        let container: Container =
+            serde_json::from_value(raw).expect("failed to deserialize container");
+        // the security context must survive the round-trip into the k8s Container struct,
+        // otherwise `allowPrivilegeEscalation=false` (and every other hardening flag) is silently
+        // dropped and containers run with escalation allowed. This fails while the injected key is
+        // the snake_case `security_context` that k8s ignores.
+        let deserialized = container
+            .security_context
+            .expect("security context was dropped during deserialization");
+        assert_eq!(
+            deserialized.allow_privilege_escalation,
+            Some(false),
+            "allowPrivilegeEscalation must survive deserialization into the k8s Container"
+        );
     }
 }

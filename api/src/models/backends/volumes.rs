@@ -98,7 +98,32 @@ impl Volume {
             VolumeTypes::Secret => Ok(()),
             VolumeTypes::NFS => {
                 // make sure nfs exists
-                let _ = unwrap_opt!(self.nfs, "NFS", "nfs");
+                let nfs = unwrap_opt!(self.nfs, "NFS", "nfs");
+                // an NFS mount lets the pod reach an arbitrary file server, so gate it the
+                // same way as host paths — only an admin (or an explicitly unrestricted cluster) may
+                // mount an operator-chosen server/path, otherwise any developer could mount internal
+                // filers into their container.
+                if !settings.allow_unrestricted_host_paths && !user.is_admin() {
+                    // determine what the error message should advise depending on if the user is an admin
+                    let admin_error_msg = if user.is_admin() {
+                        "Enable unrestricted host paths"
+                    } else {
+                        "Ask an admin to create it"
+                    };
+                    return bad!(format!(
+                        "NFS volume '{}' points at server '{}' path '{}', which only an admin may \
+                        mount. {}.",
+                        self.name, nfs.server, nfs.path, admin_error_msg
+                    ));
+                }
+                // make sure the export path is an absolute path with no relative traversal
+                if !HostPath::is_valid(&nfs.path) {
+                    return bad!(format!(
+                        "The NFS export path '{}' in volume '{}' is invalid! Export paths must be \
+                        absolute and must not contain relative traversal ('.', '..', etc.)",
+                        nfs.path, self.name
+                    ));
+                }
                 Ok(())
             }
         }
@@ -107,9 +132,62 @@ impl Volume {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::path::PathBuf;
 
     use super::*;
+    use crate::models::{NFS, UserRole, UserSettings};
+
+    /// Build a minimal non-admin developer user for volume validation tests
+    ///
+    /// `Volume::validate` only consults the user to phrase error messages, so this fills the
+    /// remaining fields with inert defaults and gives the user the non-admin Developer role.
+    fn dev_user() -> User {
+        User {
+            username: "dev".to_owned(),
+            password: Some("hash".to_owned()),
+            email: "dev@dev.gov".to_owned(),
+            role: UserRole::Developer {
+                k8s: true,
+                bare_metal: false,
+                windows: false,
+                external: false,
+                kvm: false,
+            },
+            groups: vec!["dev-group".to_owned()],
+            actual_groups: Vec::default(),
+            token: "token".to_owned(),
+            token_expiration: chrono::Utc::now(),
+            unix: None,
+            settings: UserSettings::default(),
+            verified: true,
+            verification_token: None,
+            verification_sent: None,
+            aliases: HashMap::default(),
+            image: None,
+        }
+    }
+
+    #[test]
+    fn nfs_volume_with_arbitrary_server_is_rejected() {
+        // build a non-admin developer that a group membership would let create images
+        let user = dev_user();
+        // use default settings, which whitelist no host paths and allow no unrestricted mounts
+        let settings = SystemSettings::default();
+        // craft an NFS volume pointing at an arbitrary internal filer with write access
+        let mut volume = Volume::new("data", "/mnt/loot", VolumeTypes::NFS);
+        // attach the attacker-chosen NFS server and export path
+        volume.nfs = Some(NFS {
+            server: "10.0.5.20".to_owned(),
+            path: "/exports/backups".to_owned(),
+        });
+        // an unvalidated NFS mount from a non-admin developer must be rejected, mirroring
+        // the host-path whitelist rather than accepting any server/path the user supplies
+        assert!(
+            volume.validate(&user, &settings).is_err(),
+            "NFS volume with an arbitrary server/path was accepted for a non-admin"
+        );
+    }
 
     #[test]
     fn test_host_path_validate() {

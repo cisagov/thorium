@@ -275,7 +275,11 @@ pub struct TagStoreId<'a> {
 
 impl std::fmt::Display for TagStoreId<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}", self.item, self.group)
+        // a plain `{item}-{group}` join is not injective — `("proj", "team-a")` and
+        // `("proj-team", "a")` collide to the same _id, letting one group clobber another group's
+        // document. Length-prefixing `item` makes the boundary unambiguous, so distinct (item, group)
+        // pairs always map to distinct ids.
+        write!(f, "{}-{}-{}", self.item.len(), self.item, self.group)
     }
 }
 
@@ -326,5 +330,35 @@ impl<'a> StoreLookup<'a> for CompactTagEvent {
                 group,
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TagStoreId;
+
+    #[test]
+    fn tag_store_id_is_injective() {
+        // build the two colliding (item, group) pairs that a plain join would map together
+        let victim_item = "github.com/org/proj".to_string();
+        let victim_group = "team-a".to_string();
+        let attacker_item = "github.com/org/proj-team".to_string();
+        let attacker_group = "a".to_string();
+        // build the search store ids for each pair
+        let victim = TagStoreId {
+            item: &victim_item,
+            group: &victim_group,
+        };
+        let attacker = TagStoreId {
+            item: &attacker_item,
+            group: &attacker_group,
+        };
+        // distinct (item, group) pairs must map to distinct Elasticsearch _ids so one
+        // group's repo tags cannot overwrite or delete another group's tags
+        assert_ne!(
+            victim.to_string(),
+            attacker.to_string(),
+            "distinct (item, group) pairs collided to the same _id"
+        );
     }
 }

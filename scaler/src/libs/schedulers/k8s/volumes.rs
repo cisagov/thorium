@@ -374,11 +374,14 @@ impl MountGen {
     ///
     /// * `username` - The username of the user whose keys we are binding in
     fn thorium() -> Result<VolumeMount, serde_json::Error> {
+        // use the camelCase keys k8s expects so the read-only flag is not silently dropped
+        // on deserialization (snake_case `read_only` deserializes to None, leaving the mount
+        // writable and letting a tool trojan the shared agent binary)
         serde_json::from_value(json!({
             "name": "thorium",
             "mountPath": "/opt/thorium",
-            "read_only": true,
-            "read_only_recursive": "Enabled"
+            "readOnly": true,
+            "recursiveReadOnly": "Enabled"
 
         }))
     }
@@ -457,5 +460,29 @@ impl MountGen {
             mount_propagation: None,
             recursive_read_only,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MountGen;
+
+    /// the shared `/opt/thorium` volume (which holds the `thorium-agent` binary) must be
+    /// mounted read-only in every tool pod. Otherwise a root-in-container tool can overwrite the
+    /// node's agent binary and trojan every subsequent tenant's workload on that node.
+    ///
+    /// Note this also guards this class of bug: the mount JSON must use the camelCase
+    /// `readOnly` key k8s expects, or the flag is silently dropped on deserialization and the mount
+    /// ends up writable despite the intent.
+    #[test]
+    fn thorium_mount_is_read_only() {
+        // build the shared thorium volume mount exactly as the scheduler injects it
+        let mount = MountGen::thorium().expect("thorium mount should deserialize");
+        // the mount must actually be read-only after deserialization
+        assert_eq!(
+            mount.read_only,
+            Some(true),
+            "the /opt/thorium mount is not read-only, so a tool can trojan the agent binary"
+        );
     }
 }

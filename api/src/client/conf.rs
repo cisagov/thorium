@@ -246,6 +246,50 @@ impl CtlConf {
         Ok(())
     }
 
+    /// Assemble a [`CtlConf`] from a config file body overlaid with `THORCTL_*` environment values
+    ///
+    /// The file is the trusted, persistent configuration; the environment overlay is a convenience
+    /// for ad-hoc overrides. Security-relevant toggles must NOT be silently flippable by the
+    /// environment: `invalid_certs`/`invalid_hostnames` disable TLS validation and
+    /// `skip_insecure_warning` suppresses the only interactive guardrail, so an attacker who can
+    /// influence the environment (a hostile `.envrc`, CI job, or sourced script) without write
+    /// access to the config file could otherwise disable certificate validation with no warning
+    /// and no persistent record. Centralizing the overlay here lets the fix filter those
+    /// keys out of the environment source in one place.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_body` - The raw YAML body of the config file
+    /// * `env` - The `THORCTL_*` environment values to overlay, already stripped of the prefix
+    fn assemble_config(
+        file_body: &str,
+        env: config::Environment,
+    ) -> Result<Self, Error> {
+        // build the Thorctl config from the file body first, then the environment overlay
+        let mut config: CtlConf = config::Config::builder()
+            // load from the file body first
+            .add_source(config::File::from_str(file_body, config::FileFormat::Yaml))
+            // overlay the environment for ad-hoc, non-security-relevant overrides
+            .add_source(env)
+            .build()?
+            .try_deserialize()?;
+        // the `config` crate's environment source has no per-key filter, so instead parse the
+        // trusted file body on its own and force the security-relevant toggles back to their file
+        // values. This guarantees `client.invalid_certs`, `client.invalid_hostnames`, and
+        // `skip_insecure_warning` can only be set in the persistent config file — the environment can
+        // never silently disable TLS validation or suppress the insecure-connection warning.
+        let file_only: CtlConf = config::Config::builder()
+            .add_source(config::File::from_str(file_body, config::FileFormat::Yaml))
+            .build()?
+            .try_deserialize()?;
+        // restore the TLS validation toggles from the trusted file
+        config.client.invalid_certs = file_only.client.invalid_certs;
+        config.client.invalid_hostnames = file_only.client.invalid_hostnames;
+        // restore the insecure-warning suppressor from the trusted file
+        config.skip_insecure_warning = file_only.skip_insecure_warning;
+        Ok(config)
+    }
+
     /// Loads a [`CtlConf`] from the given path
     ///
     /// # Arguments
@@ -254,16 +298,77 @@ impl CtlConf {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
         // get the path to our config
         let path = path.as_ref();
-        // build the Thorctl config
-        let mut config: CtlConf = config::Config::builder()
-            // load from a file first
-            .add_source(config::File::from(path).format(config::FileFormat::Yaml))
-            // then overlay any environment args on top
-            .add_source(config::Environment::with_prefix("THORCTL").separator("__"))
-            .build()?
-            .try_deserialize()?;
+        // read the raw config file body from disk
+        let file_body = std::fs::read_to_string(path)?;
+        // build the environment overlay for THORCTL_* variables
+        let env = config::Environment::with_prefix("THORCTL").separator("__");
+        // assemble the config from the file body overlaid with the environment
+        let mut config = Self::assemble_config(&file_body, env)?;
         // fix our config if needed
         config.fix_api_url(path)?;
         Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod conf_tests {
+    use super::CtlConf;
+
+    /// Build a `THORCTL_*` environment overlay from an explicit key/value map
+    ///
+    /// This drives `assemble_config` deterministically without mutating the real process
+    /// environment, matching how `from_path` builds its overlay (prefix `THORCTL`, `__` separator).
+    ///
+    /// # Arguments
+    ///
+    /// * `pairs` - The already-prefixed environment variable name/value pairs to overlay
+    fn env_overlay(pairs: &[(&str, &str)]) -> config::Environment {
+        // collect the pairs into the map the config crate expects
+        let map = pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect();
+        // build a THORCTL-prefixed overlay sourced from our explicit map
+        config::Environment::with_prefix("THORCTL")
+            .separator("__")
+            .source(Some(map))
+    }
+
+    /// the `THORCTL_*` environment overlay must NOT be able to disable TLS certificate
+    /// validation. A config file with validation ON must stay ON even when the environment tries to
+    /// flip `client.invalid_certs`.
+    #[test]
+    fn env_cannot_disable_tls_validation() {
+        // a minimal config file that keeps TLS validation enabled
+        let file_body = "keys:\n  api: https://thorium.example\n  username: analyst\n  token: t\n";
+        // an attacker-controlled environment that tries to accept invalid certificates. The overlay
+        // uses the `__` prefix separator `from_path` configures, so the key is `THORCTL__CLIENT__...`
+        let env = env_overlay(&[("THORCTL__CLIENT__INVALID_CERTS", "true")]);
+        // assemble the config exactly as `from_path` would
+        let conf = CtlConf::assemble_config(file_body, env)
+            .expect("config with a valid file body should assemble");
+        // the environment must not have been able to disable certificate validation
+        assert!(
+            !conf.client.invalid_certs,
+            "THORCTL_CLIENT__INVALID_CERTS disabled TLS validation via the environment"
+        );
+    }
+
+    /// the `THORCTL_*` environment overlay must NOT be able to suppress the interactive
+    /// insecure-connection warning, which is the only guardrail left when validation is off.
+    #[test]
+    fn env_cannot_suppress_insecure_warning() {
+        // a minimal config file that leaves the insecure warning enabled
+        let file_body = "keys:\n  api: https://thorium.example\n  username: analyst\n  token: t\n";
+        // an attacker-controlled environment that tries to suppress the insecure warning
+        let env = env_overlay(&[("THORCTL__SKIP_INSECURE_WARNING", "true")]);
+        // assemble the config exactly as `from_path` would
+        let conf = CtlConf::assemble_config(file_body, env)
+            .expect("config with a valid file body should assemble");
+        // the environment must not have been able to suppress the insecure warning
+        assert!(
+            !conf.skip_insecure_warning.unwrap_or(false),
+            "THORCTL_SKIP_INSECURE_WARNING suppressed the warning via the environment"
+        );
     }
 }

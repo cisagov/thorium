@@ -220,6 +220,27 @@ impl OAuthClient {
     }
 }
 
+/// Validate a username presented during OAuth self-registration
+///
+/// OAuth registration must enforce the same username rules as `User::create` so an OAuth registrant
+/// cannot claim a reserved identity (such as `external`, used for external-scaler attribution) or a
+/// username carrying LDAP/redis/k8s metacharacters that later subsystems assume are absent.
+/// This centralizes those checks so the OAuth path and the local path stay in sync.
+///
+/// # Arguments
+///
+/// * `username` - The username presented in the OAuth registration request
+fn validate_oauth_username(username: &str) -> Result<(), ApiError> {
+    // ensure username is lowercase-alphanumeric and within length bounds
+    bounder::string_lower(username, "username", 1, 50)?;
+    // reject the reserved `external` username here too, mirroring `User::create`, so an
+    // OAuth registrant cannot claim the identity used for external-scaler attribution
+    if username == "external" {
+        return bad!("external is a reserved username".to_owned());
+    }
+    Ok(())
+}
+
 impl OAuthUserCreate {
     /// Send an existing user an oauth provider link email
     ///
@@ -276,8 +297,8 @@ impl OAuthUserCreate {
     /// * `provider` - The provider to create a new registration session with
     /// * `shared` - Shared Thorium objects
     pub async fn register(self, provider: &str, shared: &Shared) -> Result<User, ApiError> {
-        // ensure username is alphanumeric
-        bounder::string_lower(&self.username, "username", 1, 50)?;
+        // validate the username against the same rules the local registration path enforces
+        validate_oauth_username(&self.username)?;
         // make sure this is a valid provider
         if !shared.oauth.contains_key(provider) {
             // return unauthorized as this is not a valid OAuth provider
@@ -426,5 +447,38 @@ where
         } else {
             bad!("Missing token and username query params!".to_owned())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_oauth_username;
+
+    #[test]
+    fn oauth_username_rejects_reserved_external() {
+        // the reserved `external` username (external-scaler attribution) must be rejected
+        // on the OAuth path exactly as `User::create` rejects it on the local path
+        assert!(
+            validate_oauth_username("external").is_err(),
+            "OAuth registration accepted the reserved 'external' username"
+        );
+    }
+
+    #[test]
+    fn oauth_username_rejects_ldap_metacharacters() {
+        // a username with LDAP filter metacharacters later injects into the admin LDAP sync filter
+        assert!(
+            validate_oauth_username("x)(objectclass=*").is_err(),
+            "OAuth registration accepted an LDAP-metacharacter username"
+        );
+    }
+
+    #[test]
+    fn oauth_username_allows_normal_names() {
+        // a well behaved lowercase-alphanumeric username must still be accepted
+        assert!(
+            validate_oauth_username("analyst1").is_ok(),
+            "OAuth registration rejected a valid username"
+        );
     }
 }
