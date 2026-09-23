@@ -3,7 +3,9 @@ use rustix::process::Signal;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use thorium::Thorium;
-use thorium::models::{ArgStrategy, ImageScaler, Node, Worker, WorkerDeleteMap, WorkerStatus};
+use thorium::models::{
+    ArgStrategy, ImageScaler, Node, SecurityContext, Worker, WorkerDeleteMap, WorkerStatus,
+};
 use tokio::process::{Child, Command};
 use tracing::{Level, event, instrument};
 
@@ -94,17 +96,24 @@ fn isolate<P: AsRef<Path>>(raw: P, id: &str) -> Result<String, Error> {
     }
 }
 
+/// The fallback unprivileged uid to drop bare-metal tool processes to when neither the
+/// image's security context nor an admin-configured default pins one (nobody)
+const DEFAULT_UNPRIVILEGED_UID: u32 = 65534;
+
+/// The fallback unprivileged gid to drop bare-metal tool processes to when neither the
+/// image's security context nor an admin-configured default pins one (nogroup)
+const DEFAULT_UNPRIVILEGED_GID: u32 = 65534;
+
 /// Describes the OS-level isolation applied to a bare-metal tool process before it is spawned
 ///
-/// NOTE: today this policy is empty. The agent — and therefore the attacker-supplied tool
-/// it execs (`agent/src/libs/agents/baremetal.rs`) — is launched with a plain
-/// `Command::new(...).spawn()` as the reactor's own uid, with no privilege drop, user separation,
-/// mount/pid namespaces, or seccomp. The only confinement is a cpu/memory cgroup. Because the
+/// The agent — and therefore the attacker-supplied tool it execs
+/// (`agent/src/libs/agents/baremetal.rs`) — is launched via `Command::new(...).spawn()`. Because the
 /// reactor runs as an admin identity and caches every user's token world-readable under
-/// `/opt/thorium-keys`, any tool code (or malware that compromises a tool) can read those
-/// credentials and impersonate every tenant. The fix is to populate this policy (drop to an
-/// unprivileged uid/gid, enter fresh namespaces, etc.) and apply it to the spawned `Command`; the
-/// regression test `baremetal_worker_drops_privileges` fails until a privilege drop is enforced.
+/// `/opt/thorium-keys`, any tool code (or malware that compromises a tool) that runs as the
+/// reactor's own uid can read those credentials and impersonate every tenant. To prevent that we
+/// drop the tool process to an unprivileged uid/gid before exec, preferring (in order) the image's
+/// own security context, an admin-configured reactor default, and finally a hard-coded nobody
+/// fallback so a drop always happens.
 #[derive(Debug, Default)]
 pub(crate) struct BareMetalIsolation {
     /// The uid the tool process should be dropped to before exec, if any
@@ -115,9 +124,56 @@ pub(crate) struct BareMetalIsolation {
 
 impl BareMetalIsolation {
     /// Builds the isolation policy applied to a bare-metal worker before spawning it
+    ///
+    /// This returns the safe fallback (an unprivileged nobody/nogroup id) so a compromised
+    /// tool cannot read the reactor's admin token or the cached tokens of other tenants. Callers
+    /// on the spawn path then layer higher-precedence sources over it (an admin-configured default
+    /// and the image's own security context) via `with_configured_defaults`/`with_security_context`.
     fn for_worker() -> Self {
-        // NOTE: no privilege drop is applied to bare-metal tool processes today
-        BareMetalIsolation::default()
+        // drop tool processes to an unprivileged nobody/nogroup id by default
+        BareMetalIsolation {
+            uid: Some(DEFAULT_UNPRIVILEGED_UID),
+            gid: Some(DEFAULT_UNPRIVILEGED_GID),
+        }
+    }
+
+    /// Overrides the fallback ids with the admin-configured reactor defaults, if any are set
+    ///
+    /// # Arguments
+    ///
+    /// * `uid` - The admin-configured default uid from the reactor's CLI args, if set
+    /// * `gid` - The admin-configured default gid from the reactor's CLI args, if set
+    #[must_use]
+    fn with_configured_defaults(mut self, uid: Option<u32>, gid: Option<u32>) -> Self {
+        // prefer the admin-configured default uid when one was supplied
+        if let Some(uid) = uid {
+            self.uid = Some(uid);
+        }
+        // prefer the admin-configured default gid when one was supplied
+        if let Some(gid) = gid {
+            self.gid = Some(gid);
+        }
+        self
+    }
+
+    /// Overrides the current ids with the tool's own security-context ids, if it pins any
+    ///
+    /// The tool's security context takes precedence over every default.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The image's security context
+    #[must_use]
+    fn with_security_context(mut self, ctx: &SecurityContext) -> Self {
+        // prefer the tool's configured uid when it sets one
+        if let Some(uid) = ctx.user.and_then(|user| u32::try_from(user).ok()) {
+            self.uid = Some(uid);
+        }
+        // prefer the tool's configured gid when it sets one
+        if let Some(gid) = ctx.group.and_then(|group| u32::try_from(group).ok()) {
+            self.gid = Some(gid);
+        }
+        self
     }
 
     /// Returns whether this policy actually drops the tool process below the reactor's privileges
@@ -156,8 +212,20 @@ pub struct ActiveWorker {
 
 impl ActiveWorker {
     /// Spawn a new active worker
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - A Thorium client
+    /// * `worker` - The worker to spawn
+    /// * `default_uid` - The admin-configured default uid to drop the tool process to, if set
+    /// * `default_gid` - The admin-configured default gid to drop the tool process to, if set
     #[instrument(name = "ActiveWorker::new", skip_all, err(Debug))]
-    pub async fn new(thorium: &Thorium, worker: &Worker) -> Result<Self, Error> {
+    pub async fn new(
+        thorium: &Thorium,
+        worker: &Worker,
+        default_uid: Option<u32>,
+        default_gid: Option<u32>,
+    ) -> Result<Self, Error> {
         // get our image
         let image = thorium.images.get(&worker.group, &worker.stage).await?;
         // build the control group for this worker
@@ -193,8 +261,12 @@ impl ActiveWorker {
             keys_str,
             "bare-metal",
         ];
-        // build the isolation policy applied to this bare-metal tool process
-        let isolation = BareMetalIsolation::for_worker();
+        // build the isolation policy applied to this bare-metal tool process: the image's own
+        // security context wins, then the admin-configured reactor default, then the unprivileged
+        // nobody/nogroup fallback
+        let isolation = BareMetalIsolation::for_worker()
+            .with_configured_defaults(default_uid, default_gid)
+            .with_security_context(&image.security_context);
         // build the command to spawn our agent
         let mut command = Command::new("/opt/thorium/thorium-agent");
         command.args(args);
@@ -283,6 +355,10 @@ pub struct BareMetal {
     node: String,
     /// A map of currently active workers
     active: HashMap<String, ActiveWorker>,
+    /// The admin-configured default uid to drop tool processes to when their image pins none
+    default_uid: Option<u32>,
+    /// The admin-configured default gid to drop tool processes to when their image pins none
+    default_gid: Option<u32>,
 }
 
 impl BareMetal {
@@ -292,11 +368,20 @@ impl BareMetal {
     ///
     /// * `cluster` - The cluster we are in
     /// * `node` - The node we are on
-    pub fn new<C: Into<String>, N: Into<String>>(cluster: C, node: N) -> Self {
+    /// * `default_uid` - The admin-configured default uid to drop tool processes to, if set
+    /// * `default_gid` - The admin-configured default gid to drop tool processes to, if set
+    pub fn new<C: Into<String>, N: Into<String>>(
+        cluster: C,
+        node: N,
+        default_uid: Option<u32>,
+        default_gid: Option<u32>,
+    ) -> Self {
         BareMetal {
             cluster: cluster.into(),
             node: node.into(),
             active: HashMap::with_capacity(25),
+            default_uid,
+            default_gid,
         }
     }
 
@@ -522,8 +607,10 @@ impl Launcher for BareMetal {
         thorium: &Thorium,
         worker: Worker,
     ) -> Result<(Worker, ActiveWorker), Error> {
-        // start our agent
-        let active = ActiveWorker::new(&thorium, &worker).await?;
+        // start our agent, dropping the tool process to our configured default ids if the image
+        // does not pin its own security context
+        let active =
+            ActiveWorker::new(&thorium, &worker, self.default_uid, self.default_gid).await?;
         Ok((worker, active))
     }
 

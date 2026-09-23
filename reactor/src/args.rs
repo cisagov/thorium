@@ -47,6 +47,14 @@ pub struct Args {
     /// automatically, but the reactor will not
     #[clap(long)]
     pub skip_self_update: bool,
+    /// The default uid bare-metal tool processes are dropped to when their image does not
+    /// pin a security-context user (defaults to the unprivileged `nobody` uid)
+    #[clap(long)]
+    pub tool_uid: Option<u32>,
+    /// The default gid bare-metal tool processes are dropped to when their image does not
+    /// pin a security-context group (defaults to the unprivileged `nogroup` gid)
+    #[clap(long)]
+    pub tool_gid: Option<u32>,
     /// the different scaler types to spawn jobs for
     #[clap(subcommand)]
     pub launchers: Launchers,

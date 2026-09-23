@@ -64,7 +64,7 @@ async fn run(args: args::Args) -> Result<(), Error> {
         #[cfg(target_os = "linux")]
         args::Launchers::BareMetal => {
             let node = args.node()?;
-            let launcher = BareMetal::new(&args.cluster, node);
+            let launcher = BareMetal::new(&args.cluster, node, args.tool_uid, args.tool_gid);
             let reactor = Reactor::new(args, launcher).await?;
             reactor.start().await
         }
