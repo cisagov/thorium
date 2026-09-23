@@ -786,17 +786,19 @@ async fn prune_access(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing files
 /// * `params` - The query params to use when listing files
 /// * `dedupe` - Whether to dedupe submissions for the same sha256
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::files::list", skip(shared), err(Debug))]
+#[instrument(name = "db::files::list", skip(user, shared), err(Debug))]
 pub async fn list(
+    user: &User,
     params: FileListParams,
     dedupe: bool,
     shared: &Shared,
 ) -> Result<ScyllaCursor<SampleListLine>, ApiError> {
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params(params, dedupe, shared).await?;
+    // get our cursor scoped to the creating user
+    let mut cursor = ScyllaCursor::from_params(params, &user.username, dedupe, shared).await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // save this cursor
@@ -1119,9 +1121,10 @@ pub async fn count(
     params: FileListParams,
     shared: &Shared,
 ) -> Result<ScyllaTagCountCursor<SampleListLine>, ApiError> {
-    // Get an existing tag count cursor or create a new one
+    // Get an existing tag count cursor or create a new one scoped to the creating user
     let mut cursor =
-        ScyllaTagCountCursor::<SampleListLine>::from_params(params, (), shared).await?;
+        ScyllaTagCountCursor::<SampleListLine>::from_params(params, (), &user.username, shared)
+            .await?;
     // get the next page of data
     cursor.next(user, shared).await?;
     // save our cursors state

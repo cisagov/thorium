@@ -205,12 +205,14 @@ impl TreeNode {
     ///
     /// # Arguments
     ///
+    /// * `user` - The user that is growing the tree
     /// * `tree` - The tree we are growing
     /// * `ring` - The current ring of growth
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "TreeNode::gather_associatons", skip_all, err(Debug))]
     async fn gather_associations(
         &self,
+        user: &User,
         tree: &Tree,
         ring: &TreeRing,
         shared: &Shared,
@@ -221,8 +223,8 @@ impl TreeNode {
             let source_hash = self.hash();
             // use default params for listing associations
             let opts = AssociationListOpts::default().groups(tree.groups.clone());
-            // list associations for this node
-            let mut cursor = db::associations::list(opts, &target, shared).await?;
+            // list associations for this node scoped to the requesting user
+            let mut cursor = db::associations::list(user, opts, &target, shared).await?;
             // step over our associations until our cursor is exhausted
             loop {
                 // add these associations to our map of associations
@@ -541,17 +543,19 @@ impl TreeRing {
     ///
     /// # Arguments
     ///
+    /// * `user` - The user that is growing the tree
     /// * `tree` - The current tree we are getting children from a specific prent
     /// * `key` - The key to use when finding children by tags
     /// * `parent` - The parent to look for children for
     /// * `shared` - Shared Thorium objects
     #[instrument(
         name = "TreeRing::gather_files_from_parent",
-        skip(self, tree, shared),
+        skip(self, user, tree, shared),
         err(Debug)
     )]
     pub async fn gather_files_from_parent(
         &self,
+        user: &User,
         tree: &Tree,
         key: &str,
         parent: &str,
@@ -563,8 +567,8 @@ impl TreeRing {
             .groups(tree.groups.clone());
         // convert our file list opts to params
         let params = FileListParams::from(opts);
-        // directly list samples in with this parent
-        let mut cursor = db::files::list(params, true, shared).await?;
+        // directly list samples in with this parent scoped to the requesting user
+        let mut cursor = db::files::list(user, params, true, shared).await?;
         // crawl this cursor and add its nodes to our tree
         loop {
             // we don't need to get any data we already have again
@@ -713,7 +717,7 @@ impl Tree {
                 // check if we want to gather this nodes associated nodes
                 if ring.params.gather_associated {
                     // gather any relationships or children from this nodes associations
-                    node.gather_associations(self, ring, shared).await?;
+                    node.gather_associations(user, self, ring, shared).await?;
                 }
                 Ok(())
             }

@@ -372,9 +372,9 @@ async fn download(
 ) -> Result<impl IntoResponse, ApiError> {
     // get this repos info
     let repo = Repo::get(&user, &repo_path, &state.shared).await?;
-    // download this repos data
+    // download this repos data scoped to the requesting user
     let stream = repo
-        .download(&params.kinds, params.commitish, &state.shared)
+        .download(&user, &params.kinds, params.commitish, &state.shared)
         .await?;
     // convert our byte stream to a streamable body
     let body = AsyncReadBody::new(stream.into_async_read());

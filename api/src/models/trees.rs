@@ -252,7 +252,7 @@ impl TreeSupport for TreeTags {
     )]
     async fn gather_children(
         &self,
-        _user: &super::User,
+        user: &super::User,
         tree: &Tree,
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
@@ -271,8 +271,9 @@ impl TreeSupport for TreeTags {
         }
         // convert our file list opts to params
         let params = crate::models::FileListParams::from(opts);
-        // directly list samples in with this parent
-        let mut cursor = crate::models::backends::db::files::list(params, true, shared).await?;
+        // directly list samples in with this parent scoped to the requesting user
+        let mut cursor =
+            crate::models::backends::db::files::list(user, params, true, shared).await?;
         // crawl this cursor and add its nodes to our tree
         loop {
             // preallocate a list for our new sha256s

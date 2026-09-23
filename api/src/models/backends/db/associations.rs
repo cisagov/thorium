@@ -266,11 +266,13 @@ pub async fn delete_many(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing associations
 /// * `params` - The query params to use when listing files
-/// * `dedupe` - Whether to dedupe submissions for the same sha256
+/// * `source` - The association target column to list associations for
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::associations::list", skip(shared), err(Debug))]
+#[instrument(name = "db::associations::list", skip(user, shared), err(Debug))]
 pub async fn list<P: Into<AssociationListParams> + std::fmt::Debug>(
+    user: &User,
     opts: P,
     source: &AssociationTargetColumn,
     shared: &Shared,
@@ -279,8 +281,9 @@ pub async fn list<P: Into<AssociationListParams> + std::fmt::Debug>(
     let params = opts.into();
     // serialize our association target column before list things related to it
     let source_str = serialize!(&source);
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params_extra(params, source_str, false, shared).await?;
+    // get our cursor scoped to the creating user
+    let mut cursor =
+        ScyllaCursor::from_params_extra(params, source_str, &user.username, false, shared).await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // save this cursor

@@ -544,17 +544,21 @@ pub async fn update_node(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing nodes
 /// * `params` - The query params to use when listing files
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::system::list_nodes", skip(shared), err(Debug))]
+#[instrument(name = "db::system::list_nodes", skip(user, shared), err(Debug))]
 pub async fn list_nodes(
+    user: &User,
     params: NodeListParams,
     shared: &Shared,
 ) -> Result<SimpleScyllaCursor<NodeListLine>, ApiError> {
-    // if a cursor id was set then get it otherwise make a new cursor
+    // if a cursor id was set then get it otherwise make a new cursor scoped to the creating user
     let mut cursor = match params.cursor {
-        Some(cursor_id) => SimpleScyllaCursor::get(cursor_id, params.page_size, shared).await?,
-        None => SimpleScyllaCursor::new(params.clusters, params.page_size),
+        Some(cursor_id) => {
+            SimpleScyllaCursor::get(cursor_id, &user.username, params.page_size, shared).await?
+        }
+        None => SimpleScyllaCursor::new(params.clusters, &user.username, params.page_size),
     };
     // get the next page of data for this cursor
     cursor.next(shared).await?;
@@ -567,17 +571,21 @@ pub async fn list_nodes(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing node details
 /// * `params` - The query params to use when listing files
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::system::list_node_details", skip(shared), err(Debug))]
+#[instrument(name = "db::system::list_node_details", skip(user, shared), err(Debug))]
 pub async fn list_node_details(
+    user: &User,
     params: NodeListParams,
     shared: &Shared,
 ) -> Result<ApiCursor<Node>, ApiError> {
-    // if a cursor id was set then get it otherwise make a new cursor
+    // if a cursor id was set then get it otherwise make a new cursor scoped to the creating user
     let mut cursor: SimpleScyllaCursor<NodeRow> = match params.cursor {
-        Some(cursor_id) => SimpleScyllaCursor::get(cursor_id, params.page_size, shared).await?,
-        None => SimpleScyllaCursor::new(params.clusters, params.page_size),
+        Some(cursor_id) => {
+            SimpleScyllaCursor::get(cursor_id, &user.username, params.page_size, shared).await?
+        }
+        None => SimpleScyllaCursor::new(params.clusters, &user.username, params.page_size),
     };
     // get the next page of data for this cursor
     cursor.next(shared).await?;

@@ -409,8 +409,8 @@ impl TreeSupport for Entity {
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
-        // get a cursor for this entities associations
-        if let Some(mut cursor) = self.list_associations(shared).await? {
+        // get a cursor for this entities associations scoped to the requesting user
+        if let Some(mut cursor) = self.list_associations(user, shared).await? {
             // get this entities tree hash
             let source_hash = self.tree_hash();
             // crawl through this entities associations and add them to the tree

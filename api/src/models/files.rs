@@ -2764,13 +2764,13 @@ impl TreeSupport for Sample {
     #[tracing::instrument(name = "TreeSupport::<Sample>::gather_children", skip_all, err(Debug))]
     async fn gather_children(
         &self,
-        _user: &User,
+        user: &User,
         tree: &Tree,
         ring: &crate::models::backends::trees::TreeRing,
         shared: &crate::utils::Shared,
     ) -> Result<(), crate::utils::ApiError> {
-        // get any children of this sample
-        ring.gather_files_from_parent(tree, "Parent", &self.sha256, shared)
+        // get any children of this sample scoped to the requesting user
+        ring.gather_files_from_parent(user, tree, "Parent", &self.sha256, shared)
             .await
     }
 

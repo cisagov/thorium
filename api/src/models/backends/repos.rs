@@ -483,8 +483,8 @@ impl Repo {
     ) -> Result<ApiCursor<Commitish>, ApiError> {
         // authorize the groups to list files from
         user.authorize_groups(&mut params.groups, shared).await?;
-        // get a chunk of the files list
-        let scylla_cursor = db::repos::commitishes(&self, params, dedupe, shared).await?;
+        // get a chunk of the files list scoped to the requesting user
+        let scylla_cursor = db::repos::commitishes(user, &self, params, dedupe, shared).await?;
         // convert our scylla cursor to a user facing cursor
         Ok(ApiCursor::from(scylla_cursor))
     }
@@ -512,14 +512,15 @@ impl Repo {
     ///
     /// # Arguments
     ///
+    /// * `user` - The user that is getting the latest commit
     /// * `shared` - Shared Thorium objects
     /// * `span` - The span to log traces under
     #[instrument(name = "Repo::latest_commit", skip_all, err(Debug))]
-    pub async fn latest_commit(&self, shared: &Shared) -> Result<String, ApiError> {
+    pub async fn latest_commit(&self, user: &User, shared: &Shared) -> Result<String, ApiError> {
         // get the groups we can see this repo is in
         let groups = self.groups();
-        // get the latest commit for this repo
-        db::repos::latest_commit(&groups, &self, shared).await
+        // get the latest commit for this repo scoped to the requesting user
+        db::repos::latest_commit(user, &groups, &self, shared).await
     }
 
     /// Get the correct repo data hash for a commit hash
@@ -548,13 +549,15 @@ impl Repo {
     ///
     /// # Arguments
     ///
+    /// * `user` - The user that is downloading a repo
     /// * `kinds` - The kinds of commitishes to download with if specified
     /// * `commit` - The commit to download if one is specified
     /// * `shared` - Shared Thorium objects
     /// * `span` - The span to log traces under
-    #[instrument(name = "Repo::download", skip(self, shared), err(Debug))]
+    #[instrument(name = "Repo::download", skip(self, user, shared), err(Debug))]
     pub async fn download(
         &self,
+        user: &User,
         kinds: &Vec<CommitishKinds>,
         commitish: Option<String>,
         shared: &Shared,
@@ -567,8 +570,8 @@ impl Repo {
             // no commitish was specified so use our default checkout commitish
             None => match &self.default_checkout {
                 Some(commitish) => commitish.value().to_owned(),
-                // we don't have a default checkout so try to get the latest commit
-                None => db::repos::latest_commit(&groups, self, shared).await?,
+                // we don't have a default checkout so try to get the latest commit scoped to the user
+                None => db::repos::latest_commit(user, &groups, self, shared).await?,
             },
         };
         // get the repo data hash for this repo + commit combo
@@ -599,8 +602,8 @@ impl Repo {
         let mut params = params.into();
         // authorize the groups to list files from
         user.authorize_groups(&mut params.groups, shared).await?;
-        // get a chunk of the repos list
-        let scylla_cursor = db::repos::list(params, shared).await?;
+        // get a chunk of the repos list scoped to the requesting user
+        let scylla_cursor = db::repos::list(user, params, shared).await?;
         // convert our scylla cursor to a user facing cursor
         Ok(ApiCursor::from(scylla_cursor))
     }

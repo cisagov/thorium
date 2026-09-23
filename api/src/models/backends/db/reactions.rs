@@ -534,15 +534,17 @@ impl RedisCursorSupport for Reaction {
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing reactions
 /// * `params` - The params for listing reactions
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::reactions::list_new", skip_all, err(Debug))]
 pub async fn list_new(
+    user: &User,
     params: ReactionCursorParam,
     shared: &Shared,
 ) -> Result<ApiCursor<String>, ApiError> {
-    // create a new or load an existing redis cursor from disk
-    let mut cursor = RedisCursor::<Reaction>::new(params, shared).await?;
+    // create a new or load an existing redis cursor from disk scoped to the creating user
+    let mut cursor = RedisCursor::<Reaction>::new(params, &user.username, shared).await?;
     // get the next page of data to return
     let api_cursor = cursor.consume(shared).await?;
     // save this cursor to redis

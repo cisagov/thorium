@@ -11,7 +11,7 @@ use super::GroupedScyllaCursor;
 use crate::models::system::K8S_CACHE_KEY;
 use crate::models::{
     Group, NetworkPolicy, NetworkPolicyListLine, NetworkPolicyListParams, NetworkPolicyListRow,
-    NetworkPolicyRequest, NetworkPolicyRow, NetworkPolicyUpdate,
+    NetworkPolicyRequest, NetworkPolicyRow, NetworkPolicyUpdate, User,
 };
 use crate::utils::{helpers, ApiError, Shared};
 use crate::{bad, conn, log_scylla_err, serialize};
@@ -68,17 +68,19 @@ pub async fn create(req: NetworkPolicyRequest, shared: &Shared) -> Result<(), Ap
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing network policies
 /// * `params` - The query params to use when listing files
 /// * `dedupe` - Whether to dedupe when listing samples or not
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::network_policies::list", skip(shared), err(Debug))]
+#[instrument(name = "db::network_policies::list", skip(user, shared), err(Debug))]
 pub async fn list(
+    user: &User,
     params: NetworkPolicyListParams,
     dedupe: bool,
     shared: &Shared,
 ) -> Result<GroupedScyllaCursor<NetworkPolicyListLine>, ApiError> {
-    // get our cursor
-    let mut cursor = GroupedScyllaCursor::from_params(params, dedupe, shared).await?;
+    // get our cursor scoped to the creating user
+    let mut cursor = GroupedScyllaCursor::from_params(params, &user.username, dedupe, shared).await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // save this cursor

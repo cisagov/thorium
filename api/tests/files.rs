@@ -21,6 +21,46 @@ use thorium::models::{
     OutputRequest, ResultGetParams, SampleRequest, SubmissionUpdate, TagDeleteRequest, TagRequest,
 };
 
+/// Assert that a result is an error carrying the expected HTTP status code
+///
+/// The `fail!` test macro re-evaluates its argument (which moves owned inputs) and requires the
+/// `Ok` type to implement `Debug`; several client calls here return non-`Debug` values
+/// (`DownloadedFile`, `Cursor<_>`) or consume owned blueprints, so this helper checks an
+/// already-evaluated result without either constraint.
+///
+/// # Arguments
+///
+/// * `result` - The already-evaluated result to check
+/// * `code` - The HTTP status code the error must carry
+/// * `context` - A short description of what was expected, used in failure messages
+fn assert_status<T>(
+    result: Result<T, thorium::Error>,
+    code: u16,
+    context: &str,
+) -> Result<(), thorium::Error> {
+    // inspect the result, discarding any success value so `T` need not be `Debug`
+    match result {
+        // a success means the secure behavior is not enforced yet, so fail the test
+        Ok(_) => Err(thorium::Error::new(format!(
+            "{context}: expected status {code} but the request succeeded"
+        ))),
+        // an error must carry exactly the expected status code
+        Err(error) => match error.status() {
+            // the status matched so the secure behavior held
+            Some(status) if status.as_u16() == code => Ok(()),
+            // a different status is still a failure to enforce the expected boundary
+            Some(status) => Err(thorium::Error::new(format!(
+                "{context}: expected status {code} but got {}",
+                status.as_u16()
+            ))),
+            // no status at all means the error was not the authorization rejection we expected
+            None => Err(thorium::Error::new(format!(
+                "{context}: expected status {code} but the error carried no status: {error}"
+            ))),
+        },
+    }
+}
+
 #[tokio::test]
 async fn create() -> Result<(), thorium::Error> {
     // get admin client
@@ -1714,4 +1754,48 @@ fn get_result_blocking() -> Result<(), thorium::Error> {
     // make sure our output requests matches
     is!(output, output_req);
     Ok(())
+}
+
+/// List cursors must be owner-scoped — a user must NOT be able to resume another user's
+/// list cursor and page through listings scoped to groups they are not a member of.
+///
+/// `ScyllaCursor::get` scopes each cursor to its creating user by nesting the id under the username
+/// in redis. Any user who obtains another user's cursor UUID (a leaked URL, log line, or shared
+/// link) must not be able to page the victim's group-scoped listings. The secure behavior is that
+/// resuming a cursor scoped to a group the caller cannot see fails with `404`, identical to a
+/// non-existent cursor id so it does not leak that the id is a valid cursor.
+#[tokio::test]
+async fn list_cursor_is_owner_scoped() -> Result<(), thorium::Error> {
+    // get an admin client that owns the secret group and its samples
+    let admin = test_utilities::admin_client().await?;
+    // create a secret group owned only by the admin
+    let secret = generators::groups(1, &admin).await?.remove(0).name;
+    // upload enough samples that a single page cannot exhaust the cursor
+    for _ in 0..3 {
+        // create a sample the attacker must never be able to page
+        admin
+            .files
+            .create(generators::gen_sample(&secret))
+            .await?;
+    }
+    // as the admin, start a list scoped to the secret group with a tiny page so a cursor is issued
+    let opts = FileListOpts::default()
+        .groups(vec![secret.clone()])
+        .page_size(1);
+    // grab the first page and its resumable cursor id
+    let cursor = admin.files.list(&opts).await?;
+    // the cursor must exist for this IDOR to be meaningful
+    let cursor_id = cursor
+        .id
+        .ok_or_else(|| thorium::Error::new("expected a resumable list cursor id".to_owned()))?;
+    // get a low privilege attacker client that is not in the secret group
+    let attacker = generators::client(&admin).await?;
+    // the attacker resumes the victim's cursor by its leaked UUID
+    let resume = FileListOpts::default().cursor(cursor_id);
+    // resuming another user's group-scoped cursor must be rejected as if it does not exist
+    assert_status(
+        attacker.files.list(&resume).await,
+        404,
+        "resuming another user's list cursor",
+    )
 }

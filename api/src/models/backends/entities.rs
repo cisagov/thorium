@@ -265,8 +265,8 @@ impl Entity {
         if let Some(source) = self.build_association_target_column() {
             // build the options for listing this entities associations
             let opts = AssociationListOpts::default().groups(user.groups.clone());
-            // list associations for this entity
-            let mut cursor = db::associations::list(opts, &source, shared).await?;
+            // list associations for this entity scoped to the requesting user
+            let mut cursor = db::associations::list(user, opts, &source, shared).await?;
             // based on our kind populate any association data
             match &mut self.metadata {
                 EntityMetadata::Device(metadata) => {
@@ -351,16 +351,22 @@ impl Entity {
     ) -> Result<ApiCursor<EntityListLine>, ApiError> {
         // authorize the groups to list entities from
         user.authorize_groups(&mut params.groups, shared).await?;
-        // get or create a cursor over entities
-        let scylla_cursor = db::entities::list(params, dedupe, shared).await?;
+        // get or create a cursor over entities scoped to the requesting user
+        let scylla_cursor = db::entities::list(user, params, dedupe, shared).await?;
         // convert our scylla cursor to a user facing cursor
         Ok(ApiCursor::from(scylla_cursor))
     }
 
     /// Get a listable association cursor for this entity
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is listing associations
+    /// * `shared` - Shared Thorium objects
     #[instrument(name = "Entity::list_associations", skip_all, err(Debug))]
     pub(crate) async fn list_associations(
         &self,
+        user: &User,
         shared: &Shared,
     ) -> Result<Option<ScyllaCursor<ListableAssociation>>, ApiError> {
         // get our source target column if possible
@@ -368,8 +374,8 @@ impl Entity {
             Some(source) => {
                 // list associations for this
                 let opts = AssociationListOpts::default().groups(self.groups.clone());
-                // list associations for this entity
-                let cursor = db::associations::list(opts, &source, shared).await?;
+                // list associations for this entity scoped to the requesting user
+                let cursor = db::associations::list(user, opts, &source, shared).await?;
                 Ok(Some(cursor))
             }
             None => Ok(None),
@@ -702,16 +708,21 @@ impl Entity {
     ///
     /// # Arguments
     ///
+    /// * `user` - The user that is deleting associations
     /// * `shared` - Shared Thorium objects
-    pub(crate) async fn delete_associations(&self, shared: &Shared) -> Result<(), ApiError> {
+    pub(crate) async fn delete_associations(
+        &self,
+        user: &User,
+        shared: &Shared,
+    ) -> Result<(), ApiError> {
         // build the associations list opts for this entity
         let opts = AssociationListOpts::default()
             .groups(self.groups.clone())
             .limit(500);
         // build the source target for this entity if we have one
         if let Some(source) = self.build_association_target_column() {
-            // list all associations for this entity
-            let mut cursor = db::associations::list(opts, &source, shared).await?;
+            // list all associations for this entity scoped to the requesting user
+            let mut cursor = db::associations::list(user, opts, &source, shared).await?;
             // step over our associations and delete them
             loop {
                 // delete this page of associations
@@ -751,7 +762,7 @@ impl Entity {
             }
         };
         // remove any associations for this entity
-        self.delete_associations(shared).await?;
+        self.delete_associations(user, shared).await?;
         // delete the entity
         db::entities::delete(user, &self, shared).await?;
         // delete this entities image if one exists
@@ -1698,8 +1709,8 @@ impl EntityMetadataUpdateForm {
                     let opts = AssociationListOpts::default()
                         .groups(user.groups.clone())
                         .limit(100);
-                    // list associations for this entity
-                    let mut cursor = db::associations::list(opts, &source, shared).await?;
+                    // list associations for this entity scoped to the requesting user
+                    let mut cursor = db::associations::list(user, opts, &source, shared).await?;
                     // build a list of associations to remove
                     let mut remove_assoc = Vec::with_capacity(self.remove_vendors.len());
                     // step over all of our associations and find the ones to delete

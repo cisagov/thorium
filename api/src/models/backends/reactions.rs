@@ -585,8 +585,8 @@ impl Reaction {
     ) -> Result<ApiCursor<String>, ApiError> {
         // authorize the groups to list reactions from
         user.authorize_groups(params.mut_groups(), shared).await?;
-        // use correct backend to list reaction names
-        db::reactions::list_new(params, shared).await
+        // use correct backend to list reaction names scoped to the requesting user
+        db::reactions::list_new(user, params, shared).await
     }
 
     /// Lists reactions for an entire group with a set status

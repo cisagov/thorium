@@ -24,8 +24,8 @@ pub async fn search(
 ) -> Result<ApiCursor<ElasticDoc>, ApiError> {
     // authorize the groups to list files from
     user.authorize_groups(&mut params.groups, shared).await?;
-    // search for results documents in elastic
-    db::search::search(params, shared).await
+    // search for results documents in elastic scoped to the requesting user
+    db::search::search(user, params, shared).await
 }
 
 impl ElasticSearchParams {

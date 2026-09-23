@@ -651,8 +651,8 @@ impl Sample {
         let mut params = params.into();
         // authorize the groups to list files from
         user.authorize_groups(&mut params.groups, shared).await?;
-        // get a chunk of the files list
-        let scylla_cursor = db::files::list(params, dedupe, shared).await?;
+        // get a chunk of the files list scoped to the requesting user
+        let scylla_cursor = db::files::list(user, params, dedupe, shared).await?;
         // convert our scylla cursor to a user facing cursor
         Ok(ApiCursor::from(scylla_cursor))
     }

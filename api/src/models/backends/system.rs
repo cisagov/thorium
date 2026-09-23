@@ -605,12 +605,12 @@ impl Node {
     ///
     /// # Arguments
     ///
-    /// * `_user` - The user that is listing node names (kept to ensure auth)
+    /// * `user` - The user that is listing node names
     /// * `params` - The params for listing node names
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "Node::list", skip_all, err(Debug))]
     pub async fn list(
-        _user: &User,
+        user: &User,
         mut params: NodeListParams,
         shared: &Shared,
     ) -> Result<ApiCursor<NodeListLine>, ApiError> {
@@ -618,8 +618,8 @@ impl Node {
         params.default_expand(shared);
         // either list nodes or get just the details for the nodes we have
         if params.nodes.is_empty() {
-            // if we have no nodes specified, get a chunk of the node names list
-            let scylla_cursor = db::system::list_nodes(params, shared).await?;
+            // if we have no nodes specified, get a chunk of the node names list scoped to the user
+            let scylla_cursor = db::system::list_nodes(user, params, shared).await?;
             // convert our scylla cursor to a user facing one
             Ok(ApiCursor::from(scylla_cursor))
         } else {
@@ -643,12 +643,12 @@ impl Node {
     ///
     /// # Arguments
     ///
-    /// * `_user` - The user that is listing node details (kept to ensure auth)
+    /// * `user` - The user that is listing node details
     /// * `params` - The params for listing nodes
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "Node::list_details", skip_all, err(Debug))]
     pub async fn list_details(
-        _user: &User,
+        user: &User,
         mut params: NodeListParams,
         shared: &Shared,
     ) -> Result<ApiCursor<Node>, ApiError> {
@@ -656,8 +656,8 @@ impl Node {
         params.default_expand(shared);
         // either list nodes or get just the details for the nodes we have
         if params.nodes.is_empty() {
-            // if we don't have nodes, get a chunk of the node details list
-            db::system::list_node_details(params, shared).await
+            // if we don't have nodes, get a chunk of the node details list scoped to the user
+            db::system::list_node_details(user, params, shared).await
         } else {
             // if we have nodes specified then just get info on those
             let rows = db::system::get_node_rows(&params.clusters, &params.nodes, shared).await?;

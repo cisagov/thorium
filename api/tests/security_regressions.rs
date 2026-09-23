@@ -10,9 +10,8 @@
 //! Elastic (see `.gitlab-ci.yml`) and are run by the operator, not offline.
 
 use thorium::models::{
-    Buffer, FileListOpts, GroupAllowedUpdate, GroupRequest, GroupUpdate, GroupUsersRequest,
-    ImageScaler, OriginRequest, Pools, Resources, SampleRequest, TreeOpts, TreeQuery, UserRole,
-    WorkerRegistrationList,
+    Buffer, GroupAllowedUpdate, GroupRequest, GroupUpdate, GroupUsersRequest, ImageScaler,
+    OriginRequest, Pools, Resources, SampleRequest, UserRole, WorkerRegistrationList,
 };
 use thorium::test_utilities::{self, generators};
 use thorium::{is, Error};
@@ -227,80 +226,6 @@ async fn monitor_cannot_change_group_settings() -> Result<(), Error> {
         monitor.groups.update(&group_req.name, &update).await,
         401,
         "monitor changing group settings",
-    )
-}
-
-/// List cursors must be owner-scoped — a user must NOT be able to resume another user's
-/// list cursor and page through listings scoped to groups they are not a member of.
-///
-/// `ScyllaCursor::get` loads the retained cursor from Redis keyed only by its UUID, with no stored
-/// owner and no group revalidation on resume. Any user who obtains another user's cursor UUID (a
-/// leaked URL, log line, or shared link) can page the victim's group-scoped listings. The secure
-/// behavior is that resuming a cursor scoped to a group the caller cannot see fails with `401`.
-#[tokio::test]
-async fn list_cursor_is_owner_scoped() -> Result<(), Error> {
-    // get an admin client that owns the secret group and its samples
-    let admin = test_utilities::admin_client().await?;
-    // create a secret group owned only by the admin
-    let secret = generators::groups(1, &admin).await?.remove(0).name;
-    // upload enough samples that a single page cannot exhaust the cursor
-    for _ in 0..3 {
-        // create a sample the attacker must never be able to page
-        admin
-            .files
-            .create(generators::gen_sample(&secret))
-            .await?;
-    }
-    // as the admin, start a list scoped to the secret group with a tiny page so a cursor is issued
-    let opts = FileListOpts::default()
-        .groups(vec![secret.clone()])
-        .page_size(1);
-    // grab the first page and its resumable cursor id
-    let cursor = admin.files.list(&opts).await?;
-    // the cursor must exist for this IDOR to be meaningful
-    let cursor_id = cursor
-        .id
-        .ok_or_else(|| Error::new("expected a resumable list cursor id".to_owned()))?;
-    // get a low privilege attacker client that is not in the secret group
-    let attacker = generators::client(&admin).await?;
-    // the attacker resumes the victim's cursor by its leaked UUID
-    let resume = FileListOpts::default().cursor(cursor_id);
-    // resuming another user's group-scoped cursor must be rejected
-    assert_status(
-        attacker.files.list(&resume).await,
-        401,
-        "resuming another user's list cursor",
-    )
-}
-
-/// Tree cursors must be owner-scoped — a user must NOT be able to fetch another user's
-/// saved relationship tree by its UUID.
-///
-/// `db::trees::load` ignores the requesting user and returns any saved `Tree` by UUID; the tree
-/// carries the creator's group visibility, so a fetch or grow leaks sample/tag/association data
-/// from groups the caller cannot see. The secure behavior is that fetching a tree created by
-/// another user in a group the caller is not in fails with `401`.
-#[tokio::test]
-async fn tree_cursor_is_owner_scoped() -> Result<(), Error> {
-    // get an admin client that owns the secret group and its sample
-    let admin = test_utilities::admin_client().await?;
-    // create a secret group owned only by the admin
-    let secret = generators::groups(1, &admin).await?.remove(0).name;
-    // upload a sample to seed a relationship tree from
-    let seed = admin.files.create(generators::gen_sample(&secret)).await?;
-    // build a tree query scoped to the secret group and seeded with the sample
-    let mut query = TreeQuery::default().sample(seed.sha256);
-    // restrict the tree to the secret group so its cursor carries that visibility
-    query.groups = vec![secret];
-    // start the tree as the admin
-    let tree = admin.trees.start(&TreeOpts::default(), &query).await?;
-    // get a low privilege attacker client that is not in the secret group
-    let attacker = generators::client(&admin).await?;
-    // fetching another user's tree by UUID must be rejected
-    assert_status(
-        attacker.trees.get(tree.id).await,
-        401,
-        "fetching another user's tree",
     )
 }
 

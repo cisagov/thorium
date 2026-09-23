@@ -13,6 +13,46 @@ use thorium::models::{
     TreeRelationships, TreeSupport, WindowsProcessEntity, WindowsProcessTreeEntity,
 };
 
+/// Assert that a result is an error carrying the expected HTTP status code
+///
+/// The `fail!` test macro re-evaluates its argument (which moves owned inputs) and requires the
+/// `Ok` type to implement `Debug`; several client calls here return non-`Debug` values
+/// (`DownloadedFile`, `Cursor<_>`) or consume owned blueprints, so this helper checks an
+/// already-evaluated result without either constraint.
+///
+/// # Arguments
+///
+/// * `result` - The already-evaluated result to check
+/// * `code` - The HTTP status code the error must carry
+/// * `context` - A short description of what was expected, used in failure messages
+fn assert_status<T>(
+    result: Result<T, thorium::Error>,
+    code: u16,
+    context: &str,
+) -> Result<(), thorium::Error> {
+    // inspect the result, discarding any success value so `T` need not be `Debug`
+    match result {
+        // a success means the secure behavior is not enforced yet, so fail the test
+        Ok(_) => Err(thorium::Error::new(format!(
+            "{context}: expected status {code} but the request succeeded"
+        ))),
+        // an error must carry exactly the expected status code
+        Err(error) => match error.status() {
+            // the status matched so the secure behavior held
+            Some(status) if status.as_u16() == code => Ok(()),
+            // a different status is still a failure to enforce the expected boundary
+            Some(status) => Err(thorium::Error::new(format!(
+                "{context}: expected status {code} but got {}",
+                status.as_u16()
+            ))),
+            // no status at all means the error was not the authorization rejection we expected
+            None => Err(thorium::Error::new(format!(
+                "{context}: expected status {code} but the error carried no status: {error}"
+            ))),
+        },
+    }
+}
+
 /// Generate a buffer of random bytes so every test run uploads unique samples
 fn random_buffer() -> Vec<u8> {
     // build a buffer to fill with random data
@@ -1109,4 +1149,36 @@ async fn grow_entities() -> Result<(), thorium::Error> {
         "System <-> smss branch"
     );
     Ok(())
+}
+
+/// Tree cursors must be owner-scoped — a user must NOT be able to fetch another user's
+/// saved relationship tree by its UUID.
+///
+/// `db::trees::load` scopes each tree to its creating user by nesting the id under the username in
+/// redis; the tree carries the creator's group visibility, so a fetch or grow by another user would
+/// leak sample/tag/association data from groups the caller cannot see. The secure behavior is that
+/// fetching a tree created by another user in a group the caller is not in fails with `404`,
+/// identical to a non-existent tree id so it does not leak that the id is a valid tree.
+#[tokio::test]
+async fn tree_cursor_is_owner_scoped() -> Result<(), thorium::Error> {
+    // get an admin client that owns the secret group and its sample
+    let admin = test_utilities::admin_client().await?;
+    // create a secret group owned only by the admin
+    let secret = generators::groups(1, &admin).await?.remove(0).name;
+    // upload a sample to seed a relationship tree from
+    let seed = admin.files.create(generators::gen_sample(&secret)).await?;
+    // build a tree query scoped to the secret group and seeded with the sample
+    let mut query = TreeQuery::default().sample(seed.sha256);
+    // restrict the tree to the secret group so its cursor carries that visibility
+    query.groups = vec![secret];
+    // start the tree as the admin
+    let tree = admin.trees.start(&TreeOpts::default(), &query).await?;
+    // get a low privilege attacker client that is not in the secret group
+    let attacker = generators::client(&admin).await?;
+    // fetching another user's tree by UUID must be rejected as if it does not exist
+    assert_status(
+        attacker.trees.get(tree.id).await,
+        404,
+        "fetching another user's tree",
+    )
 }

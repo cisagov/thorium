@@ -601,6 +601,8 @@ where
 {
     /// The Id for this cursor
     pub id: Uuid,
+    /// The username of the user this cursor is scoped to
+    pub username: String,
     /// The cursor settings/data to retain across cursor iterations
     pub retain: ScyllaCursorRetain<D>,
     /// The year that we last got data from
@@ -696,6 +698,7 @@ where
     /// # Arguments
     ///
     /// * `params` - The params to build this cursor from
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `dedupe` - Whether to dedupe items or not
     /// * `shared` - Shared Thorium objects
     #[instrument(
@@ -705,12 +708,13 @@ where
     )]
     pub async fn from_params(
         mut params: D::Params,
+        username: &str,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<ScyllaCursor<D>, ApiError> {
         // if we have a cursor id then try to get our cursor from the DB
         if let Some(id) = D::get_id(&params) {
-            ScyllaCursor::get(id, params, dedupe, shared).await
+            ScyllaCursor::get(id, username, params, dedupe, shared).await
         } else {
             // this is a new cursor
             // get the start/end timestamps from our cursor
@@ -754,6 +758,7 @@ where
             // build our cursor
             let cursor = ScyllaCursor {
                 id: Uuid::new_v4(),
+                username: username.to_owned(),
                 retain,
                 year,
                 bucket,
@@ -779,6 +784,7 @@ where
     ///
     /// * `params` - The params to build this cursor from
     /// * `extra_filter` - The extra filters to use in this cursor
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `dedupe` - Whether to dedupe items or not
     /// * `shared` - Shared Thorium objects
     #[instrument(
@@ -789,12 +795,13 @@ where
     pub async fn from_params_extra(
         mut params: D::Params,
         extra_filter: D::ExtraFilters,
+        username: &str,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<ScyllaCursor<D>, ApiError> {
         // if we have a cursor id then try to get our cursor from the DB
         if let Some(id) = D::get_id(&params) {
-            ScyllaCursor::get(id, params, dedupe, shared).await
+            ScyllaCursor::get(id, username, params, dedupe, shared).await
         } else {
             // this is a new cursor
             // get the start/end timestamps from our cursor
@@ -836,6 +843,7 @@ where
             // build our cursor
             let cursor = ScyllaCursor {
                 id: Uuid::new_v4(),
+                username: username.to_owned(),
                 retain,
                 year,
                 bucket,
@@ -860,18 +868,20 @@ where
     /// # Arguments
     ///
     /// * `cursor_id` - The uuid of the cursor to retrieve if one is known
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `params` - The params to build this cursor from
     /// * `dedupe` - Whether to dedupe items or not
     /// * `shared` - Shared thorium objects
     #[instrument(name = "ScyllaCursor::get", skip(params, shared), err(Debug))]
     pub async fn get(
         cursor_id: Uuid,
+        username: &str,
         params: D::Params,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<ScyllaCursor<D>, ApiError> {
-        // build the key to our cursor data in redis
-        let key = cursors::data(CursorKind::Scylla, &cursor_id, shared);
+        // build the key to our cursor data in redis scoped to the creating user
+        let key = cursors::data(CursorKind::Scylla, username, &cursor_id, shared);
         // get our cursor from redis
         let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
         // check if we got any cursor data
@@ -896,9 +906,10 @@ where
                 // get our starting/ending bucket
                 let bucket = u32::try_from(helpers::partition(retain.start, year, chunk))?;
                 let end_bucket = u32::try_from(helpers::partition(retain.end, end_year, chunk))?;
-                // rebuild our cursor
+                // rebuild our cursor scoped to the creating user
                 let cursor = ScyllaCursor {
                     id: cursor_id,
+                    username: username.to_owned(),
                     retain,
                     year,
                     bucket,
@@ -1663,8 +1674,8 @@ where
     pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
         // serialize our retained data
         let data = serialize!(&self.retain);
-        // build the key to save this cursor data too
-        let key = cursors::data(CursorKind::Scylla, &self.id, shared);
+        // build the key to save this cursor data too scoped to the creating user
+        let key = cursors::data(CursorKind::Scylla, &self.username, &self.id, shared);
         // if this is a new cursor only hold onto it for 8 hours
         // if its an existing cursor that is being paged then hold onto it for 7 days
         let ttl = if self.new { 28_800 } else { 604_800 };
@@ -1740,6 +1751,8 @@ where
 {
     /// The ID for this cursor
     pub id: Uuid,
+    /// The username of the user this cursor is scoped to
+    pub username: String,
     /// The dta that is retained thoughout this cursors life
     pub retain: SimpleScyllaCursorRetain,
     /// The max number of items to return at once
@@ -1766,17 +1779,20 @@ where
     /// # Arguments
     ///
     /// * `partitions` - The partitions to list data from
+    /// * `username` - The username of the user this cursor is scoped to
+    /// * `limit` - The max number of items to return at once
     #[must_use]
-    pub fn new(partitions: Vec<String>, limit: usize) -> Self {
+    pub fn new(partitions: Vec<String>, username: &str, limit: usize) -> Self {
         // create an initial simple scylla cursor
         let retain = SimpleScyllaCursorRetain {
             partitions,
             index: 0,
             tie: None,
         };
-        // build our simple cursor
+        // build our simple cursor scoped to the creating user
         SimpleScyllaCursor {
             id: Uuid::new_v4(),
+            username: username.to_owned(),
             retain,
             limit,
             exhausted: false,
@@ -1802,15 +1818,18 @@ where
     /// # Arguments
     ///
     /// * `cursor_id` - The id of the cursor to retrieve
+    /// * `username` - The username of the user this cursor is scoped to
+    /// * `limit` - The max number of items to return at once
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "SimpleScyllaCursor::get", skip(shared), err(Debug))]
     pub async fn get(
         cursor_id: Uuid,
+        username: &str,
         limit: usize,
         shared: &Shared,
     ) -> Result<SimpleScyllaCursor<D>, ApiError> {
-        // build the key to our cursor data in redis
-        let key = cursors::data(CursorKind::SimpleScylla, &cursor_id, shared);
+        // build the key to our cursor data in redis scoped to the creating user
+        let key = cursors::data(CursorKind::SimpleScylla, username, &cursor_id, shared);
         // get our cursor from redis
         let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
         // check if we got any cursor data
@@ -1820,6 +1839,7 @@ where
                 let retain = deserialize!(&data);
                 let cursor = SimpleScyllaCursor {
                     id: cursor_id,
+                    username: username.to_owned(),
                     retain,
                     limit,
                     exhausted: false,
@@ -1902,8 +1922,8 @@ where
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "SimpleScyllaCursor::save", skip_all, err(Debug))]
     pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
-        // build the key to save this cursor data too
-        let key = cursors::data(CursorKind::Scylla, &self.id, shared);
+        // build the key to save this cursor data too scoped to the creating user
+        let key = cursors::data(CursorKind::Scylla, &self.username, &self.id, shared);
         // either save or delete this cursor based on whether its exhausted or not
         if self.exhausted {
             // only delete if this cursor was actually written to redis
@@ -1914,8 +1934,8 @@ where
         } else {
             // serialize our paritions
             let data = serialize!(&self.retain);
-            // build the key to save this cursor data too
-            let key = cursors::data(CursorKind::SimpleScylla, &self.id, shared);
+            // build the key to save this cursor data too scoped to the creating user
+            let key = cursors::data(CursorKind::SimpleScylla, &self.username, &self.id, shared);
             // save this cursors data to redis
             let _: () = query!(
                 cmd("set").arg(key).arg(data).arg("EX").arg(2_628_000),
@@ -2125,6 +2145,8 @@ where
 {
     /// The Id for this cursor
     pub id: Uuid,
+    /// The username of the user this cursor is scoped to
+    pub username: String,
     /// The cursor settings/data to retain across cursor iterations
     pub retain: GroupedScyllaCursorRetain<D>,
     /// The max number of items to return at once
@@ -2149,6 +2171,7 @@ where
     /// # Arguments
     ///
     /// * `params` - The params to build this cursor from
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `dedupe` - Whether to dedupe items or not
     /// * `shared` - Shared Thorium objects
     #[instrument(
@@ -2158,12 +2181,13 @@ where
     )]
     pub async fn from_params(
         mut params: D::Params,
+        username: &str,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<GroupedScyllaCursor<D>, ApiError> {
         // if we have a cursor id then try to get our cursor from the DB
         if let Some(id) = D::get_id(&mut params) {
-            GroupedScyllaCursor::get(id, params, dedupe, shared).await
+            GroupedScyllaCursor::get(id, username, params, dedupe, shared).await
         } else {
             // get our extra filters
             let extra_filter = D::get_extra_filters(&mut params);
@@ -2179,6 +2203,7 @@ where
             // build our cursor
             let cursor = GroupedScyllaCursor {
                 id: Uuid::new_v4(),
+                username: username.to_owned(),
                 retain,
                 limit: D::get_limit(&params)?,
                 in_redis: false,
@@ -2195,6 +2220,7 @@ where
     ///
     /// * `params` - The params to build this cursor from
     /// * `extra_filter` - The extra filters to use in this cursor
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `dedupe` - Whether to dedupe items or not
     /// * `shared` - Shared Thorium objects
     #[instrument(
@@ -2205,12 +2231,13 @@ where
     pub async fn from_params_extra(
         mut params: D::Params,
         extra_filter: D::ExtraFilters,
+        username: &str,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<GroupedScyllaCursor<D>, ApiError> {
         // if we have a cursor id then try to get our cursor from the DB
         if let Some(id) = D::get_id(&mut params) {
-            GroupedScyllaCursor::get(id, params, dedupe, shared).await
+            GroupedScyllaCursor::get(id, username, params, dedupe, shared).await
         } else {
             // get our group restrictions
             let groups = D::get_groups(&mut params);
@@ -2224,6 +2251,7 @@ where
             // build our cursor
             let cursor = GroupedScyllaCursor {
                 id: Uuid::new_v4(),
+                username: username.to_owned(),
                 retain,
                 limit: D::get_limit(&params)?,
                 in_redis: false,
@@ -2239,18 +2267,20 @@ where
     /// # Arguments
     ///
     /// * `cursor_id` - The uuid of the cursor to retrieve if one is known
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `params` - The params to build this cursor from
     /// * `dedupe` - Whether to dedupe items or not
     /// * `shared` - Shared thorium objects
     #[instrument(name = "GroupedScyllaCursor::get", skip(params, shared), err(Debug))]
     pub async fn get(
         cursor_id: Uuid,
+        username: &str,
         params: D::Params,
         dedupe: bool,
         shared: &Shared,
     ) -> Result<GroupedScyllaCursor<D>, ApiError> {
-        // build the key to our cursor data in redis
-        let key = cursors::data(CursorKind::GroupedScylla, &cursor_id, shared);
+        // build the key to our cursor data in redis scoped to the creating user
+        let key = cursors::data(CursorKind::GroupedScylla, username, &cursor_id, shared);
         // get our cursor from redis
         let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
         // check if we got any cursor data
@@ -2261,6 +2291,7 @@ where
                 // build and return our cursor
                 let cursor = GroupedScyllaCursor {
                     id: cursor_id,
+                    username: username.to_owned(),
                     retain,
                     limit: D::get_limit(&params)?,
                     in_redis: true,
@@ -2531,8 +2562,8 @@ where
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "GroupedScyllaCursor::save", skip_all, err(Debug))]
     pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
-        // build the key to save this cursor data too
-        let key = cursors::data(CursorKind::GroupedScylla, &self.id, shared);
+        // build the key to save this cursor data too scoped to the creating user
+        let key = cursors::data(CursorKind::GroupedScylla, &self.username, &self.id, shared);
         // either save or delete this cursor based on whether its exhausted or not
         if self.exhausted() {
             // only delete if this cursor was actually written to redis
@@ -2543,8 +2574,8 @@ where
         } else {
             // serialize our paritions
             let data = serialize!(&self.retain);
-            // build the key to save this cursor data too
-            let key = cursors::data(CursorKind::GroupedScylla, &self.id, shared);
+            // build the key to save this cursor data too scoped to the creating user
+            let key = cursors::data(CursorKind::GroupedScylla, &self.username, &self.id, shared);
             // if this is a new cursor only hold onto it for 8 hours
             // if its an existing cursor that is being paged then hold onto it for 7 days
             let ttl = if self.new { 28_800 } else { 604_800 };
@@ -2755,15 +2786,17 @@ pub trait TagCountCursorSupport: ScyllaCursorSupport + Send {
     ///
     /// * `params` - The params used to get our backing cursor
     /// * `extra` - Any extra params needed to get our backing cursor
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `shared` - Shared Thorium objects
     #[allow(async_fn_in_trait)]
     async fn backing_cursor(
         params: <Self as CursorCore>::Params,
         _extra: <Self as CursorCore>::ExtraFilters,
+        username: &str,
         shared: &Shared,
     ) -> Result<ScyllaCursor<Self>, ApiError> {
-        // get our backing cursor
-        ScyllaCursor::from_params(params, true, shared).await
+        // get our backing cursor scoped to the creating user
+        ScyllaCursor::from_params(params, username, true, shared).await
     }
 
     /// Get the details for our backing cursor
@@ -2838,6 +2871,8 @@ impl TagCountCursorRetain {
 pub struct ScyllaTagCountCursor<D: TagCountCursorSupport + Send> {
     /// The id for our tag count cursor
     pub id: Uuid,
+    /// The username of the user this cursor is scoped to
+    pub username: String,
     /// The info to retain across tag counts
     pub retain: TagCountCursorRetain,
     /// The cursor backing our counts
@@ -2853,18 +2888,20 @@ impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
     ///
     /// * `params` - The params for counting tags
     /// * `extra` - Any extra params needed to count tags
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "ScyllaTagCountCursor::from_params", skip_all, err(Debug))]
     pub async fn from_params(
         params: <D as CursorCore>::Params,
         extra: <D as CursorCore>::ExtraFilters,
+        username: &str,
         shared: &Shared,
     ) -> Result<Self, ApiError> {
         // get our cursor id if we have one
         let (id, retain, new) = match <D as CursorCore>::get_id(&params) {
             Some(id) => {
-                // build the key to our cursor data in redis
-                let key = cursors::data(CursorKind::TagsCount, &id, shared);
+                // build the key to our cursor data in redis scoped to the creating user
+                let key = cursors::data(CursorKind::TagsCount, username, &id, shared);
                 // get our cursor from redis
                 let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
                 // if we didn't get any data then return a 404
@@ -2882,12 +2919,15 @@ impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
             ),
         };
         // get our backing cursor
-        let mut backing = D::backing_cursor(params, extra, shared).await?;
+        let mut backing = D::backing_cursor(params, extra, username, shared).await?;
         // override our backing cursors id to be the same as our tags count cursor
         backing.id = id;
+        // scope our backing cursor to the same user as our tags count cursor
+        backing.username = username.to_owned();
         // build our internal tag count cursor
         let internal = ScyllaTagCountCursor {
             id,
+            username: username.to_owned(),
             retain,
             backing,
             new,
@@ -2928,8 +2968,8 @@ impl<D: TagCountCursorSupport + Send> ScyllaTagCountCursor<D> {
         self.backing.save(shared).await?;
         // serialize our cursor info
         let serialized = serialize!(&self.retain);
-        // build the key to save this cursor data too
-        let key = cursors::data(CursorKind::TagsCount, &self.id, shared);
+        // build the key to save this cursor data too scoped to the creating user
+        let key = cursors::data(CursorKind::TagsCount, &self.username, &self.id, shared);
         // if this is a new cursor only hold onto it for 8 hours
         // if its an existing cursor that is being paged then hold onto it for 7 days
         let ttl = if self.new { 28_800 } else { 604_800 };
@@ -2992,6 +3032,8 @@ pub struct ElasticCursorRetain {
 pub struct ElasticCursor {
     /// The id for this cursor
     pub id: Uuid,
+    /// The username of the user this cursor is scoped to
+    pub username: String,
     /// The info to retain throughout this cursors lifetime
     pub retain: ElasticCursorRetain,
     /// The max number of items to return at once
@@ -3076,18 +3118,20 @@ impl ElasticCursor {
     /// # Arguments
     ///
     /// * `params` - The elastic search params to use
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `shared` - Shared Thorium objects
     pub async fn from_params(
         mut params: ElasticSearchParams,
+        username: &str,
         shared: &Shared,
     ) -> Result<Self, ApiError> {
         // if a cursor was specified then get an existing cursor
         if let Some(id) = params.cursor.take() {
             // get an existing cursor
-            ElasticCursor::get(id, params, shared).await
+            ElasticCursor::get(id, username, params, shared).await
         } else {
             // we don't have an existing cursor so make a new one
-            ElasticCursor::new(params, shared).await
+            ElasticCursor::new(params, username, shared).await
         }
     }
 
@@ -3096,9 +3140,14 @@ impl ElasticCursor {
     /// # Arguments
     ///
     /// * `params` - The elastic search params to use
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "ElasticCursor::new", skip(shared), err(Debug))]
-    async fn new(params: ElasticSearchParams, shared: &Shared) -> Result<ElasticCursor, ApiError> {
+    async fn new(
+        params: ElasticSearchParams,
+        username: &str,
+        shared: &Shared,
+    ) -> Result<ElasticCursor, ApiError> {
         // get the names of our indexes
         let indexes = params
             .indexes
@@ -3119,6 +3168,7 @@ impl ElasticCursor {
         // build a new elastic cursor
         let cursor = ElasticCursor {
             id: Uuid::new_v4(),
+            username: username.to_owned(),
             retain,
             limit: i64::from(params.limit),
             data: Vec::default(),
@@ -3132,16 +3182,18 @@ impl ElasticCursor {
     /// # Arguments
     ///
     /// * `id` - The ID of the cursor to get
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `params` - The elastic search params to use
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "ElasticCursor::get", skip(shared), err(Debug))]
     pub async fn get(
         id: Uuid,
+        username: &str,
         params: ElasticSearchParams,
         shared: &Shared,
     ) -> Result<ElasticCursor, ApiError> {
-        // build the key to our cursor data in redis
-        let key = cursors::data(CursorKind::Elastic, &id, shared);
+        // build the key to our cursor data in redis scoped to the creating user
+        let key = cursors::data(CursorKind::Elastic, username, &id, shared);
         // get our cursor from redis
         let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
         // check if we got any cursor data
@@ -3152,6 +3204,7 @@ impl ElasticCursor {
                 // build our cursor
                 let cursor = ElasticCursor {
                     id,
+                    username: username.to_owned(),
                     retain,
                     limit: params.limit.into(),
                     data: Vec::default(),
@@ -3262,8 +3315,8 @@ impl ElasticCursor {
     pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
         // serialize our retained info
         let data = serialize!(&self.retain);
-        // build the key to save this cursor data too
-        let key = cursors::data(CursorKind::Elastic, &self.id, shared);
+        // build the key to save this cursor data too scoped to the creating user
+        let key = cursors::data(CursorKind::Elastic, &self.username, &self.id, shared);
         // if this is a new cursor only hold onto it for 8 hours
         // if its an existing cursor that is being paged then hold onto it for 7 days
         let ttl = if self.new { 28_800 } else { 604_800 };
@@ -3449,6 +3502,8 @@ where
 {
     /// The Id for this cursor
     pub id: Uuid,
+    /// The username of the user this cursor is scoped to
+    pub username: String,
     /// The cursor settings/data to retain across cursor iterations
     pub retain: RedisCursorRetain<D>,
     /// The params to use with this cursor
@@ -3467,12 +3522,13 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
     /// # Arguments
     ///
     /// * `params` - The parameters to use with this cursor
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "RedisCursor::new", skip_all, err(Debug))]
-    pub async fn new(params: D::Params, shared: &Shared) -> Result<Self, ApiError> {
+    pub async fn new(params: D::Params, username: &str, shared: &Shared) -> Result<Self, ApiError> {
         // if a cursor id was passed then load that existing cursor from redis
         match D::get_id(&params) {
-            Some(id) => RedisCursor::get(id, params, shared).await,
+            Some(id) => RedisCursor::get(id, username, params, shared).await,
             None => {
                 // get the limit on the amount of data to return
                 let limit = D::get_limit(&params);
@@ -3481,6 +3537,7 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
                 // build our new cursor with a new id
                 let cursor = RedisCursor {
                     id: Uuid::new_v4(),
+                    username: username.to_owned(),
                     retain,
                     params,
                     limit,
@@ -3497,16 +3554,18 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
     /// # Arguments
     ///
     /// * `cursor_id` - The id of the cursor to load
+    /// * `username` - The username of the user this cursor is scoped to
     /// * `params` - The parameters to use with this cursor
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "RedisCursor::get", skip(params, shared), err(Debug))]
     pub async fn get(
         cursor_id: Uuid,
+        username: &str,
         params: D::Params,
         shared: &Shared,
     ) -> Result<Self, ApiError> {
-        // build the key to our cursor data in redis
-        let key = cursors::data(CursorKind::Redis, &cursor_id, shared);
+        // build the key to our cursor data in redis scoped to the creating user
+        let key = cursors::data(CursorKind::Redis, username, &cursor_id, shared);
         // get our cursor from redis
         let data: Option<String> = query!(cmd("get").arg(key), shared).await?;
         // check if we got any cursor data
@@ -3517,6 +3576,7 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
                 // rebuild our cursor
                 let cursor = RedisCursor {
                     id: cursor_id,
+                    username: username.to_owned(),
                     retain,
                     limit: D::get_limit(&params),
                     params,
@@ -3633,8 +3693,8 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
     /// * `shared` - Shared Thorium objects
     #[instrument(name = "RedisCursor::save", skip_all, err(Debug))]
     pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
-        // build the key to save this cursor data too
-        let key = cursors::data(CursorKind::Redis, &self.id, shared);
+        // build the key to save this cursor data too scoped to the creating user
+        let key = cursors::data(CursorKind::Redis, &self.username, &self.id, shared);
         // either save or delete this cursor based on whether its exhausted or not
         if self.exhausted() {
             // only delete if this cursor was actually written to redis

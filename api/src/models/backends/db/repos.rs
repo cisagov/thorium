@@ -798,13 +798,15 @@ pub async fn add_commitishes(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing commitishes
 /// * `repo` - The repo to list commitishes from
 /// * `params` - The query params to use when listing commitishes
 /// * `dedupe` - Whether to dedupe any data that is returned
 /// * `shared` - Shared Thorium objects
 /// * `span` - The span to log traces under
-#[instrument(name = "db::repos::commitishes", skip(params, shared), err(Debug))]
+#[instrument(name = "db::repos::commitishes", skip(user, params, shared), err(Debug))]
 pub async fn commitishes(
+    user: &User,
     repo: &Repo,
     mut params: CommitishListParams,
     dedupe: bool,
@@ -818,8 +820,10 @@ pub async fn commitishes(
     }
     // get our target repos url
     let url = repo.url.clone();
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params_extra(params, (kinds, url), dedupe, shared).await?;
+    // get our cursor scoped to the creating user
+    let mut cursor =
+        ScyllaCursor::from_params_extra(params, (kinds, url), &user.username, dedupe, shared)
+            .await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // save this cursor
@@ -984,11 +988,13 @@ pub async fn commitish_exists(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is getting the latest commit
 /// * `groups` - The groups to look for commits in
 /// * `repo` - The repo to get the latest commit for
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::repos::latest_commit", skip(shared), err(Debug))]
+#[instrument(name = "db::repos::latest_commit", skip(user, shared), err(Debug))]
 pub async fn latest_commit(
+    user: &User,
     groups: &HashSet<&String>,
     repo: &Repo,
     shared: &Shared,
@@ -1002,9 +1008,9 @@ pub async fn latest_commit(
     let params = CommitishListParams::new(groups, repo.earliest, 1);
     // build our extra filters to only search commits for this repo
     let extra = (vec![CommitishKinds::Commit], repo.url.to_owned());
-    // get our cursor
+    // get our cursor scoped to the creating user
     let mut cursor: ScyllaCursor<Commitish> =
-        ScyllaCursor::from_params_extra(params, extra, false, shared).await?;
+        ScyllaCursor::from_params_extra(params, extra, &user.username, false, shared).await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // get the first commits hash
@@ -1156,16 +1162,18 @@ pub async fn repo_data_hash(
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing repos
 /// * `params` - The query params to use when listing files
 /// * `shared` - Shared Thorium objects
 /// * `span` - The span to log traces under
 #[instrument(name = "db::repos::list", skip_all, err(Debug))]
 pub async fn list(
+    user: &User,
     params: RepoListParams,
     shared: &Shared,
 ) -> Result<ScyllaCursor<RepoListLine>, ApiError> {
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params(params, true, shared).await?;
+    // get our cursor scoped to the creating user
+    let mut cursor = ScyllaCursor::from_params(params, &user.username, true, shared).await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // save this cursor

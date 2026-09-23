@@ -409,8 +409,8 @@ impl Association {
     ) -> Result<ApiCursor<Association>, ApiError> {
         // make sure these groups are visible to our user
         user.authorize_groups(&mut params.groups, shared).await?;
-        // list associations for our some entity/object
-        let cursor = db::associations::list(params, source, shared).await?;
+        // list associations for our some entity/object scoped to the requesting user
+        let cursor = db::associations::list(user, params, source, shared).await?;
         // convet our cursor to an api cursor
         let api_cursor = ApiCursor::try_from(cursor)?;
         Ok(api_cursor)

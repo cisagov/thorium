@@ -3,7 +3,7 @@
 use tracing::{Level, event, instrument};
 
 use super::ElasticCursor;
-use crate::models::{ApiCursor, ElasticDoc, ElasticSearchParams};
+use crate::models::{ApiCursor, ElasticDoc, ElasticSearchParams, User};
 use crate::utils::{ApiError, Shared};
 
 pub mod events;
@@ -12,10 +12,12 @@ pub mod events;
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is searching results
 /// * `params` - The query params for searching results
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::results::search", skip(shared), err(Debug))]
+#[instrument(name = "db::results::search", skip(user, shared), err(Debug))]
 pub async fn search(
+    user: &User,
     params: ElasticSearchParams,
     shared: &Shared,
 ) -> Result<ApiCursor<ElasticDoc>, ApiError> {
@@ -29,8 +31,8 @@ pub async fn search(
             data: Vec::default(),
         });
     }
-    // get our cursor or build a new one
-    let mut cursor = ElasticCursor::from_params(params, shared).await?;
+    // get our cursor or build a new one scoped to the creating user
+    let mut cursor = ElasticCursor::from_params(params, &user.username, shared).await?;
     //  get the next page of data
     cursor.next(shared).await?;
     // save this cursor

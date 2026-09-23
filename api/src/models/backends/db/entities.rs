@@ -176,17 +176,19 @@ pub async fn get(groups: &[String], id: Uuid, shared: &Shared) -> Result<Entity,
 ///
 /// # Arguments
 ///
+/// * `user` - The user that is listing entities
 /// * `params` - The query params to use when listing files
 /// * `dedupe` - Whether to dedupe submissions for the same sha256
 /// * `shared` - Shared Thorium objects
-#[instrument(name = "db::entities::list", skip(shared), err(Debug))]
+#[instrument(name = "db::entities::list", skip(user, shared), err(Debug))]
 pub async fn list(
+    user: &User,
     params: EntityListParams,
     dedupe: bool,
     shared: &Shared,
 ) -> Result<ScyllaCursor<EntityListLine>, ApiError> {
-    // get our cursor
-    let mut cursor = ScyllaCursor::from_params(params, dedupe, shared).await?;
+    // get our cursor scoped to the creating user
+    let mut cursor = ScyllaCursor::from_params(params, &user.username, dedupe, shared).await?;
     // get the next page of data for this cursor
     cursor.next(shared).await?;
     // if we are searching on tags, we need to supplement the data

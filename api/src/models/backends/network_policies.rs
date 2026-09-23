@@ -89,8 +89,8 @@ impl NetworkPolicy {
     ) -> Result<ApiCursor<NetworkPolicyListLine>, ApiError> {
         // authorize the groups to list network policies from
         user.authorize_groups(&mut params.groups, shared).await?;
-        // get a chunk of the network policies list
-        let scylla_cursor = db::network_policies::list(params, dedupe, shared).await?;
+        // get a chunk of the network policies list scoped to the requesting user
+        let scylla_cursor = db::network_policies::list(user, params, dedupe, shared).await?;
         // convert our scylla cursor to a user facing cursor
         Ok(ApiCursor::from(scylla_cursor))
     }
