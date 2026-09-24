@@ -41,7 +41,7 @@ async function mockApi(page: Page, m: ApiMocks): Promise<void> {
       });
     }
     if (url.includes('/oauth/') && url.includes('/link')) {
-      // DELETE = revoke (XHR, 204); GET = confirm (XHR, 204 linked / 401 expired). The page maps the
+      // DELETE = revoke (XHR, 204); POST = confirm (XHR, 204 linked / 401 expired). The page maps the
       // result to a client-side navigate to the /linked landing page.
       if (method === 'DELETE') {
         return route.fulfill({ status: 204 });
@@ -92,7 +92,7 @@ test.describe('OAuth callback', () => {
 
   test('NewUser with an available username creates the account', async ({ page }) => {
     await mockApi(page, {
-      callback: { NewUser: 'session-123' },
+      callback: { NewUser: { token: 'session-123', email_required: false } },
       usernameStatus: 204,
       register: { Authed: AUTH_RESPONSE },
       whoami: MOCK_USER,
@@ -101,16 +101,43 @@ test.describe('OAuth callback', () => {
     await page.goto('/oauth/google/callback?code=abc&state=xyz');
 
     await page.getByPlaceholder('Choose a username').fill('alice');
-    await page.getByPlaceholder('Enter your email').fill('alice@example.com');
+    // no email field: the account email is derived server-side from the verified OIDC claims
     await expect(page.getByText('Username is available')).toBeVisible({ timeout: 5000 });
+    // a provider that returned an email claim must not prompt for one
+    await expect(page.getByPlaceholder('you@example.com')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Create account' }).click();
     await page.waitForURL((url) => !url.pathname.includes('/oauth/'), { timeout: 15000 });
   });
 
+  test('NewUser with email_required prompts for an email before creating the account', async ({ page }) => {
+    await mockApi(page, {
+      callback: { NewUser: { token: 'session-123', email_required: true } },
+      usernameStatus: 204,
+      // the account is created but must verify the user-supplied email before a token is issued
+      register: { VerifyEmail: 'alice@sandia.gov' },
+    });
+
+    await page.goto('/oauth/google/callback?code=abc&state=xyz');
+
+    await page.getByPlaceholder('Choose a username').fill('alice');
+    await expect(page.getByText('Username is available')).toBeVisible({ timeout: 5000 });
+
+    // the provider returned no email claim, so the form must collect one before submitting
+    const emailInput = page.getByPlaceholder('you@example.com');
+    await expect(emailInput).toBeVisible();
+    // the create button stays disabled until the required email is supplied
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
+    await emailInput.fill('alice@sandia.gov');
+
+    await page.getByRole('button', { name: 'Create account' }).click();
+    // registration lands on the verify-email notice for the supplied address
+    await expect(page.getByText(/verify/i)).toBeVisible({ timeout: 5000 });
+  });
+
   test('NewUser with a taken username switches to Link Account and sends the link email', async ({ page }) => {
     await mockApi(page, {
-      callback: { NewUser: 'session-123' },
+      callback: { NewUser: { token: 'session-123', email_required: false } },
       usernameStatus: 409, // username taken -> link mode
       registerStatus: 409,
       register: 'A user with this email already exists. Please check your email for a account link email!',
@@ -125,7 +152,7 @@ test.describe('OAuth callback', () => {
     // The create-mode button must not be present in link mode.
     await expect(page.getByRole('button', { name: 'Create account' })).toHaveCount(0);
 
-    await page.getByPlaceholder('Enter your email').fill('existinguser@example.com');
+    // no email field: the link email is sent to the existing account's own stored address
     await linkBtn.click();
 
     await expect(page.getByText(/check your email to finish linking/i)).toBeVisible({ timeout: 5000 });

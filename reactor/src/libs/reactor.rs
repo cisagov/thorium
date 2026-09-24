@@ -59,28 +59,6 @@ macro_rules! try_ban {
     };
 }
 
-/// Selects the API token that gets written into a worker's keys file
-///
-/// The keys file is copied verbatim into every executor's tool context: mounted into k8s tool
-/// pods and, for the KVM launcher, transferred into the detonation guest at the fixed path
-/// `/thorium-keys.yml` / `C:\thorium-keys.yml` where live malware runs.
-///
-/// NOTE: this returns the user's primary, full-privilege API token (`user.token`),
-/// the same credential accepted by `token_auth` as `AuthedUser::Full`. Any code that runs in the
-/// tool context — a detonated sample, or a malicious tool image — can read this token and
-/// impersonate the submitting user across all of their groups until the token's normal expiration.
-/// The fix is to mint a job-/group-scoped, short-lived token here (Thorium already has a
-/// scoped-token mechanism) instead of the primary token; the regression test
-/// `worker_token_is_not_the_primary_token` fails until that happens.
-///
-/// # Arguments
-///
-/// * `user` - The user whose worker keys file is being written
-fn select_worker_token(user: &ScrubbedUser) -> &str {
-    // NOTE: the primary full-privilege token is used, not a job-scoped credential
-    &user.token
-}
-
 /// The daemon that will monitor this nodes worker and spawn them
 pub struct Reactor<L: Launcher> {
     /// The client used to talk to Thorium
@@ -247,10 +225,8 @@ impl<L: Launcher> Reactor<L> {
                     try_ban!(tokio::fs::create_dir_all(parent).await, name, bans);
                 }
                 // we need to create this users keys since they don't exist
-                // select the credential to write into this worker's keys file
-                let token = select_worker_token(&user);
                 // build the keys object for this user
-                let keys = Keys::new_token(&self.thorium.host, token);
+                let keys = Keys::new_token(&self.thorium.host, &user.token);
                 // serialize our keys
                 let serialized = try_ban!(serde_norway::to_string(&keys), name, bans);
                 // write our serialized keys to disk
@@ -484,4 +460,3 @@ impl<L: Launcher> Reactor<L> {
         Ok(())
     }
 }
-

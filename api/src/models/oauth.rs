@@ -36,8 +36,13 @@ pub enum OAuthMaybeAuthed {
     },
     /// This user successfully authenticated but needs to verify their email
     VerifyEmail(String),
-    /// An Oauth registration session token
-    NewUser(String),
+    /// An Oauth registration session for a new user
+    NewUser {
+        /// The registration session token to pass back to `POST /oauth/{name}/register`
+        token: String,
+        /// Whether the user must supply an email at registration because the IdP returned none
+        email_required: bool,
+    },
 }
 
 /// An OAuth user creation session
@@ -49,6 +54,12 @@ pub struct OAuthRegistrationSessionId {
 }
 
 /// Data needed to register a user
+///
+/// The `email` field is only honored when the provider returned no email claim of its own and the
+/// provider is configured to accept a user-supplied email (via a non-empty `approved_emails` regex
+/// list). In every other case the registrant's email is derived from the verified OIDC claims during
+/// the OAuth callback (never from the client), so an attacker cannot self-assert a victim's email to
+/// trigger an account-link email.
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct OAuthUserCreate {
@@ -56,8 +67,12 @@ pub struct OAuthUserCreate {
     pub session_token: String,
     /// The username of the user
     pub username: String,
-    /// This users email
-    pub email: String,
+    /// The email supplied by the user when the provider returned no email claim
+    ///
+    /// Only honored for providers that accept a user-supplied email; it must match the provider's
+    /// approved email regexes. Ignored (must match) when the IdP already provided an email.
+    #[serde(default)]
+    pub email: Option<String>,
     /// The role of this user
     #[serde(default)]
     pub role: UserRole,

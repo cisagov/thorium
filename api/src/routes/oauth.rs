@@ -285,6 +285,6 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route("/oauth/{name}/auth", get(generate_challenge))
         .route("/oauth/{name}/callback", get(callback))
         .route("/oauth/{name}/register", post(register))
-        .route("/oauth/{name}/link", get(link).delete(revoke_link_attempt))
+        .route("/oauth/{name}/link", post(link).delete(revoke_link_attempt))
         .route("/oauth/{name}/username/available", post(username_available))
 }

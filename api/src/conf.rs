@@ -294,6 +294,22 @@ pub struct OauthProvider {
     pub client_secret: String,
     /// The scope to set for this provider
     pub scopes: Vec<String>,
+    /// Trust the provider's `email` claim even when it omits the `email_verified` claim
+    ///
+    /// Some IdPs never emit `email_verified` for genuinely verified addresses. This opt-in lets an
+    /// administrator trust a *specific* provider's email claim when `email_verified` is absent. It
+    /// still rejects an explicit `email_verified: false`. Defaults to false so we fail closed.
+    #[serde(default)]
+    pub trust_unverified_email: bool,
+    /// Regexes restricting which emails may register through this provider
+    ///
+    /// When non-empty, any email placed on a new account through this provider — whether returned by
+    /// the IdP or supplied by the user when the IdP returns none — must match one of these regexes.
+    /// A non-empty list is also what opts this provider into accepting a user-supplied email when the
+    /// IdP returns none. When empty (the default) the provider does not accept a user-supplied email,
+    /// so a provider that returns no email claim fails closed exactly as before.
+    #[serde(default)]
+    pub approved_emails: Vec<String>,
 }
 
 /// Helps serde default the csrf token lifetime to 10 minutes
@@ -2725,8 +2741,7 @@ mod tests {
         // the privileged, cluster-critical Kubernetes namespaces must never be creatable or
         // schedulable into by Thorium. `kube-public` and `kube-node-lease` are world-readable /
         // node-owned control-plane namespaces and `default` is where unscoped workloads land, so
-        // omitting any of them lets a group name collide with a sensitive namespace. This fails
-        // until the default blacklist is expanded to include them.
+        // omitting any of them lets a group name collide with a sensitive namespace.
         for namespace in ["kube-system", "kube-public", "kube-node-lease", "default"] {
             assert!(
                 blacklist.contains(namespace),

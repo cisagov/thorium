@@ -470,10 +470,6 @@ mod tests {
     /// the shared `/opt/thorium` volume (which holds the `thorium-agent` binary) must be
     /// mounted read-only in every tool pod. Otherwise a root-in-container tool can overwrite the
     /// node's agent binary and trojan every subsequent tenant's workload on that node.
-    ///
-    /// Note this also guards this class of bug: the mount JSON must use the camelCase
-    /// `readOnly` key k8s expects, or the flag is silently dropped on deserialization and the mount
-    /// ends up writable despite the intent.
     #[test]
     fn thorium_mount_is_read_only() {
         // build the shared thorium volume mount exactly as the scheduler injects it

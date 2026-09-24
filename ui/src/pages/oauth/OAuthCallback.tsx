@@ -41,6 +41,8 @@ const OAuthCallback = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [formError, setFormError] = useState('');
   const [sessionToken, setSessionToken] = useState('');
+  // whether the register form must prompt for an email because the IdP returned none
+  const [emailRequired, setEmailRequired] = useState(false);
   // username/email for the verify-email notice (username known only when we just registered here)
   const [verifyInfo, setVerifyInfo] = useState<{ username?: string; email?: string }>({});
   // Guard against the mount effect running the (single-use) exchange twice under StrictMode.
@@ -81,7 +83,8 @@ const OAuthCallback = () => {
         return;
       }
       if (isNewUser(result)) {
-        setSessionToken(result.NewUser);
+        setSessionToken(result.NewUser.token);
+        setEmailRequired(result.NewUser.email_required);
         setStatus(CallbackStatus.NeedsRegistration);
       }
     })();
@@ -89,8 +92,9 @@ const OAuthCallback = () => {
   }, []);
 
   // After registration, the issued token may be unusable until the account's email is verified.
-  // Probe whoami to distinguish "logged in" from "must verify first".
-  const handleRegisterComplete = async (auth: UserAuthResponse, account: { username: string; email: string }) => {
+  // Probe whoami to distinguish "logged in" from "must verify first". The email is derived
+  // server-side from the verified OIDC claims, so it is not carried in the account object here.
+  const handleRegisterComplete = async (auth: UserAuthResponse, account: { username: string }) => {
     completeOAuth(auth.token, auth.expires);
     const user = await whoami();
     if (user) {
@@ -117,6 +121,7 @@ const OAuthCallback = () => {
             <OAuthRegisterForm
               provider={provider}
               sessionToken={sessionToken}
+              emailRequired={emailRequired}
               onComplete={(auth, account) => void handleRegisterComplete(auth, account)}
               onVerifyEmail={(account) => {
                 setVerifyInfo(account);

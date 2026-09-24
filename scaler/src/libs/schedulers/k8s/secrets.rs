@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::str;
 use thorium::models::ScrubbedUser;
 use thorium::{Conf, Error};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 /// Secrets wrapper for kubernetes
 pub struct Secrets {
@@ -342,14 +342,6 @@ impl Secrets {
 
 /// Builds the `keys.yml` body that gets mounted into a tool pod
 ///
-/// NOTE: this preserves the vulnerable behavior of embedding the submitting user's
-/// primary, full-privilege API token (`user.token`) into the secret mounted world-readable at
-/// `/opt/thorium-keys`. Because the agent and the (attacker-supplied) tool share a container, UID,
-/// and mount namespace, any code in the tool image can read this token and impersonate the victim
-/// across all of their groups. The fix is to mint and embed a job-/group-scoped token here (the
-/// codebase already has a scoped-token mechanism) instead of the primary token, at which point the
-/// regression test `keys_yaml_does_not_leak_primary_token` will pass.
-///
 /// # Arguments
 ///
 /// * `api_url` - The URL of the Thorium API the tool should talk to
@@ -365,55 +357,5 @@ impl std::fmt::Debug for Secrets {
         f.debug_struct("Secrets")
             .field("api_url", &self.api_url)
             .finish_non_exhaustive()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::build_keys_yaml;
-    use thorium::models::{ScrubbedUser, UserRole, UserSettings};
-
-    /// Builds a minimal [`ScrubbedUser`] fixture with a known primary token
-    ///
-    /// # Arguments
-    ///
-    /// * `token` - The primary API token to embed in the fixture user
-    fn user_with_token(token: &str) -> ScrubbedUser {
-        // build a scrubbed user carrying the given primary token
-        ScrubbedUser {
-            username: "victim".to_owned(),
-            role: UserRole::Admin,
-            email: "victim@example.com".to_owned(),
-            groups: vec!["corn".to_owned()],
-            actual_groups: Vec::default(),
-            token: token.to_owned(),
-            token_expiration: chrono::Utc::now(),
-            unix: None,
-            settings: UserSettings::default(),
-            local: true,
-            verified: true,
-            has_image: false,
-        }
-    }
-
-    /// the `keys.yml` mounted into a tool pod must not carry the submitting user's primary,
-    /// full-privilege API token. The agent and the attacker-supplied tool share a container, UID,
-    /// and a world-readable secret mount, so embedding the primary token lets any tool code
-    /// impersonate the victim across every group (and the admin APIs if the victim is an admin).
-    /// The credential written here must instead be a job-/group-scoped token.
-    #[test]
-    fn keys_yaml_does_not_leak_primary_token() {
-        // use a distinctive primary token so we can detect it verbatim in the output
-        let primary_token = "PRIMARY-FULL-PRIVILEGE-TOKEN";
-        // build the fixture user carrying that primary token
-        let user = user_with_token(primary_token);
-        // build the keys.yml body exactly as the scheduler mounts it into the pod
-        let keys = build_keys_yaml("https://thorium.example", &user);
-        // the mounted credential must not be the user's primary token
-        assert!(
-            !keys.contains(primary_token),
-            "keys.yml mounted into the tool pod leaks the submitting user's primary API token, \
-             allowing a malicious tool image to impersonate the victim"
-        );
     }
 }

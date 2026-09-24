@@ -27,6 +27,33 @@ thorium:
     logs: 10
   web_ui:
     version: "0.0.0"
+  # Authentication settings (optional). Uncomment and fill in to enable OAuth/OIDC login.
+  # NOTE: OAuth registration requires email verification (auth.email below) to be configured;
+  # without it new-user registration through OAuth is rejected.
+  # auth:
+  #   oauth:
+  #     redirect_base: "https://thorium.example.com"
+  #     providers:
+  #       <PROVIDER_NAME>:
+  #         issuer_url: "https://idp.example.com"
+  #         client_id: "<CLIENT_ID>"
+  #         client_secret: "<CLIENT_SECRET>"
+  #         # Must include the openid and email scopes so the provider returns a verified email
+  #         # claim, otherwise new-user registration is rejected.
+  #         scopes:
+  #           - "openid"
+  #           - "email"
+  #         # Trust this provider's email claim even when it omits the email_verified claim. Only
+  #         # enable this for an IdP you fully control/trust: some IdPs never emit email_verified for
+  #         # genuinely verified addresses. An explicit "email_verified: false" is still rejected.
+  #         # Defaults to false so we fail closed.
+  #         trust_unverified_email: false
+  #         # Regexes restricting which emails may register through this provider. When set, any email
+  #         # placed on an account through this provider (from the IdP or user-supplied) must match one
+  #         # of these. A non-empty list is also what lets a user supply their own email when this
+  #         # provider returns no email claim at all. Leave empty to fail closed for no-email providers.
+  #         approved_emails:
+  #           - ".*@sandia\\.gov$"
 redis:
   host: "<REDIS_IP>"
   port: 6379

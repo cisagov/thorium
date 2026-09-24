@@ -14,8 +14,12 @@ export type OAuthAuthed = {
 /// The new-user arm of the callback response: a short-lived registration session token
 /// for an OIDC identity that is not yet linked to any Thorium account.
 export type OAuthNewUser = {
-  /// The registration session token to pass back to `POST /oauth/{name}/register`
-  NewUser: string;
+  NewUser: {
+    /// The registration session token to pass back to `POST /oauth/{name}/register`
+    token: string;
+    /// Whether the user must supply their own email at registration because the IdP returned none
+    email_required: boolean;
+  };
 };
 
 /// The verify-email arm: the OAuth identity is linked to an existing account whose email is not yet
@@ -28,7 +32,8 @@ export type OAuthVerifyEmail = {
 /// Response body of `GET /api/oauth/{name}/callback`.
 ///
 /// Mirrors the externally-tagged Rust enum `OAuthMaybeAuthed`, which serializes as one of
-/// `{ "Authed": { token, expires } }`, `{ "VerifyEmail": "<email>" }`, or `{ "NewUser": "<session_token>" }`.
+/// `{ "Authed": { token, expires } }`, `{ "VerifyEmail": "<email>" }`, or
+/// `{ "NewUser": { token, email_required } }`.
 export type OAuthMaybeAuthed = OAuthAuthed | OAuthVerifyEmail | OAuthNewUser;
 
 /// Type guard: the callback authenticated an existing linked user.
@@ -48,16 +53,20 @@ export function isNewUser(result: OAuthMaybeAuthed): result is OAuthNewUser {
 
 /// Request body for `POST /api/oauth/{name}/register`.
 ///
-/// NOTE: the backend currently forces `role` to `User` and only honors `skip_verification`
-/// with a secret key, so the registration UI does not surface those fields — they are mirrored
-/// here only to match the API model.
+/// NOTE: the `email` field is only honored when the provider returned no email claim and is
+/// configured to accept a user-supplied email (a non-empty `approved_emails` regex list); it must
+/// match those regexes. In every other case the backend derives the registrant's email from the
+/// verified OIDC claims, never from the client, so a caller cannot self-assert someone else's email.
+/// The backend also forces `role` to `User` and only honors `skip_verification` with a secret key,
+/// so the registration UI does not surface those fields — they are mirrored here only to match the
+/// API model.
 export type OAuthUserCreate = {
-  /// The registration session token returned by the callback (`OAuthNewUser.NewUser`)
+  /// The registration session token returned by the callback (`OAuthNewUser.NewUser.token`)
   session_token: string;
   /// The desired username for the new account
   username: string;
-  /// The email for the new account (must be unique across Thorium)
-  email: string;
+  /// The email the user supplied when the provider returned no email claim of its own
+  email?: string;
   /// The requested role (ignored by the backend, forced to User)
   role?: ThoriumRole;
   /// Initial user settings (defaulted server-side if omitted)
@@ -74,7 +83,7 @@ export type OAuthUsernameCheck = {
   session_token: string;
 };
 
-/// Query params for `GET`/`DELETE /api/oauth/{name}/link` (delivered via an account-link email).
+/// Query params for `POST`/`DELETE /api/oauth/{name}/link` (delivered via an account-link email).
 export type OAuthLinkParams = {
   /// The existing Thorium username the new provider would be linked to
   username: string;

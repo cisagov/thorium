@@ -21,46 +21,6 @@ use thorium::models::{
     OutputRequest, ResultGetParams, SampleRequest, SubmissionUpdate, TagDeleteRequest, TagRequest,
 };
 
-/// Assert that a result is an error carrying the expected HTTP status code
-///
-/// The `fail!` test macro re-evaluates its argument (which moves owned inputs) and requires the
-/// `Ok` type to implement `Debug`; several client calls here return non-`Debug` values
-/// (`DownloadedFile`, `Cursor<_>`) or consume owned blueprints, so this helper checks an
-/// already-evaluated result without either constraint.
-///
-/// # Arguments
-///
-/// * `result` - The already-evaluated result to check
-/// * `code` - The HTTP status code the error must carry
-/// * `context` - A short description of what was expected, used in failure messages
-fn assert_status<T>(
-    result: Result<T, thorium::Error>,
-    code: u16,
-    context: &str,
-) -> Result<(), thorium::Error> {
-    // inspect the result, discarding any success value so `T` need not be `Debug`
-    match result {
-        // a success means the secure behavior is not enforced yet, so fail the test
-        Ok(_) => Err(thorium::Error::new(format!(
-            "{context}: expected status {code} but the request succeeded"
-        ))),
-        // an error must carry exactly the expected status code
-        Err(error) => match error.status() {
-            // the status matched so the secure behavior held
-            Some(status) if status.as_u16() == code => Ok(()),
-            // a different status is still a failure to enforce the expected boundary
-            Some(status) => Err(thorium::Error::new(format!(
-                "{context}: expected status {code} but got {}",
-                status.as_u16()
-            ))),
-            // no status at all means the error was not the authorization rejection we expected
-            None => Err(thorium::Error::new(format!(
-                "{context}: expected status {code} but the error carried no status: {error}"
-            ))),
-        },
-    }
-}
-
 #[tokio::test]
 async fn create() -> Result<(), thorium::Error> {
     // get admin client
@@ -1773,10 +1733,7 @@ async fn list_cursor_is_owner_scoped() -> Result<(), thorium::Error> {
     // upload enough samples that a single page cannot exhaust the cursor
     for _ in 0..3 {
         // create a sample the attacker must never be able to page
-        admin
-            .files
-            .create(generators::gen_sample(&secret))
-            .await?;
+        admin.files.create(generators::gen_sample(&secret)).await?;
     }
     // as the admin, start a list scoped to the secret group with a tiny page so a cursor is issued
     let opts = FileListOpts::default()
@@ -1793,9 +1750,55 @@ async fn list_cursor_is_owner_scoped() -> Result<(), thorium::Error> {
     // the attacker resumes the victim's cursor by its leaked UUID
     let resume = FileListOpts::default().cursor(cursor_id);
     // resuming another user's group-scoped cursor must be rejected as if it does not exist
-    assert_status(
+    test_utilities::assert_status(
         attacker.files.list(&resume).await,
         404,
         "resuming another user's list cursor",
+    )
+}
+
+/// Sample authorization must not fall through to success when the groups×sha256s cartesian
+/// product is >= 100.
+///
+/// `db::files::authorize` has a small-product branch (correct) and a large-product branch. Any
+/// authenticated user can create unlimited groups (`POST /api/groups/` has no role gate) to inflate
+/// their group count past 100, forcing every authorize into the large branch. If that branch grants
+/// access when the sample is in none of the caller's groups, the attacker can download any sample
+/// in the cluster knowing only its sha256. The secure behavior is that a cross-tenant download
+/// still fails with `401` even with >= 100 groups.
+#[tokio::test]
+async fn sample_authorize_no_fallthrough_with_many_groups() -> Result<(), thorium::Error> {
+    // get an admin client that owns the victim data
+    let admin = test_utilities::admin_client().await?;
+    // create a victim group owned by the admin
+    let victim_group = generators::groups(1, &admin).await?.remove(0).name;
+    // upload a victim sample the attacker must never be able to reach
+    let victim = admin
+        .files
+        .create(
+            SampleRequest::new_buffer(Buffer::new(generators::gen_string(64)), vec![victim_group])
+                .description("victim sample")
+                .origin(OriginRequest::downloaded("https://victim.example", None)),
+        )
+        .await?;
+    // get a low privilege user client that is not in the victim group
+    let attacker = generators::client(&admin).await?;
+    // inflate the attacker's group count past 100 to force the large-product authorize branch
+    for _ in 0..100 {
+        // each group has no role gate and auto-adds the creator as owner
+        attacker.groups.create(&generators::gen_group()).await?;
+    }
+    // build download options targeting a throwaway path
+    let mut opts = thorium::models::FileDownloadOpts::default();
+    // pick a unique download destination so parallel tests do not collide
+    let dest = std::env::temp_dir().join(format!("xtenant-{}", generators::gen_string(12)));
+    // downloading a sample from a group the attacker is not in must still fail
+    test_utilities::assert_status(
+        attacker
+            .files
+            .download(&victim.sha256, &dest, &mut opts)
+            .await,
+        401,
+        "cross-tenant download with >= 100 groups",
     )
 }

@@ -18,7 +18,8 @@ api = [
   "scylla", "ldap3", "itertools", "sha-1", "sha2", "md-5", "data-encoding", "anyhow", "elasticsearch", "zip", "async-trait",
   "axum", "http", "tower", "axum-macros", "tower-http", "tokio-stream", "generic-array", "futures-util", "tokio-util", "serde_qs",
   "aws-sdk-s3", "aws-types", "aws-smithy-http", "aws-credential-types", "scylla-utils", "http-body", "axum-extra", "once_cell", "utoipa",
-  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "scc", "mime", "rmcp", "openidconnect", "humantime"
+  "utoipa-swagger-ui", "lettre", "headers", "percent-encoding", "dashmap", "scc", "mime", "rmcp", "openidconnect", "humantime",
+  "constant_time_eq"
   ]
 
 # include scylla utility functions
@@ -138,6 +139,7 @@ itertools = { version = "0.14", optional = true }
 sha-1 = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
 md-5 = { version = "0.10", optional = true }
+constant_time_eq = { version = "0.3", optional = true }
 data-encoding = { version = "2.9", optional = true }
 aws-types = {version = "1.3", optional = true }
 aws-sdk-s3 = { version = "1.90", features = ["rt-tokio", "behavior-version-latest"], optional = true }

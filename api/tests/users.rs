@@ -591,3 +591,90 @@ async fn scoped_token_ephemeral() -> Result<(), Error> {
     is!(listed.len(), 0);
     Ok(())
 }
+
+/// Unauthenticated self-registration must NOT grant the all-groups Analyst role without
+/// the deployment secret key.
+///
+/// `POST /api/users/` is unauthenticated by design. An external attacker who can self-assign the
+/// `Analyst` role gains read access to every group in the cluster (`db::users::get` expands an
+/// Analyst's group list to all groups). The secure behavior is to reject a keyless `Analyst`
+/// registration, so this asserts the request fails with `401`.
+#[tokio::test]
+async fn self_registration_analyst_requires_secret_key() -> Result<(), Error> {
+    // get an admin client just to resolve the API host to talk to
+    let client = test_utilities::admin_client().await?;
+    // build a self-registration blueprint that self-assigns the all-groups Analyst role
+    let blueprint = thorium::models::UserCreate::new(
+        generators::gen_string(24),
+        generators::gen_string(64),
+        "attacker@evil.example",
+    )
+    .role(UserRole::Analyst);
+    // use default client settings for this unauthenticated registration
+    let settings = ClientSettings::default();
+    // registering an Analyst without the secret key must be rejected
+    test_utilities::assert_status(
+        Users::create(&client.host, blueprint, None::<&str>, &settings).await,
+        401,
+        "keyless Analyst self-registration",
+    )
+}
+
+/// Unauthenticated self-registration must NOT grant the developer role without
+/// the deployment secret key.
+///
+/// `POST /api/users/` is unauthenticated by design. An external attacker who can self-assign the
+/// `Developr` role gains the ability to create tools.
+#[tokio::test]
+async fn self_registration_developer_requires_secret_key() -> Result<(), Error> {
+    // get an admin client just to resolve the API host to talk to
+    let client = test_utilities::admin_client().await?;
+    // build a self-registration blueprint that self-assigns the developr role
+    let blueprint = thorium::models::UserCreate::new(
+        generators::gen_string(24),
+        generators::gen_string(64),
+        "attacker@evil.example",
+    )
+    .role(UserRole::Developer {
+        k8s: true,
+        bare_metal: true,
+        windows: true,
+        external: true,
+        kvm: true,
+    });
+    // use default client settings for this unauthenticated registration
+    let settings = ClientSettings::default();
+    // registering a developer without the secret key must be rejected
+    test_utilities::assert_status(
+        Users::create(&client.host, blueprint, None::<&str>, &settings).await,
+        401,
+        "keyless Developr self-registration",
+    )
+}
+
+/// Client-controlled `skip_verification` must NOT be honored without the deployment secret
+/// key.
+///
+/// `skip_verification` is documented as "requires secret key" but historically bypassed the email
+/// verification gate for any unauthenticated registrant. The secure behavior is to reject a
+/// keyless `skip_verification=true` registration, so this asserts the request fails with `401`.
+#[tokio::test]
+async fn skip_verification_requires_secret_key() -> Result<(), Error> {
+    // get an admin client just to resolve the API host to talk to
+    let client = test_utilities::admin_client().await?;
+    // build a self-registration blueprint that tries to skip email verification without a key
+    let blueprint = thorium::models::UserCreate::new(
+        generators::gen_string(24),
+        generators::gen_string(64),
+        "attacker@evil.example",
+    )
+    .skip_verification();
+    // use default client settings for this unauthenticated registration
+    let settings = ClientSettings::default();
+    // skipping verification without the secret key must be rejected
+    test_utilities::assert_status(
+        Users::create(&client.host, blueprint, None::<&str>, &settings).await,
+        401,
+        "keyless skip_verification self-registration",
+    )
+}

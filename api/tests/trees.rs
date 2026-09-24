@@ -13,46 +13,6 @@ use thorium::models::{
     TreeRelationships, TreeSupport, WindowsProcessEntity, WindowsProcessTreeEntity,
 };
 
-/// Assert that a result is an error carrying the expected HTTP status code
-///
-/// The `fail!` test macro re-evaluates its argument (which moves owned inputs) and requires the
-/// `Ok` type to implement `Debug`; several client calls here return non-`Debug` values
-/// (`DownloadedFile`, `Cursor<_>`) or consume owned blueprints, so this helper checks an
-/// already-evaluated result without either constraint.
-///
-/// # Arguments
-///
-/// * `result` - The already-evaluated result to check
-/// * `code` - The HTTP status code the error must carry
-/// * `context` - A short description of what was expected, used in failure messages
-fn assert_status<T>(
-    result: Result<T, thorium::Error>,
-    code: u16,
-    context: &str,
-) -> Result<(), thorium::Error> {
-    // inspect the result, discarding any success value so `T` need not be `Debug`
-    match result {
-        // a success means the secure behavior is not enforced yet, so fail the test
-        Ok(_) => Err(thorium::Error::new(format!(
-            "{context}: expected status {code} but the request succeeded"
-        ))),
-        // an error must carry exactly the expected status code
-        Err(error) => match error.status() {
-            // the status matched so the secure behavior held
-            Some(status) if status.as_u16() == code => Ok(()),
-            // a different status is still a failure to enforce the expected boundary
-            Some(status) => Err(thorium::Error::new(format!(
-                "{context}: expected status {code} but got {}",
-                status.as_u16()
-            ))),
-            // no status at all means the error was not the authorization rejection we expected
-            None => Err(thorium::Error::new(format!(
-                "{context}: expected status {code} but the error carried no status: {error}"
-            ))),
-        },
-    }
-}
-
 /// Generate a buffer of random bytes so every test run uploads unique samples
 fn random_buffer() -> Vec<u8> {
     // build a buffer to fill with random data
@@ -87,7 +47,10 @@ fn gen_child(group: &str, parent: &str) -> SampleRequest {
     // build a sample request with random data that was unpacked from our parent
     SampleRequest::new_buffer(Buffer::new(random_buffer()), vec![group])
         .description("tree test child")
-        .origin(OriginRequest::unpacked(parent, Some("tree-tests".to_owned())))
+        .origin(OriginRequest::unpacked(
+            parent,
+            Some("tree-tests".to_owned()),
+        ))
 }
 
 /// Upload a number of children unpacked from a single parent sample
@@ -554,7 +517,11 @@ async fn process_tree() -> Result<(), thorium::Error> {
     // build a realistic windows process tree
     let mut builder =
         WindowsProcessTreeEntity::builder("tree-tests-process-tree").tool("volatility");
-    builder.add_mut(WindowsProcessEntity::new(4).name("System").image_path("System"));
+    builder.add_mut(
+        WindowsProcessEntity::new(4)
+            .name("System")
+            .image_path("System"),
+    );
     builder.add_mut(
         WindowsProcessEntity::new(368)
             .parent_pid(4)
@@ -1078,9 +1045,12 @@ async fn grow_entities() -> Result<(), thorium::Error> {
     // upload a memory dump sample to hang our process tree on
     let dump = client.files.create(gen_root(&group)).await?.sha256;
     // build a small windows process tree to grow into
-    let mut builder =
-        WindowsProcessTreeEntity::builder("tree-tests-grow-tree").tool("volatility");
-    builder.add_mut(WindowsProcessEntity::new(4).name("System").image_path("System"));
+    let mut builder = WindowsProcessTreeEntity::builder("tree-tests-grow-tree").tool("volatility");
+    builder.add_mut(
+        WindowsProcessEntity::new(4)
+            .name("System")
+            .image_path("System"),
+    );
     builder.add_mut(
         WindowsProcessEntity::new(368)
             .parent_pid(4)
@@ -1176,7 +1146,7 @@ async fn tree_cursor_is_owner_scoped() -> Result<(), thorium::Error> {
     // get a low privilege attacker client that is not in the secret group
     let attacker = generators::client(&admin).await?;
     // fetching another user's tree by UUID must be rejected as if it does not exist
-    assert_status(
+    test_utilities::assert_status(
         attacker.trees.get(tree.id).await,
         404,
         "fetching another user's tree",

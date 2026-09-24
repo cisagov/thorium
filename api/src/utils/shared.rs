@@ -150,6 +150,13 @@ pub struct OAuthClient {
     pub name: String,
     /// The different scopes for this provider
     pub scopes: Vec<String>,
+    /// Whether to trust this provider's email claim when it omits the `email_verified` claim
+    pub trust_unverified_email: bool,
+    /// The compiled regexes restricting which emails may register through this provider
+    ///
+    /// `None` means this provider has no email restrictions and does not accept a user-supplied
+    /// email; `Some` means both IdP- and user-supplied emails must match one of these regexes.
+    pub approved_emails: Option<RegexSet>,
     /// The http client to use to drive this client
     pub http_client: reqwest::Client,
     /// The client to this provider
@@ -218,14 +225,50 @@ impl OAuthClient {
         let client = CoreClient::from_provider_metadata(provider_metadata, id, secret)
             // set the url to redirect back to after authentication
             .set_redirect_uri(RedirectUrl::new(redirect_url).unwrap());
+        // compile our per-provider approved email regexes if any were configured
+        let approved_emails = if conf.approved_emails.is_empty() {
+            // no restrictions configured so this provider does not accept a user-supplied email
+            None
+        } else {
+            // compile the provider's approved email regex set, failing loudly on a bad config
+            Some(RegexSet::new(&conf.approved_emails).expect("Invalid OAuth approved_emails regex"))
+        };
         // build our oauth client struct
         let wrapper = OAuthClient {
             name: name.to_string(),
             scopes: conf.scopes.clone(),
+            trust_unverified_email: conf.trust_unverified_email,
+            approved_emails,
             http_client,
             client,
         };
         Ok(wrapper)
+    }
+
+    /// Check whether an email is permitted to register through this provider
+    ///
+    /// Returns `true` when this provider has no configured email restrictions, otherwise `true` only
+    /// when the email matches one of the provider's approved email regexes.
+    ///
+    /// # Arguments
+    ///
+    /// * `email` - The email to check against this provider's approved email regexes
+    pub fn email_allowed(&self, email: &str) -> bool {
+        // an email is allowed if there are no restrictions or it matches one of them
+        match &self.approved_emails {
+            // this provider restricts emails so the email must match one of the regexes
+            Some(approved) => approved.is_match(email),
+            // this provider has no email restrictions so any email is allowed
+            None => true,
+        }
+    }
+
+    /// Check whether this provider accepts a user-supplied email when the IdP returns none
+    ///
+    /// Only providers with a configured approved email regex set opt into a user-supplied email.
+    pub fn accepts_user_email(&self) -> bool {
+        // a user-supplied email is only accepted when this provider restricts emails
+        self.approved_emails.is_some()
     }
 
     /// Generate an auth url for this provider

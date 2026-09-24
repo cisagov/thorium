@@ -25,7 +25,6 @@ test.describe('OAuth live end-to-end (mock-oauth2-server)', () => {
     const stamp = Date.now();
     const sub = `e2e-sub-${stamp}`;
     const username = `e2euser${stamp}`;
-    const email = `e2e${stamp}@example.com`;
 
     const signInAtIdp = async (subject: string) => {
       // The provider button triggers a full-page nav to the API /auth, which 303s to the mock IdP.
@@ -45,7 +44,7 @@ test.describe('OAuth live end-to-end (mock-oauth2-server)', () => {
 
     await page.waitForURL(/\/oauth\/mock\/callback/, { timeout: 20000 });
     await page.getByPlaceholder('Choose a username').fill(username);
-    await page.getByPlaceholder('Enter your email').fill(email);
+    // no email field: the account email is derived from the mock IdP's verified email claim
     await expect(page.getByText('Username is available')).toBeVisible({ timeout: 8000 });
     await page.getByRole('button', { name: 'Create account' }).click();
 

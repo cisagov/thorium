@@ -460,16 +460,6 @@ impl CmdBuilder {
         self
     }
 
-    // modify our args for running in windows
-    pub fn windows(self, _is_windows: bool) -> Self {
-        // Previously this prepended `["cmd.exe", "/C", ...]` on Windows. Because the argv is
-        // later re-joined into a single command line for `cmd.exe`, a whitespace-free user positional
-        // like `&powershell` was re-parsed by the shell as a second command (metacharacter
-        // injection). We now spawn the tool binary directly — exactly as the Linux path does — so the
-        // OS passes each positional as a discrete argument and no shell re-parses them.
-        self
-    }
-
     /// Check if the source command is empty or only invokes a shell
     #[instrument(name = "Cmd::not_empty_or_just_shell", skip_all)]
     fn not_empty_or_just_shell(&self) -> Result<(), Error> {
@@ -2130,15 +2120,14 @@ mod tests {
         // parsed as a second command if it ever reached `cmd.exe /C`
         let mut job = generate_job();
         job.args = job.args.positionals(vec!["&powershell", "-nop", "-enc", "ZQBjAGgAbwA="]);
-        // build the command the way the Windows executor does: overlay args, then apply
-        // the windows transform, then finalize
+        // build the command the way the Windows executor does: overlay args, then finalize.
+        // The Windows path spawns the tool binary directly, so there is no shell-wrapping step
         let cmd = CmdBuilder::new(
             &image,
             &job,
             slice_string!["tool.exe"],
             slice_string!["scan"],
         )
-        .windows(true)
         .build(&image, None, None)
         .unwrap();
         // the tool must be spawned directly, not through the Windows shell interpreter

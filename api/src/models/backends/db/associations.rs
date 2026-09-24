@@ -15,6 +15,27 @@ use crate::models::{
 use crate::serialize;
 use crate::utils::{ApiError, Shared, helpers};
 
+/// Insert both directional rows for a single association
+///
+/// This writes the `source -> target` row and its inverted `target -> source`
+/// counterpart so the association can be listed from either side.
+///
+/// # Arguments
+///
+/// * `user` - The user creating this association
+/// * `group` - The group this association row belongs to
+/// * `year` - The year this association is being created in
+/// * `bucket` - The partition bucket for this association's timestamp
+/// * `now` - The timestamp for when this association is being created
+/// * `kind` - The kind of association being created
+/// * `source_str` - The serialized source of this association
+/// * `target_str` - The serialized target of this association
+/// * `extra_source` - Any extra info tied to the source, if set
+/// * `extra_target` - Any extra info tied to the target, if set
+/// * `submissions_source` - The submission id tied to the source, if set
+/// * `submissions_target` - The submission id tied to the target, if set
+/// * `direction` - The directionality of the `source -> target` row
+/// * `shared` - Shared Thorium objects
 #[instrument(name = "db::associations::create_helper", skip_all, err(Debug))]
 #[expect(clippy::too_many_arguments)]
 async fn create_helper(
@@ -84,6 +105,21 @@ async fn create_helper(
     Ok(())
 }
 
+/// Create associations from a single source to many targets across groups
+///
+/// This writes both directions for every target/group pair and updates the
+/// census cache to reflect the new associations.
+///
+/// # Arguments
+///
+/// * `user` - The user creating these associations
+/// * `size_hint` - A hint for how many associations are being created
+/// * `kind` - The kind of associations being created
+/// * `source` - The source these associations originate from
+/// * `targets` - The targets to associate with the source and their groups
+/// * `submissions` - The submission ids tied to each side of the association, if any
+/// * `direction` - The directionality of the `source -> target` rows
+/// * `shared` - Shared Thorium objects
 #[instrument(
     name = "db::associations::create",
     skip(user, targets, shared),
@@ -179,6 +215,15 @@ pub async fn create(
 }
 
 /// Help delete both the regular and inverted rows for this association
+///
+/// # Arguments
+///
+/// * `group_chunk` - The chunk of groups to delete this association from
+/// * `year` - The year this association was created in
+/// * `bucket` - The partition bucket for this association's timestamp
+/// * `source_serialized` - The serialized source of this association
+/// * `association` - The association to delete
+/// * `shared` - Shared Thorium objects
 async fn delete_helper(
     group_chunk: &[String],
     year: i32,
@@ -227,6 +272,12 @@ async fn delete_helper(
 }
 
 /// Delete a list of associations from multiple groups
+///
+/// # Arguments
+///
+/// * `source` - The association target column these associations originate from
+/// * `associations` - The associations to delete
+/// * `shared` - Shared Thorium objects
 pub async fn delete_many(
     source: &AssociationTargetColumn,
     associations: &Vec<ListableAssociation>,
@@ -267,7 +318,7 @@ pub async fn delete_many(
 /// # Arguments
 ///
 /// * `user` - The user that is listing associations
-/// * `params` - The query params to use when listing files
+/// * `opts` - The query params to use when listing files
 /// * `source` - The association target column to list associations for
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::associations::list", skip(user, shared), err(Debug))]

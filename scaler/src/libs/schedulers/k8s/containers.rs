@@ -233,9 +233,6 @@ impl Containers {
     /// * `raw` - The raw container json object to inject the security context into
     /// * `security_context` - The k8s security context to inject
     fn inject_security_context(raw: &mut serde_json::Value, security_context: &SecurityContext) {
-        // use the camelCase `securityContext` key the k8s Container struct expects, so the
-        // context (including `allowPrivilegeEscalation: false`) survives deserialization instead of
-        // being silently dropped and leaving the container able to escalate privileges
         raw["securityContext"] = json!(security_context);
     }
 

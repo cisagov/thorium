@@ -4,12 +4,12 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use thorium::models::{
-    HostPathWhitelistUpdate, ImageBanKind, PipelineBanKind, PipelineRequest, PipelineUpdate,
-    SystemSettings, SystemSettingsResetParams, SystemSettingsUpdate, SystemSettingsUpdateParams,
-    Volume, VolumeTypes,
+    HostPathWhitelistUpdate, ImageBanKind, ImageScaler, PipelineBanKind, PipelineRequest,
+    PipelineUpdate, Pools, Resources, SystemSettings, SystemSettingsResetParams,
+    SystemSettingsUpdate, SystemSettingsUpdateParams, Volume, VolumeTypes, WorkerRegistrationList,
 };
 use thorium::test_utilities::{self, generators};
-use thorium::{contains, fail, is, is_not, unwrap_variant, vec_in_vec, Error};
+use thorium::{Error, contains, fail, is, is_not, unwrap_variant, vec_in_vec};
 
 #[serial_test::serial]
 #[tokio::test]
@@ -444,4 +444,42 @@ async fn host_path_consistency_scan() -> Result<(), Error> {
     contains!(pipeline_banned_images, &&new_image.name);
     contains!(pipeline_banned_images, &&image.name);
     Ok(())
+}
+
+/// Worker registration must require admin privileges.
+///
+/// `POST /api/system/worker/{scaler}` historically discarded the caller entirely, letting any
+/// authenticated low-privilege user write attacker-chosen rows into the scaler's worker registry
+/// (a scheduling-plane DoS, and on reactor deployments a path to admin-token theft). Every sibling
+/// `/api/system/*` method is admin-gated. The secure behavior is that a non-admin registration is
+/// rejected with `401`.
+#[tokio::test]
+async fn worker_registration_requires_admin() -> Result<(), Error> {
+    // get an admin client just to resolve the API host and create the low-priv user
+    let admin = test_utilities::admin_client().await?;
+    // get a low privilege (non-admin) user client
+    let attacker = generators::client(&admin).await?;
+    // resolve the attacker's own username to set as the phantom worker's owner
+    let username = attacker.users.info().await?.username;
+    // build a phantom worker registration naming plausible cluster/node values
+    let workers = WorkerRegistrationList::default().add(
+        "cluster0",
+        "node0",
+        "phantom-worker",
+        username,
+        "attacker-group",
+        "attacker-pipeline",
+        "attacker-stage",
+        Resources::default(),
+        Pools::Deadline,
+    );
+    // a non-admin registering workers must be rejected
+    test_utilities::assert_status(
+        attacker
+            .system
+            .register_workers(ImageScaler::K8s, &workers)
+            .await,
+        401,
+        "non-admin worker registration",
+    )
 }

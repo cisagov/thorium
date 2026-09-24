@@ -692,7 +692,7 @@ impl UserSettingsUpdate {
 ///
 /// The secret key gates admin/analyst self-registration and other privileged bootstrap paths, so
 /// the comparison must not leak the key one byte at a time through its timing. This helper
-/// centralizes the comparison so the fix (a constant-time compare that always inspects every byte
+/// centralizes the comparison so the constant-time compare (which always inspects every byte
 /// regardless of where the first mismatch is) lives in one place.
 ///
 /// # Arguments
@@ -700,10 +700,8 @@ impl UserSettingsUpdate {
 /// * `configured` - The secret key from the Thorium config
 /// * `presented` - The secret key presented in the request
 fn secret_key_matches(configured: &str, presented: &str) -> bool {
-    // NOTE: this uses a short-circuiting `==`, preserving the current (timing-leaky)
-    // behavior. The regression test `secret_key_matches_is_correct` only anchors correctness; the
-    // fix is to swap this for a constant-time comparison (e.g. `subtle`/`ring::constant_time`).
-    configured == presented
+    // compare in constant time so we don't leak the key one byte at a time through timing
+    constant_time_eq::constant_time_eq(configured.as_bytes(), presented.as_bytes())
 }
 
 impl User {
@@ -734,12 +732,8 @@ impl User {
         if User::exists(&req.username, shared).await? {
             return conflict!(format!("User {} already exists", req.username));
         }
-        // only allow users with the secret key to create admins with this route
-        if req.role == UserRole::Admin
-            || req.role == UserRole::Analyst
-            || req.local
-            || req.skip_verification
-        {
+        // only allow users with the secret key to create admins/analysts/developers/disabled accounts
+        if req.role != UserRole::User || req.local || req.skip_verification {
             // bounce users without the key
             if let Some(key) = key {
                 // return unauthorized for users with invalid keys
@@ -1929,9 +1923,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        Key, build_ldap_user_filter, reject_empty_ldap_password, secret_key_matches,
-    };
+    use super::{Key, build_ldap_user_filter, reject_empty_ldap_password, secret_key_matches};
     use headers::{Header, HeaderValue};
 
     #[test]
@@ -1941,7 +1933,10 @@ mod tests {
         assert!(secret_key_matches("super-secret-key", "super-secret-key"));
         assert!(!secret_key_matches("super-secret-key", "wrong-key"));
         assert!(!secret_key_matches("super-secret-key", "super-secret-ke"));
-        assert!(!secret_key_matches("super-secret-key", "super-secret-key-extra"));
+        assert!(!secret_key_matches(
+            "super-secret-key",
+            "super-secret-key-extra"
+        ));
         assert!(!secret_key_matches("super-secret-key", ""));
     }
 

@@ -1,7 +1,10 @@
 //! Tests the Groups routes in Thorium
 
 use http::StatusCode;
-use thorium::models::{GroupUpdate, GroupUsersRequest, GroupUsersUpdate, NetworkPolicyListOpts};
+use thorium::models::{
+    GroupAllowedUpdate, GroupRequest, GroupUpdate, GroupUsersRequest, GroupUsersUpdate,
+    NetworkPolicyListOpts,
+};
 use thorium::test_utilities::{self, generators};
 use thorium::{fail, is, is_in, is_not_in, vec_in_vec};
 
@@ -283,4 +286,38 @@ async fn update() -> Result<(), thorium::Error> {
     let updated = client.groups.get(&group).await?;
     is!(updated, update);
     Ok(())
+}
+
+/// A read-only group member (monitor) must NOT be able to change the group's `allowed`
+/// settings or description.
+///
+/// `Group::update` only invokes the owner/manager (`modifiable`) check when the update touches role
+/// membership; `removes_only_user` ignores `description`, `clear_description`, and the entire
+/// `allowed` update. So an update with zero role changes skips the privilege check and any member —
+/// even a monitor, the explicitly read-only role — can flip group-wide `allowed` flags (a DoS) or
+/// deface the description. The secure behavior is that a monitor's settings-only update fails with
+/// `401`.
+#[tokio::test]
+async fn monitor_cannot_change_group_settings() -> Result<(), thorium::Error> {
+    // get an admin client that owns the shared group
+    let admin = test_utilities::admin_client().await?;
+    // get a low privilege user client that will only be a monitor in the group
+    let monitor = generators::client(&admin).await?;
+    // resolve the monitor's username so we can grant them the read-only role
+    let monitor_name = monitor.users.info().await?.username;
+    // build a group where the monitor holds only the read-only monitor role
+    let group_req = GroupRequest::new(generators::gen_string(50))
+        .monitors(GroupUsersRequest::default().direct(&monitor_name));
+    // create the shared group as the admin
+    admin.groups.create(&group_req).await?;
+    // as the monitor, attempt a settings-only update that touches no role membership
+    let mut update = GroupUpdate::default().description("pwned");
+    // disabling files is a group-wide setting that only owners/managers should control
+    update.allowed = GroupAllowedUpdate::default().disable_files();
+    // a read-only monitor changing group settings must be rejected
+    test_utilities::assert_status(
+        monitor.groups.update(&group_req.name, &update).await,
+        401,
+        "monitor changing group settings",
+    )
 }

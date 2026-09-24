@@ -6,7 +6,7 @@ import { isAuthed, isNewUser, isVerifyEmail, OAuthMaybeAuthed } from './oauth';
 describe('OAuthMaybeAuthed type guards', () => {
   const authed: OAuthMaybeAuthed = { Authed: { token: 'tok', expires: '2099-01-01T00:00:00Z' } };
   const verifyEmail: OAuthMaybeAuthed = { VerifyEmail: 'user@example.com' };
-  const newUser: OAuthMaybeAuthed = { NewUser: 'session-token' };
+  const newUser: OAuthMaybeAuthed = { NewUser: { token: 'session-token', email_required: false } };
 
   it('isAuthed is true only for the Authed arm', () => {
     expect(isAuthed(authed)).toBe(true);
@@ -34,7 +34,8 @@ describe('OAuthMaybeAuthed type guards', () => {
       expect(verifyEmail.VerifyEmail).toBe('user@example.com');
     }
     if (isNewUser(newUser)) {
-      expect(newUser.NewUser).toBe('session-token');
+      expect(newUser.NewUser.token).toBe('session-token');
+      expect(newUser.NewUser.email_required).toBe(false);
     }
   });
 });

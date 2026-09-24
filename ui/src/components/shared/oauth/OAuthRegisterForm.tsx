@@ -18,11 +18,14 @@ interface OAuthRegisterFormProps {
   provider: string;
   /// The registration session token from the callback `NewUser` response (kept in memory only)
   sessionToken: string;
+  /// Whether the user must supply their own email because the provider returned no email claim
+  emailRequired: boolean;
   /// Called once a new, auto-verified account is created, with the issued auth response and the
-  /// account's username/email (so a follow-up verify-email step can resend to the right account).
-  onComplete: (auth: UserAuthResponse, account: { username: string; email: string }) => void;
-  /// Called when the account was created but its email must be verified before sign-in.
-  onVerifyEmail: (account: { username: string; email: string }) => void;
+  /// account's username (the email is derived server-side from the verified OIDC claims).
+  onComplete: (auth: UserAuthResponse, account: { username: string }) => void;
+  /// Called when the account was created but its email must be verified before sign-in. The email
+  /// (when known) comes from the server's verify-email response, not from user input.
+  onVerifyEmail: (account: { username: string; email?: string }) => void;
   /// Called with a formatted message if registration fails (e.g. email belongs to a different user)
   onError: (msg: string) => void;
 }
@@ -67,8 +70,16 @@ const USERNAME_CHECK_DEBOUNCE_MS = 400;
  * provider to their account via the email-link flow. Role/verification fields are not exposed (the
  * backend forces role=User).
  */
-const OAuthRegisterForm: React.FC<OAuthRegisterFormProps> = ({ provider, sessionToken, onComplete, onVerifyEmail, onError }) => {
+const OAuthRegisterForm: React.FC<OAuthRegisterFormProps> = ({
+  provider,
+  sessionToken,
+  emailRequired,
+  onComplete,
+  onVerifyEmail,
+  onError,
+}) => {
   const [username, setUsername] = useState('');
+  // the user-supplied email, only collected when the provider returned no email claim
   const [email, setEmail] = useState('');
   const [availability, setAvailability] = useState<Availability>(Availability.Idle);
   const [submitting, setSubmitting] = useState(false);
@@ -99,18 +110,27 @@ const OAuthRegisterForm: React.FC<OAuthRegisterFormProps> = ({ provider, session
     // onError identity is not stable across renders; intentionally excluded from deps.
   }, [username, provider, sessionToken]);
 
-  const canSubmit = username.trim() !== '' && email.trim() !== '' && availability !== Availability.Checking && !submitting;
+  // when the provider returned no email claim the user must supply one before we can submit
+  const emailSatisfied = !emailRequired || email.trim() !== '';
+  const canSubmit = username.trim() !== '' && emailSatisfied && availability !== Availability.Checking && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
-    const result = await registerOAuthUser(provider, { session_token: sessionToken, username: username.trim(), email: email.trim() });
+    // only send the user-supplied email when the provider requires one; otherwise the backend
+    // derives it from the verified OIDC claims
+    const result = await registerOAuthUser(provider, {
+      session_token: sessionToken,
+      username: username.trim(),
+      ...(emailRequired ? { email: email.trim() } : {}),
+    });
     switch (result.status) {
       case OAuthRegisterStatus.Created:
-        onComplete(result.auth, { username: username.trim(), email: email.trim() });
+        onComplete(result.auth, { username: username.trim() });
         break;
       case OAuthRegisterStatus.VerifyEmail:
-        onVerifyEmail({ username: username.trim(), email: email.trim() });
+        // the email (if any) comes from the server's verify-email response, not user input
+        onVerifyEmail({ username: username.trim(), email: result.email });
         break;
       case OAuthRegisterStatus.LinkEmailSent:
         setLinkSent(true);
@@ -150,8 +170,8 @@ const OAuthRegisterForm: React.FC<OAuthRegisterFormProps> = ({ provider, session
       <Subtitle>Link {label} to a Thorium account</Subtitle>
       {isLinkMode && (
         <AlertBanner severity={Severity.Warning}>
-          An account named &quot;{username.trim()}&quot; already exists. If it&apos;s yours, enter the email on that account and we&apos;ll
-          send a link to connect your {label} sign-in.
+          An account named &quot;{username.trim()}&quot; already exists. If it&apos;s yours and your {label} email matches
+          it, we&apos;ll send a link to that account&apos;s email to connect your {label} sign-in.
         </AlertBanner>
       )}
       <Field>
@@ -166,17 +186,23 @@ const OAuthRegisterForm: React.FC<OAuthRegisterFormProps> = ({ provider, session
         />
         {usernameHint()}
       </Field>
-      <Field>
-        <label htmlFor="oauth-reg-email">Email</label>
-        <TextInput
-          id="oauth-reg-email"
-          type="email"
-          placeholder="Enter your email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-        />
-      </Field>
+      {emailRequired && (
+        <Field>
+          <label htmlFor="oauth-reg-email">Email</label>
+          <TextInput
+            id="oauth-reg-email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+          />
+          <Hint $tone="muted">
+            Your {label} sign-in didn&apos;t provide an email, so enter one here. You&apos;ll need to
+            verify it before you can sign in.
+          </Hint>
+        </Field>
+      )}
       <Actions>
         {submitting ? (
           <LoadingSpinner loading={submitting} />
