@@ -34,8 +34,9 @@ mod version;
 mod volumes;
 
 pub use associations::{
-    AssociatedSubmissions, Association, AssociationKind, AssociationListOpts, AssociationListParams,
-    AssociationRequest, AssociationSupport, AssociationTarget,
+    AssociatedSubmissions, Association, AssociationDeleteRequest, AssociationKind,
+    AssociationListOpts, AssociationListParams, AssociationRequest, AssociationSupport,
+    AssociationTarget,
 };
 pub use deadlines::Deadline;
 pub use elastic::{ElasticDoc, ElasticIndex, ElasticSearchOpts, ElasticSearchParams};

@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use self::{
     ai::Ai,
+    associations::Associations,
     cart::Cart,
     clusters::{Clusters, Login},
     config::Config,
@@ -27,6 +28,7 @@ use self::{
 use crate::{args::toolbox::Toolbox, utils::repos::validate_repo_url};
 
 pub mod ai;
+pub mod associations;
 pub mod cart;
 pub mod clusters;
 pub mod config;
@@ -146,6 +148,15 @@ pub enum SubCommands {
     /// Perform tree related tasks
     #[clap(version, author, subcommand, alias = "tree")]
     Trees(Trees),
+    /// Create, delete, and list associations between files, repos, and entities
+    #[clap(
+        version,
+        author,
+        subcommand,
+        alias = "association",
+        visible_alias = "assoc"
+    )]
+    Associations(Associations),
     /// Perform network policy related tasks
     #[clap(version, author, subcommand, visible_alias = "netpols")]
     NetworkPolicies(NetworkPolicies),

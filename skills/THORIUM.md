@@ -159,14 +159,14 @@ See Swagger UI for complete endpoint details including request/response schemas.
 | Pipelines | `/api/pipelines/` | Create, list, update, delete tool chains; manage notifications and bans |
 | Reactions | `/api/reactions/` | Create, list, get, update, delete reactions; view/set logs; handle lifecycle (proceed/fail); manage cache and sub-reactions |
 | Results | `/api/files/results/:sha256` | Get and upload tool results and result files for a sample |
-| Repos | `/api/repos/` | Ingest, list, download, tag repos; list commitishes; view/upload results |
+| Repos | `/api/repos/` | Ingest, list, download, tag repos; list commitishes; list associations; view/upload results |
 | Search | `/api/search/` | Full-text search across sample results and tags (defaults to samples; repo indexes also available) |
 | Streams | `/api/streams/` | Query stream depth (object counts over time ranges) and map data |
 | Users | `/api/users/` | Create, list, update, delete users; authenticate; email verification; LDAP sync |
 | System | `/api/system/` | System init, settings, stats, backup/restore, cache reset, node/worker management |
 | Trees | `/api/trees/` | Build and retrieve relationship trees from samples, repos, or entities |
-| Entities | `/api/entities/` | Create, list, update, delete entities; manage entity tags and images |
-| Associations | `/api/associations/` | Create associations between entities and other objects |
+| Entities | `/api/entities/` | Create, list, update, delete entities; manage entity tags and images; list associations |
+| Associations | `/api/associations/` | Create and delete associations between files, repos, and entities |
 | Binaries | `/api/binaries/` | Download thorctl and other Thorium binaries |
 | Events | `/api/events/` | Internal event queue operations (pop, clear, reset) |
 | Jobs | `/api/jobs/` | Internal job lifecycle (claim, proceed, error, sleep, checkpoint, bulk reset) |
@@ -236,6 +236,8 @@ See `{THORIUM_URL}/api/docs/user/getting_started/thorctl.html` for per-OS instal
 | `thorctl reactions` | Create, get, describe, delete reactions; retrieve reaction logs |
 | `thorctl results` | Download results for files/repos and upload new results |
 | `thorctl tags` | Get, add, and delete tags on files and repos |
+| `thorctl associations` | Create, delete, and list associations between files, repos, and entities |
+| `thorctl trees` | Delete the descendant entities under a set of initial tree nodes |
 | `thorctl repos` | Ingest, update, get, describe, download, compile repos; list commits and contributors |
 | `thorctl network-policies` | Get, describe, create, update, delete, and verify network policies; view group defaults |
 | `thorctl ai` | Chat with AI and summarize files/repos |
@@ -550,7 +552,7 @@ Groups are the primary access control mechanism. Files, images, pipelines, and r
 
 Entities support tags, images, and group-based access control.
 
-**Associations** are directional (or bidirectional) relationships that link entities, files, and repos to each other. Association kinds include: FileFor, DocumentationFor, FirmwareFor, AssociatedWith, DevelopedBy, ContainsCVE, ContainsCWE, BasedIn, EmployedBy, ParentCompanyOf, UsedBy, UsedIn, PerformedBy, FileSystemIn, FolderIn, and FileIn.
+**Associations** are directional (or bidirectional) relationships that link entities, files, and repos to each other. Association kinds include: FileFor, DocumentationFor, FirmwareFor, AssociatedWith, DevelopedBy, ContainsCVE, ContainsCWE, BasedIn, EmployedBy, ParentCompanyOf, UsedBy, UsedIn, PerformedBy, FileSystemIn, FolderIn, FileIn, ProcessTreeIn, ChildProcess, HasNetworkConnection, SectionIn, ImportIn, FlagFor, CreatedBy, SigmaRuleHit, and InvolvedIn. Use `thorctl associations create|delete|list` to manage them; only the submitter, a group manager/owner, or an admin can delete an association.
 
 **Trees** build relationship graphs across samples, repos, and entities to visualize how data is connected.
 

@@ -11,6 +11,7 @@
     - [Uploading Files](./users/uploading_files.md)
     - [Viewing Files](./users/viewing_files.md)
     - [Tagging Files](./users/tagging_files.md)
+    - [Associating Data](./users/associations.md)
     - [Spawning Reactions](./users/spawning_reactions.md)
     - [Search](./users/search.md)
     - [Viewing Tool Results](./users/viewing_results.md)

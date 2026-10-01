@@ -20,7 +20,19 @@ pub enum AssociationTarget {
 }
 
 /// The different possible associations
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, strum::EnumString)]
+#[derive(
+    Debug,
+    Serialize,
+    Deserialize,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    strum::EnumString,
+    clap::ValueEnum,
+)]
+#[value(rename_all = "verbatim")]
 #[cfg_attr(
     feature = "rkyv-support",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
@@ -348,6 +360,103 @@ impl AssociationRequest {
     pub fn submission_source(mut self, submission: Uuid) -> Self {
         // get an entry to our submissions or insert a default and set the source side
         self.submissions.get_or_insert_with(AssociatedSubmissions::default).source = Some(submission);
+        self
+    }
+}
+
+/// A request to delete associations between one piece of data and others
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+pub struct AssociationDeleteRequest {
+    /// The kind of association to delete
+    pub kind: AssociationKind,
+    /// The piece of data these associations start with
+    pub source: AssociationTarget,
+    /// The data to remove associations with
+    ///
+    /// The name of entity targets is ignored when matching associations.
+    pub targets: Vec<AssociationTarget>,
+    /// The groups to delete these associations from (defaults to all groups visible to the user)
+    #[serde(default)]
+    pub groups: Vec<String>,
+    /// The directions relative to the source to delete associations for (defaults to any direction)
+    #[serde(default)]
+    pub directions: Vec<Directionality>,
+}
+
+impl AssociationDeleteRequest {
+    /// Create a new association delete request
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The kind of association to delete
+    /// * `source` - Where the associations to delete come from
+    #[must_use]
+    pub fn new(kind: AssociationKind, source: AssociationTarget) -> Self {
+        AssociationDeleteRequest {
+            kind,
+            source,
+            targets: Vec::default(),
+            groups: Vec::default(),
+            directions: Vec::default(),
+        }
+    }
+
+    /// Add a target to delete associations with
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The target to delete associations with
+    #[must_use]
+    pub fn target(mut self, target: AssociationTarget) -> Self {
+        // add our new target
+        self.targets.push(target);
+        self
+    }
+
+    /// Add multiple targets to delete associations with
+    ///
+    /// # Arguments
+    ///
+    /// * `targets` - The targets to delete associations with
+    #[must_use]
+    pub fn targets<I>(mut self, targets: I) -> Self
+    where
+        I: IntoIterator<Item = AssociationTarget>,
+    {
+        // add our new targets
+        self.targets.extend(targets);
+        self
+    }
+
+    /// Restrict this delete to specific groups
+    ///
+    /// # Arguments
+    ///
+    /// * `groups` - The groups to delete associations from
+    #[must_use]
+    pub fn groups<I>(mut self, groups: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<String>,
+    {
+        // extend our groups with our new groups
+        self.groups
+            .extend(groups.into_iter().map(|group| group.into()));
+        self
+    }
+
+    /// Restrict this delete to associations in a specific direction relative to the source
+    ///
+    /// # Arguments
+    ///
+    /// * `direction` - The direction to delete associations in
+    #[must_use]
+    pub fn direction(mut self, direction: Directionality) -> Self {
+        // add this direction if it isn't already set
+        if !self.directions.contains(&direction) {
+            self.directions.push(direction);
+        }
         self
     }
 }

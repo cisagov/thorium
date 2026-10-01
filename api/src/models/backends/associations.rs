@@ -6,18 +6,19 @@ use chrono::prelude::*;
 use futures_util::Future;
 use scylla::errors::ExecutionError;
 use scylla::response::query_result::QueryResult;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 use super::db;
 use crate::models::backends::db::{CursorCore, ScyllaCursor, ScyllaCursorSupport};
 use crate::models::{
-    ApiCursor, Association, AssociationListParams, AssociationListRow, AssociationRequest,
-    AssociationTarget, AssociationTargetColumn, Directionality, Entity, Group, GroupAllowAction,
-    ListableAssociation, Repo, Sample, TreeNode, User,
+    ApiCursor, Association, AssociationDeleteRequest, AssociationListParams, AssociationListRow,
+    AssociationRequest, AssociationTarget, AssociationTargetColumn, Directionality, Entity, Group,
+    GroupAllowAction, ListableAssociation, Repo, Sample, TreeNode, User,
 };
 use crate::utils::{ApiError, Shared};
+use crate::{bad, not_found, serialize, unauthorized};
 
 impl AssociationTarget {
     /// Make sure this target exists and get its groups
@@ -119,6 +120,99 @@ impl AssociationRequest {
         )
         .await?;
         Ok(())
+    }
+}
+
+impl AssociationDeleteRequest {
+    /// Delete the associations matching this request
+    ///
+    /// Only the submitter of an association, a manager/owner of the group it is in, or an admin
+    /// can delete it. If any matching association cannot be deleted by this user then nothing
+    /// is deleted.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user that is deleting associations
+    /// * `shared` - Shared Thorium objects
+    pub async fn apply(self, user: &User, shared: &Shared) -> Result<(), ApiError> {
+        // make sure we have at least one target to delete associations with
+        if self.targets.is_empty() {
+            return bad!("At least one target must be set to delete associations".to_owned());
+        }
+        // make sure our source exists and that we can see it
+        self.source.get_groups(user, shared).await?;
+        // make sure we can access the requested groups or default to all of our groups
+        let mut groups = self.groups;
+        user.authorize_groups(&mut groups, shared).await?;
+        // get the column for our source
+        let (source, _) = self.source.to_column()?;
+        // serialize our targets so we can compare them to listed associations
+        let mut targets = HashSet::with_capacity(self.targets.len());
+        for target in self.targets {
+            // get the column for this target (entity names are not part of this)
+            let (column, _) = target.to_column()?;
+            // serialize this target the same way it was saved
+            targets.insert(serialize!(&column));
+        }
+        // build the params for listing all associations for our source
+        let params = AssociationListParams {
+            groups,
+            limit: 1000,
+            ..Default::default()
+        };
+        // list all associations for our source scoped to the requesting user
+        let mut cursor = db::associations::list(user, params, &source, shared).await?;
+        // keep a list of the associations to delete
+        let mut matched = Vec::default();
+        // step over all of our associations and find the ones to delete
+        loop {
+            // filter down to just the associations that match our request
+            for assoc in cursor.data.drain(..) {
+                // check if this association matches our request
+                if assoc.kind == self.kind
+                    && targets.contains(&assoc.other)
+                    && (self.directions.is_empty() || self.directions.contains(&assoc.direction))
+                {
+                    matched.push(assoc);
+                }
+            }
+            // check if this cursor is exhausted
+            if cursor.exhausted() {
+                break;
+            }
+            // get the next page of data in this cursor
+            cursor.next(shared).await?;
+        }
+        // if we didn't find any associations then return a 404
+        if matched.is_empty() {
+            return not_found!("No matching associations found".to_owned());
+        }
+        // admins can delete any association
+        if !user.is_admin() {
+            // get the groups for any associations we didn't submit
+            let foreign_groups = matched
+                .iter()
+                .filter(|assoc| assoc.submitter != user.username)
+                .flat_map(|assoc| assoc.groups.iter())
+                .collect::<BTreeSet<&String>>();
+            // we must be a manager or owner in these groups to delete these associations
+            if !foreign_groups.is_empty() {
+                // get the details for these groups
+                let details =
+                    db::groups::list_details(foreign_groups.iter().copied(), shared).await?;
+                // make sure we are a manager or owner in each group
+                for group in details {
+                    if !group.is_manager_or_owner(&user.username) {
+                        return unauthorized!(format!(
+                            "Cannot delete associations submitted by other users in group {}",
+                            group.name
+                        ));
+                    }
+                }
+            }
+        }
+        // delete all of our matched associations
+        db::associations::delete_many(&source, &matched, shared).await
     }
 }
 

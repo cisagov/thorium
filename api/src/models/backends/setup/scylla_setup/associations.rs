@@ -118,6 +118,9 @@ async fn delete(session: &Session, config: &Conf) -> PreparedStatement {
 
 /// Gets any remaining rows from past ties in listing associations
 ///
+/// Targets are clustered in ascending order so the remaining tied rows are at or
+/// after our tie breaker.
+///
 /// # Arguments
 ///
 /// * `sessions` - The scylla session to use
@@ -133,7 +136,7 @@ async fn list_ties(session: &Session, config: &Conf) -> PreparedStatement {
                 AND bucket = ? \
                 AND source = ?
                 AND created = ? \
-                AND target <= ? \
+                AND target >= ? \
                 LIMIT ?",
             &config.thorium.namespace
         ))

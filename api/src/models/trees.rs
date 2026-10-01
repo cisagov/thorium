@@ -840,7 +840,7 @@ impl FromStr for Directionality {
         match raw {
             "To" => Ok(Directionality::To),
             "From" => Ok(Directionality::From),
-            "Directionality" => Ok(Directionality::Bidirectional),
+            "Bidirectional" => Ok(Directionality::Bidirectional),
             _ => Err(InvalidEnum(format!("Unknown Directionality: {raw}"))),
         }
     }
@@ -955,5 +955,29 @@ impl Tree {
         self.data_map.insert(hash, node);
         // add this node to our sent nodes
         self.sent.insert(hash);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Directionality;
+    use std::str::FromStr;
+
+    /// every direction must parse back from the string it is stored as or rows
+    /// containing it can't be read back out of scylla.
+    #[test]
+    fn directionality_round_trips_through_str() {
+        // check each direction can be parsed from its own string
+        for direction in [
+            Directionality::To,
+            Directionality::From,
+            Directionality::Bidirectional,
+        ] {
+            assert_eq!(
+                Directionality::from_str(direction.as_str()).unwrap(),
+                direction,
+                "{direction:?} did not round trip through its str"
+            );
+        }
     }
 }

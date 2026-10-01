@@ -552,14 +552,15 @@ async fn list_details(
 /// * `state` - Shared Thorium objects
 #[utoipa::path(
     get,
-    path = "/api/associations/:sha256",
+    path = "/api/files/associations/{sha256}",
     params(
         ("sha256" = String, Path, description = "Sha256 of sample to get associations for"),
         ("params" = AssociationListParams, description = "Query params to use for this association list request"),
     ),
     responses(
-        (status = 200, description = "JSON-formatted cursor response containing the sha256 of a sample, the samples group information, submission uuid, and upload timestamp", body = ApiCursor<SampleListLine>),
+        (status = 200, description = "JSON-formatted cursor response containing the associations for a sample", body = ApiCursor<Association>),
         (status = 401, description = "This user is not authorized to access this route"),
+        (status = 404, description = "The sample does not exist"),
     ),
     security(
         ("basic" = []),

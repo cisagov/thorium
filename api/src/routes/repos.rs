@@ -30,12 +30,13 @@ use super::OpenApiSecurity;
 use crate::models::AuthedUser;
 use crate::models::backends::TagSupport;
 use crate::models::{
-    ApiCursor, Branch, BranchDetails, BranchRequest, Commit, CommitDetails, CommitRequest,
-    Commitish, CommitishDetails, CommitishKinds, CommitishListParams, CommitishMapRequest,
-    CommitishRequest, GitTag, GitTagDetails, GitTagRequest, Output, OutputFormBuilder, OutputKind,
-    OutputMap, OutputResponse, Repo, RepoCheckout, RepoCreateResponse, RepoDataUploadResponse,
-    RepoDownloadOpts, RepoListLine, RepoListParams, RepoRequest, RepoScheme, RepoSubmissionChunk,
-    ResultFileDownloadParams, ResultGetParams, TagDeleteRequest, TagRequest,
+    ApiCursor, Association, AssociationListParams, AssociationTargetColumn, Branch, BranchDetails,
+    BranchRequest, Commit, CommitDetails, CommitRequest, Commitish, CommitishDetails,
+    CommitishKinds, CommitishListParams, CommitishMapRequest, CommitishRequest, GitTag,
+    GitTagDetails, GitTagRequest, Output, OutputFormBuilder, OutputKind, OutputMap, OutputResponse,
+    Repo, RepoCheckout, RepoCreateResponse, RepoDataUploadResponse, RepoDownloadOpts, RepoListLine,
+    RepoListParams, RepoRequest, RepoScheme, RepoSubmissionChunk, ResultFileDownloadParams,
+    ResultGetParams, TagDeleteRequest, TagRequest,
 };
 use crate::utils::{ApiError, AppState, bounder};
 
@@ -255,6 +256,47 @@ async fn delete_tags(
     repo.delete_tags(&user, tags_del, &state.shared).await?;
     // delete the tags from this
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// List the associations for a repo
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing associations
+/// * `params` - The query params to use for this request
+/// * `repo_path` - The repo to list associations for
+/// * `state` - Shared Thorium objects
+// TODO_UTOIPA: WIDLCARD
+// #[utoipa::path(
+//     get,
+//     path = "/api/repos/associations/*repo_path",
+//     params(
+//         ("path" = Vec<String>, Path, description = "The path containing this urls args"),
+//         ("params" = AssociationListParams, description = "Query params to use for this association list request"),
+//     ),
+//     responses(
+//         (status = 200, description = "JSON-formatted cursor response containing the associations for a repo", body = ApiCursor<Association>),
+//         (status = 401, description = "This user is not authorized to access this route"),
+//         (status = 404, description = "The repo does not exist"),
+//     ),
+//     security(
+//         ("basic" = []),
+//     )
+// )]
+#[instrument(name = "routes::repos::list_associations", skip_all, err(Debug))]
+async fn list_associations(
+    user: AuthedUser,
+    params: AssociationListParams,
+    Path(repo_path): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<Association>>, ApiError> {
+    // make sure this user can access this repo
+    let repo = Repo::get(&user, &repo_path, &state.shared).await?;
+    // create the source to list associations from
+    let source = AssociationTargetColumn::Repo(repo.url);
+    // list the associations for this repo
+    let cursor = Association::list(&user, params, &source, &state.shared).await?;
+    Ok(Json(cursor))
 }
 
 /// List the commitshes for a repo
@@ -628,6 +670,7 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/repos/download/{*repo_path}", get(download))
         .route("/repos/tags/{*repo_path}", post(tag).delete(delete_tags))
+        .route("/repos/associations/{*repo_path}", get(list_associations))
         .route(
             "/repos/results/{*repo_path}",
             get(get_results).post(upload_results),

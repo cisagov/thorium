@@ -13,8 +13,8 @@ use super::shared::graphics;
 use crate::models::AuthedUser;
 use crate::models::backends::{GraphicSupport, TagSupport};
 use crate::models::{
-    ApiCursor, Entity, EntityListLine, EntityListParams, EntityResponse, TagDeleteRequest,
-    TagRequest,
+    ApiCursor, Association, AssociationListParams, AssociationTargetColumn, Entity, EntityListLine,
+    EntityListParams, EntityResponse, TagDeleteRequest, TagRequest,
 };
 use crate::not_found;
 use crate::utils::{ApiError, AppState};
@@ -348,6 +348,46 @@ async fn get_image(
     }
 }
 
+/// List the associations for an entity
+///
+/// # Arguments
+///
+/// * `user` - The user that is listing associations
+/// * `params` - The query params to use for this request
+/// * `id` - The id of the entity to list associations for
+/// * `state` - Shared Thorium objects
+#[utoipa::path(
+    get,
+    path = "/api/entities/associations/{id}",
+    params(
+        ("id" = Uuid, Path, description = "The id of the entity to list associations for"),
+        ("params" = AssociationListParams, description = "Query params to use for this association list request"),
+    ),
+    responses(
+        (status = 200, description = "JSON-formatted cursor response containing the associations for an entity", body = ApiCursor<Association>),
+        (status = 401, description = "This user is not authorized to access this route"),
+        (status = 404, description = "The entity does not exist"),
+    ),
+    security(
+        ("basic" = []),
+    )
+)]
+#[instrument(name = "routes::entities::list_associations", skip_all, err(Debug))]
+async fn list_associations(
+    user: AuthedUser,
+    params: AssociationListParams,
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Result<Json<ApiCursor<Association>>, ApiError> {
+    // make sure this user can access this entity
+    Entity::get(&user, id, &state.shared).await?;
+    // create the source to list associations from
+    let source = AssociationTargetColumn::Entity(id);
+    // list the associations for this entity
+    let cursor = Association::list(&user, params, &source, &state.shared).await?;
+    Ok(Json(cursor))
+}
+
 /// Add the entities routes to our router
 ///
 /// # Arguments
@@ -364,4 +404,8 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/entities/{id}/image", axum::routing::get(get_image))
         .route("/entities/tags/{id}", post(tag).delete(delete_tags))
+        .route(
+            "/entities/associations/{id}",
+            axum::routing::get(list_associations),
+        )
 }
