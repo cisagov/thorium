@@ -50,6 +50,22 @@ pub struct ReactionTriggerWorker {
 }
 
 impl ReactionTriggerWorker {
+    /// Decide whether a drained potential event should be cleared in [`Self::final_eval`]
+    ///
+    /// It returns whether the event should be added to the clear list after its triggers
+    /// have been re-checked. A `NewTags` event whose required file/repo data could not be
+    /// fetched because of a transient error must not be cleared, since `check` could not
+    /// actually evaluate it. Instead it is left in flight so it is retried once our retry
+    /// timestamp passes and `reset_all` requeues it.
+    ///
+    /// # Arguments
+    ///
+    /// * `data_missing` - Whether this event's required data was absent due to a fetch error
+    fn should_clear_potential(data_missing: bool) -> bool {
+        // only clear events we could fully evaluate; the rest are left in flight to retry
+        !data_missing
+    }
+
     /// Perform a final evaluation with all data for any still potential events
     ///
     /// # Arguments
@@ -94,12 +110,26 @@ impl ReactionTriggerWorker {
                     found.push((group, pipeline, trigger));
                 }
             }
+            // track whether we confirmed any trigger before we move `found`
+            let confirmed_any = !found.is_empty();
             // add all of this events now confirmed triggers if we found any
-            if !found.is_empty() {
+            if confirmed_any {
                 filtered.confirmed.push((event_id, found));
             }
-            // add this to our cleared ids list
-            filtered.clears.push(event_id);
+            // a transient data-fetch failure leaves this events required data out of the cache
+            let data_missing = !self.data_cache.has_data(event);
+            // only clear this event if we could fully evaluate it
+            if Self::should_clear_potential(data_missing) {
+                // add this to our cleared ids list
+                filtered.clears.push(event_id);
+            } else {
+                // log that we are leaving this event in flight to retry it later
+                event!(
+                    Level::WARN,
+                    msg = "Retrying event with missing data",
+                    event = event_id.to_string()
+                );
+            }
         }
     }
 
@@ -145,8 +175,8 @@ impl ReactionTriggerWorker {
                         match tag_type {
                             TagType::Files => req.sample(item),
                             TagType::Repos => req.repo(RepoDependencyRequest::new(item)),
-                            // should be impossible to get an unsupported tag type because we error
-                            // when getting the event's data, but handle the error here anyway
+                            // should be impossible to get an unsupported tag type because they
+                            // can never be confirmed, but handle the error here anyway
                             _ => {
                                 return Err(Error::new(format!(
                                     "Events are not supported for tag type '{tag_type}'"
@@ -324,5 +354,44 @@ impl EventWorkerMutableSupport for ReactionTriggerWorker {
         stats: &mut <Self as EventWorkerSupportCore>::Stats,
     ) -> Result<(), Error> {
         self.evaluate(events, stats).await
+    }
+
+    /// Take the time to retry any events this worker left in flight if one is set
+    async fn take_retry_ts(&mut self) -> Option<DateTime<Utc>> {
+        self.retry_ts.write().await.take()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// When a potential tag-trigger event's required file/repo data cannot be fetched (a
+    /// transient error left it out of the data cache and `check` returned false for missing
+    /// data), `should_clear_potential` returns false so the event is not cleared. It is left
+    /// in-flight for `reset_all`/retry so the user's triggered reaction is eventually created
+    /// instead of the event being lost on a transient fetch blip.
+    #[test]
+    fn potential_with_missing_data_is_not_cleared() {
+        // simulate a drained potential whose required data could not be fetched
+        let should_clear = ReactionTriggerWorker::should_clear_potential(true);
+        // it must be retained (not cleared) so retry/reset_all can reprocess it
+        assert!(
+            !should_clear,
+            "a potential event whose data was missing must be retained, not cleared and lost"
+        );
+    }
+
+    /// A potential event whose required data was present (a genuine trigger miss) is cleared
+    /// normally.
+    #[test]
+    fn potential_with_present_data_is_cleared() {
+        // simulate a drained potential whose data was available and simply did not match
+        let should_clear = ReactionTriggerWorker::should_clear_potential(false);
+        // it is a genuine miss so it should be cleared
+        assert!(
+            should_clear,
+            "a potential event with present data that did not match should be cleared"
+        );
     }
 }

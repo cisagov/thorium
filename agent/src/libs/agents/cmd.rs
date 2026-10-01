@@ -559,7 +559,11 @@ impl CmdBuilder {
                 // if wipe is false then add this other arg
                 if !wipe && (in_kwarg || !self.opts.override_positionals)
                     // if we are overriding positionals then only allow one positional from entrypoint and cmd each
-                    || (self.opts.override_positionals && self.allowable_positionals > 0)
+                    // never keep a wiped kwarg's old value as a positional
+                    || (!wipe
+                        && !in_kwarg
+                        && self.opts.override_positionals
+                        && self.allowable_positionals > 0)
                 {
                     // add this non kwarg argument
                     built.push(arg);
@@ -1127,6 +1131,42 @@ mod tests {
         assert_eq!(
             cmd,
             vec_string!("/usr/bin/python3", "corn.py", "pos1", "--1", "1")
+        );
+    }
+
+    /// When a split kwarg (`--key value`) in the image's original entrypoint/cmd is replaced
+    /// by a job-supplied value, its old value token is dropped. This holds even when
+    /// `override_positionals` is on and the positional budget is not yet spent, so the stale
+    /// value never sneaks into the built command as a positional and the tool runs against the
+    /// right arguments.
+    ///
+    /// The scenario uses a single leading positional (so the budget survives to the kwarg)
+    /// plus a replaced split kwarg, and checks that the replaced kwarg's old value never
+    /// appears in the final command.
+    #[tokio::test]
+    async fn wiped_split_kwarg_value_does_not_leak_as_positional() {
+        // generate an image
+        let image = generate_image();
+        // generate a job
+        let mut job = generate_job();
+        // the job replaces the split "--depth" kwarg and overrides positionals
+        job.args = job.args.kwarg("--depth", vec!["5"]).positionals(vec!["pos1"]);
+        // enable positional overrides so the stale value competes for the positional budget
+        job.args.opts.override_positionals = true;
+        // build the command: a single-binary entrypoint with a default split kwarg whose
+        // old value is the distinctive token "STALEVAL"
+        let cmd = CmdBuilder::new(
+            &image,
+            &job,
+            slice_string!["tool"],
+            slice_string!["--depth", "STALEVAL", "default-target"],
+        )
+        .build(&image, None, None)
+        .unwrap();
+        // the replaced kwarg's stale value must never survive into the executed command
+        assert!(
+            !cmd.contains(&"STALEVAL".to_string()),
+            "replaced split-kwarg value leaked into the command as a positional: {cmd:?}"
         );
     }
 

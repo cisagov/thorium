@@ -1,4 +1,5 @@
 //! Launches bare metal jobs
+use http::StatusCode;
 use rustix::process::Signal;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -410,8 +411,11 @@ impl BareMetal {
             // delete this workers info its not alive
             if !alive {
                 // get this workers and add it to our deletes
-                if let Some(info) = active.remove(name) {
-                    deletes.add_mut(info.name);
+                if let Some(worker_info) = active.remove(name) {
+                    // decide whether this dead worker should still be deleted from the API
+                    if Self::should_delete_dead_worker(&worker_info.name, &info.workers) {
+                        deletes.add_mut(worker_info.name);
+                    }
                 }
                 // try to delete this workers cgroup
                 if let Err(error) = worker.cgroup.delete() {
@@ -431,11 +435,72 @@ impl BareMetal {
             }
         }
         // delete the workers that no longer exist
-        thorium
+        Self::delete_workers(thorium, &deletes).await
+    }
+
+    /// Delete workers from the Thorium API, treating a 404 as success
+    ///
+    /// A 404 means one or more of these workers were already deleted (e.g. by the agent itself on
+    /// a clean exit), so it must not crash the reactor.
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - A Thorium client
+    /// * `deletes` - The workers to delete
+    async fn delete_workers(thorium: &Thorium, deletes: &WorkerDeleteMap) -> Result<(), Error> {
+        // skip the request entirely if there is nothing to delete
+        if deletes.workers.is_empty() {
+            return Ok(());
+        }
+        // try to delete these workers from Thorium
+        match thorium
             .system
-            .delete_workers(ImageScaler::BareMetal, &deletes)
-            .await?;
-        Ok(())
+            .delete_workers(ImageScaler::BareMetal, deletes)
+            .await
+        {
+            Ok(_) => Ok(()),
+            // ignore 404 errors since one or more of these workers were already deleted
+            Err(err) if err.status() == Some(StatusCode::NOT_FOUND) => {
+                event!(
+                    Level::WARN,
+                    msg = "Workers to delete were already missing",
+                    workers = ?deletes.workers
+                );
+                Ok(())
+            }
+            Err(err) => Err(Error::from(err)),
+        }
+    }
+
+    /// Decide whether a dead bare-metal worker should be deleted from the Thorium API
+    ///
+    /// This is `check_helper`'s per-worker delete decision (it never needs `self`) so its logic can
+    /// be unit tested without a live Thorium client. A dead worker is only deleted while the API
+    /// still lists it; when the agent already deleted its own record on a clean exit, deleting it
+    /// again would 404.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the dead worker being considered for deletion
+    /// * `api_workers` - The workers the API still reports for this node
+    fn should_delete_dead_worker(name: &str, api_workers: &HashMap<String, Worker>) -> bool {
+        // only delete dead workers that still exist in the API
+        api_workers.contains_key(name)
+    }
+
+    /// Decide whether recovered workers should be propagated into the reactor's active map
+    ///
+    /// This is `recover_workers`' propagation guard (it never needs `self`) so its logic can be
+    /// unit tested. Recovered workers are propagated whenever the `recovered` flag is set or at
+    /// least one worker was recovered in this pass, so they are never launched a second time.
+    ///
+    /// # Arguments
+    ///
+    /// * `recovered_flag` - Whether `recover_workers` recovered any workers
+    /// * `recovered_count` - The number of workers actually recovered in this pass
+    fn propagates_recovered_workers(recovered_flag: bool, recovered_count: usize) -> bool {
+        // propagate if we recovered any workers at all
+        recovered_flag || recovered_count > 0
     }
 
     /// Helps our launcher recover any existing workers
@@ -452,7 +517,9 @@ impl BareMetal {
         active: &mut HashMap<String, Worker>,
     ) -> Result<(), Error> {
         // whether we have recovered any workers or not
-        let recovered = false;
+        let mut recovered = false;
+        // the number of workers we actually recovered in this pass
+        let mut recovered_count: usize = 0;
         // filter out any workers that we already know about
         // crawl the workers that should exist on this node and check if their control group exists
         for (name, _) in info.workers.iter() {
@@ -467,20 +534,23 @@ impl BareMetal {
                 // we have some processes so recover this worker
                 event!(Level::INFO, msg = "Recovered worker", name = &name);
                 // build our recovered worker without a child
-                let recovered = ActiveWorker {
+                let recovered_worker = ActiveWorker {
                     cgroup,
                     child: None,
                 };
                 // add this worker to our active map
-                self.active.insert(name.clone(), recovered);
+                self.active.insert(name.clone(), recovered_worker);
+                // track that we recovered another worker in this pass
+                recovered = true;
+                recovered_count += 1;
             }
         }
         // only update our active map if we recovered some workers
-        if recovered {
+        if Self::propagates_recovered_workers(recovered, recovered_count) {
             // put all our active workers in our reactors active map
             for name in self.active.keys() {
-                // get this workers info
-                if let Some(worker) = info.workers.remove(name) {
+                // get this workers info, leaving it in the node info so later checks still see it
+                if let Some(worker) = info.workers.get(name).cloned() {
                     // just overwrite any existing workers since this should only really happen at start
                     active.insert(name.clone(), worker);
                 }
@@ -668,20 +738,137 @@ impl Launcher for BareMetal {
             self.kill(&worker).await?;
             // execute our cleanup script
             self.cleanup(thorium, &worker).await?;
-            deletes.add_mut(&worker);
+            // build the delete payload to send for this iteration
+            let payload = Self::next_shutdown_delete_payload(&mut deletes, &worker);
             // remove this workers from Thorium
-            thorium
-                .system
-                .delete_workers(ImageScaler::BareMetal, &deletes)
-                .await?;
+            Self::delete_workers(thorium, &payload).await?;
         }
         Ok(())
     }
 }
 
+impl BareMetal {
+    /// Build the delete-workers payload sent on a single `shutdown` loop iteration
+    ///
+    /// This is `shutdown`'s per-iteration delete bookkeeping (it never needs `self`) so it can be
+    /// unit tested. The worker is still recorded in the `deletes` accumulator, but only the worker
+    /// deleted on this iteration is sent so already-deleted workers are never re-deleted (which
+    /// would 404).
+    ///
+    /// # Arguments
+    ///
+    /// * `deletes` - The delete map accumulated across `shutdown` iterations
+    /// * `worker` - The worker being deleted on this iteration
+    fn next_shutdown_delete_payload(
+        deletes: &mut WorkerDeleteMap,
+        worker: &str,
+    ) -> WorkerDeleteMap {
+        // track every worker we have deleted so far
+        deletes.add_mut(worker);
+        // only send the worker being deleted on this iteration
+        WorkerDeleteMap::with_capacity(1).add(worker)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::BareMetalIsolation;
+    use super::{BareMetal, BareMetalIsolation};
+    use std::collections::HashMap;
+    use thorium::models::WorkerDeleteMap;
+
+    /// Build a bare metal worker registered in the API with the given name
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of this worker
+    fn test_worker(name: &str) -> thorium::models::Worker {
+        thorium::models::Worker {
+            cluster: "cluster".to_owned(),
+            node: "node".to_owned(),
+            scaler: thorium::models::ImageScaler::BareMetal,
+            name: name.to_owned(),
+            user: "user".to_owned(),
+            group: "group".to_owned(),
+            pipeline: "pipeline".to_owned(),
+            stage: "stage".to_owned(),
+            status: thorium::models::WorkerStatus::Running,
+            spawned: chrono::Utc::now(),
+            heart_beat: None,
+            resources: thorium::models::Resources::default(),
+            pool: thorium::models::Pools::Deadline,
+            active: None,
+        }
+    }
+
+    /// `check_helper` only deletes a dead worker from the API when that worker is still present
+    /// in the API's worker list, so a dead worker that is not listed is not re-deleted. When a
+    /// bare-metal agent exits cleanly it deletes its own record first, so on the next poll the
+    /// reactor sees a dead process whose record is already gone; deleting it again would 404 and
+    /// crash the reactor daemon (this mirrors how the Kvm launcher filters its delete map against
+    /// `info.workers` "to avoid 404's").
+    #[test]
+    fn dead_worker_absent_from_api_is_not_deleted() {
+        // the API no longer lists this worker (the agent deleted its own record on clean exit)
+        let api_workers: HashMap<String, thorium::models::Worker> = HashMap::new();
+        // a dead worker already gone from the API must not be deleted again (that 404s and crashes)
+        assert!(
+            !BareMetal::should_delete_dead_worker("worker-a", &api_workers),
+            "a dead worker whose API record was already deleted is deleted again, 404-crashing \
+             the reactor on every clean bare-metal job completion"
+        );
+    }
+
+    /// A dead worker that is still listed by the API is deleted so its registration does not
+    /// leak.
+    #[test]
+    fn dead_worker_present_in_api_is_deleted() {
+        // the API still lists this worker
+        let mut api_workers: HashMap<String, thorium::models::Worker> = HashMap::new();
+        api_workers.insert("worker-a".to_owned(), test_worker("worker-a"));
+        // the dead worker must be deleted from the API
+        assert!(BareMetal::should_delete_dead_worker(
+            "worker-a",
+            &api_workers
+        ));
+    }
+
+    /// `recover_workers` propagates recovered workers into the reactor's active map whenever at
+    /// least one worker was actually recovered, even if the `recovered` flag is not set. This
+    /// puts recovered workers in the active map so they do not get a duplicate agent launched
+    /// after every reactor restart.
+    #[test]
+    fn recovering_a_worker_propagates_it_to_the_active_map() {
+        // the `recovered` flag is not set, so only the recovered count can trigger propagation
+        let recovered_flag = false;
+        // we recovered exactly one worker in this pass
+        let recovered_count = 1;
+        // recovering a worker must cause it to be propagated into the reactor's active map
+        assert!(
+            BareMetal::propagates_recovered_workers(recovered_flag, recovered_count),
+            "recovered workers are never propagated into the reactor's active map, so a duplicate \
+             agent is launched for each after every reactor restart"
+        );
+    }
+
+    /// `shutdown` sends only the worker being deleted on each loop iteration, not an accumulating
+    /// map of every worker deleted so far, so the payload for iteration 2 contains only the second
+    /// worker. Re-sending iteration 1's already-deleted worker would 404 and crash the reactor.
+    #[test]
+    fn shutdown_payload_does_not_re_delete_prior_workers() {
+        // the delete map carried across shutdown iterations
+        let mut deletes = WorkerDeleteMap::default();
+        // iteration 1 deletes worker A
+        let first = BareMetal::next_shutdown_delete_payload(&mut deletes, "worker-a");
+        assert_eq!(first.workers, vec!["worker-a".to_string()]);
+        // iteration 2 deletes worker B and must NOT re-send already-deleted worker A
+        let second = BareMetal::next_shutdown_delete_payload(&mut deletes, "worker-b");
+        assert_eq!(
+            second.workers,
+            vec!["worker-b".to_string()],
+            "shutdown re-sends the accumulated delete map, re-deleting already-deleted workers and \
+             404-crashing the reactor on any multi-worker scale-down"
+        );
+    }
 
     /// bare-metal tool processes must not run with the reactor's own (admin, typically
     /// root) privileges. The reactor holds an admin token and caches every user's token

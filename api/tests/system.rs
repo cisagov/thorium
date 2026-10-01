@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use thorium::models::{
     HostPathWhitelistUpdate, ImageBanKind, ImageScaler, PipelineBanKind, PipelineRequest,
     PipelineUpdate, Pools, Resources, SystemSettings, SystemSettingsResetParams,
-    SystemSettingsUpdate, SystemSettingsUpdateParams, Volume, VolumeTypes, WorkerRegistrationList,
+    SystemSettingsUpdate, SystemSettingsUpdateParams, Volume, VolumeTypes, WorkerDeleteMap,
+    WorkerRegistrationList,
 };
 use thorium::test_utilities::{self, generators};
 use thorium::{Error, contains, fail, is, is_not, unwrap_variant, vec_in_vec};
@@ -481,5 +482,83 @@ async fn worker_registration_requires_admin() -> Result<(), Error> {
             .await,
         401,
         "non-admin worker registration",
+    )
+}
+
+/// Deleting a batch of workers is all or nothing
+///
+/// `delete_workers` checks workers 25 at a time but deletes nothing until every chunk has been
+/// checked, so a missing worker in a later chunk fails the request without leaving the earlier
+/// chunks deleted (a partially applied delete).
+#[tokio::test]
+async fn delete_workers_is_all_or_nothing() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // register our test node
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // get our username to own our workers
+    let username = client.users.info().await?.username;
+    // register 29 workers with unique names
+    let prefix = generators::gen_string(16);
+    let names: Vec<String> = (0..29).map(|i| format!("{prefix}-{i}")).collect();
+    let mut registrations = WorkerRegistrationList::default();
+    for name in &names {
+        registrations = registrations.add(
+            "cluster0",
+            "node0",
+            name,
+            &username,
+            "group",
+            "pipeline",
+            "stage",
+            Resources::default(),
+            Pools::Deadline,
+        );
+    }
+    client
+        .system
+        .register_workers(ImageScaler::K8s, &registrations)
+        .await?;
+    // delete them all with a missing worker placed in the second chunk of 25
+    let mut deletes = WorkerDeleteMap::default();
+    for name in &names[..25] {
+        deletes.add_mut(name);
+    }
+    deletes.add_mut(format!("{prefix}-ghost"));
+    for name in &names[25..] {
+        deletes.add_mut(name);
+    }
+    let result = client
+        .system
+        .delete_workers(ImageScaler::K8s, &deletes)
+        .await;
+    // count how many of our real workers still exist
+    let mut remaining = 0;
+    for name in &names {
+        if client.system.get_worker(name).await.is_ok() {
+            remaining += 1;
+        }
+    }
+    // a failed delete must leave every worker and a successful one must leave none
+    let expected = if result.is_err() { names.len() } else { 0 };
+    is!(remaining, expected);
+    Ok(())
+}
+
+/// A non-admin deleting a worker that doesn't exist gets a 404, not a 500
+///
+/// The owner lookup for a missing worker returns nil, which is reported as the worker not being
+/// found rather than as a redis type error.
+#[tokio::test]
+async fn non_admin_deleting_missing_worker_is_not_found() -> Result<(), Error> {
+    // get an admin client to create our non-admin user
+    let admin = test_utilities::admin_client().await?;
+    let user = generators::client(&admin).await?;
+    // try to delete a worker that never existed
+    let deletes = WorkerDeleteMap::default().add(generators::gen_string(24));
+    test_utilities::assert_status(
+        user.system.delete_workers(ImageScaler::K8s, &deletes).await,
+        404,
+        "non-admin delete of a missing worker",
     )
 }

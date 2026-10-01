@@ -3,11 +3,11 @@
 use chrono::{Duration, prelude::*};
 use futures::stream::{self, StreamExt};
 use futures_locks::RwLock;
-use std::collections::HashMap;
+use reqwest::StatusCode;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thorium::models::{
-    Event, EventData, EventTrigger, Repo, Sample, ScrubbedUser, TagType, TriggerPotential,
-    UserRole,
+    Event, EventData, EventTrigger, Repo, Sample, ScrubbedUser, TagType, TriggerPotential, UserRole,
 };
 use thorium::{Error, Thorium};
 use tracing::{Level, event, instrument};
@@ -141,6 +141,45 @@ impl TriggerCache {
         Ok(cache)
     }
 
+    /// Decide how the max-depth guard in [`Self::check_event`] should act on an event
+    ///
+    /// It returns a `(clear, halt)` pair: `clear` is whether the event should be added to the
+    /// clear list, and `halt` is whether trigger evaluation should stop for this event.
+    ///
+    /// An event at or beyond `max_depth` is both cleared and halted so it can never confirm
+    /// a trigger and spawn a reaction at depth+1. This is the only loop breaker in the trigger
+    /// pipeline, so cyclic trigger configurations rely on it to terminate.
+    ///
+    /// # Arguments
+    ///
+    /// * `depth` - The current depth of the event being checked
+    /// * `max_depth` - The max depth an event is allowed to reach
+    fn max_depth_guard(depth: u8, max_depth: u8) -> (bool, bool) {
+        // mark the event to be cleared if it is at or beyond its max depth
+        let clear = depth >= max_depth;
+        // a depth-capped event must not be evaluated any further or it could still fire
+        let halt = clear;
+        // hand back both decisions
+        (clear, halt)
+    }
+
+    /// Decide whether an event that matched no triggers should be cleared
+    ///
+    /// It returns whether the event should be added to the clear list once all of a user's
+    /// triggers have been checked. An event that matched no triggers at all (both lists are
+    /// empty) lands in neither `confirmed` nor `potentials`, so it must be cleared here or it
+    /// would leak in the in-flight queue forever. Events that did match a trigger are cleared
+    /// later once their confirmed/potential triggers are handled.
+    ///
+    /// # Arguments
+    ///
+    /// * `confirmed_empty` - Whether no triggers were confirmed for this event
+    /// * `potential_empty` - Whether no triggers were potentially met for this event
+    fn should_clear_no_matches(confirmed_empty: bool, potential_empty: bool) -> bool {
+        // only clear events that matched nothing since matched events are cleared later
+        confirmed_empty && potential_empty
+    }
+
     /// check if this event could trigger any triggers
     fn check_event_helper<'a>(
         &'a self,
@@ -169,12 +208,17 @@ impl TriggerCache {
                             TriggerPotential::Potentially => {
                                 potential.push((group, pipeline, trigger))
                             }
-                            TriggerPotential::CanNot => filtered.clears.push(event.id),
+                            // this trigger can never fire for this event, but other
+                            // triggers still might so don't clear this event yet
+                            TriggerPotential::CanNot => {}
                         }
                     }
                 }
             }
         }
+        // capture whether we matched anything before we move the lists into filtered
+        let confirmed_empty = confirmed.is_empty();
+        let potential_empty = potential.is_empty();
         // check if we found any confirmed triggers or not
         if !confirmed.is_empty() {
             filtered.confirmed.push((event.id, confirmed))
@@ -183,6 +227,11 @@ impl TriggerCache {
         if !potential.is_empty() {
             filtered.potentials.push((event.id, potential))
         }
+        // clear any event that matched no triggers so it does not leak
+        if Self::should_clear_no_matches(confirmed_empty, potential_empty) {
+            // add this event to the clear list so it does not leak in the in-flight queue
+            filtered.clears.push(event.id);
+        }
     }
 
     /// Filters a single event that does not meet at least some conditions for a trigger
@@ -190,10 +239,17 @@ impl TriggerCache {
     /// Events from disabled users are skipped and cleared since acting on
     /// their behalf would only fail.
     fn check_event<'a>(&'a self, event: &Event, filtered: &mut FilteredEvents<'a>) {
+        // check if this event is at its max depth
+        let (clear, halt) = Self::max_depth_guard(event.depth, self.max_depth);
         // skip any events that are at their max depth
-        if event.depth >= self.max_depth {
+        if clear {
             // add this event to the clear list
             filtered.clears.push(event.id);
+        }
+        // stop evaluating this event if the guard says to halt
+        if halt {
+            // this depth-capped event should fire nothing, so return early
+            return;
         }
         // get this users info
         match self.users.get(&event.user) {
@@ -239,9 +295,24 @@ enum DataCacheFuture {
     Files(Sample),
     /// The info on a single repo
     Repos(Repo),
+    /// A file that Thorium reported does not exist
+    MissingFile(String),
+    /// A repo that Thorium reported does not exist
+    MissingRepo(String),
 }
 
 impl DataCacheFuture {
+    /// Check if an error means the data we requested does not exist
+    ///
+    /// Retrying a request for data that does not exist will never succeed.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The error to check
+    fn is_not_found(error: &Error) -> bool {
+        error.status() == Some(StatusCode::NOT_FOUND)
+    }
+
     /// Get info about this events data
     pub async fn get(thorium: &Thorium, event: &Event) -> Result<Option<Self>, Error> {
         // get info on this events data
@@ -250,11 +321,33 @@ impl DataCacheFuture {
                 // get all info on this item
                 match tag_type {
                     // get info on this file
-                    TagType::Files => Ok(Some(Self::Files(thorium.files.get(item).await?))),
-                    TagType::Repos => Ok(Some(Self::Repos(thorium.repos.get(item).await?))),
-                    _ => Err(Error::new(format!(
-                        "Events are not supported for tag type '{tag_type}'"
-                    ))),
+                    TagType::Files => match thorium.files.get(item).await {
+                        Ok(file) => Ok(Some(Self::Files(file))),
+                        // this file doesn't exist so remember that instead of retrying
+                        Err(error) if Self::is_not_found(&error) => {
+                            Ok(Some(Self::MissingFile(item.clone())))
+                        }
+                        Err(error) => Err(error),
+                    },
+                    // get info on this repo
+                    TagType::Repos => match thorium.repos.get(item).await {
+                        Ok(repo) => Ok(Some(Self::Repos(repo))),
+                        // this repo doesn't exist so remember that instead of retrying
+                        Err(error) if Self::is_not_found(&error) => {
+                            Ok(Some(Self::MissingRepo(item.clone())))
+                        }
+                        Err(error) => Err(error),
+                    },
+                    // we can never get data for unsupported tag types so retrying won't help
+                    _ => {
+                        // log that this tag type is not supported
+                        event!(
+                            Level::WARN,
+                            msg = "Events are not supported for tag type",
+                            tag_type = tag_type.as_str()
+                        );
+                        Ok(None)
+                    }
                 }
             }
             _ => Ok(None),
@@ -269,6 +362,10 @@ pub struct DataCache {
     samples: HashMap<String, Sample>,
     /// the repos to get info on
     repos: HashMap<String, Repo>,
+    /// The samples that Thorium reported do not exist
+    missing_samples: HashSet<String>,
+    /// The repos that Thorium reported do not exist
+    missing_repos: HashSet<String>,
 }
 
 impl DataCache {
@@ -311,6 +408,7 @@ impl DataCache {
                         error = error.to_string()
                     );
                     // set our retry timestamp for 3 minutes in the future if its not already set
+                    // so any events left in flight because of this error get retried
                     if retry_ts.read().await.is_none() {
                         // get a timestamp for 3 minutes in the future
                         let future_ts = Utc::now() + Duration::minutes(3);
@@ -328,6 +426,12 @@ impl DataCache {
                 }
                 Some(DataCacheFuture::Repos(repo)) => {
                     self.repos.insert(repo.url.clone(), repo);
+                }
+                Some(DataCacheFuture::MissingFile(sha256)) => {
+                    self.missing_samples.insert(sha256);
+                }
+                Some(DataCacheFuture::MissingRepo(url)) => {
+                    self.missing_repos.insert(url);
                 }
                 None => (),
             }
@@ -395,8 +499,8 @@ impl DataCache {
                         // check against all the tags for this repo
                         Event::check_all_tag_trigger(&user.groups, &repo.tags, required, not)
                     }
-                    // this is an unsupported tag type; we shouldn't get here because we error
-                    // if it's unsupported when getting the event's data, so just return false
+                    // this is an unsupported tag type that we can never get data for, so it
+                    // can never meet this trigger
                     _ => false,
                 }
             }
@@ -405,11 +509,41 @@ impl DataCache {
         }
     }
 
+    /// Check whether this cache has all the data it will ever get for an event
+    ///
+    /// Only `NewTags` events need extra data; every other event kind never misses data here.
+    /// Data that Thorium reported does not exist and tag types we can never get data for
+    /// count as present, since retrying will never find them. So this only returns false
+    /// when an event's data is missing because of an error that a retry may fix.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - The event to check for data
+    pub fn has_data(&self, event: &Event) -> bool {
+        match &event.data {
+            // tag events need their sample or repo to be in our cache or known to not exist
+            EventData::NewTags { tag_type, item, .. } => match tag_type {
+                TagType::Files => {
+                    self.samples.contains_key(item) || self.missing_samples.contains(item)
+                }
+                TagType::Repos => {
+                    self.repos.contains_key(item) || self.missing_repos.contains(item)
+                }
+                // unsupported tag types never have data to gather so retrying won't help
+                _ => true,
+            },
+            // other events need no extra data
+            _ => true,
+        }
+    }
+
     /// Empty this data cache
     pub fn clear(&mut self) {
         // empty our caches
         self.samples.clear();
         self.repos.clear();
+        self.missing_samples.clear();
+        self.missing_repos.clear();
     }
 }
 
@@ -486,7 +620,158 @@ mod tests {
         let enabled_event = test_event("enabled");
         let mut filtered = FilteredEvents::default();
         cache.check_event(&enabled_event, &mut filtered);
-        // the enabled users event should not be cleared by the disabled check
-        assert!(filtered.clears.is_empty());
+        // the enabled users event is evaluated and cleared since it matches no triggers
+        assert_eq!(filtered.clears, vec![enabled_event.id]);
+    }
+
+    /// The max-depth guard is the only loop-breaker in the whole trigger pipeline, so for an
+    /// event at or beyond `max_depth`, `max_depth_guard` reports both `clear` and `halt`. This
+    /// makes [`TriggerCache::check_event`] return before ever reaching trigger evaluation, so the
+    /// event cannot confirm a trigger, spawn a reaction at depth+1, and let cyclic trigger
+    /// configurations recurse forever.
+    #[test]
+    fn max_depth_guard_halts_evaluation_at_max_depth() {
+        // an event exactly at the max depth must be cleared AND halt further evaluation
+        let (clear, halt) = TriggerCache::max_depth_guard(5, 5);
+        // the depth-capped event is added to the clear list
+        assert!(
+            clear,
+            "an event at max depth should be added to the clear list"
+        );
+        // and evaluation must stop so the event cannot confirm a trigger and spawn a reaction
+        assert!(
+            halt,
+            "an event at max depth must halt evaluation so it cannot fire a trigger"
+        );
+        // an event beyond the max depth must likewise halt
+        let (clear, halt) = TriggerCache::max_depth_guard(6, 5);
+        // it is cleared as well
+        assert!(clear, "an event beyond max depth should be cleared");
+        // and it too must halt evaluation
+        assert!(halt, "an event beyond max depth must halt evaluation");
+    }
+
+    /// An event below its max depth is still evaluated normally, so the guard neither clears it
+    /// nor halts it.
+    #[test]
+    fn max_depth_guard_allows_shallow_events() {
+        // an event well below the max depth should be neither cleared nor halted
+        let (clear, halt) = TriggerCache::max_depth_guard(0, 5);
+        // it is not added to the clear list
+        assert!(
+            !clear,
+            "a shallow event should not be cleared by the depth guard"
+        );
+        // and evaluation continues so it can match triggers
+        assert!(!halt, "a shallow event should not halt evaluation");
+    }
+
+    /// When an event matched no triggers (both confirmed and potential are empty),
+    /// `should_clear_no_matches` reports it should be cleared. Such an event lands in neither
+    /// confirmed nor potentials, so clearing it here is what lets
+    /// [`ReactionTriggerWorker::clear`] remove it instead of leaking it in the Redis in-flight
+    /// map/queue forever.
+    #[test]
+    fn events_matching_no_triggers_are_cleared() {
+        // an event with no confirmed and no potential triggers matched nothing at all
+        let should_clear = TriggerCache::should_clear_no_matches(true, true);
+        // it must be cleared so it does not accumulate in the in-flight queue forever
+        assert!(
+            should_clear,
+            "an event that matched no triggers must be cleared to avoid a Redis leak"
+        );
+    }
+
+    /// An event that did match a trigger (confirmed or potential non-empty) is not cleared by
+    /// this path, since it is handled by the confirmed/potential lists instead.
+    #[test]
+    fn events_matching_some_trigger_are_not_cleared_here() {
+        // an event with a confirmed trigger is handled elsewhere, so this path should not clear it
+        assert!(
+            !TriggerCache::should_clear_no_matches(false, true),
+            "an event with a confirmed trigger should not be cleared by the no-match path"
+        );
+        // an event with a potential trigger is likewise handled elsewhere
+        assert!(
+            !TriggerCache::should_clear_no_matches(true, false),
+            "an event with a potential trigger should not be cleared by the no-match path"
+        );
+    }
+
+    /// Driving [`TriggerCache::check_event`] with an event from an enabled user whose groups have
+    /// no triggers at all adds that event to the clear list, so an event that matched no
+    /// triggers never leaks in the Redis in-flight queue.
+    #[test]
+    fn check_event_clears_event_matching_no_triggers() {
+        // build a cache with one enabled user and no triggers
+        let mut users = HashMap::default();
+        users.insert("enabled".to_owned(), test_user("enabled", UserRole::User));
+        let cache = TriggerCache {
+            users,
+            triggers: HashMap::default(),
+            max_depth: 5,
+        };
+        // check an event from our enabled user
+        let event = test_event("enabled");
+        let mut filtered = FilteredEvents::default();
+        cache.check_event(&event, &mut filtered);
+        // the event matched nothing so it must be cleared
+        assert_eq!(
+            filtered.clears,
+            vec![event.id],
+            "an event that matched no triggers must be cleared to avoid a Redis leak"
+        );
+    }
+
+    /// Build a trigger cache whose single enabled user is in a group with a `NewSample` trigger
+    fn new_sample_trigger_cache() -> TriggerCache {
+        // build an enabled user in the corn group
+        let mut user = test_user("enabled", UserRole::User);
+        user.groups = vec!["corn".to_owned()];
+        let mut users = HashMap::default();
+        users.insert("enabled".to_owned(), user);
+        // give the corn group a pipeline triggered by new samples
+        let mut pipeline_triggers = HashMap::default();
+        pipeline_triggers.insert("on-new-sample".to_owned(), EventTrigger::NewSample);
+        let mut pipelines = HashMap::default();
+        pipelines.insert("harvest".to_owned(), pipeline_triggers);
+        let mut triggers = HashMap::default();
+        triggers.insert("corn".to_owned(), pipelines);
+        TriggerCache {
+            users,
+            triggers,
+            max_depth: 5,
+        }
+    }
+
+    /// An event at its max trigger depth confirms no trigger (not even a matching `NewSample`
+    /// trigger) when driven through [`TriggerCache::check_event`], so no reaction is spawned at
+    /// depth+1 and cyclic trigger configurations cannot recurse forever.
+    #[test]
+    fn check_event_at_max_depth_confirms_nothing() {
+        let cache = new_sample_trigger_cache();
+        // an event exactly at the max depth
+        let mut event = test_event("enabled");
+        event.depth = 5;
+        let mut filtered = FilteredEvents::default();
+        cache.check_event(&event, &mut filtered);
+        // the depth-capped event must fire nothing
+        assert!(
+            filtered.confirmed.is_empty(),
+            "an event at max depth must not confirm any trigger"
+        );
+    }
+
+    /// The same event below its max depth confirms the `NewSample` trigger when driven through
+    /// [`TriggerCache::check_event`].
+    #[test]
+    fn check_event_below_max_depth_confirms_trigger() {
+        let cache = new_sample_trigger_cache();
+        // a shallow event
+        let event = test_event("enabled");
+        let mut filtered = FilteredEvents::default();
+        cache.check_event(&event, &mut filtered);
+        // the trigger is confirmed for this event
+        assert_eq!(filtered.confirmed.len(), 1);
     }
 }

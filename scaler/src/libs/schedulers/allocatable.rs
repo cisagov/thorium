@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, HashSet};
 use thorium::conf::{FairShareWeights, IsRestricted, SpawnSlots, WorkerRestrictions};
 use thorium::models::{
     Deadline, Image, ImageScaler, NodeListParams, Pools, Requisition, Resources, SpawnLimits,
-    SpawnMap, SystemSettings, WorkerDeleteMap,
+    SpawnMap, SystemSettings, Worker, WorkerDeleteMap,
 };
 use thorium::{Conf, Error, Thorium};
 use tracing::{Level, Span, event, instrument};
@@ -193,7 +193,28 @@ impl Allocatable {
             .fold(Resources::default(), |acc, (_, cluster)| {
                 acc + cluster.resources
             });
-        self.deadlines_pool.resources = total;
+        // set the deadline pool size excluding the fairshare reserve
+        self.deadlines_pool.resources =
+            Self::deadline_pool_resources(total, self.fairshare_pool.resources);
+    }
+
+    /// Compute the resources the deadline pool should hold given the total cluster capacity
+    ///
+    /// This is the pool-sizing arithmetic in [`Allocatable::resize_deadline_pool`] (it never
+    /// needs `self`) extracted so its logic can be unit tested in isolation. The deadline pool
+    /// gets the total cluster capacity minus the fairshare pool's remaining reserve so both pools
+    /// never claim the same capacity. The subtraction saturates at zero.
+    ///
+    /// # Arguments
+    ///
+    /// * `total` - The summed available resources across every cluster
+    /// * `fairshare_reserve` - The fairshare pool's remaining reserve that should be held back
+    fn deadline_pool_resources(total: Resources, fairshare_reserve: Resources) -> Resources {
+        // start with the full cluster total
+        let mut resources = total;
+        // hold back whatever the fairshare pool has reserved
+        resources -= fairshare_reserve;
+        resources
     }
 
     /// Log all clusters current resources
@@ -525,6 +546,11 @@ impl Allocatable {
         let span = Span::current();
         // crawl over the users to try and spawn fair share jobs for
         'user: for user in users {
+            // if we are out of spawn slots then keep this user at their current rank
+            if *spawn_slots == 0 {
+                no_spawns.insert(user);
+                continue;
+            }
             // get the images this user is trying to spawn
             if let Some(job_stats) = map.get_mut(&user) {
                 // crawl this users job stats from lowest current utilization to highest
@@ -566,7 +592,7 @@ impl Allocatable {
                             // decrement our created count since we are spawning an image for this
                             *created -= 1;
                             // consume one spawn slot
-                            *spawn_slots -= 1;
+                            consume_spawn_slot(spawn_slots);
                             // continue onto the next user
                             continue 'user;
                         }
@@ -599,7 +625,12 @@ impl Allocatable {
         // track the users that do not spawn any jobs
         let mut no_spawns = BTreeMap::default();
         // iterate over our users based on how many resources they have consumed
-        while let Some((rank, users)) = self.fair_share.pop_first() {
+        // stop once we have used all of our spawn slots for this loop
+        while *spawn_slots > 0 {
+            // get the next lowest rank group or stop if we have crawled all users
+            let Some((rank, users)) = self.fair_share.pop_first() else {
+                break;
+            };
             // get an entry to the current rank group in our no spawn map
             let entry = no_spawns.entry(rank).or_default();
             // try to spawn a job for each of the users in this rank group
@@ -809,16 +840,9 @@ impl Allocatable {
                             for spawned in spawned_group {
                                 // skip any workers that are not running or that are the same worker type
                                 // or that haven't had time to complete at least one job
-                                if !spawned.scaled_down
-                                    && spawned.down_scalable < now
-                                    && spawned.pool == Pools::Deadline
-                                    && spawned.req.user != req.user
-                                    && spawned.req.group != req.group
-                                    && spawned.req.pipeline != req.pipeline
-                                    && spawned.req.stage != req.stage
-                                {
+                                if is_scale_down_victim(spawned, req, now) {
                                     // add this workers resources to our freeable set
-                                    freeable += image.resources;
+                                    freeable += spawned.resources;
                                     // add this worker to our scale down set
                                     scale_downs.push(spawned);
                                     // check if we have enough resources to spawn this image now
@@ -1075,25 +1099,8 @@ impl Allocatable {
         while !cursor.data.is_empty() {
             // crawl over the nodes on this page
             for node in cursor.data.drain(..) {
-                // crawl over the workers on this node
-                for (name, worker) in node.workers {
-                    // if this worker has failed then add it to our delete map
-                    if failed.contains(&name) {
-                        // add this failed worker to our delete map
-                        deletes.add_mut(name);
-                        // get this groups image map
-                        if let Some(image_map) = self.image_counts.get_mut(&worker.group) {
-                            // get this image current spawn count
-                            if let Some(count) = image_map.get_mut(&worker.stage) {
-                                // decrement this images count by 1
-                                *count = count.saturating_sub(1);
-                            }
-                        }
-                    } else {
-                        // this worker is alive so add its name to our alive set
-                        alive.insert(name);
-                    }
-                }
+                // sort the workers on this node into failed and alive workers
+                prune_failed_node_workers(failed, node.workers, &mut alive, &mut deletes);
             }
             // if our cursor is exhausted then break
             if cursor.exhausted() {
@@ -1158,6 +1165,114 @@ impl Allocatable {
         self.deadlines_pool.release(freed.deadline);
         Ok(())
     }
+}
+
+/// Sort the workers Thorium lists on a node into failed workers to delete and alive workers
+///
+/// This is the per-node loop in [`Allocatable::prune_failed_workers`] extracted so it can be
+/// unit tested. A failed worker's image count is NOT decremented here: the failed worker is left
+/// out of `alive`, so `NodeResources::free` frees it and decrements its image count exactly once.
+///
+/// # Arguments
+///
+/// * `failed` - The workers that have failed
+/// * `workers` - The workers Thorium lists on this node
+/// * `alive` - The set of alive workers to add to
+/// * `deletes` - The failed workers to delete from Thorium
+fn prune_failed_node_workers(
+    failed: &HashSet<String>,
+    workers: impl IntoIterator<Item = (String, Worker)>,
+    alive: &mut HashSet<String>,
+    deletes: &mut WorkerDeleteMap,
+) {
+    // crawl over the workers on this node
+    for (name, _) in workers {
+        // if this worker has failed then add it to our delete map
+        if failed.contains(&name) {
+            // add this failed worker to our delete map
+            // its image count is released when NodeResources::free frees it
+            deletes.add_mut(name);
+        } else {
+            // this worker is alive so add its name to our alive set
+            alive.insert(name);
+        }
+    }
+}
+
+/// Track a worker that the scheduler failed to spawn
+///
+/// This is the spawn error branch in `Scaler::schedule` extracted so it can be unit tested.
+/// When a worker fails to spawn it is deleted from Thorium, and the fairshare pool resources and
+/// spawn limit image count that `try_allocate` consumed for it are released here. The failed
+/// worker never reaches `node.spawned` or Thorium's worker listing, so no other free path would
+/// ever release them. Deadline pool resources are not released here since the deadline pool is
+/// resized from observed cluster resources on every resources update.
+///
+/// # Arguments
+///
+/// * `fairshare_pool` - The fairshare pool the worker may have consumed resources from
+/// * `image_counts` - The current counts for spawned images
+/// * `spawn` - The worker that failed to spawn
+/// * `deleted` - The workers that were deleted this loop
+/// * `failed` - The workers to delete from Thorium
+pub fn record_failed_spawn(
+    fairshare_pool: &mut Pool,
+    image_counts: &mut HashMap<String, HashMap<String, u64>>,
+    spawn: Spawned,
+    deleted: &mut HashSet<String>,
+    failed: &mut WorkerDeleteMap,
+) {
+    // give any consumed fairshare resources back to the fairshare pool
+    if spawn.pool == Pools::FairShare {
+        fairshare_pool.release(spawn.resources);
+    }
+    // get this groups image map
+    if let Some(image_map) = image_counts.get_mut(&spawn.req.group) {
+        // get this images current spawn count
+        if let Some(count) = image_map.get_mut(&spawn.req.stage) {
+            // release the spawn limit slot this worker consumed
+            *count = count.saturating_sub(1);
+        }
+    }
+    // add this failed worker to our delete map
+    deleted.insert(spawn.name.clone());
+    // add this failed worker to our list of workers to remove
+    failed.add_mut(spawn.name);
+}
+
+/// Consume a single spawn slot from the remaining per-loop spawn budget
+///
+/// This is the decrement that `try_fair_share_spawn` applies once per fairshare spawn; it
+/// is extracted so the underflow behavior can be unit tested in isolation. The budget never
+/// drops below zero.
+///
+/// # Arguments
+///
+/// * `spawn_slots` - The remaining spawn slots to decrement
+fn consume_spawn_slot(spawn_slots: &mut usize) {
+    // decrement the remaining spawn budget by one without underflowing
+    *spawn_slots = spawn_slots.saturating_sub(1);
+}
+
+/// Decide whether an already spawned worker is a valid victim to scale down in order to
+/// make room for a higher priority requisition
+///
+/// This is the pure decision that [`Allocatable::scale_down_to_meet`] applies to each
+/// candidate worker; it is extracted so it can be unit tested without a live cluster.
+///
+/// # Arguments
+///
+/// * `spawned` - The already spawned worker being considered as a scale down victim
+/// * `req` - The higher priority requisition we are trying to make room for
+/// * `now` - The current timestamp used to check the worker has run long enough to scale down
+fn is_scale_down_victim(spawned: &Spawned, req: &Requisition, now: DateTime<Utc>) -> bool {
+    // only consider workers that have not already been scaled down, have had time to
+    // complete at least one job, are in the deadline pool, and are not the same requisition
+    // a worker is only the same requisition if every field matches
+    !spawned.scaled_down
+        && spawned.down_scalable < now
+        && spawned.pool == Pools::Deadline
+        && spawned.req != *req
 }
 
 /// All resources for a single cluster
@@ -1317,11 +1432,12 @@ impl ClusterResources {
             temp_nodes.extend(node_group);
         }
         // insert or update all of the nodes in our update
-        for (name, node_update) in update.nodes.drain() {
+        // don't drain our update since free_after_update needs it to free inactive workers
+        for (name, node_update) in &update.nodes {
             // get this nodes entry
             let entry = temp_nodes
                 .entry(name.clone())
-                .or_insert_with(|| NodeResources::new(name, self.spawn_slots_reset));
+                .or_insert_with(|| NodeResources::new(name.clone(), self.spawn_slots_reset));
             // apply our update to this node
             entry.available = node_update.available;
             entry.total = node_update.total;
@@ -1558,5 +1674,401 @@ impl NodeResources {
         }
         // drop any empty spawned groups
         self.spawned.retain(|_, workers| !workers.is_empty());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    /// Build a spawned deadline worker eligible to be scaled down, tied to the given req
+    ///
+    /// The worker is placed in the deadline pool, marked not-yet-scaled-down, and given a
+    /// past `down_scalable` time so it always satisfies the "has run long enough" checks.
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - The requisition this worker was spawned for
+    /// * `resources` - The resources this worker is currently holding
+    fn scalable_worker(req: Requisition, resources: Resources) -> Spawned {
+        // build a spawned worker that is otherwise a valid scale down candidate
+        Spawned {
+            req,
+            cluster: "cluster".to_owned(),
+            node: "node".to_owned(),
+            name: "worker".to_owned(),
+            resources,
+            pool: Pools::Deadline,
+            spawn: true,
+            scaled_down: false,
+            // set the down scalable time in the past so it is eligible to scale down
+            down_scalable: Utc::now() - Duration::minutes(5),
+        }
+    }
+
+    /// The victim filter in `scale_down_to_meet` excludes a worker only when it is the *same*
+    /// requisition (matches on user AND group AND pipeline AND stage), so a worker that shares
+    /// just one field with the incoming req (here the group) is still selected as a victim.
+    #[test]
+    fn victim_sharing_one_field_is_still_selected() {
+        // the incoming requisition we are trying to make room for
+        let req = Requisition::new("alice", "corn", "pipe-a", "stage-a");
+        // a spawned worker that shares only the group but differs on user/pipeline/stage
+        let other = Requisition::new("bob", "corn", "pipe-b", "stage-b");
+        let worker = scalable_worker(other, Resources::new(500, 256, 0, 1));
+        // this worker is a different requisition, so it must be a valid scale down victim
+        assert!(
+            is_scale_down_victim(&worker, &req, Utc::now()),
+            "a worker sharing only one field with the incoming req is a different requisition \
+             and must be selectable as a scale down victim"
+        );
+    }
+
+    /// A worker for the exact same requisition is never selected as a victim of itself, so the
+    /// scaler never scales down the very workers it is trying to spawn.
+    #[test]
+    fn identical_requisition_is_never_a_victim() {
+        // the incoming requisition we are trying to make room for
+        let req = Requisition::new("alice", "corn", "pipe-a", "stage-a");
+        // a spawned worker for the exact same requisition
+        let worker = scalable_worker(req.clone(), Resources::new(500, 256, 0, 1));
+        // an identical requisition must be excluded from scale down candidates
+        assert!(
+            !is_scale_down_victim(&worker, &req, Utc::now()),
+            "a worker for the same requisition must never be scaled down to make room for itself"
+        );
+    }
+
+    /// Consuming a spawn slot when the per-loop budget is already zero leaves it at zero. The
+    /// per-node fairshare capacity can exceed the global `spawn_limit`, and an underflow would
+    /// either panic (overflow-checked builds) or wrap to `usize::MAX` and defeat the per-loop
+    /// spawn cap.
+    #[test]
+    fn consuming_slot_at_zero_does_not_underflow() {
+        // the per-loop spawn budget has already been fully exhausted
+        let mut spawn_slots = 0usize;
+        // consuming another slot must not wrap the budget around to a huge value
+        consume_spawn_slot(&mut spawn_slots);
+        assert_eq!(
+            spawn_slots, 0,
+            "consuming a spawn slot at zero must stay at zero, not underflow to usize::MAX"
+        );
+    }
+
+    /// The deadline pool holds only "whatever resources are in no other pools": the total cluster
+    /// capacity minus the fairshare pool's reserve (32000m - 8000m = 24000m cpu). This keeps both
+    /// pools from claiming the same physical capacity and voiding the fairshare reservation.
+    #[test]
+    fn deadline_pool_excludes_fairshare_reserve() {
+        // the summed available capacity across every cluster
+        let total = Resources::new(32000, 65536, 0, 40);
+        // the fairshare pool holds an 8-core / 16 GiB reserve that must be held back
+        let fairshare_reserve = Resources::new(8000, 16384, 0, 10);
+        // size the deadline pool given the total capacity and the fairshare reserve
+        let deadline = Allocatable::deadline_pool_resources(total, fairshare_reserve);
+        // the deadline pool must not claim the cpu the fairshare reserve guarantees
+        assert_eq!(
+            deadline.cpu, 24000,
+            "the deadline pool must exclude the fairshare cpu reserve (32000 - 8000)"
+        );
+        // nor may it claim the reserved memory
+        assert_eq!(
+            deadline.memory, 49152,
+            "the deadline pool must exclude the fairshare memory reserve (65536 - 16384)"
+        );
+    }
+
+    /// With no fairshare reserve configured the deadline pool holds the full cluster capacity, so
+    /// the deadline pool is not shrunk when nothing is reserved.
+    #[test]
+    fn deadline_pool_is_full_total_without_fairshare_reserve() {
+        // the summed available capacity across every cluster
+        let total = Resources::new(32000, 65536, 0, 40);
+        // no fairshare reserve is held back
+        let deadline = Allocatable::deadline_pool_resources(total, Resources::default());
+        // the deadline pool gets everything
+        assert_eq!(deadline, total);
+    }
+
+    /// Build a spawned worker in group `corn` for image `husker`
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique name of this worker
+    /// * `pool` - The pool this worker was spawned in
+    /// * `resources` - The resources this worker holds
+    fn corn_worker(name: &str, pool: Pools, resources: Resources) -> Spawned {
+        Spawned {
+            name: name.to_owned(),
+            pool,
+            ..scalable_worker(
+                Requisition::new("user", "corn", "pipeline", "husker"),
+                resources,
+            )
+        }
+    }
+
+    /// A failed spawn gives back the fairshare pool resources and spawn limit image count that
+    /// `try_allocate` consumed for it. Nothing else releases them, so this keeps failed spawns
+    /// from permanently shrinking the fairshare pool and occupying spawn limit slots until the
+    /// scaler restarts.
+    #[test]
+    fn failed_spawn_releases_pool_and_image_count() {
+        // a fairshare pool that has already given 2 cores / 4 GiB to the spawn that will fail
+        let resources = Resources::new(2000, 4096, 0, 0);
+        let mut fairshare_pool = Pool::default();
+        fairshare_pool.resources = Resources::new(6000, 12288, 0, 0);
+        // the spawn limited image was counted when it was allocated
+        let mut image_counts: HashMap<String, HashMap<String, u64>> = HashMap::default();
+        image_counts
+            .entry("corn".to_owned())
+            .or_default()
+            .insert("husker".to_owned(), 1);
+        // the scheduler fails to create this fairshare worker
+        let spawn = corn_worker("w1", Pools::FairShare, resources);
+        let mut deleted = HashSet::default();
+        let mut failed = WorkerDeleteMap::default();
+        record_failed_spawn(
+            &mut fairshare_pool,
+            &mut image_counts,
+            spawn,
+            &mut deleted,
+            &mut failed,
+        );
+        // its consumed resources must be returned to the fairshare pool
+        assert_eq!(
+            fairshare_pool.resources,
+            Resources::new(8000, 16384, 0, 0),
+            "a failed spawn must release its fairshare pool resources"
+        );
+        // and its spawn limit slot must be released
+        assert_eq!(
+            image_counts["corn"]["husker"], 0,
+            "a failed spawn must release its spawn limit image count"
+        );
+    }
+
+    /// A failed spawn is deleted from Thorium.
+    #[test]
+    fn failed_spawn_is_deleted() {
+        let mut fairshare_pool = Pool::default();
+        let mut image_counts: HashMap<String, HashMap<String, u64>> = HashMap::default();
+        let spawn = corn_worker("w1", Pools::FairShare, Resources::default());
+        let mut deleted = HashSet::default();
+        let mut failed = WorkerDeleteMap::default();
+        record_failed_spawn(
+            &mut fairshare_pool,
+            &mut image_counts,
+            spawn,
+            &mut deleted,
+            &mut failed,
+        );
+        // the failed worker is tracked as deleted and removed from Thorium
+        assert!(deleted.contains("w1"));
+        assert_eq!(failed.workers, vec!["w1".to_owned()]);
+    }
+
+    /// Build a worker registered in Thorium in group `corn` for image `husker`
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique name of this worker
+    fn registered_corn_worker(name: &str) -> Worker {
+        Worker {
+            cluster: "cluster".to_owned(),
+            node: "node".to_owned(),
+            scaler: ImageScaler::K8s,
+            name: name.to_owned(),
+            user: "user".to_owned(),
+            group: "corn".to_owned(),
+            pipeline: "pipeline".to_owned(),
+            stage: "husker".to_owned(),
+            status: thorium::models::WorkerStatus::Running,
+            spawned: Utc::now(),
+            heart_beat: None,
+            resources: Resources::default(),
+            pool: Pools::Deadline,
+            active: None,
+        }
+    }
+
+    /// Run the two free paths `free_deleted` applies to a node running two `husker` workers
+    ///
+    /// # Arguments
+    ///
+    /// * `failed` - The workers that have failed
+    fn free_two_husker_workers(failed: &HashSet<String>) -> u64 {
+        // two husker workers are running so the spawn limit count is 2
+        let mut image_counts: HashMap<String, HashMap<String, u64>> = HashMap::default();
+        image_counts
+            .entry("corn".to_owned())
+            .or_default()
+            .insert("husker".to_owned(), 2);
+        // Thorium lists both workers on this node
+        let listed = vec![
+            ("w1".to_owned(), registered_corn_worker("w1")),
+            ("w2".to_owned(), registered_corn_worker("w2")),
+        ];
+        // prune any failed workers from the listing
+        let mut alive = HashSet::default();
+        let mut deletes = WorkerDeleteMap::default();
+        prune_failed_node_workers(failed, listed, &mut alive, &mut deletes);
+        // the scaler's node also tracks both spawned workers
+        let mut node = NodeResources::new("node".to_owned(), SpawnSlots::default());
+        node.spawned.insert(
+            Utc::now(),
+            vec![
+                corn_worker("w1", Pools::Deadline, Resources::default()),
+                corn_worker("w2", Pools::Deadline, Resources::default()),
+            ],
+        );
+        // free any workers that are no longer alive
+        node.free(
+            &alive,
+            &HashSet::default(),
+            &mut PoolFrees::default(),
+            &mut image_counts,
+            &mut HashMap::default(),
+        );
+        image_counts["corn"]["husker"]
+    }
+
+    /// Across both free paths in `free_deleted` (`prune_failed_workers` then
+    /// `NodeResources::free`) a failed worker decrements its image count exactly once, so one
+    /// failed worker out of two drops the count from 2 to 1. This keeps spawn limited images from
+    /// running more concurrent workers than their limit allows.
+    #[test]
+    fn failed_worker_decrements_image_count_once() {
+        // one of the two running workers failed
+        let failed: HashSet<String> = ["w1".to_owned()].into_iter().collect();
+        // one worker is still running so the count must be 1
+        assert_eq!(
+            free_two_husker_workers(&failed),
+            1,
+            "a single failed worker must only decrement its image count once"
+        );
+    }
+
+    /// When no worker failed the image count is unchanged.
+    #[test]
+    fn alive_workers_keep_their_image_count() {
+        assert_eq!(free_two_husker_workers(&HashSet::default()), 2);
+    }
+
+    /// The result of applying a resources update to a cluster running one `husker` worker
+    struct UpdatedCluster {
+        /// The cluster after the update was applied
+        cluster: ClusterResources,
+        /// The resources the update freed
+        freed: PoolFrees,
+        /// The image counts after the update was applied
+        image_counts: HashMap<String, HashMap<String, u64>>,
+        /// The requisition counts after the update was applied
+        req_counts: HashMap<Requisition, i64>,
+    }
+
+    /// Apply a resources update to a cluster whose only node is running fairshare worker `w1`
+    ///
+    /// # Arguments
+    ///
+    /// * `active` - The workers the update reports as active on the node
+    fn update_cluster_running_w1(active: &[&str]) -> UpdatedCluster {
+        // w1 holds 2 cores and 4 GiB from the fairshare pool
+        let worker = corn_worker("w1", Pools::FairShare, Resources::new(2000, 4096, 0, 0));
+        // w1 is counted against its spawn limit and its requisition count
+        let mut image_counts: HashMap<String, HashMap<String, u64>> = HashMap::default();
+        image_counts
+            .entry("corn".to_owned())
+            .or_default()
+            .insert("husker".to_owned(), 1);
+        let mut req_counts: HashMap<Requisition, i64> = HashMap::default();
+        req_counts.insert(worker.req.clone(), 1);
+        // the scaler tracks w1 as spawned on its node
+        let mut node = NodeResources::new("node".to_owned(), SpawnSlots::default());
+        node.spawned.insert(Utc::now(), vec![worker]);
+        // build a cluster containing just this node
+        let mut cluster = ClusterResources {
+            name: "cluster".to_owned(),
+            resources: Resources::default(),
+            total: Resources::default(),
+            low_resources: false,
+            nodes: BTreeMap::default(),
+            spawn_slots_reset: SpawnSlots::default(),
+        };
+        cluster
+            .nodes
+            .entry(node.available.cpu)
+            .or_default()
+            .insert(node.name.clone(), node);
+        // the resources update lists this node with the given active workers
+        let node_resources = Resources::new(8000, 16384, 0, 10);
+        let mut node_update = NodeAllocatableUpdate::new(node_resources, node_resources);
+        node_update
+            .active
+            .extend(active.iter().map(|name| (*name).to_owned()));
+        let mut update = AllocatableUpdate::default();
+        update.nodes.insert("node".to_owned(), node_update);
+        // apply the update to our cluster
+        let freed = cluster.update(update, &mut image_counts, &mut req_counts);
+        UpdatedCluster {
+            cluster,
+            freed,
+            image_counts,
+            req_counts,
+        }
+    }
+
+    /// Check if a worker is still tracked as spawned anywhere in a cluster
+    ///
+    /// # Arguments
+    ///
+    /// * `cluster` - The cluster to check
+    /// * `name` - The name of the worker to look for
+    fn is_spawned(cluster: &ClusterResources, name: &str) -> bool {
+        cluster
+            .nodes
+            .values()
+            .flat_map(HashMap::values)
+            .flat_map(|node| node.spawned.values().flatten())
+            .any(|spawned| spawned.name == name)
+    }
+
+    /// A resources update frees a worker that is missing from its node's active set: it is no
+    /// longer tracked as spawned, its fairshare resources are returned, and it no longer counts
+    /// against its spawn limit or requisition count.
+    #[test]
+    fn update_frees_inactive_workers() {
+        // the update lists the node but w1 is no longer active on it
+        let updated = update_cluster_running_w1(&[]);
+        // w1 must no longer be tracked as spawned
+        assert!(
+            !is_spawned(&updated.cluster, "w1"),
+            "a worker missing from its node's active set must be freed on a resources update"
+        );
+        // its fairshare resources must be returned
+        assert_eq!(
+            updated.freed.fairshare,
+            Resources::new(2000, 4096, 0, 0),
+            "an inactive worker's resources must be returned to its pool"
+        );
+        // and it must no longer count against its spawn limit or requisition count
+        assert_eq!(updated.image_counts["corn"]["husker"], 0);
+        assert_eq!(updated.req_counts.values().sum::<i64>(), 0);
+    }
+
+    /// A worker that is still active on its node is kept and still counted.
+    #[test]
+    fn update_frees_inactive_workers_keeps_active_workers() {
+        // the update lists the node and w1 is still active on it
+        let updated = update_cluster_running_w1(&["w1"]);
+        // w1 is still spawned and nothing was freed
+        assert!(is_spawned(&updated.cluster, "w1"));
+        assert_eq!(updated.freed.fairshare, Resources::default());
+        assert_eq!(updated.freed.deadline, Resources::default());
+        // and it still counts against its spawn limit and requisition count
+        assert_eq!(updated.image_counts["corn"]["husker"], 1);
+        assert_eq!(updated.req_counts.values().sum::<i64>(), 1);
     }
 }

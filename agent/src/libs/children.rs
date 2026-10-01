@@ -8,6 +8,7 @@ use regex::Regex;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
@@ -28,6 +29,9 @@ use crate::log;
 // task an can be on any thread
 static CHILD_FILTERS_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// The name of the metadata file tools write for children carved from pcaps
+const PCAP_METADATA_FILE_NAME: &str = "thorium_pcap_metadata.json";
 
 /// Create all directories to look for children in
 ///
@@ -606,14 +610,35 @@ impl Children {
                 get_filesystem_children(&unknown_root).await?,
             ))
         } else {
-            // recursively walk through this directory and get all files
-            Some(ChildrenFiles::Loose(get_children(&root).await?))
+            // recursively walk through the loose-unknown directory and get all files
+            Some(ChildrenFiles::Loose(get_children(&unknown_root).await?))
         };
-        // collect any files carved from pcaps
-        let pcap = Some(ChildrenFiles::Loose(get_children(&pcap_root).await?));
+        // collect any files carved from pcaps except the agent's metadata file
+        let pcap_children = get_children(&pcap_root)
+            .await?
+            .into_iter()
+            // only keep files that should be submitted as pcap children
+            .filter(|path| Self::is_collectable_pcap_child(path))
+            .collect();
+        // wrap the collected pcap children as loose files
+        let pcap = Some(ChildrenFiles::Loose(pcap_children));
         // recursively walk through this directory skipping any hidden files
         self.carved = CarvedChildren { unknown, pcap };
         Ok(())
+    }
+
+    /// Decide whether a file under `carved/pcap` should be submitted as a pcap-carved child
+    ///
+    /// The agent itself defines `carved/pcap/thorium_pcap_metadata.json` as its metadata contract
+    /// (read by [`Children::get_pcap_metadata`]), so that exact file is excluded and every other
+    /// file is collected.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to a candidate pcap-carved child file
+    fn is_collectable_pcap_child(path: &Path) -> bool {
+        // skip the agent's own pcap metadata file but keep every other carved file
+        path.file_name() != Some(OsStr::new(PCAP_METADATA_FILE_NAME))
     }
 
     /// Filter children based on the image's configured child filters
@@ -856,7 +881,7 @@ impl Children {
     ///
     /// * `logs` - The logs to send to the API
     async fn get_pcap_metadata(&self, logs: &mut Sender<String>) -> HashMap<String, PcapMetadata> {
-        let pcap_metadata_path = self.root.join("carved/pcap/thorium_pcap_metadata.json");
+        let pcap_metadata_path = self.root.join("carved/pcap").join(PCAP_METADATA_FILE_NAME);
         match PcapMetadata::map_from_file(&pcap_metadata_path).await {
             Ok(maybe_metadata) => match maybe_metadata {
                 Some(metadata) => {
@@ -920,6 +945,35 @@ impl Children {
         }
     }
 
+    /// Take the carved-unknown paths to submit for each parent sample in [`Self::submit_carved`]
+    ///
+    /// The unknown paths are taken once and every parent sample is given its own copy, mirroring
+    /// the pcap handling in `submit_carved`, so unknown carved children are associated with every
+    /// parent sample and not just the first. `None` means there are no unknown carved children,
+    /// which ends `submit_carved` early.
+    ///
+    /// # Arguments
+    ///
+    /// * `samples` - The parent samples bound into this job
+    /// * `unknown` - The carved-unknown children files collected for this job
+    fn carved_unknown_plan(
+        samples: &[String],
+        unknown: &mut Option<ChildrenFiles>,
+    ) -> Option<Vec<(Vec<PathBuf>, bool)>> {
+        // take either our loose files or our filesystems files once for all parent samples
+        let (paths, is_direct) = match unknown {
+            // theres no unknown carved children and nothing to do
+            None => return None,
+            // ingest all loose unpacked children files
+            Some(ChildrenFiles::Loose(loose)) => (std::mem::take(loose), true),
+            // ingest all children files in this filesystem
+            Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
+        };
+        // give every parent sample its own copy of the unknown paths
+        let plan = samples.iter().map(|_| (paths.clone(), is_direct)).collect();
+        Some(plan)
+    }
+
     /// submit charved children files to Thorium
     ///
     /// # Arguments
@@ -952,8 +1006,10 @@ impl Children {
             // ingest all children files in this filesystem
             Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
         };
+        // take the carved-unknown paths once so every parent sample gets them
+        let mut unknown_plan = Self::carved_unknown_plan(&job.samples, &mut self.carved.unknown);
         // submit for each parent sample that was bound in
-        for sample in &job.samples {
+        for (sample_idx, sample) in job.samples.iter().enumerate() {
             // submit samples carved from a PCAP
             let resps = submit!(
                 sample,
@@ -1024,14 +1080,12 @@ impl Children {
                     }
                 }
             }
-            // submit either our loose files or our filesystem
-            let (paths, is_direct) = match &mut self.carved.unknown {
-                // theres no unpacked children and nothing to do
+            // get the unknown carved paths taken for this parent sample
+            let (paths, is_direct) = match unknown_plan.as_mut() {
+                // theres no unknown carved children and nothing to do
                 None => return Ok(()),
-                // ingest all loose unpacked children files
-                Some(ChildrenFiles::Loose(loose)) => (std::mem::take(loose), true),
-                // ingest all children files in this filesystem
-                Some(ChildrenFiles::Fs(builder)) => (std::mem::take(&mut builder.files), false),
+                // use the paths taken for this parent sample
+                Some(plan) => std::mem::take(&mut plan[sample_idx]),
             };
             // submit samples carved from an unknown source
             let resps = submit!(
@@ -1185,5 +1239,86 @@ impl From<PcapMetadata> for CarvedOrigin {
             proto: metadata.proto,
             url: metadata.url,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The agent's own `thorium_pcap_metadata.json` is not collected as a pcap-carved child and
+    /// uploaded to Thorium as a sample
+    ///
+    /// The agent defines `carved/pcap/thorium_pcap_metadata.json` as its metadata contract, so
+    /// the pcap collection walk skips that exact file name rather than ingesting the metadata
+    /// file as a sample on every pcap-metadata job.
+    #[test]
+    fn pcap_metadata_file_is_not_collected_as_a_child() {
+        // build the path to the agent's own metadata file under carved/pcap
+        let metadata_path =
+            PathBuf::from("/tmp/thorium/children/carved/pcap/thorium_pcap_metadata.json");
+        // the metadata file must never be submitted as a pcap-carved child
+        assert!(
+            !Children::is_collectable_pcap_child(&metadata_path),
+            "the pcap metadata file must be excluded from collected pcap children"
+        );
+    }
+
+    /// A real carved file under `carved/pcap` is still collected as a child. The metadata-file
+    /// exclusion is narrow: only `thorium_pcap_metadata.json` is skipped, every other carved file
+    /// is still a legitimate pcap child.
+    #[test]
+    fn real_pcap_child_is_still_collected() {
+        // build the path to a genuine carved child under carved/pcap
+        let child_path = PathBuf::from("/tmp/thorium/children/carved/pcap/carved_payload.bin");
+        // a genuine carved file must still be submitted as a pcap child
+        assert!(
+            Children::is_collectable_pcap_child(&child_path),
+            "a genuine carved pcap child must still be collected"
+        );
+    }
+
+    /// Unknown carved children are associated with every parent sample, not just the first
+    ///
+    /// The carved-unknown paths are taken once before `submit_carved` loops over the job's parent
+    /// samples, mirroring the pcap handling, so every parent sample is submitted with the full set
+    /// of unknown children and a CarvedUnknown origin rather than parents 2..N getting an empty
+    /// set.
+    #[test]
+    fn unknown_carved_children_associated_with_every_parent_sample() {
+        // a job with two parent samples
+        let samples = vec!["parent-a".to_owned(), "parent-b".to_owned()];
+        // two loose unknown carved children were collected for this job
+        let children = vec![
+            PathBuf::from("/tmp/thorium/children/carved/unknown/one.bin"),
+            PathBuf::from("/tmp/thorium/children/carved/unknown/two.bin"),
+        ];
+        let mut unknown = Some(ChildrenFiles::Loose(children.clone()));
+        // plan which unknown children are submitted for each parent sample
+        let plan = Children::carved_unknown_plan(&samples, &mut unknown)
+            .expect("unknown children were collected so there must be a plan");
+        // each parent sample must be submitted with every unknown child
+        for (sample, (paths, _)) in samples.iter().zip(&plan) {
+            assert_eq!(
+                paths, &children,
+                "parent sample {sample} must be associated with every unknown carved child"
+            );
+        }
+    }
+
+    /// The first parent sample receives every unknown carved child as loose (direct) files.
+    #[test]
+    fn first_parent_sample_gets_unknown_carved_children() {
+        // a job with a single parent sample
+        let samples = vec!["parent-a".to_owned()];
+        // one loose unknown carved child was collected for this job
+        let children = vec![PathBuf::from(
+            "/tmp/thorium/children/carved/unknown/one.bin",
+        )];
+        let mut unknown = Some(ChildrenFiles::Loose(children.clone()));
+        // plan which unknown children are submitted for the parent sample
+        let plan = Children::carved_unknown_plan(&samples, &mut unknown).unwrap();
+        // the single parent gets every child as direct loose files
+        assert_eq!(plan, vec![(children, true)]);
     }
 }

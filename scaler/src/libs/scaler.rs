@@ -126,7 +126,6 @@ impl ErrorOutKinds {
     /// # Arguments
     ///
     /// * `worker` - The worker whose image cannot be pulled
-    #[allow(dead_code)]
     pub fn image_pull_backoff<W: Into<String>>(worker: W) -> Self {
         ErrorOutKinds::ImagePullBackoff(worker.into())
     }
@@ -168,6 +167,102 @@ impl PartialEq for ErrorOutKinds {
         // check if we have the same worker
         self.worker() == other.worker()
     }
+}
+
+/// Sync our ban sets against a newly pulled cache
+///
+/// This is the cache arm of `Scaler::check_tasks` extracted so it can be unit tested. The stale
+/// bans from the old cache are cleared first and then every scheduler repopulates the ban sets
+/// from the new cache, so the bans derived from the new cache are kept.
+///
+/// # Arguments
+///
+/// * `bans` - The ban sets to sync
+/// * `sync` - Syncs every scheduler against the new cache, adding any bans it finds
+async fn resync_bans<F>(bans: &mut BanSets, sync: F) -> Result<(), Error>
+where
+    F: AsyncFnOnce(&mut BanSets) -> Result<(), Error>,
+{
+    // clear the stale bans from our old cache before syncing
+    bans.clear();
+    // sync our schedulers against the new cache, adding any bans they find
+    sync(bans).await?;
+    Ok(())
+}
+
+/// Build the batches of worker registrations `Scaler::register_workers` submits
+///
+/// This is the batching in `Scaler::register_workers` extracted so it can be unit tested. A batch
+/// is submitted once it reaches 25 workers and a fresh batch is started afterwards, so each worker
+/// is registered exactly once.
+///
+/// # Arguments
+///
+/// * `reqs` - The requisitions whose spawns should be registered
+fn registration_batches(reqs: &ReqMap) -> Vec<WorkerRegistrationList> {
+    // track the batches to submit in order
+    let mut batches = Vec::default();
+    // build a list to track the new workers we are spawning
+    let mut registrations = WorkerRegistrationList::default();
+    // get the worker registration info for each cluster
+    for (cluster, spawn_map) in &reqs.spawns {
+        // crawl over the groups for this cluster
+        for spawn_group in spawn_map.values() {
+            // build a worker registration object for each spawned worker
+            for spawn in spawn_group {
+                // build this workers registration object
+                let worker = WorkerRegistration::new(
+                    cluster,
+                    &spawn.node,
+                    &spawn.name,
+                    &spawn.req.user,
+                    &spawn.req.group,
+                    &spawn.req.pipeline,
+                    &spawn.req.stage,
+                    spawn.resources,
+                    spawn.pool,
+                );
+                // add this new spawn to our list of workers to register
+                registrations.add_mut(worker);
+            }
+            // if we have at least 25 workers then submit them to Thorium
+            if registrations.workers.len() >= 25 {
+                // submit this batch and start a new one so no worker is sent twice
+                batches.push(std::mem::take(&mut registrations));
+            }
+        }
+    }
+    // skip registering new workers if we have none
+    if !registrations.workers.is_empty() {
+        batches.push(registrations);
+    }
+    batches
+}
+
+/// Get the clusters `Scaler::schedule` asks to delete workers and the scale downs for each
+///
+/// This is the cluster selection in `Scaler::schedule` extracted so it can be unit tested. Every
+/// cluster with new scale down orders is returned with them, and every cluster whose scheduler
+/// still has pending deletes from an earlier loop is returned with no new scale downs, so it is
+/// still asked to validate them instead of leaving those workers in the being deleted state
+/// until that cluster happens to get another scale down.
+///
+/// # Arguments
+///
+/// * `scale_down` - The new scale down orders by cluster
+/// * `pending` - The clusters whose schedulers have pending deletes to validate
+fn delete_targets(
+    mut scale_down: HashMap<String, Vec<Spawned>>,
+    pending: &HashSet<String>,
+) -> HashMap<String, Vec<Spawned>> {
+    // crawl over the clusters with pending deletes
+    for cluster in pending {
+        // make sure quiet clusters are still called to validate their pending deletes
+        if !scale_down.contains_key(cluster) {
+            scale_down.insert(cluster.clone(), Vec::default());
+        }
+    }
+    scale_down
 }
 
 /// Banned groups and users due to setup errors
@@ -235,7 +330,8 @@ impl BanSets {
 
     /// check if this ban rule set is expired and clear it if so
     pub fn is_expired(&mut self) {
-        if self.expire > Utc::now() {
+        // only clear our bans once their expiration has passed
+        if self.expire <= Utc::now() {
             self.clear();
         }
     }
@@ -245,6 +341,7 @@ impl BanSets {
         self.expire = from_now!(600);
         self.groups.clear();
         self.users.clear();
+        self.reqs.clear();
     }
 }
 
@@ -377,27 +474,26 @@ impl Scaler {
                 event!(Level::INFO, task = completed.as_str());
                 // check if a join error occured
                 match completed {
-                    // All zombie jobs were completed
-                    TaskResult::ZombieJobs => add_task!(self, Tasks::ZombieJobs),
-                    // Thorium has synced against LDAP
-                    TaskResult::LdapSync => add_task!(self, Tasks::LdapSync),
                     // An updated cache has been pulled
                     TaskResult::Cache(cache) => {
-                        // crawl over each cluster and sync any cache updates
-                        for (name, scheduler) in &mut self.schedulers {
-                            scheduler
-                                .sync_to_new_cache(name, &cache, &mut self.allocatable.bans)
-                                .await?;
-                        }
-                        // clear all items in our ban sets
-                        self.allocatable.bans.clear();
+                        // get our schedulers so they can sync against the new cache
+                        let schedulers = &mut self.schedulers;
+                        // sync our ban sets against the new cache
+                        resync_bans(&mut self.allocatable.bans, async |bans: &mut BanSets| {
+                            // crawl over each cluster and sync any cache updates
+                            for (name, scheduler) in schedulers.iter_mut() {
+                                scheduler.sync_to_new_cache(name, &cache, bans).await?;
+                            }
+                            Ok(())
+                        })
+                        .await?;
                         // save the cache in the scaler for next update
                         self.cache = Arc::new(cache);
                         // add a new task for refreshing our cache
                         add_task!(self, Tasks::CacheReload)
                     }
-                    // Thorium has updated image runtimes
-                    TaskResult::UpdateRuntimes => add_task!(self, Tasks::UpdateRuntimes),
+                    // reschedule any other completed task
+                    completed => add_task!(self, completed.next_task()),
                 };
             } else {
                 // this task hasn't completed so keep tracking it
@@ -496,42 +592,9 @@ impl Scaler {
     /// * `reqs` - The reqs we spawned
     #[instrument(name = "Scaler::register_workers", skip_all, err(Debug))]
     async fn register_workers(&self, reqs: &ReqMap) -> Result<(), Error> {
-        // build a list to track the new workers we are spawning
-        let mut registrations = WorkerRegistrationList::default();
-        // get the worker registration info for each cluster
-        for (cluster, spawn_map) in &reqs.spawns {
-            // crawl over the groups for this cluster
-            for spawn_group in spawn_map.values() {
-                // build a worker registration object for each spawned worker
-                for spawn in spawn_group {
-                    // build this workers registration object
-                    let worker = WorkerRegistration::new(
-                        cluster,
-                        &spawn.node,
-                        &spawn.name,
-                        &spawn.req.user,
-                        &spawn.req.group,
-                        &spawn.req.pipeline,
-                        &spawn.req.stage,
-                        spawn.resources,
-                        spawn.pool,
-                    );
-                    // add this new spawn to our list of workers to register
-                    registrations.add_mut(worker);
-                }
-                // if we have at least 25 workers then submit them to Thorium
-                if registrations.workers.len() >= 25 {
-                    // try to register our new workers
-                    self.thorium
-                        .system
-                        .register_workers(self.scaler_type, &registrations)
-                        .await?;
-                }
-            }
-        }
-        // skip registering new workers if we have none
-        if !registrations.workers.is_empty() {
-            // set all the resources we want to spawn as being created
+        // submit each batch of new workers to Thorium in order
+        for registrations in registration_batches(reqs) {
+            // try to register our new workers
             self.thorium
                 .system
                 .register_workers(self.scaler_type, &registrations)
@@ -555,12 +618,22 @@ impl Scaler {
         let mut changes: HashMap<DateTime<Utc>, Vec<Spawned>> =
             HashMap::with_capacity(self.allocatable.changes.spawns.len());
         let mut deleted = HashSet::with_capacity(self.allocatable.changes.scale_down.len());
-        // start our delete workers span if we have workers to delete
-        if !self.allocatable.changes.scale_down.is_empty() {
+        // get the clusters whose schedulers still have pending deletes to validate
+        let pending = self
+            .schedulers
+            .iter()
+            .filter(|(_, scheduler)| scheduler.has_pending_deletes())
+            .map(|(name, _)| name.clone())
+            .collect::<HashSet<String>>();
+        // get the clusters to scale down workers on or validate pending deletes for
+        let scale_down = std::mem::take(&mut self.allocatable.changes.scale_down);
+        let targets = delete_targets(scale_down, &pending);
+        // start our delete workers span if we have workers to delete or pending deletes to validate
+        if !targets.is_empty() {
             // start our delete workers span
             let del_span = span!(Level::INFO, "Deleting Workers");
-            // crawl over the clusters we have scale down orders for
-            for (cluster_name, deletes) in self.allocatable.changes.scale_down.drain() {
+            // crawl over the clusters we have scale down orders or pending deletes for
+            for (cluster_name, deletes) in targets {
                 // get a mutable reference to the target cluster
                 if let Some(cluster) = self.schedulers.get_mut(&cluster_name) {
                     // delete the requested workers
@@ -624,10 +697,14 @@ impl Scaler {
                                         name = spawn.name,
                                         error = error.msg()
                                     );
-                                    // add this failed worker to our delete map
-                                    deleted.insert(spawn.name.clone());
-                                    // add this failed worker to our list of workers to remove
-                                    failed.add_mut(spawn.name);
+                                    // track this failed worker
+                                    schedulers::record_failed_spawn(
+                                        &mut self.allocatable.fairshare_pool,
+                                        &mut self.allocatable.image_counts,
+                                        spawn,
+                                        &mut deleted,
+                                        &mut failed,
+                                    );
                                 }
                                 None => {
                                     // get an entry to this resources current count
@@ -844,5 +921,175 @@ impl Scaler {
                 std::time::Duration::from_secs(self.conf.thorium.scaler.dwell(self.scaler_type));
             tokio::time::sleep(dwell).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `BanSets::is_expired` clears a ban set only once its `expire` timestamp has passed: an
+    /// expired ban set (expire in the past) is cleared, while a still-valid one (expire in the
+    /// future) is retained until it expires.
+    #[test]
+    fn is_expired_clears_only_after_expiry() {
+        // an expired ban set: expire timestamp is in the past
+        let mut expired = BanSets::new(ImageScaler::K8s);
+        expired.expire = Utc::now() - chrono::Duration::seconds(60);
+        // populate it with a banned group so we can observe whether it gets cleared
+        expired.groups.insert("corn".to_string());
+        // an expired ban set must be cleared
+        expired.is_expired();
+        assert!(
+            expired.groups.is_empty(),
+            "an expired ban set was not cleared"
+        );
+
+        // a still-valid ban set: expire timestamp is in the future
+        let mut valid = BanSets::new(ImageScaler::K8s);
+        valid.expire = Utc::now() + chrono::Duration::seconds(600);
+        // populate it with a banned group
+        valid.groups.insert("corn".to_string());
+        // a still-valid ban set must be retained (not cleared early)
+        valid.is_expired();
+        assert!(
+            valid.groups.contains("corn"),
+            "a still-valid ban set was cleared before it expired"
+        );
+    }
+
+    /// When a new cache is pulled the stale bans are dropped before every scheduler repopulates
+    /// the ban sets from it, so a ban added while syncing the new cache is kept.
+    #[tokio::test]
+    async fn resync_keeps_bans_from_new_cache() {
+        // a ban set holding a ban derived from the previous cache
+        let mut bans = BanSets::new(ImageScaler::K8s);
+        bans.groups.insert("stale".to_owned());
+        // the sync against the new cache bans a group
+        resync_bans(&mut bans, async |bans: &mut BanSets| {
+            bans.groups.insert("new".to_owned());
+            Ok(())
+        })
+        .await
+        .unwrap();
+        // the ban found in the new cache must be kept
+        assert!(
+            bans.groups.contains("new"),
+            "bans derived from the new cache must not be cleared"
+        );
+    }
+
+    /// Build a spawned deadline worker with a unique name
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique name of this worker
+    fn spawned(name: String) -> Spawned {
+        Spawned {
+            req: thorium::models::Requisition::new("user", "group", "pipeline", "stage"),
+            cluster: "cluster".to_owned(),
+            node: "node".to_owned(),
+            name,
+            resources: thorium::models::Resources::default(),
+            pool: thorium::models::Pools::Deadline,
+            spawn: true,
+            scaled_down: false,
+            down_scalable: Utc::now(),
+        }
+    }
+
+    /// Build a requisition map with groups of spawned workers in a single cluster
+    ///
+    /// # Arguments
+    ///
+    /// * `groups` - The number of workers in each deadline group
+    fn spawn_map(groups: &[usize]) -> ReqMap {
+        let mut reqs = ReqMap::default();
+        let mut deadlines = BTreeMap::default();
+        for (group, count) in groups.iter().enumerate() {
+            // give each group its own deadline
+            let deadline = Utc::now() + chrono::Duration::seconds(group as i64);
+            let workers = (0..*count)
+                .map(|i| spawned(format!("worker-{group}-{i}")))
+                .collect();
+            deadlines.insert(deadline, workers);
+        }
+        reqs.spawns.insert("cluster".to_owned(), deadlines);
+        reqs
+    }
+
+    /// Each new worker is registered exactly once: 60 workers in three groups of 20 are split
+    /// across batches without any worker being re-sent in a later batch, which keeps
+    /// registration requests linear in the number of spawns.
+    #[test]
+    fn each_worker_registered_once() {
+        // three deadline groups of 20 workers each
+        let reqs = spawn_map(&[20, 20, 20]);
+        // build the batches that would be submitted
+        let batches = registration_batches(&reqs);
+        // gather every registered worker name across all batches
+        let names: Vec<&String> = batches
+            .iter()
+            .flat_map(|batch| batch.workers.iter().map(|worker| &worker.name))
+            .collect();
+        let unique: HashSet<&String> = names.iter().copied().collect();
+        // every worker is registered and none of them more than once
+        assert_eq!(unique.len(), 60);
+        assert_eq!(
+            names.len(),
+            60,
+            "each spawned worker must be registered exactly once"
+        );
+    }
+
+    /// A small spawn wave is registered in a single batch.
+    #[test]
+    fn small_spawn_wave_is_registered_in_one_batch() {
+        // a single group of 10 workers
+        let reqs = spawn_map(&[10]);
+        // build the batches that would be submitted
+        let batches = registration_batches(&reqs);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].workers.len(), 10);
+    }
+
+    /// A cluster with pending deletes from an earlier loop but no new scale downs is still
+    /// selected for `Scheduler::delete` (with no new scale downs), while clusters with new scale
+    /// downs still get them. `Scheduler::delete` is the only place a scheduler validates its
+    /// pending deletes, so this keeps those workers from staying registered in Thorium and in the
+    /// allocator in the being deleted state until that cluster happens to get another scale down.
+    #[test]
+    fn pending_deletes_on_quiet_cluster_are_validated() {
+        // cluster a has a new scale down this loop
+        let mut scale_down = HashMap::default();
+        scale_down.insert("a".to_owned(), vec![spawned("w1".to_owned())]);
+        // cluster b has no new scale downs but its scheduler still has pending deletes
+        let pending: HashSet<String> = ["b".to_owned()].into_iter().collect();
+        // get the clusters we will call delete on
+        let targets = delete_targets(scale_down, &pending);
+        // the quiet cluster must still be called so it validates its pending deletes
+        assert!(
+            targets.contains_key("b"),
+            "a cluster with pending deletes and no new scale downs must still be validated"
+        );
+        // it has no new scale downs to hand over
+        assert!(targets["b"].is_empty());
+        // and the cluster with new scale downs still gets them
+        assert_eq!(targets["a"].len(), 1);
+    }
+
+    /// A cluster with neither new scale downs nor pending deletes is not called, and a cluster
+    /// with only new scale downs keeps them.
+    #[test]
+    fn pending_deletes_on_quiet_cluster_idle_cluster_is_not_called() {
+        // cluster a has a new scale down this loop
+        let mut scale_down = HashMap::default();
+        scale_down.insert("a".to_owned(), vec![spawned("w1".to_owned())]);
+        // no cluster has pending deletes and cluster c is completely idle
+        let targets = delete_targets(scale_down, &HashSet::default());
+        // only the cluster with new scale downs is called
+        assert_eq!(targets.len(), 1);
+        assert!(!targets.contains_key("c"));
+        assert_eq!(targets["a"][0].name, "w1");
     }
 }

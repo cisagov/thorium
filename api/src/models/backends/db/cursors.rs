@@ -63,6 +63,25 @@ impl CursorKind {
     }
 }
 
+/// Get the last partition bucket of a year
+///
+/// This is the bucket of the final second of the year, so it accounts for the length of this
+/// year (leap years included) rather than the year before it.
+///
+/// # Arguments
+///
+/// * `year` - The year to get the last bucket for
+/// * `partition_size` - The size of each partition in seconds
+fn last_year_bucket(year: i32, partition_size: u16) -> u32 {
+    // get the final second of this year, which always exists for the years we crawl
+    let last_second = NaiveDate::from_ymd_opt(year, 12, 31)
+        .and_then(|date| date.and_hms_opt(23, 59, 59))
+        .map(|time| time.and_utc())
+        .unwrap_or_default();
+    // get the bucket this last second is in
+    u32::try_from(helpers::partition(last_second, year, partition_size)).unwrap_or_default()
+}
+
 /// The data to retain throughout this cursors life
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ScyllaCursorRetain<D: CursorCore> {
@@ -78,6 +97,10 @@ pub struct ScyllaCursorRetain<D: CursorCore> {
     pub ties: D::Ties,
     /// Tags data to retain if this is a tags cursor
     pub tags_retain: Option<TagsRetain>,
+    /// The values already returned by this cursor when deduping, retained so that duplicates
+    /// on later pages are also deduped
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
+    pub dedupe_set: HashSet<String>,
 }
 
 /// Tag data to retain throughout a cursor's life if it's
@@ -619,8 +642,6 @@ where
     pub limit: usize,
     /// Whether to dedupe this data or not
     pub dedupe: bool,
-    /// The set of values to use when deduping
-    dedupe_set: HashSet<String>,
     /// The data this cursor has retrieved
     pub data: Vec<D>,
     /// The internal sorted data to return to the user
@@ -754,6 +775,7 @@ where
                 group_by: groups,
                 ties: D::Ties::default(),
                 tags_retain,
+                dedupe_set: HashSet::default(),
             };
             // build our cursor
             let cursor = ScyllaCursor {
@@ -767,7 +789,6 @@ where
                 partition_size: chunk,
                 limit: D::get_limit(&params),
                 dedupe,
-                dedupe_set: HashSet::default(),
                 data: Vec::default(),
                 sorted: BTreeMap::default(),
                 mapped: 0,
@@ -839,6 +860,7 @@ where
                 group_by: groups,
                 ties: D::Ties::default(),
                 tags_retain,
+                dedupe_set: HashSet::default(),
             };
             // build our cursor
             let cursor = ScyllaCursor {
@@ -852,7 +874,6 @@ where
                 partition_size: chunk,
                 limit: D::get_limit(&params),
                 dedupe,
-                dedupe_set: HashSet::default(),
                 data: Vec::default(),
                 sorted: BTreeMap::default(),
                 mapped: 0,
@@ -861,6 +882,54 @@ where
             };
             Ok(cursor)
         }
+    }
+
+    /// Rebuild a cursor from the data it retained in redis
+    ///
+    /// The set of items already returned for deduping is part of the retained data, so an item
+    /// whose duplicates fall on different pages is only returned once.
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor_id` - The uuid of the cursor being rebuilt
+    /// * `username` - The username of the user this cursor is scoped to
+    /// * `retain` - The data this cursor retained in redis
+    /// * `chunk` - The partition size to use
+    /// * `limit` - The max number of items to return at once
+    /// * `dedupe` - Whether to dedupe items or not
+    fn rebuild(
+        cursor_id: Uuid,
+        username: &str,
+        retain: ScyllaCursorRetain<D>,
+        chunk: u16,
+        limit: usize,
+        dedupe: bool,
+    ) -> Result<Self, ApiError> {
+        // determin our current year and our end year
+        let year = retain.start.year();
+        let end_year = retain.end.year();
+        // get our starting/ending bucket
+        let bucket = u32::try_from(helpers::partition(retain.start, year, chunk))?;
+        let end_bucket = u32::try_from(helpers::partition(retain.end, end_year, chunk))?;
+        // rebuild our cursor scoped to the creating user
+        let cursor = ScyllaCursor {
+            id: cursor_id,
+            username: username.to_owned(),
+            retain,
+            year,
+            bucket,
+            end_year,
+            end_bucket,
+            partition_size: chunk,
+            limit,
+            dedupe,
+            data: Vec::default(),
+            sorted: BTreeMap::default(),
+            mapped: 0,
+            buckets_exhausted: false,
+            new: false,
+        };
+        Ok(cursor)
     }
 
     /// Gets a cursors data from Redis
@@ -900,32 +969,15 @@ where
                     D::partition_size(shared)
                 };
 
-                // determin our current year and our end year
-                let year = retain.start.year();
-                let end_year = retain.end.year();
-                // get our starting/ending bucket
-                let bucket = u32::try_from(helpers::partition(retain.start, year, chunk))?;
-                let end_bucket = u32::try_from(helpers::partition(retain.end, end_year, chunk))?;
                 // rebuild our cursor scoped to the creating user
-                let cursor = ScyllaCursor {
-                    id: cursor_id,
-                    username: username.to_owned(),
+                Self::rebuild(
+                    cursor_id,
+                    username,
                     retain,
-                    year,
-                    bucket,
-                    end_year,
-                    end_bucket,
-                    partition_size: chunk,
-                    limit: D::get_limit(&params),
+                    chunk,
+                    D::get_limit(&params),
                     dedupe,
-                    dedupe_set: HashSet::default(),
-                    data: Vec::default(),
-                    sorted: BTreeMap::default(),
-                    mapped: 0,
-                    buckets_exhausted: false,
-                    new: false,
-                };
-                Ok(cursor)
+                )
             }
             None => not_found!(format!("Cursor {} doesn't exist", cursor_id)),
         }
@@ -1067,18 +1119,8 @@ where
                 // there is no more data in this year but we have more years to check
                 // decrement our year
                 self.year = self.year.saturating_sub(1);
-                // get a duration for the next year
-                let year = NaiveDate::from_ymd_opt(self.year, 1, 1)
-                    .unwrap()
-                    .and_hms_opt(0, 0, 1)
-                    .unwrap();
-                let next_year = NaiveDate::from_ymd_opt(self.year - 1, 1, 1)
-                    .unwrap()
-                    .and_hms_opt(0, 0, 1)
-                    .unwrap();
-                let duration = year - next_year;
                 // reset our bucket to the last possible partition of the year
-                self.bucket = duration.num_seconds() as u32 / self.partition_size as u32;
+                self.bucket = last_year_bucket(self.year, self.partition_size);
                 // go to the next loop iteration
                 continue;
             }
@@ -1322,7 +1364,7 @@ where
                                     // only dedupe if we are configured too
                                     if self.dedupe {
                                         // dedupe our data and then see if we need to get more
-                                        if !item.dedupe_item(&mut self.dedupe_set) {
+                                        if !item.dedupe_item(&mut self.retain.dedupe_set) {
                                             // this is a duplicate item so skip it
                                             continue;
                                         }
@@ -1333,13 +1375,18 @@ where
                                 None => continue 'outer,
                             }
                         }
-                        // if we have another item then add it to our tie map
-                        if let Some(tied_row) = item.front() {
-                            // if this a tags cursor add this to our tag ties
-                            if let Some(tag_ties) = &mut tag_ties {
+                        // add every leftover row to our tie map so that rows in groups other
+                        // than the front row's aren't skipped by our next query
+                        if let Some(tag_ties) = &mut tag_ties {
+                            // tag ties overwrite each other so add them back to front so the
+                            // front most row in each group wins
+                            for tied_row in item.iter().rev() {
                                 // add this tie to our tag tie map
                                 tied_row.add_tag_tie(tag_ties);
-                            } else {
+                            }
+                        } else {
+                            // regular ties keep the first tie for each group
+                            for tied_row in &item {
                                 // add this to our regular query tie map
                                 tied_row.add_tie(&mut self.retain.ties);
                             }
@@ -1533,18 +1580,8 @@ where
                 (Ordering::Greater, true) => {
                     // decrement our year
                     self.year = self.year.saturating_sub(1);
-                    // get a duration for the next year
-                    let year = NaiveDate::from_ymd_opt(self.year, 1, 1)
-                        .unwrap()
-                        .and_hms_opt(0, 0, 1)
-                        .unwrap();
-                    let next_year = NaiveDate::from_ymd_opt(self.year - 1, 1, 1)
-                        .unwrap()
-                        .and_hms_opt(0, 0, 1)
-                        .unwrap();
-                    let duration = year - next_year;
                     // reset our bucket to the last possible partition of the year
-                    self.bucket = duration.num_seconds() as u32 / self.partition_size as u32;
+                    self.bucket = last_year_bucket(self.year, self.partition_size);
                 }
                 // we have reached our end bucket and end year
                 (Ordering::Equal | Ordering::Less, true) => {
@@ -1676,13 +1713,26 @@ where
         let data = serialize!(&self.retain);
         // build the key to save this cursor data too scoped to the creating user
         let key = cursors::data(CursorKind::Scylla, &self.username, &self.id, shared);
-        // if this is a new cursor only hold onto it for 8 hours
-        // if its an existing cursor that is being paged then hold onto it for 7 days
-        let ttl = if self.new { 28_800 } else { 604_800 };
+        // get how long to hold onto this cursor
+        let ttl = scylla_cursor_save_expire(self.new);
         // save this cursors data to redis
-        let _: () = query!(cmd("set").arg(key).arg(data).arg("EX").arg(604_800), shared).await?;
+        let _: () = query!(cmd("set").arg(key).arg(data).arg("EX").arg(ttl), shared).await?;
         Ok(())
     }
+}
+
+/// Get how many seconds [`ScyllaCursor::save`] holds a cursor in redis for
+///
+/// A new cursor is only held for 8 hours so abandoned new cursors don't linger in redis, and a
+/// cursor that is being paged is held for 7 days.
+///
+/// # Arguments
+///
+/// * `new` - Whether this is a newly created cursor
+fn scylla_cursor_save_expire(new: bool) -> u64 {
+    // if this is a new cursor only hold onto it for 8 hours
+    // if its an existing cursor that is being paged then hold onto it for 7 days
+    if new { 28_800 } else { 604_800 }
 }
 
 impl<D> From<ScyllaCursor<D>> for ApiCursor<D>
@@ -1739,6 +1789,23 @@ pub trait SimpleCursorExt {
 
     /// Gets the cluster key to start the next page of data after
     fn get_tie(&self) -> Option<String>;
+}
+
+/// The [`CursorKind`] the exhausted-cursor delete path in [`SimpleScyllaCursor::save`] uses
+///
+/// This must match [`simple_scylla_save_kind`], since the kind is part of the key and deleting
+/// under any other kind never removes the cursor from redis.
+fn simple_scylla_delete_kind() -> CursorKind {
+    CursorKind::SimpleScylla
+}
+
+/// The [`CursorKind`] the write path in [`SimpleScyllaCursor::save`] uses
+///
+/// Split out of the save key construction so it can be unit tested against the delete path's
+/// kind. The delete path must use this same kind, or the exhausted-cursor `DEL` targets a key
+/// that never exists (the kind is part of the key) and never removes the cursor from redis.
+fn simple_scylla_save_kind() -> CursorKind {
+    CursorKind::SimpleScylla
 }
 
 /// A simple non group permissioned cursor
@@ -1923,7 +1990,12 @@ where
     #[instrument(name = "SimpleScyllaCursor::save", skip_all, err(Debug))]
     pub async fn save(&self, shared: &Shared) -> Result<(), ApiError> {
         // build the key to save this cursor data too scoped to the creating user
-        let key = cursors::data(CursorKind::Scylla, &self.username, &self.id, shared);
+        let key = cursors::data(
+            simple_scylla_delete_kind(),
+            &self.username,
+            &self.id,
+            shared,
+        );
         // either save or delete this cursor based on whether its exhausted or not
         if self.exhausted {
             // only delete if this cursor was actually written to redis
@@ -1935,7 +2007,7 @@ where
             // serialize our paritions
             let data = serialize!(&self.retain);
             // build the key to save this cursor data too scoped to the creating user
-            let key = cursors::data(CursorKind::SimpleScylla, &self.username, &self.id, shared);
+            let key = cursors::data(simple_scylla_save_kind(), &self.username, &self.id, shared);
             // save this cursors data to redis
             let _: () = query!(
                 cmd("set").arg(key).arg(data).arg("EX").arg(2_628_000),
@@ -2508,6 +2580,25 @@ where
         }
     }
 
+    /// Consume the rows returned by our tie queries into our user facing data buffer
+    ///
+    /// Once our ties have been queried they are cleared so later pages don't query and return the
+    /// same tied entities again; consuming the tied rows may record a new leftover tie. Returns
+    /// whether the tied rows filled our data buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `rows` - The rows returned by our tie queries
+    fn consume_tied_rows(&mut self, rows: Vec<D::RowType>) -> bool {
+        let sorted_map = Self::build_sorted_map(rows);
+        // our ties have been queried so clear them before any new leftover tie is recorded
+        self.retain.ties.clear();
+        // consume the sorted data and add it to our user-facing data buffer
+        self.consume_sorted(sorted_map);
+        // see if our ties returned all we needed
+        self.data.len() >= self.limit as usize
+    }
+
     /// Gets the next page of queries for this cursor for data for general queries
     ///
     /// # Arguments
@@ -2526,11 +2617,8 @@ where
         if !tied_query_results.is_empty() {
             // cast the rows we just retrieved
             let rows = Self::cast_rows(tied_query_results)?;
-            let sorted_map = Self::build_sorted_map(rows);
-            // consume the sorted data and add it to our user-facing data buffer
-            self.consume_sorted(sorted_map);
-            // see if our ties returned all we needed and return early if so
-            if self.data.len() >= self.limit as usize {
+            // consume our tied rows and return early if they returned all we needed
+            if self.consume_tied_rows(rows) {
                 return Ok(());
             }
         }
@@ -2656,10 +2744,57 @@ impl ExistsCursor {
             bucket: u32::try_from(helpers::partition(start, year, partition_size))?,
             end,
             end_year,
-            end_bucket: u32::try_from(helpers::partition(start, year, partition_size))?,
+            // the walk stops at the end timestamp's bucket in the end year
+            end_bucket: u32::try_from(helpers::partition(end, end_year, partition_size))?,
             partition_size,
         };
         Ok(cursor)
+    }
+
+    /// Get the next window of partitions [`ExistsCursor::exists`] checks and advance past it
+    ///
+    /// Split out of the partition walk in `exists` so it can be unit tested (the walk never
+    /// depends on query results, so advancing before the window is queried is identical).
+    /// Returns the year and buckets to query and whether this is the final window.
+    /// The walk stops at `end_bucket` in `end_year`.
+    fn next_window(&mut self) -> (i32, Vec<i32>, bool) {
+        // get the year this window is in
+        let year = self.year;
+        // check if we are in the final year to list and stop at the correct bucket
+        let end = if self.year == self.end_year {
+            std::cmp::max(self.bucket.saturating_sub(99), self.end_bucket)
+        } else {
+            self.bucket.saturating_sub(99)
+        };
+        let buckets = (end..=self.bucket)
+            .map(|bucket| bucket as i32)
+            .collect::<Vec<i32>>();
+        // update our bucket counter correctly
+        let done = match (
+            self.year.cmp(&self.end_year),
+            end == 0,
+            end <= self.end_bucket,
+        ) {
+            // we have more buckets this year to query so just update our bucket
+            (Ordering::Greater, false, _) | (Ordering::Equal, _, false) => {
+                self.bucket = end - 1;
+                false
+            }
+            // we have more years to query to decrement our year and update our bucket
+            (Ordering::Greater, true, _) => {
+                // decrement our year
+                self.year = self.year.saturating_sub(1);
+                // reset our bucket to the last possible partition of the year
+                self.bucket = last_year_bucket(self.year, self.partition_size);
+                false
+            }
+            // were done querying so update our bucket and break
+            (_, _, _) => {
+                self.bucket = end.saturating_sub(1);
+                true
+            }
+        };
+        (year, buckets, done)
     }
 
     /// Check if any rows exist across all partitions
@@ -2684,20 +2819,13 @@ impl ExistsCursor {
         // create a weeks worth of futures polling
         let mut futures = Vec::with_capacity(100);
         loop {
-            // check if we are in the final year to list and stop at the correct bucket
-            let end = if self.year == self.end_year {
-                std::cmp::max(self.bucket.saturating_sub(99), self.end_bucket)
-            } else {
-                self.bucket.saturating_sub(99)
-            };
-            let buckets = (end..=self.bucket)
-                .map(|bucket| bucket as i32)
-                .collect::<Vec<i32>>();
+            // get the next window of partitions to check and advance our cursor
+            let (year, buckets, done) = self.next_window();
             // build the query to see if data exists in these partitions
             let query = shared
                 .scylla
                 .session
-                .execute_unpaged(prepared, (self.year, buckets, key));
+                .execute_unpaged(prepared, (year, buckets, key));
             // add this future out our futures list
             futures.push(query);
             // if we have have more then 100 futures to crawl then send them all at once
@@ -2718,38 +2846,9 @@ impl ExistsCursor {
                     }
                 }
             }
-            // update our bucket counter correctly
-            match (
-                self.year.cmp(&self.end_year),
-                end == 0,
-                end <= self.end_bucket,
-            ) {
-                // we have more buckets this year to query so just update our bucket
-                (Ordering::Greater, false, _) | (Ordering::Equal, _, false) => {
-                    self.bucket = end - 1;
-                }
-                // we have more years to query to decrement our year and update our bucket
-                (Ordering::Greater, true, _) => {
-                    // decrement our year
-                    self.year = self.year.saturating_sub(1);
-                    // get a duration for the next year
-                    let year = NaiveDate::from_ymd_opt(self.year, 1, 1)
-                        .unwrap()
-                        .and_hms_opt(0, 0, 1)
-                        .unwrap();
-                    let next_year = NaiveDate::from_ymd_opt(self.year - 1, 1, 1)
-                        .unwrap()
-                        .and_hms_opt(0, 0, 1)
-                        .unwrap();
-                    let duration = year - next_year;
-                    // reset our bucket to the last possible partition of the year
-                    self.bucket = duration.num_seconds() as u32 / self.partition_size as u32;
-                }
-                // were done querying so update our bucket and break
-                (_, _, _) => {
-                    self.bucket = end.saturating_sub(1);
-                    break;
-                }
+            // stop once we have queried our final window
+            if done {
+                break;
             }
         }
         // if we hae any remaining futures then execute them
@@ -3717,7 +3816,30 @@ impl<D: RedisCursorSupport> RedisCursor<D> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_group_filter, build_query_string_clause};
+    use super::{
+        ExistsCursor, GroupedScyllaCursor, GroupedScyllaCursorRetain, ScyllaCursor,
+        ScyllaCursorRetain, build_group_filter, build_query_string_clause,
+        scylla_cursor_save_expire, simple_scylla_delete_kind, simple_scylla_save_kind,
+    };
+    use crate::models::{NetworkPolicyListLine, NetworkPolicyListRow, SampleListLine};
+    use crate::utils::helpers;
+    use chrono::prelude::*;
+    use std::collections::{HashMap, HashSet};
+    use uuid::Uuid;
+
+    /// `SimpleScyllaCursor::save` builds the exhausted-cursor `DEL` key with the same
+    /// `CursorKind` as the save key. The kind is part of the redis key, so this is what lets the
+    /// delete actually remove the exhausted simple cursor it wrote.
+    #[test]
+    fn simple_scylla_delete_kind_matches_save_kind() {
+        // the delete path must key on the same cursor kind the save path wrote, or the DEL is a
+        // no-op against a nonexistent key and the exhausted cursor lingers forever
+        assert_eq!(
+            simple_scylla_delete_kind().as_str(),
+            simple_scylla_save_kind().as_str(),
+            "the exhausted-cursor delete key must use the same CursorKind as the save key"
+        );
+    }
 
     /// the group filter must reject an empty group list rather than emit an empty `should`
     /// array that Elasticsearch rewrites to `match_all` (a full cross-tenant search read).
@@ -3764,6 +3886,375 @@ mod tests {
             options.get("allow_leading_wildcard"),
             Some(&serde_json::Value::Bool(false)),
             "query_string clause did not disable leading wildcards (DoS)"
+        );
+    }
+
+    /// Build a UTC timestamp at midnight on a day
+    ///
+    /// # Arguments
+    ///
+    /// * `year` - The year of this timestamp
+    /// * `month` - The month of this timestamp
+    /// * `day` - The day of this timestamp
+    fn day(year: i32, month: u32, day: u32) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(year, month, day, 0, 0, 0).unwrap()
+    }
+
+    /// Walk every window an exists cursor queries and collect the buckets checked in each year
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - The exists cursor to walk
+    fn walk(mut cursor: ExistsCursor) -> HashMap<i32, HashSet<i32>> {
+        let mut checked: HashMap<i32, HashSet<i32>> = HashMap::new();
+        // cap the walk so a broken cursor can't loop forever
+        for _ in 0..100_000 {
+            let (year, buckets, done) = cursor.next_window();
+            checked.entry(year).or_default().extend(buckets);
+            if done {
+                return checked;
+            }
+        }
+        panic!("the exists cursor walk never finished");
+    }
+
+    /// `ExistsCursor::new` computes `end_bucket` as the bucket of the `end` timestamp in
+    /// `end_year`. This lets the walk reach the final year's early buckets, so `exists()` checks
+    /// them and `prune_data` doesn't delete repo data blobs still referenced by commits there.
+    #[test]
+    fn exists_cursor_end_bucket_uses_end_timestamp() {
+        // check from Sept 24 2026 back to Feb 1 2020 in hour sized partitions
+        let start = day(2026, 9, 24);
+        let end = day(2020, 2, 1);
+        let cursor = ExistsCursor::new(start, end, 3_600).unwrap();
+        // the walk must stop at the end timestamp's bucket
+        assert_eq!(
+            cursor.end_bucket,
+            helpers::partition(end, 2020, 3_600) as u32,
+            "the end bucket must be computed from the end timestamp and end year"
+        );
+    }
+
+    /// Walking an exists cursor from 2026 back to Feb 1 2020 checks the buckets of early 2020
+    /// (here March 1 2020), so data referenced only there isn't treated as unreferenced and
+    /// deleted.
+    #[test]
+    fn exists_walk_covers_end_year_early_buckets() {
+        let start = day(2026, 9, 24);
+        let end = day(2020, 2, 1);
+        let checked = walk(ExistsCursor::new(start, end, 3_600).unwrap());
+        // a commit on March 1 2020 is inside the requested range
+        let march = helpers::partition(day(2020, 3, 1), 2020, 3_600);
+        assert!(
+            checked
+                .get(&2020)
+                .is_some_and(|buckets| buckets.contains(&march)),
+            "the exists walk must check every bucket of its final year back to the end timestamp"
+        );
+    }
+
+    /// Within a single year, walking from Sept 24 back to Jan 15 checks March 1 rather than only
+    /// the start's window.
+    #[test]
+    fn exists_walk_covers_same_year_range() {
+        let start = day(2026, 9, 24);
+        let end = day(2026, 1, 15);
+        let checked = walk(ExistsCursor::new(start, end, 3_600).unwrap());
+        let march = helpers::partition(day(2026, 3, 1), 2026, 3_600);
+        assert!(
+            checked
+                .get(&2026)
+                .is_some_and(|buckets| buckets.contains(&march)),
+            "the exists walk must check every bucket between its start and end"
+        );
+    }
+
+    /// When a cursor walk rolls back into an earlier year it resets its bucket to the last
+    /// partition of that year, sized by that year's own length. Rolling back into a leap year
+    /// (2024, after the 365 day 2023) therefore starts at bucket 8783 with hourly partitions, so
+    /// every partition inside the requested range is checked, including the final hours of
+    /// Dec 31 2024.
+    #[test]
+    fn exists_walk_covers_leap_year_december_31() {
+        let start = day(2026, 9, 24);
+        let end = day(2020, 2, 1);
+        let checked = walk(ExistsCursor::new(start, end, 3_600).unwrap());
+        // the last hour of 2024 (a leap year) is inside the requested range
+        let last_hour = helpers::partition(
+            Utc.with_ymd_and_hms(2024, 12, 31, 23, 30, 0).unwrap(),
+            2024,
+            3_600,
+        );
+        assert!(
+            checked
+                .get(&2024)
+                .is_some_and(|buckets| buckets.contains(&last_hour)),
+            "the exists walk must check the final hours of a leap year"
+        );
+    }
+
+    /// Rolling back into a regular year after a leap year checks that year's final hour.
+    #[test]
+    fn exists_walk_covers_regular_year_december_31() {
+        let start = day(2026, 9, 24);
+        let end = day(2020, 2, 1);
+        let checked = walk(ExistsCursor::new(start, end, 3_600).unwrap());
+        // the last hour of 2025 (a regular year after the 2024 leap year) is inside the range
+        let last_hour = helpers::partition(
+            Utc.with_ymd_and_hms(2025, 12, 31, 23, 30, 0).unwrap(),
+            2025,
+            3_600,
+        );
+        assert!(
+            checked
+                .get(&2025)
+                .is_some_and(|buckets| buckets.contains(&last_hour))
+        );
+    }
+
+    /// Buckets in the years between the start and end years are checked.
+    #[test]
+    fn exists_walk_covers_middle_years() {
+        let start = day(2026, 9, 24);
+        let end = day(2020, 2, 1);
+        let checked = walk(ExistsCursor::new(start, end, 3_600).unwrap());
+        assert!(
+            checked
+                .get(&2023)
+                .is_some_and(|buckets| buckets.contains(&100))
+        );
+    }
+
+    /// Build a listed sample in some groups
+    ///
+    /// # Arguments
+    ///
+    /// * `sha256` - The sha256 of this sample
+    /// * `groups` - The groups this submission is in
+    /// * `uploaded` - When this submission was uploaded
+    fn sample(sha256: &str, groups: &[&str], uploaded: DateTime<Utc>) -> SampleListLine {
+        SampleListLine {
+            groups: groups.iter().map(|group| (*group).to_owned()).collect(),
+            sha256: sha256.to_owned(),
+            submission: Some(Uuid::new_v4()),
+            uploaded,
+        }
+    }
+
+    /// Build a sample listing cursor over 2020-2026 with some retained data
+    ///
+    /// # Arguments
+    ///
+    /// * `retain` - The data this cursor retained
+    /// * `limit` - The max number of items to return at once
+    /// * `dedupe` - Whether to dedupe items or not
+    fn sample_cursor(
+        retain: ScyllaCursorRetain<SampleListLine>,
+        limit: usize,
+        dedupe: bool,
+    ) -> ScyllaCursor<SampleListLine> {
+        ScyllaCursor::rebuild(Uuid::new_v4(), "user", retain, 3_600, limit, dedupe).unwrap()
+    }
+
+    /// Build fresh retained data for a sample listing cursor over 2020-2026
+    fn sample_retain() -> ScyllaCursorRetain<SampleListLine> {
+        ScyllaCursorRetain {
+            start: day(2026, 9, 24),
+            end: day(2020, 1, 2),
+            extra_filter: (),
+            group_by: vec!["g1".to_owned(), "g2".to_owned()],
+            ties: HashMap::new(),
+            tags_retain: None,
+            dedupe_set: HashSet::new(),
+        }
+    }
+
+    /// Add rows sharing one timestamp to a cursor's sorted buffer
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - The cursor to add rows to
+    /// * `rows` - The rows to add, all sharing one timestamp
+    fn add_sorted(cursor: &mut ScyllaCursor<SampleListLine>, rows: Vec<SampleListLine>) {
+        let timestamp = rows[0].uploaded;
+        cursor.mapped += rows.len();
+        cursor.sorted.entry(timestamp).or_default().extend(rows);
+    }
+
+    /// When a page ends inside a run of rows sharing one timestamp, `consume_sorted` records a
+    /// tie for the groups of every leftover row, not just the front one. The next page only pulls
+    /// rows strictly older than that timestamp, so without a tie the leftover rows of group g1
+    /// (which trail g2's in the run) would never be returned.
+    #[test]
+    fn consume_sorted_records_ties_for_all_leftover_groups() {
+        let mut cursor = sample_cursor(sample_retain(), 4, false);
+        // at one timestamp g2 has five rows followed by g1's two
+        let at = day(2026, 9, 1);
+        let mut rows: Vec<SampleListLine> = (0..5)
+            .map(|i| sample(&format!("i{i}"), &["g2"], at))
+            .collect();
+        rows.extend((0..2).map(|i| sample(&format!("j{i}"), &["g1"], at)));
+        add_sorted(&mut cursor, rows);
+        // fill a page of 4
+        cursor.consume_sorted(None);
+        // g1's leftover rows at this timestamp must get a tie so the next page returns them
+        assert!(
+            cursor.retain.ties.contains_key("g1"),
+            "every group with leftover rows at the page boundary needs a tie, got {:?}",
+            cursor.retain.ties
+        );
+    }
+
+    /// The front leftover row's group gets a tie and the page is filled in order.
+    #[test]
+    fn consume_sorted_records_tie_for_front_leftover_group() {
+        let mut cursor = sample_cursor(sample_retain(), 4, false);
+        let at = day(2026, 9, 1);
+        let rows: Vec<SampleListLine> = (0..5)
+            .map(|i| sample(&format!("i{i}"), &["g2"], at))
+            .collect();
+        let fifth = rows[4].submission.unwrap().to_string();
+        add_sorted(&mut cursor, rows);
+        cursor.consume_sorted(None);
+        assert_eq!(cursor.data.len(), 4);
+        assert_eq!(cursor.retain.ties.get("g2"), Some(&fifth));
+    }
+
+    /// The set of samples already returned by a deduped listing is retained between pages, so a
+    /// sample whose submissions fall on different pages (here X) is only returned on the first.
+    #[test]
+    fn dedupe_persists_across_pages() {
+        // page 1 returns sample X's newest submission
+        let mut page_one = sample_cursor(sample_retain(), 1, true);
+        add_sorted(&mut page_one, vec![sample("X", &["g1"], day(2026, 9, 2))]);
+        page_one.consume_sorted(None);
+        assert_eq!(page_one.data[0].sha256, "X");
+        // persist the retained data between requests just like saving to redis does
+        let saved = serde_json::to_string(&page_one.retain).unwrap();
+        let retain: ScyllaCursorRetain<SampleListLine> = serde_json::from_str(&saved).unwrap();
+        // page 2 sees X's older submission followed by sample Z
+        let mut page_two = sample_cursor(retain, 1, true);
+        add_sorted(&mut page_two, vec![sample("X", &["g1"], day(2026, 8, 2))]);
+        add_sorted(&mut page_two, vec![sample("Z", &["g1"], day(2026, 7, 2))]);
+        page_two.consume_sorted(None);
+        // X was already returned so page 2 must skip it
+        let returned: Vec<&str> = page_two
+            .data
+            .iter()
+            .map(|line| line.sha256.as_str())
+            .collect();
+        assert_eq!(
+            returned,
+            vec!["Z"],
+            "a deduped listing must not repeat X on a later page"
+        );
+    }
+
+    /// Duplicate submissions of a sample within one page are deduped.
+    #[test]
+    fn dedupe_within_one_page() {
+        let mut cursor = sample_cursor(sample_retain(), 2, true);
+        add_sorted(&mut cursor, vec![sample("X", &["g1"], day(2026, 9, 2))]);
+        add_sorted(&mut cursor, vec![sample("X", &["g1"], day(2026, 8, 2))]);
+        add_sorted(&mut cursor, vec![sample("Z", &["g1"], day(2026, 7, 2))]);
+        cursor.consume_sorted(None);
+        let returned: Vec<&str> = cursor
+            .data
+            .iter()
+            .map(|line| line.sha256.as_str())
+            .collect();
+        assert_eq!(returned, vec!["X", "Z"]);
+    }
+
+    /// `ScyllaCursor::save` holds a new cursor in redis for 8 hours (28800 seconds), so abandoned
+    /// new cursors don't linger for a week.
+    #[test]
+    fn new_scylla_cursor_expires_in_8h() {
+        assert_eq!(
+            scylla_cursor_save_expire(true),
+            28_800,
+            "a new scylla cursor must only be held in redis for 8 hours"
+        );
+    }
+
+    /// A cursor that is being paged is held for 7 days.
+    #[test]
+    fn paged_scylla_cursor_expires_in_7d() {
+        assert_eq!(scylla_cursor_save_expire(false), 604_800);
+    }
+
+    /// Build a listed network policy row in a group
+    ///
+    /// # Arguments
+    ///
+    /// * `group` - The group this row is in
+    /// * `name` - The name of this network policy
+    /// * `id` - The id of this network policy
+    fn policy_row(group: &str, name: &str, id: Uuid) -> NetworkPolicyListRow {
+        NetworkPolicyListRow {
+            group: group.to_owned(),
+            name: name.to_owned(),
+            id,
+        }
+    }
+
+    /// Build a network policy listing cursor over groups g1 and g2
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - The max number of items to return at once
+    /// * `ties` - The ties retained from a previous page
+    fn policy_cursor(
+        limit: i32,
+        ties: Vec<(String, Vec<String>)>,
+    ) -> GroupedScyllaCursor<NetworkPolicyListLine> {
+        GroupedScyllaCursor {
+            id: Uuid::new_v4(),
+            username: "user".to_owned(),
+            retain: GroupedScyllaCursorRetain {
+                extra_filter: (),
+                group_by: ["g1".to_owned(), "g2".to_owned()].into_iter().collect(),
+                ties,
+                current_sort_by: Some("b".to_owned()),
+            },
+            limit,
+            in_redis: true,
+            data: Vec::default(),
+            new: false,
+        }
+    }
+
+    /// `GroupedScyllaCursor::next` queries `retain.ties` at the start of every page and clears
+    /// them once the tied entities are consumed, even when no new leftover exists. This keeps
+    /// later pages from returning the same tied entity (here "c") again.
+    #[test]
+    fn grouped_cursor_clears_consumed_ties() {
+        // page 1 left entity c behind as a tie
+        let mut cursor = policy_cursor(2, vec![("c".to_owned(), vec!["g1".to_owned()])]);
+        // page 2's tie query returns c, which fits on this page with room to spare
+        let filled = cursor.consume_tied_rows(vec![policy_row("g1", "c", Uuid::new_v4())]);
+        assert!(!filled);
+        assert_eq!(cursor.data.len(), 1);
+        // the consumed tie must not be queried again on the next page
+        assert!(
+            cursor.retain.ties.iter().all(|(sort_by, _)| sort_by != "c"),
+            "a consumed tie must be cleared, got {:?}",
+            cursor.retain.ties
+        );
+    }
+
+    /// When tied rows overflow the page, the leftover is recorded as a tie.
+    #[test]
+    fn grouped_cursor_records_leftover_tie() {
+        let mut cursor = policy_cursor(1, Vec::default());
+        let filled = cursor.consume_tied_rows(vec![
+            policy_row("g1", "c", Uuid::new_v4()),
+            policy_row("g2", "c", Uuid::new_v4()),
+        ]);
+        assert!(filled);
+        assert_eq!(
+            cursor.retain.ties,
+            vec![("c".to_owned(), vec!["g2".to_owned()])]
         );
     }
 }

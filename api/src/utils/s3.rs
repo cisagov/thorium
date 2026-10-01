@@ -100,7 +100,9 @@ fn enforce_zip_download_limit(content_length: Option<i64>) -> Result<(), ApiErro
             "object is too large to download as a zip: {len} bytes exceeds the {MAX_ZIP_DOWNLOAD_SIZE} byte limit"
         )),
         // an unknown content length could be arbitrarily large, so reject it too
-        None => bad!("cannot download an object with an unknown content length as a zip".to_owned()),
+        None => {
+            bad!("cannot download an object with an unknown content length as a zip".to_owned())
+        }
     }
 }
 
@@ -1355,8 +1357,10 @@ impl S3Client {
         }
         // upload whatever is left as the final part; it has the highest part number so s3
         // allows it to be smaller than the 5 MiB minimum
-        let chunk = buffer.split().freeze();
-        self.submit_part(&mut tracker, chunk).await?;
+        if should_submit_trailing_part(buffer.is_empty(), tracker.part_num) {
+            let chunk = buffer.split().freeze();
+            self.submit_part(&mut tracker, chunk).await?;
+        }
         // wait for every part to finish uploading and complete the multipart upload
         self.complete_multipart(tracker).await
     }
@@ -1457,16 +1461,14 @@ impl S3Client {
         let decoded = base64::engine::general_purpose::STANDARD.decode(encoded)?;
         // decode this file
         let decoded_stream = ByteStream::from(decoded);
-        // write this file to s3
-        if !self.exists(path).await? {
-            self.client
-                .put_object()
-                .bucket(&self.bucket)
-                .key(path)
-                .body(decoded_stream)
-                .send()
-                .await?;
-        }
+        // write this file to s3, overwriting any existing file so updates aren't lost
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .body(decoded_stream)
+            .send()
+            .await?;
         Ok(())
     }
 
@@ -1697,9 +1699,24 @@ impl GraphicsS3Client {
     }
 }
 
+/// Decide whether [`S3Client::stream_helper`] submits the bytes left after its read loop
+///
+/// The read loop empties the buffer whenever it flushes a full part, so a body that ends exactly
+/// on a flush boundary leaves an empty buffer. A single empty part is only required when no part
+/// has been submitted yet (an empty file), so an empty trailing buffer is skipped once a part
+/// was uploaded.
+///
+/// # Arguments
+///
+/// * `buffer_empty` - Whether the trailing buffer is empty
+/// * `next_part_num` - The part number the trailing part would be assigned (1 if none were sent)
+fn should_submit_trailing_part(buffer_empty: bool, next_part_num: i32) -> bool {
+    !buffer_empty || next_part_num == 1
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MAX_ZIP_DOWNLOAD_SIZE, enforce_zip_download_limit};
+    use super::{MAX_ZIP_DOWNLOAD_SIZE, enforce_zip_download_limit, should_submit_trailing_part};
 
     /// an object far larger than the in-memory zip cap must be rejected before it is
     /// buffered, so a single authenticated request cannot OOM the API.
@@ -1733,5 +1750,29 @@ mod tests {
             enforce_zip_download_limit(Some(1 << 20)).is_ok(),
             "zip download rejected a normally sized object"
         );
+    }
+
+    /// When an uncarted upload's body ends exactly on a part flush boundary the read loop leaves
+    /// an empty buffer, and `stream_helper` skips it instead of submitting a zero-byte extra
+    /// final part (a wasted round trip, and an upload failure on S3-compatible stores that reject
+    /// empty parts).
+    #[test]
+    fn empty_trailing_part_is_skipped_after_full_parts() {
+        // two full parts were flushed so the trailing part would be part 3, and nothing is left
+        assert!(
+            !should_submit_trailing_part(true, 3),
+            "an empty trailing buffer must not be submitted as an extra zero-byte part"
+        );
+    }
+
+    /// An empty file still gets its single (empty) part so the multipart upload can be
+    /// completed, and leftover bytes are always submitted.
+    #[test]
+    fn trailing_part_is_submitted_when_required() {
+        // an empty body has not submitted any part yet, so its empty part is required
+        assert!(should_submit_trailing_part(true, 1));
+        // leftover bytes are always submitted whether or not parts were already sent
+        assert!(should_submit_trailing_part(false, 1));
+        assert!(should_submit_trailing_part(false, 3));
     }
 }

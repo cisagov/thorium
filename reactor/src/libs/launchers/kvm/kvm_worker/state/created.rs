@@ -55,11 +55,24 @@ impl Created {
         match self.try_launch(client, domain, worker, agent_paths).await {
             Ok(agent_pid) => Ok(self.next_state(Some(agent_pid))),
             Err(err) => {
-                // increment our attempt count
-                self.launch_attempts += 1;
+                // record this failed launch attempt in our retry-pacing state
+                self.record_launch_failure();
                 Err((self, err))
             }
         }
+    }
+
+    /// Record a failed launch attempt in this worker's retry-pacing state
+    ///
+    /// This is `Created::launch`'s error-path bookkeeping (it never needs anything beyond
+    /// `&mut self`) so its retry-pacing logic can be unit tested. It increments `launch_attempts`
+    /// and records when this attempt was made in `last_launch_attempt`, so `ready_to_launch`
+    /// enforces the inter-attempt dwell before the next attempt.
+    fn record_launch_failure(&mut self) {
+        // increment our attempt count
+        self.launch_attempts += 1;
+        // record when we last tried so the next attempt waits out the dwell
+        self.last_launch_attempt = Some(Utc::now());
     }
 
     /// Proceed to the next state as if we actually launched the worker
@@ -389,5 +402,63 @@ impl Created {
             // if this is our first attempt, see if we've waited long enough for the domain to stabilize
             now >= self.created + FIRST_LAUNCH_ATTEMPT_DWELL
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a `Created` worker whose domain was created long enough ago that the
+    /// first-launch dwell has already elapsed, with no launch attempt recorded yet
+    ///
+    /// # Arguments
+    ///
+    /// * `launch_attempts` - The number of launch attempts to pre-seed the worker with
+    fn stale_created(launch_attempts: u8) -> Created {
+        // place domain creation well past FIRST_LAUNCH_ATTEMPT_DWELL (2 min) in the past
+        let created = Utc::now() - chrono::Duration::minutes(30);
+        // build a worker in the Created state ready for its next launch attempt
+        Created {
+            worker: "test-worker".to_string(),
+            guest_os: GuestOs::Linux,
+            overlay_path: std::path::PathBuf::from("/tmp/thorium/overlay.qcow2"),
+            domain_name: "thorium-test-worker".to_string(),
+            created,
+            last_launch_attempt: None,
+            launch_attempts,
+        }
+    }
+
+    /// `Created::launch`'s error path records `last_launch_attempt` so the 1-minute
+    /// inter-attempt dwell (`LAUNCH_ATTEMPT_DWELL`) is enforced. Immediately after a failed launch
+    /// attempt the worker is not ready to launch again because the dwell has not elapsed. This
+    /// keeps a domain older than `FIRST_LAUNCH_ATTEMPT_DWELL` from retrying on every ~2s poll and
+    /// burning all 10 launch attempts in seconds.
+    #[test]
+    fn launch_failure_enforces_inter_attempt_dwell() {
+        // start with a worker whose first-launch dwell has already elapsed
+        let mut worker = stale_created(0);
+        // record a failed launch attempt exactly as the launch error path does
+        worker.record_launch_failure();
+        // the attempt counter must have advanced
+        assert_eq!(worker.launch_attempts, 1);
+        // and the just-failed worker must wait out LAUNCH_ATTEMPT_DWELL before retrying
+        assert!(
+            !worker.ready_to_launch(),
+            "a worker that just failed a launch is immediately ready again, so the 1-minute \
+             inter-attempt dwell is never enforced and all launch attempts burn in seconds"
+        );
+    }
+
+    /// A worker whose last launch attempt is older than `LAUNCH_ATTEMPT_DWELL` is ready to retry,
+    /// so the dwell never leaves a worker waiting forever.
+    #[test]
+    fn worker_is_ready_after_inter_attempt_dwell() {
+        // a worker whose previous failed attempt was well past the dwell ago
+        let mut worker = stale_created(1);
+        worker.last_launch_attempt = Some(Utc::now() - LAUNCH_ATTEMPT_DWELL * 2);
+        // it may try launching again
+        assert!(worker.ready_to_launch());
     }
 }

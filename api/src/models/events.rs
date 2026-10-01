@@ -155,12 +155,13 @@ impl Event {
             match tags.get(req_key) {
                 // A required tag key exists
                 Some(values) => {
-                    // check if any of our required values were set
-                    if !req_values
-                        .iter()
-                        .filter_map(|req| values.get(req))
-                        .all(|groups| groups.iter().any(|group| visible.contains(group)))
-                    {
+                    // check that every required value is set in a group we can see; a required
+                    // value that isn't set at all fails this check
+                    if !req_values.iter().all(|req| {
+                        values.get(req).is_some_and(|groups| {
+                            groups.iter().any(|group| visible.contains(group))
+                        })
+                    }) {
                         // this trigger will not trigger as its missing a required tag value
                         return false;
                     }
@@ -350,5 +351,72 @@ impl EventCacheStatusOpts {
         // set our reset flag to true
         self.reset = true;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a tag map with a single group visible under one key/value
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The tag key to set
+    /// * `value` - The tag value to set under the key
+    /// * `group` - The group the value is visible in
+    fn tag(key: &str, value: &str, group: &str) -> HashMap<String, HashMap<String, HashSet<String>>> {
+        // build the innermost set of groups the value is visible in
+        let mut groups = HashSet::new();
+        groups.insert(group.to_owned());
+        // map the value to its visible groups
+        let mut values = HashMap::new();
+        values.insert(value.to_owned(), groups);
+        // map the key to its values
+        let mut tags = HashMap::new();
+        tags.insert(key.to_owned(), values);
+        tags
+    }
+
+    /// `check_all_tag_trigger`'s required-value check requires every required value to be
+    /// present, so it is not vacuously satisfied when a required KEY exists but none of its
+    /// required VALUES are present. A trigger requiring `family=[emotet]` does NOT fire on a
+    /// sample whose only family tag is `zeus`.
+    #[test]
+    fn required_key_with_wrong_value_does_not_fire() {
+        // the sample carries family=zeus, visible in group "corn"
+        let tags = tag("family", "zeus", "corn");
+        // the trigger requires family=emotet, which the sample does not have
+        let mut required = HashMap::new();
+        required.insert("family".to_owned(), vec!["emotet".to_owned()]);
+        // nothing is forbidden by this trigger
+        let not = HashMap::new();
+        // the group the requesting user can see
+        let visible = vec!["corn".to_owned()];
+        // the required value is absent, so this trigger must not fire
+        assert!(
+            !Event::check_all_tag_trigger(&visible, &tags, &required, &not),
+            "a trigger requiring family=emotet must not fire on a sample tagged only family=zeus"
+        );
+    }
+
+    /// When the required value IS present and visible, the trigger fires. This pins the positive
+    /// case so the required-value check can't regress into never firing.
+    #[test]
+    fn required_key_with_matching_value_fires() {
+        // the sample carries family=emotet, visible in group "corn"
+        let tags = tag("family", "emotet", "corn");
+        // the trigger requires family=emotet, which the sample has
+        let mut required = HashMap::new();
+        required.insert("family".to_owned(), vec!["emotet".to_owned()]);
+        // nothing is forbidden by this trigger
+        let not = HashMap::new();
+        // the group the requesting user can see
+        let visible = vec!["corn".to_owned()];
+        // the required value is present and visible, so this trigger must fire
+        assert!(
+            Event::check_all_tag_trigger(&visible, &tags, &required, &not),
+            "a trigger requiring family=emotet must fire on a sample tagged family=emotet"
+        );
     }
 }

@@ -22,6 +22,21 @@ pub type ImageInfoCache = HashMap<String, HashMap<String, Image>>;
 /// Hashmap of vectors of docker info by group
 pub type DockerInfoCache = HashMap<String, HashMap<String, DockerInfo>>;
 
+/// Determine whether the Thorium client token should be refreshed early
+///
+/// This is the token-expiry check in [`refresh_client`] (it never needs a live client)
+/// extracted so its logic can be unit tested without a Thorium client. A token that expires
+/// within the next week (or whose expiration is unknown) is refreshed early.
+///
+/// # Arguments
+///
+/// * `expires` - When the current token expires, if known
+/// * `now` - The current timestamp to compare the expiry against
+fn should_refresh_client(expires: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+    // refresh our token if it expires within the next week
+    expires < Some(now + chrono::Duration::weeks(1))
+}
+
 /// Reads in the Thorium keys and refreshes the client if its needed
 ///
 /// # Arguments
@@ -37,7 +52,7 @@ async fn refresh_client(
     // check to see if our Thorium client token will expire in the next week and refresh it early
     // we refresh it a week early since the Thorium client is shared and we may not get a
     // mutable reference on the first try
-    if thorium.expires < Some(Utc::now() - chrono::Duration::weeks(1)) {
+    if should_refresh_client(thorium.expires, Utc::now()) {
         // start our Thorium auth refresh span
         let span = span!(parent: span, Level::INFO, "Thorium Client Refresh");
         // reload auth keys
@@ -528,5 +543,41 @@ impl Cache {
                     .collect()
             })
             .transpose()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// A token that expires within the next week is refreshed early, so a token expiring in
+    /// three days triggers a refresh now rather than after it has already expired.
+    #[test]
+    fn refreshes_token_a_week_before_expiry() {
+        // the current time
+        let now = Utc::now();
+        // a token that will expire in three days is inside the one-week early-refresh window
+        let expires = Some(now + chrono::Duration::days(3));
+        // a token expiring within the next week must be refreshed early
+        assert!(
+            should_refresh_client(expires, now),
+            "a token expiring within the next week must be refreshed early"
+        );
+    }
+
+    /// A token that is not close to expiring is not refreshed, so the early-refresh window does
+    /// not turn into refreshing on every single call.
+    #[test]
+    fn does_not_refresh_token_far_from_expiry() {
+        // the current time
+        let now = Utc::now();
+        // a token that expires in a month is well outside the one-week early-refresh window
+        let expires = Some(now + chrono::Duration::days(30));
+        // a token with plenty of life left must not be refreshed yet
+        assert!(
+            !should_refresh_client(expires, now),
+            "a token expiring far in the future must not be refreshed early"
+        );
     }
 }

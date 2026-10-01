@@ -64,7 +64,7 @@ impl SystemInfo {
 }
 
 /// The number of jobs running and in the deadline queue for each scaler
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct ScalerStats {
     /// The number of jobs curerntin the deadline queue
@@ -99,6 +99,12 @@ pub struct SystemStats {
     pub baremetal: ScalerStats,
     /// The stats for jobs under the external scaler
     pub external: ScalerStats,
+    /// The stats for jobs under the windows scaler
+    #[serde(default)]
+    pub windows: ScalerStats,
+    /// The stats for jobs under the kvm scaler
+    #[serde(default)]
+    pub kvm: ScalerStats,
     /// Detailed stats reports for each group
     pub groups: HashMap<String, GroupStats>,
 }
@@ -637,6 +643,7 @@ pub fn default_scalers() -> Vec<ImageScaler> {
         ImageScaler::K8s,
         ImageScaler::Windows,
         ImageScaler::BareMetal,
+        ImageScaler::Kvm,
         ImageScaler::External,
     ]
 }
@@ -836,11 +843,18 @@ impl NodeListParams {
 
     /// Add the clusters in a config for configured scalers
     ///
+    /// Clusters are only added if no clusters were requested, so a requested cluster filter is
+    /// respected.
+    ///
     /// # Arguments
     ///
     /// * `scaler` - The scaler to add clusters for
     /// * `config` - The Thorium config
     pub fn clusters_from_config(mut self, config: &Conf) -> Self {
+        // respect any clusters that were already requested
+        if !self.clusters.is_empty() {
+            return self;
+        }
         // add the clusters for our scalers from our config
         for scaler in &self.scalers {
             // add the right cluster names for each scaler
@@ -882,11 +896,18 @@ impl NodeListParams {
 
     /// Add the clusters in a config for configured scalers
     ///
+    /// Clusters are only added if no clusters were requested, so a requested cluster filter is
+    /// respected.
+    ///
     /// # Arguments
     ///
     /// * `scaler` - The scaler to add clusters for
     /// * `config` - The Thorium config
     pub fn clusters_from_config_ref(&mut self, config: &Conf) {
+        // respect any clusters that were already requested
+        if !self.clusters.is_empty() {
+            return;
+        }
         // add the clusters for our scalers from our config
         for scaler in self.scalers.clone() {
             // add the right cluster names for each scaler
@@ -1402,4 +1423,75 @@ pub enum SystemComponents {
     Scaler(ImageScaler),
     EventHandler,
     SearchStreamer,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use clap::ValueEnum;
+
+    /// `default_scalers` (the serde default for node list/get params) covers every scaler,
+    /// including `ImageScaler::Kvm`, so node and worker listings that don't name their scalers
+    /// include KVM workers and KVM clusters.
+    #[test]
+    fn default_scalers_include_every_scaler() {
+        let defaults = default_scalers();
+        for scaler in ImageScaler::value_variants() {
+            assert!(
+                defaults.contains(scaler),
+                "the default node scalers must include {scaler:?}"
+            );
+        }
+    }
+
+    /// The default scalers include K8s.
+    #[test]
+    fn default_scalers_include_k8s() {
+        assert!(default_scalers().contains(&ImageScaler::K8s));
+    }
+
+    /// Build node list params for the windows scaler limited to some clusters
+    ///
+    /// # Arguments
+    ///
+    /// * `clusters` - The clusters to limit our listing too
+    fn windows_params(clusters: &[&str]) -> NodeListParams {
+        NodeListParams {
+            clusters: clusters
+                .iter()
+                .map(|cluster| (*cluster).to_owned())
+                .collect(),
+            scalers: vec![ImageScaler::Windows],
+            ..NodeListParams::default()
+        }
+    }
+
+    /// Load the test config with two windows clusters, prod and dev
+    fn windows_conf() -> Conf {
+        let mut conf = Conf::new("tests/thorium-testing.yml").unwrap();
+        conf.thorium.scaler.windows.clusters = vec!["prod".to_owned(), "dev".to_owned()];
+        conf
+    }
+
+    /// `clusters_from_config_ref` keeps a user supplied cluster filter as is, so a node listing
+    /// filtered to `["prod"]` only returns nodes from prod rather than every configured cluster.
+    #[test]
+    fn cluster_filter_is_respected() {
+        let mut params = windows_params(&["prod"]);
+        params.clusters_from_config_ref(&windows_conf());
+        assert_eq!(
+            params.clusters,
+            vec!["prod".to_owned()],
+            "a user supplied cluster filter must not be expanded to every configured cluster"
+        );
+    }
+
+    /// With no cluster filter every configured cluster is listed.
+    #[test]
+    fn empty_cluster_filter_expands_to_configured_clusters() {
+        let mut params = windows_params(&[]);
+        params.clusters_from_config_ref(&windows_conf());
+        assert_eq!(params.clusters, vec!["prod".to_owned(), "dev".to_owned()]);
+    }
 }

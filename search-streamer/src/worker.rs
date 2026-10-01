@@ -6,15 +6,34 @@ use kanal::{AsyncReceiver, AsyncSender};
 use scylla::client::session::Session;
 use std::convert::Into;
 use std::sync::Arc;
-use thorium::models::SearchEventType;
 use thorium::Error;
+use thorium::models::SearchEventType;
 use tracing::instrument;
 
 use crate::events::CompactEvent;
 use crate::index::{IndexMapping, IndexTyped};
 use crate::msg::{Job, JobStatus};
 use crate::sources::DataSource;
-use crate::stores::{SearchStore, StoreLookup};
+use crate::stores::{SearchStore, StoreIdentifiable, StoreLookup};
+
+/// Pick the documents a Modified event leaves with no data to re-index
+///
+/// When the last tags of an item in a group are deleted, re-reading that group returns zero rows,
+/// so no bundle (and no document) is produced for it. The documents of every event id that
+/// produced no bundle must be deleted, otherwise they keep listing the deleted data forever.
+///
+/// # Arguments
+///
+/// * `event_ids` - The ids of every document the Modified event refers to
+/// * `bundle_ids` - The ids of the documents that were re-bundled with fresh data
+fn stale_modified_store_ids(event_ids: &[String], bundle_ids: &[String]) -> Vec<String> {
+    // any document that was not re-bundled no longer has any data
+    event_ids
+        .iter()
+        .filter(|id| !bundle_ids.contains(id))
+        .cloned()
+        .collect()
+}
 
 pub struct StreamWorker<D: DataSource, S: SearchStore> {
     /// A client for scylla
@@ -121,12 +140,31 @@ where
         match compacted_event.get_type() {
             // the item was modified, so re-stream it for its groups
             SearchEventType::Modified => {
+                // get the ids to every document this event refers to before we consume it
+                let event_ids = compacted_event
+                    .store_ids()
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>();
                 // get data for the item the event is referring to and bundle it up
                 let bundles = self
                     .source
                     .bundle_event(compacted_event, &self.scylla)
                     .await?;
+                // get the ids of the documents that still have data
+                let bundle_ids = bundles
+                    .iter()
+                    .map(|bundle| bundle.as_store_id().to_string())
+                    .collect::<Vec<_>>();
+                // find any documents left with no data to re-index
+                let stale_ids = stale_modified_store_ids(&event_ids, &bundle_ids);
                 self.send_docs(index_type, bundles).await?;
+                // delete any documents that no longer have any data
+                if !stale_ids.is_empty() {
+                    self.store
+                        .delete(index_type.map_index()?, &stale_ids)
+                        .await?;
+                }
             }
             // the item was deleted, so delete it in all its groups
             SearchEventType::Deleted => {
@@ -206,5 +244,42 @@ where
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Deleting the last remaining tag(s) of an item in a group emits a Modified search event.
+    /// Re-reading the group from Scylla returns zero rows, so no `TagBundle` is produced for it,
+    /// and every document the event refers to that produced no bundle is selected for deletion.
+    /// This keeps the existing `{item}-{group}` document (still listing the deleted tags) from
+    /// staying searchable in Elasticsearch forever.
+    #[test]
+    fn deleting_last_tag_removes_stale_doc() {
+        // the event refers to the item's documents in two groups
+        let event_ids = vec!["sha256-corn".to_owned(), "sha256-wheat".to_owned()];
+        // only the corn group still has tags, the wheat group's last tag was deleted
+        let bundle_ids = vec!["sha256-corn".to_owned()];
+        // pick the documents left with no data
+        let stale = stale_modified_store_ids(&event_ids, &bundle_ids);
+        // the wheat document must be deleted so the deleted tags stop matching searches
+        assert_eq!(
+            stale,
+            vec!["sha256-wheat".to_owned()],
+            "a document whose group has no remaining data must be deleted"
+        );
+    }
+
+    /// Documents that were re-bundled with fresh data are overwritten, not deleted, so live
+    /// documents are never removed.
+    #[test]
+    fn rebundled_docs_are_not_deleted() {
+        // every group the event refers to still has tags
+        let event_ids = vec!["sha256-corn".to_owned()];
+        let bundle_ids = vec!["sha256-corn".to_owned()];
+        // nothing should be deleted
+        assert!(stale_modified_store_ids(&event_ids, &bundle_ids).is_empty());
     }
 }

@@ -317,12 +317,12 @@ async fn bootstrap_test_api() -> Result<String, Error> {
     let resp = loop {
         // start with default client settings
         let settings = ClientSettings::default();
-        // boot strap an admin Thorium client
+        // boot strap an admin Thorium client with the password "password"
         let attempt = Thorium::bootstrap(
             &ADDR,
             "thorium",
-            "fake@fake.gov",
             "password",
+            "fake@fake.gov",
             &CONF.thorium.secret_key,
             &settings,
         )

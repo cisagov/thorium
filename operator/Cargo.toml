@@ -36,3 +36,4 @@ aws-sdk-s3 = { version = "1.90", features = ["rt-tokio", "behavior-version-lates
 aws-credential-types = { version = "1.2" }
 generic-array = { version = "0.14" }
 papaya = "0.2"
+sha2 = "0.10"

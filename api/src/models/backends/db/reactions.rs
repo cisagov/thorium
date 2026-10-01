@@ -11,7 +11,7 @@ use uuid::Uuid;
 use super::keys::{
     ImageKeys, JobKeys, ReactionCacheKind, ReactionKeys, StreamKeys, SubReactionLists, logs,
 };
-use super::{RedisCursor, images, jobs, pipelines, streams};
+use super::{RedisCursor, helpers, images, jobs, pipelines, streams};
 use crate::models::backends::db::{RedisCursorSupport, RedisGroupCursor};
 use crate::models::backends::reactions::{InternalReactionCacheFileUpdates, ReactionCursorParam};
 use crate::models::{
@@ -569,27 +569,24 @@ pub async fn list_group_set(
     limit: usize,
     shared: &Shared,
 ) -> Result<ReactionList, ApiError> {
+    // an empty page can't advance our cursor
+    if limit == 0 {
+        return Ok(ReactionList::new(None, Vec::default()));
+    }
     // get key to reaction set for this group/pipeline
     let key = ReactionKeys::group_set(group, status, shared);
-    // use a arbitrarily large value to attempt to read to
-    let end: i64 = 999_999_999_999;
-    // read the group status sorted set
-    let data: Vec<(String, i64)> = query!(
-        cmd("zrevrangebyscore").arg(key).arg(end).arg(cursor)
-            .arg("LIMIT").arg(0).arg(limit).arg("WITHSCORES"),
+    // read the next page of the group status sorted set by rank, highest score first; the
+    // cursor is the rank to start at since many reactions can share the same score
+    let ids: Vec<String> = query!(
+        cmd("zrevrange").arg(key).arg(cursor).arg(cursor + limit - 1),
         shared
     )
     .await?;
-    // cast to group list with correct cursor
-    // if cursor is 0 no more groups exist
-    if data.is_empty() {
-        Ok(ReactionList::new(None, Vec::default()))
+    // if we got a full page then more reactions may exist so return a cursor to the next rank
+    if ids.len() == limit {
+        Ok(ReactionList::new(Some(cursor + ids.len()), ids))
     } else {
-        // more groups exist use new_cursor
-        let cursor = data.last().unwrap().clone().1 as usize;
-        // collapse to just the ids
-        let ids = data.into_iter().map(|pair| pair.0).collect();
-        Ok(ReactionList::new(Some(cursor), ids))
+        Ok(ReactionList::new(None, ids))
     }
 }
 
@@ -734,18 +731,20 @@ async fn cost(
 /// # Arguments
 ///
 /// * `reaction` - The reaction to check for a parent reaction
+/// * `prior` - The status this reaction had before it was completed or failed
 /// * `pipe` - The Redis [`redis::Pipeline`] to build ontop of
 /// * `shared` - Shared Thorium objects
 #[rustfmt::skip]
-fn incr_parent(reaction: &Reaction, pipe: &mut redis::Pipeline, shared: &Shared) {
+fn incr_parent(reaction: &Reaction, prior: &ReactionStatus, pipe: &mut redis::Pipeline, shared: &Shared) {
     // check if we have a parent reaction
     if let Some(parent) = reaction.parent.as_ref() {
         // build key to our parent reactions data
         let parent_data = ReactionKeys::data(&reaction.group, parent, shared);
         // build key to the our sub reaction status sets
-        // the old status is always Started because we cannot incr a parent from any other status
+        // the old status is whatever status this reaction had before, since a queued (Created)
+        // sub reaction can be failed too
         let old_status =
-            ReactionKeys::sub_status_set(&reaction.group, parent, &ReactionStatus::Started, shared);
+            ReactionKeys::sub_status_set(&reaction.group, parent, prior, shared);
         let new_status =
             ReactionKeys::sub_status_set(&reaction.group, parent, &reaction.status, shared);
         // get our reaction id as a string
@@ -874,6 +873,8 @@ pub async fn complete(
     let keys = ReactionKeys::new(&reaction, shared);
     // build key to pipeline reaction src status set
     let src = ReactionKeys::status(&reaction.group, &reaction.pipeline, &reaction.status, shared);
+    // get the group set this reaction is moved out of
+    let src_group_status = group_set_src_status(&reaction.status);
     // update status
     reaction.status = ReactionStatus::Completed;
     // build status log for completing this reaction
@@ -892,13 +893,13 @@ pub async fn complete(
         .cmd("rpush").arg(logs::queue_name(&update, shared)).arg(force_serialize!(&update))
         .cmd("srem").arg(src).arg(&reaction_id)
         .cmd("sadd").arg(dest).arg(&reaction_id)
-        // move from started group set to completed group set
-        .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &ReactionStatus::Started, shared))
+        // move from our prior group set to completed group set
+        .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &src_group_status, shared))
             .arg(&reaction_id)
         .cmd("zadd").arg(ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
             .arg(timestamp).arg(&reaction_id); 
     // handle parent reaction incrementing if we have a parent
-    incr_parent(&reaction, pipe, shared);
+    incr_parent(&reaction, &src_group_status, pipe, shared);
     // try to delete any ephemeral files
     delete_ephemeral_and_cache_files(&reaction, shared).await?;
     Ok(reaction)
@@ -1004,6 +1005,36 @@ async fn parent_proceed(
     Ok(())
 }
 
+/// Refuse to proceed a reaction that has already reached a terminal status
+///
+/// Both Completed and Failed reactions are refused, so when a job of a reaction the user already
+/// failed (canceled) finishes, the Failed reaction is not resurrected and flipped to Completed,
+/// and its parent's completed sub reaction count is not incremented a second time.
+///
+/// # Arguments
+///
+/// * `id` - The id of the reaction being proceeded
+/// * `status` - The current status of the reaction being proceeded
+fn proceed_guard(id: &Uuid, status: &ReactionStatus) -> Result<(), ApiError> {
+    // terminal reactions can't be proceeded
+    if matches!(status, ReactionStatus::Completed | ReactionStatus::Failed) {
+        return conflict!(format!("reaction {} is already {}", id, status));
+    }
+    Ok(())
+}
+
+/// Get the status whose group set a reaction is moved out of when it is completed or failed
+///
+/// This is the status the reaction had before, so failing (or completing) a reaction that is
+/// still Created removes it from the Created group set.
+///
+/// # Arguments
+///
+/// * `prior` - The status the reaction had before it was completed or failed
+fn group_set_src_status(prior: &ReactionStatus) -> ReactionStatus {
+    prior.clone()
+}
+
 /// Increments a [`Reaction`]s progress and creates jobs for the next stage
 ///
 /// # Arguments
@@ -1012,14 +1043,16 @@ async fn parent_proceed(
 /// * `shared` - Shared Thorium objects
 #[instrument(name = "db::reactions::proceed", skip_all, err(Debug))]
 pub async fn proceed(mut reaction: Reaction, shared: &Shared) -> Result<JobHandleStatus, ApiError> {
-    // check if reaction is already complete
-    status_guard!(reaction, ReactionStatus::Completed);
+    // check if reaction is already complete or failed
+    proceed_guard(&reaction.id, &reaction.status)?;
     // if we have pending sub reactions then short circuit and wait
     if reaction.sub_reactions > reaction.completed_sub_reactions {
         return Ok(JobHandleStatus::Waiting);
     }
     // check if we any active generators
     if reaction.generators.is_empty() {
+        // get the stage we are proceeding from
+        let from_stage = reaction.current_stage.to_string();
         // either all generatos completed or we never had any
         // so increment current stage
         reaction.current_stage += 1;
@@ -1028,8 +1061,30 @@ pub async fn proceed(mut reaction: Reaction, shared: &Shared) -> Result<JobHandl
         // create the current stages jobs
         let mut pipe = redis::pipe();
         let (reaction, status) = react(&mut pipe, &pipeline, reaction, shared).await?;
+        // only advance this reaction if it is still on the stage we proceeded from and hasn't
+        // been completed or failed, so concurrent proceeds can't both launch the next stage
+        let data_key = ReactionKeys::data(&reaction.group, &reaction.id, shared);
+        let completed = serialize!(&ReactionStatus::Completed);
+        let failed = serialize!(&ReactionStatus::Failed);
+        let still_proceedable = |values: &[Option<String>]| {
+            values[0].as_deref() == Some(from_stage.as_str())
+                && values[1].as_deref() != Some(completed.as_str())
+                && values[1].as_deref() != Some(failed.as_str())
+        };
+        pipe.atomic();
         // execute pipeline
-        let progress: Vec<u64> = pipe.atomic().query_async(conn!(shared)).await?;
+        let progress: Option<Vec<u64>> = helpers::exec_if(
+            &pipe,
+            &data_key,
+            &["current_stage", "status"],
+            still_proceedable,
+            shared,
+        )
+        .await?;
+        // if another request already advanced this reaction then we have nothing to do
+        let Some(progress) = progress else {
+            return Ok(JobHandleStatus::Waiting);
+        };
         // we only try to proceed parent reactions if we are completing our current reaction
         if status == JobHandleStatus::Completed {
             // if we have a parent reaction then proceed it
@@ -1119,6 +1174,8 @@ pub async fn fail(
         &reaction.status,
         shared,
     );
+    // get the group set this reaction is moved out of
+    let src_group_status = group_set_src_status(&reaction.status);
     // set status to failed
     reaction.status = ReactionStatus::Failed;
     // build key to pipeline reaction failed status set
@@ -1142,8 +1199,8 @@ pub async fn fail(
         // move from src status to failed status set
         .cmd("srem").arg(src).arg(&reaction_id)
         .cmd("sadd").arg(dest).arg(&reaction_id)
-        // move from started group set to failed group set
-       .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &ReactionStatus::Started, shared))
+        // move from our prior group set to failed group set
+       .cmd("zrem").arg(ReactionKeys::group_set(&reaction.group, &src_group_status, shared))
             .arg(&reaction_id)
        .cmd("zadd").arg(ReactionKeys::group_set(&reaction.group, &reaction.status, shared))
             .arg(timestamp).arg(&reaction_id);
@@ -1155,7 +1212,7 @@ pub async fn fail(
     );
     super::logs::build(&mut pipe, &[update_cast], shared)?;
     // handle parent reaction incrementing if we have a parent
-    incr_parent(&reaction, &mut pipe, shared);
+    incr_parent(&reaction, &src_group_status, &mut pipe, shared);
     // execute redis pipeline
     let progress: Vec<u64> = pipe.atomic().query_async(conn!(shared)).await?;
     // proceed with our parent reactions
@@ -1211,7 +1268,28 @@ pub async fn add_stage_logs(
 #[derive(Debug, DeserializeRow)]
 #[scylla(flavor = "enforce_order", skip_name_checks)]
 struct LogLine {
+    position: i64,
     line: String,
+}
+
+/// Compute the scylla buckets that cover a stage-log cursor/limit window
+///
+/// Stage log lines are partitioned into scylla buckets of 2500 lines by position, so the window
+/// of positions `[cursor, cursor + limit)` spans every bucket from `cursor / 2500` through
+/// `(cursor + limit - 1) / 2500`.
+///
+/// # Arguments
+///
+/// * `cursor` - The position of the first log line to return
+/// * `limit` - The max number of log lines to return
+fn stage_log_buckets(cursor: i64, limit: usize) -> Result<Vec<i32>, ApiError> {
+    // always look at at least one line so we always query our current bucket
+    let limit: i64 = std::cmp::max(limit, 1).try_into()?;
+    // determine the first and last buckets in our window
+    let first_bucket: i32 = (cursor / 2500).try_into()?;
+    let last_bucket: i32 = ((cursor + limit - 1) / 2500).try_into()?;
+    // query every bucket in our window
+    Ok((first_bucket..=last_bucket).collect())
 }
 
 /// Gets stage logs for a stage in a reaction from Redis
@@ -1237,16 +1315,8 @@ pub async fn stage_logs(
     if limit > 250_000 {
         return bad!("Limit can be no more then 250,000 lines".to_owned());
     }
-    // determine our current bucket
-    let current_bucket: i32 = (cursor / 2500).try_into()?;
-    // determine the number of buckets we need to search in
-    let max_buckets: i32 = std::cmp::max((limit / 2500).try_into()?, 1);
-    // build a vec to store our buckets
-    let mut buckets = Vec::with_capacity((max_buckets + 1).try_into()?);
-    // add our current bucket
-    buckets.push(current_bucket);
-    // add the remaining buckets to search
-    buckets.extend((0..max_buckets).map(|i| current_bucket + i));
+    // compute the scylla buckets that cover this cursor/limit window
+    let buckets = stage_log_buckets(cursor, limit)?;
     // get our log lines from scylla
     let query = shared
         .scylla
@@ -1257,16 +1327,20 @@ pub async fn stage_logs(
         )
         .await?;
     // assume we will pull the max number of logs we want
-    let mut logs = Vec::with_capacity(limit);
+    let mut lines = Vec::with_capacity(limit);
     // enable rows on this query response
     let query_rows = query.into_rows_result()?;
-    // crawl over logs and convert them into Strings
+    // crawl over logs and deserialize them
     for row in query_rows.rows::<LogLine>()? {
         // try to deserialize this line
-        let line = row?;
-        // add this line to our logs
-        logs.push(line.line);
+        lines.push(row?);
     }
+    // each bucket returns up to limit lines, so sort our lines across buckets and only keep the
+    // first limit lines
+    lines.sort_unstable_by_key(|line| line.position);
+    lines.truncate(limit);
+    // convert our lines into Strings
+    let logs = lines.into_iter().map(|line| line.line).collect();
     Ok(StageLogs { logs })
 }
 
@@ -1490,6 +1564,29 @@ pub async fn expire_lists(shared: &Shared) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// Add the command that saves a reaction's updated ephemeral file list to a pipeline
+///
+/// `build` always sets this field when the reaction is created, so the updated list must
+/// overwrite it or files added by an update are never listed on the reaction.
+///
+/// # Arguments
+///
+/// * `pipe` - The pipeline to add our command to
+/// * `data_key` - The key to this reaction's data
+/// * `ephemeral` - The reaction's updated ephemeral files
+fn set_updated_ephemeral(
+    pipe: &mut redis::Pipeline,
+    data_key: &str,
+    ephemeral: &[String],
+) -> Result<(), ApiError> {
+    // overwrite our stored list with the updated one
+    pipe.cmd("hset")
+        .arg(data_key)
+        .arg("ephemeral")
+        .arg(serialize!(&ephemeral));
+    Ok(())
+}
+
 /// Updates the remaining stages of this reaction
 ///
 /// # Arguments
@@ -1511,8 +1608,9 @@ pub async fn update(
     // build pipeline to update our reactions data
     let mut pipe = redis::pipe();
     pipe.cmd("hset").arg(&keys.data).arg("args").arg(serialize!(&reaction.args))
-        .cmd("hset").arg(&keys.data).arg("sla").arg(serialize!(&reaction.sla))
-        .cmd("hsetnx").arg(&keys.data).arg("ephemeral").arg(serialize!(&reaction.ephemeral));
+        .cmd("hset").arg(&keys.data).arg("sla").arg(serialize!(&reaction.sla));
+    // save our updated ephemeral files
+    set_updated_ephemeral(&mut pipe, &keys.data, &reaction.ephemeral)?;
     // get our reaction id as a string
     let reaction_id = reaction.id.to_string();
     // remove the old tags
@@ -1632,4 +1730,122 @@ pub async fn update_cache_files(
     // execute the redis pipeline for updating our cache info
     pipe.atomic().exec_async(conn!(shared)).await?;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::{group_set_src_status, proceed_guard, set_updated_ephemeral, stage_log_buckets};
+    use crate::models::ReactionStatus;
+    use uuid::Uuid;
+
+    /// `update` saves a reaction's updated ephemeral file list with an unconditional `HSET`.
+    /// `build` always sets that field when the reaction is created, so the updated list must
+    /// overwrite it or files added by an update are uploaded to S3 but never listed on the
+    /// reaction.
+    #[test]
+    fn updated_ephemeral_list_overwrites_stored_list() {
+        let mut pipe = redis::pipe();
+        let ephemeral = vec!["original.json".to_owned(), "added.json".to_owned()];
+        set_updated_ephemeral(&mut pipe, "reaction_data", &ephemeral).unwrap();
+        // get the single command that saves our list
+        let cmds: Vec<_> = pipe.cmd_iter().collect();
+        assert_eq!(cmds.len(), 1);
+        let args: Vec<Vec<u8>> = cmds[0]
+            .args_iter()
+            .map(|arg| match arg {
+                redis::Arg::Simple(bytes) => bytes.to_vec(),
+                redis::Arg::Cursor => Vec::new(),
+            })
+            .collect();
+        // the list must be written unconditionally so it replaces the list set at creation
+        assert_eq!(
+            args[0].to_ascii_uppercase(),
+            b"HSET",
+            "the updated ephemeral list must overwrite the stored list"
+        );
+        // and it writes the full updated list to the ephemeral field
+        assert_eq!(args[1], b"reaction_data");
+        assert_eq!(args[2], b"ephemeral");
+        assert_eq!(args[3], serde_json::to_vec(&ephemeral).unwrap());
+    }
+
+    /// Stage log lines are bucketed by position in blocks of 2500. The window the caller asks for
+    /// is positions `[cursor, cursor+limit)`, spanning buckets
+    /// `cursor/2500 ..= (cursor+limit-1)/2500`, and every bucket in that inclusive range is
+    /// queried, including the trailing bucket when `(cursor % 2500) + limit` crosses a bucket
+    /// boundary. Here `cursor=2000, limit=2500` queries buckets 0 and 1.
+    #[test]
+    fn bucket_window_covers_full_requested_range() {
+        // request 2500 lines starting at position 2000: this spans positions 2000-4499
+        let buckets = stage_log_buckets(2000, 2500).unwrap();
+        // positions 2000-2499 live in bucket 0 and 2500-4499 live in bucket 1, so both are needed
+        assert!(
+            buckets.contains(&0),
+            "the window starting at position 2000 must query bucket 0, got {buckets:?}"
+        );
+        assert!(
+            buckets.contains(&1),
+            "positions 2500-4499 live in bucket 1 which must be queried, got {buckets:?}"
+        );
+    }
+
+    /// `cursor=0, limit=3000` asks for positions 0-2999, which span buckets 0 and 1. Both are
+    /// queried so a full 3000-line page can be returned.
+    #[test]
+    fn bucket_window_spans_boundary_from_zero() {
+        // request 3000 lines from the start: positions 0-2999 span buckets 0 and 1
+        let buckets = stage_log_buckets(0, 3000).unwrap();
+        // bucket 1 holds positions 2500-2999 and must be queried to fill the page
+        assert!(
+            buckets.contains(&1),
+            "a 3000-line page from position 0 must query bucket 1, got {buckets:?}"
+        );
+    }
+
+    /// A Failed (canceled) reaction is terminal, so proceeding it is refused. This keeps a job
+    /// that finishes after its reaction was canceled from resurrecting it, flipping it to
+    /// Completed, and counting it twice in its parent's `completed_sub_reactions`.
+    #[test]
+    fn proceed_refuses_failed_reaction() {
+        // a reaction the user already failed
+        let guard = proceed_guard(&Uuid::new_v4(), &ReactionStatus::Failed);
+        // a failed reaction must not be proceeded
+        assert!(
+            guard.is_err(),
+            "a Failed reaction must not be proceeded and resurrected"
+        );
+    }
+
+    /// A Completed reaction is refused and a Started reaction proceeds.
+    #[test]
+    fn proceed_guard_refuses_completed_and_allows_started() {
+        // a completed reaction is refused
+        assert!(proceed_guard(&Uuid::new_v4(), &ReactionStatus::Completed).is_err());
+        // a started reaction is proceeded
+        assert!(proceed_guard(&Uuid::new_v4(), &ReactionStatus::Started).is_ok());
+    }
+
+    /// `fail` (and `complete`) remove the reaction from the group set of the status it actually
+    /// had, so failing a reaction that is still Created (queued, never claimed) removes it from
+    /// the Created group set instead of leaving it listed there forever.
+    #[test]
+    fn fail_moves_from_prior_group_status() {
+        // a reaction that was still queued when it was failed
+        assert_eq!(
+            group_set_src_status(&ReactionStatus::Created),
+            ReactionStatus::Created,
+            "a Created reaction must be removed from the Created group set"
+        );
+    }
+
+    /// A Started reaction is removed from the Started group set.
+    #[test]
+    fn started_reaction_moves_from_started_group_status() {
+        // a running reaction is moved out of the started group set
+        assert_eq!(
+            group_set_src_status(&ReactionStatus::Started),
+            ReactionStatus::Started
+        );
+    }
 }

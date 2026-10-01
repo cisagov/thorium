@@ -832,8 +832,13 @@ impl Reaction {
         // add new tags
         self.tags.extend(update.add_tags.clone());
         // upload any new ephemeral files and add them to our reaction
-        let mut paths = ReactionRequest::upload_files(&self.id, update.ephemeral, shared).await?;
-        self.ephemeral.append(&mut paths);
+        let paths = ReactionRequest::upload_files(&self.id, update.ephemeral, shared).await?;
+        // files that replace an existing file are already listed so only add new names
+        for path in paths {
+            if !self.ephemeral.contains(&path) {
+                self.ephemeral.push(path);
+            }
+        }
         // apply our updates to the reaction data in the backend
         db::reactions::update(&self, &update.add_tags, &update.remove_tags, shared).await?;
         Ok(self)

@@ -1,13 +1,15 @@
 //! Tests the Images routes in Thorium
 
+use data_encoding::BASE64;
 use std::collections::{HashMap, HashSet};
 use thorium::models::{
-    GenericJobArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageUpdate, PipelineBan,
-    PipelineBanKind, PipelineBanUpdate, PipelineRequest, PipelineUpdate, ReactionCursorOpts,
-    ReactionRequest, ReactionStatus, ReactionUpdate, Resources, UserRole, UserUpdate,
+    GenericJob, GenericJobArgsUpdate, ImageBan, ImageBanKind, ImageBanUpdate, ImageUpdate,
+    Pipeline, PipelineBan, PipelineBanKind, PipelineBanUpdate, PipelineRequest, PipelineUpdate,
+    ReactionCursorOpts, ReactionRequest, ReactionStatus, ReactionUpdate, Resources, UserRole,
+    UserUpdate,
 };
 use thorium::test_utilities::{self, generators};
-use thorium::{Error, contains_key, fail, is, is_empty, is_in, is_not_in, vec_in_vec};
+use thorium::{Error, Thorium, contains_key, fail, is, is_empty, is_in, is_not_in, vec_in_vec};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -70,7 +72,10 @@ async fn create_bulk_by_user_disabled() -> Result<(), Error> {
     let disabled_info = disabled_client.users.info().await?;
     let enabled_info = enabled_client.users.info().await?;
     // create a group and pipeline owned by each user
-    let disabled_group = generators::groups(1, &disabled_client).await?.remove(0).name;
+    let disabled_group = generators::groups(1, &disabled_client)
+        .await?
+        .remove(0)
+        .name;
     let enabled_group = generators::groups(1, &enabled_client).await?.remove(0).name;
     let disabled_pipe_req = generators::pipelines(&disabled_group, 1, false, &disabled_client)
         .await?
@@ -1883,5 +1888,451 @@ async fn parent_ephemeral() -> Result<(), Error> {
         .download_ephemeral(&group, &created.parent.unwrap(), "parent-file")
         .await?;
     is!(download, "I am a parent test file");
+    Ok(())
+}
+
+/// Updating a reaction's ephemeral file overwrites the stored object, so a download after the
+/// update returns the new content rather than the stale original
+///
+/// `upload_base64` PUTs the file even when the key already exists, so updating a reaction's
+/// ephemeral file under the same name replaces its old content.
+#[tokio::test]
+async fn updating_ephemeral_file_overwrites_stale_content() -> Result<(), Error> {
+    // the original bytes uploaded when the reaction is created
+    const ORIGINAL: &str = "I am the original config";
+    // the corrected bytes the update tries to replace them with, under the same file name
+    const UPDATED: &str = "I am the corrected config after a retry";
+    // get an admin client to drive the reaction routes
+    let client = test_utilities::admin_client().await?;
+    // register a test node so the reaction has somewhere to schedule
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group to hold this reaction
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a random pipeline to react against
+    let pipe_req = generators::pipelines(&group, 1, false, &client)
+        .await?
+        .remove(0);
+    // fetch the full pipeline so we can build a reaction for it
+    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    // create a reaction carrying an ephemeral file with the original content
+    let react_req = generators::gen_reaction(&group, &pipe, None).buffer("config.json", ORIGINAL);
+    let resp = client.reactions.create(&react_req).await?;
+    // sanity check the file downloads as the original content before the update
+    let before = client
+        .reactions
+        .download_ephemeral(&group, &resp.id, "config.json")
+        .await?;
+    is!(before, ORIGINAL);
+    // build an update that supplies new content under the same ephemeral file name; ReactionUpdate
+    // has no ephemeral() builder so populate the map directly, base64 encoding the bytes the route
+    // expects
+    let mut update = ReactionUpdate::default();
+    update
+        .ephemeral
+        .insert("config.json".to_owned(), BASE64.encode(UPDATED.as_bytes()));
+    // apply the update; the api reports success either way
+    client.reactions.update(&group, &resp.id, &update).await?;
+    // download the file again; it has the corrected content, not the stale original
+    let after = client
+        .reactions
+        .download_ephemeral(&group, &resp.id, "config.json")
+        .await?;
+    is!(after, UPDATED);
+    Ok(())
+}
+
+/// Ephemeral files added by a reaction update are recorded on the reaction
+///
+/// `build` always sets the ephemeral list when the reaction is created, so
+/// `db::reactions::update` overwrites that list rather than only setting it when missing. This
+/// keeps a new file from being uploaded to S3 while the reaction (and so its jobs) never lists it.
+#[tokio::test]
+async fn updating_reaction_records_new_ephemeral_files() -> Result<(), Error> {
+    // get an admin client to drive the reaction routes
+    let client = test_utilities::admin_client().await?;
+    // register a test node so the reaction has somewhere to schedule
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group to hold this reaction
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a random pipeline to react against
+    let pipe_req = generators::pipelines(&group, 1, false, &client)
+        .await?
+        .remove(0);
+    // fetch the full pipeline so we can build a reaction for it
+    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    // create a reaction carrying one ephemeral file
+    let react_req =
+        generators::gen_reaction(&group, &pipe, None).buffer("original.json", "original");
+    let resp = client.reactions.create(&react_req).await?;
+    // add a second ephemeral file in an update
+    let mut update = ReactionUpdate::default();
+    update
+        .ephemeral
+        .insert("added.json".to_owned(), BASE64.encode("added".as_bytes()));
+    client.reactions.update(&group, &resp.id, &update).await?;
+    // the reaction must list both its original and its newly added ephemeral file
+    let react = client.reactions.get(&group, resp.id).await?;
+    is_in!(react.ephemeral, "original.json".to_owned());
+    is_in!(react.ephemeral, "added.json".to_owned());
+    // and the added file is downloadable
+    let added = client
+        .reactions
+        .download_ephemeral(&group, &resp.id, "added.json")
+        .await?;
+    is!(added, "added");
+    Ok(())
+}
+
+/// Send a raw reaction handle command since the client has no method for this route
+///
+/// A rejected command returns an error carrying the status and response body, so a caller
+/// fails here instead of at a later assertion that assumed the command was applied.
+///
+/// # Arguments
+///
+/// * `client` - The admin client whose host to send this command to
+/// * `group` - The group the reaction is in
+/// * `id` - The reaction to handle a command for
+/// * `cmd` - The command to send (`proceed` or `fail`)
+async fn handle_reaction(
+    client: &Thorium,
+    group: &str,
+    id: &Uuid,
+    cmd: &str,
+) -> Result<reqwest::StatusCode, Error> {
+    // build the url for this reactions handle route
+    let url = format!("{}/api/reactions/handle/{group}/{id}/{cmd}", client.host);
+    // send this command as the test admin using basic auth
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .basic_auth("thorium", Some("password"))
+        .send()
+        .await
+        .map_err(|err| Error::new(err.to_string()))?;
+    // get the status of this command
+    let status = resp.status();
+    // surface the status and body of any rejected command
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(Error::new(format!(
+            "handle {cmd} for reaction {id} returned {status}: {body}"
+        )));
+    }
+    Ok(status)
+}
+
+/// Register a worker for and claim the job of every image in a single stage pipeline
+///
+/// # Arguments
+///
+/// * `client` - The admin client to use
+/// * `group` - The group the pipeline is in
+/// * `pipe` - The single stage pipeline to claim jobs for
+/// * `prefix` - The prefix to use for each of our worker names
+async fn claim_stage(
+    client: &Thorium,
+    group: &str,
+    pipe: &Pipeline,
+    prefix: &str,
+) -> Result<Vec<GenericJob>, Error> {
+    // claim the job for each image in our only stage
+    let mut jobs = Vec::with_capacity(pipe.order[0].len());
+    for (i, image) in pipe.order[0].iter().enumerate() {
+        // register a worker for this image
+        let worker = format!("{prefix}_{i}");
+        generators::worker(
+            "cluster0", "node0", &worker, group, &pipe.name, image, client,
+        )
+        .await?;
+        // claim this images job
+        let mut claimed = client
+            .jobs
+            .claim(group, &pipe.name, image, "cluster0", "node0", &worker, 1)
+            .await?;
+        jobs.push(claimed.remove(0));
+    }
+    Ok(jobs)
+}
+
+/// Delete the workers registered by [`claim_stage`]
+///
+/// # Arguments
+///
+/// * `client` - The admin client to use
+/// * `pipe` - The single stage pipeline jobs were claimed for
+/// * `prefix` - The prefix used for each of our worker names
+async fn delete_stage_workers(
+    client: &Thorium,
+    pipe: &Pipeline,
+    prefix: &str,
+) -> Result<(), Error> {
+    for i in 0..pipe.order[0].len() {
+        generators::delete_worker(&format!("{prefix}_{i}"), client).await?;
+    }
+    Ok(())
+}
+
+/// A reaction the user failed (canceled) while its jobs were running stays Failed
+///
+/// `proceed` refuses Failed reactions as well as Completed ones, so when the canceled reaction's
+/// still running jobs finish, the reaction is not resurrected and flipped to Completed.
+#[tokio::test]
+async fn failed_reaction_not_resurrected_by_job_completion() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // register our test node
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group to test in
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a random pipeline with a single stage of three images
+    let pipe_req = generators::pipelines(&group, 1, false, &client)
+        .await?
+        .remove(0);
+    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    // create a reaction and claim all of its jobs so they are running
+    let req = generators::gen_reaction(&group, &pipe, None);
+    let resp = client.reactions.create(&req).await?;
+    let jobs = claim_stage(&client, &group, &pipe, "c5_01").await?;
+    // the user fails (cancels) the reaction while its jobs are running
+    is!(
+        handle_reaction(&client, &group, &resp.id, "fail").await?,
+        reqwest::StatusCode::ACCEPTED
+    );
+    // the running jobs then finish; ignore their results since they may be rejected
+    let logs = generators::stage_logs();
+    for job in &jobs {
+        let _ = client.jobs.proceed(job, &logs, 1).await;
+    }
+    // the canceled reaction must still be failed
+    let react = client.reactions.get(&group, resp.id).await?;
+    is!(react.status, ReactionStatus::Failed);
+    // and it must not be listed as completed
+    let mut completed =
+        client
+            .reactions
+            .list_status(&group, &pipe.name, &ReactionStatus::Completed);
+    completed.next().await?;
+    is_not_in!(completed.names, resp.id.to_string());
+    delete_stage_workers(&client, &pipe, "c5_01").await?;
+    Ok(())
+}
+
+/// A failed sub reaction only counts once toward its parent's completed sub reactions
+///
+/// Failing the sub reaction increments its parent's `completed_sub_reactions`. A Failed reaction
+/// is never proceeded, so the sub reaction's running jobs finishing afterwards doesn't resurrect
+/// and complete it and increment the count again.
+#[tokio::test]
+async fn failed_sub_reaction_counts_once_in_parent() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // register our test node
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group to test in
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a parent reaction and a single sub reaction
+    let (_, parent) = generators::reactions(&group, 1, None, &client).await?;
+    let parent = parent.created[0];
+    let (_, subs, sub_pipe) = generators::sub_reactions(&group, 1, &parent, &client).await?;
+    // claim all of the sub reaction's jobs so they are running
+    let jobs = claim_stage(&client, &group, &sub_pipe, "c5_01_sub").await?;
+    // the user fails the sub reaction while its jobs are running
+    handle_reaction(&client, &group, &subs[0].id, "fail").await?;
+    // the running jobs then finish; ignore their results since they may be rejected
+    let logs = generators::stage_logs();
+    for job in &jobs {
+        let _ = client.jobs.proceed(job, &logs, 1).await;
+    }
+    // the parent must count its single sub reaction exactly once
+    let parent = client.reactions.get(&group, parent).await?;
+    is!(parent.completed_sub_reactions, 1);
+    delete_stage_workers(&client, &sub_pipe, "c5_01_sub").await?;
+    Ok(())
+}
+
+/// Paging through a group's reaction list advances past the first page
+///
+/// `list_group_set` uses the cursor as the rank to start the next page at, so each page picks up
+/// where the last one left off and the listing reaches every created reaction without repeats.
+#[tokio::test]
+async fn list_group_set_paged() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // setup 20 random reactions
+    let (_, resp) = generators::reactions(&group, 20, None, &client).await?;
+    is_empty!(resp.errors);
+    // list the reactions we just created in pages of 5
+    let mut cursor = client
+        .reactions
+        .list_group(&group, &ReactionStatus::Created)
+        .page_size(5);
+    // gather every page, capping the pages so a cursor that never advances cannot loop forever
+    let mut gathered = Vec::new();
+    for _ in 0..10 {
+        cursor.next().await?;
+        gathered.extend(cursor.names.iter().cloned());
+        if cursor.exhausted {
+            break;
+        }
+    }
+    // every reaction we created must be listed
+    for id in &resp.created {
+        is_in!(gathered, id.to_string());
+    }
+    // and no reaction may be listed twice
+    let unique = gathered.iter().collect::<HashSet<_>>();
+    is!(gathered.len(), unique.len());
+    Ok(())
+}
+
+/// Failing a reaction that is still queued removes it from the Created group list
+///
+/// `fail` moves a reaction out of the group set of the status it actually had, so a reaction
+/// failed before any of its jobs were claimed leaves the Created group list and is listed as
+/// Failed.
+#[tokio::test]
+async fn failing_queued_reaction_leaves_created_list() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a reaction whose jobs are never claimed
+    let (_, resp) = generators::reactions(&group, 1, None, &client).await?;
+    let id = resp.created[0];
+    // fail the still queued reaction
+    handle_reaction(&client, &group, &id, "fail").await?;
+    // it must no longer be listed as Created
+    let mut created = client
+        .reactions
+        .list_group(&group, &ReactionStatus::Created)
+        .page_size(1000);
+    created.next().await?;
+    is_not_in!(created.names, id.to_string());
+    // and it is listed as Failed
+    let mut failed = client
+        .reactions
+        .list_group(&group, &ReactionStatus::Failed)
+        .page_size(1000);
+    failed.next().await?;
+    is_in!(failed.names, id.to_string());
+    Ok(())
+}
+
+/// Failing a queued sub reaction removes it from its parent's Created sub list
+///
+/// The sub reaction is moved out of its parent's sub status set for the status it actually had,
+/// so a sub reaction failed while still Created leaves its parent's Created sub status list.
+#[tokio::test]
+async fn failing_queued_sub_reaction_leaves_parent_created_list() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a parent reaction with a single queued sub reaction
+    let (_, parent) = generators::reactions(&group, 1, None, &client).await?;
+    let parent = parent.created[0];
+    let (_, subs, _) = generators::sub_reactions(&group, 1, &parent, &client).await?;
+    // fail the still queued sub reaction
+    handle_reaction(&client, &group, &subs[0].id, "fail").await?;
+    // it must no longer be listed as a Created sub reaction
+    let mut created = client
+        .reactions
+        .list_sub_status(&group, &parent, &ReactionStatus::Created);
+    created.next().await?;
+    is_not_in!(created.names, subs[0].id.to_string());
+    Ok(())
+}
+
+/// Completing a queued reaction by proceeding it removes it from the Created group list
+///
+/// `complete` moves a reaction out of the group set of the status it actually had, so a single
+/// stage reaction proceeded by its owner before any job was claimed is Completed and no longer
+/// listed as Created.
+#[tokio::test]
+async fn proceeding_queued_reaction_leaves_created_list() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a single stage reaction whose jobs are never claimed
+    let (_, resp) = generators::reactions(&group, 1, None, &client).await?;
+    let id = resp.created[0];
+    // proceed the still queued reaction past its only stage, completing it
+    handle_reaction(&client, &group, &id, "proceed").await?;
+    // it must no longer be listed as Created
+    let mut created = client
+        .reactions
+        .list_group(&group, &ReactionStatus::Created)
+        .page_size(1000);
+    created.next().await?;
+    is_not_in!(created.names, id.to_string());
+    Ok(())
+}
+
+/// Concurrent proceeds of the same reaction don't both advance from the same stage
+///
+/// `proceed` only saves the advanced `current_stage` if the reaction is still on the stage it
+/// proceeded from and hasn't been completed or failed, so two concurrent proceeds can't both
+/// advance from stage 0 to stage 1 and both create (duplicate) the jobs for stage 1.
+///
+/// The race is probabilistic, so this races many reactions and checks that none of them has more
+/// than one stage 1 job.
+#[tokio::test]
+#[ignore = "probabilistic race between concurrent reaction proceeds"]
+async fn concurrent_user_proceed_does_not_duplicate_stage_jobs() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // register our test node
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // build a three stage pipeline with a single image per stage
+    let images: Vec<String> = generators::images(&group, 3, false, &client)
+        .await?
+        .into_iter()
+        .map(|image| image.name)
+        .collect();
+    let order = serde_json::json!([[&images[0]], [&images[1]], [&images[2]]]);
+    let pipe_req = PipelineRequest::new(&group, generators::gen_string(25), order);
+    client.pipelines.create(&pipe_req).await?;
+    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    // create many reactions to widen the race window
+    let mut ids = HashSet::new();
+    for _ in 0..10 {
+        let req = generators::gen_reaction(&group, &pipe, None);
+        ids.insert(client.reactions.create(&req).await?.id);
+    }
+    // proceed each reaction twice concurrently
+    for id in &ids {
+        let _ = tokio::join!(
+            handle_reaction(&client, &group, id, "proceed"),
+            handle_reaction(&client, &group, id, "proceed")
+        );
+    }
+    // claim every stage 1 job
+    generators::worker(
+        "cluster0", "node0", "c5_04", &group, &pipe.name, &images[1], &client,
+    )
+    .await?;
+    let jobs = client
+        .jobs
+        .claim(
+            &group, &pipe.name, &images[1], "cluster0", "node0", "c5_04", 100,
+        )
+        .await?;
+    // no reaction may have more than one stage 1 job
+    let mut per_reaction: HashMap<Uuid, usize> = HashMap::new();
+    for job in &jobs {
+        *per_reaction.entry(job.reaction).or_default() += 1;
+    }
+    for (id, count) in per_reaction {
+        assert!(
+            count <= 1,
+            "reaction {id} had {count} stage 1 jobs; concurrent proceeds duplicated a stage"
+        );
+    }
+    generators::delete_worker("c5_04", &client).await?;
     Ok(())
 }

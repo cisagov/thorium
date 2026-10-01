@@ -1,5 +1,6 @@
 use bb8_redis::redis::cmd;
 use chrono::prelude::*;
+use clap::ValueEnum;
 use futures::stream::{self, StreamExt};
 use std::collections::{HashMap, HashSet};
 use tracing::{Level, event, instrument};
@@ -154,6 +155,18 @@ pub async fn reset_cache(shared: &Shared) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// Get the scaler streams whose sizes [`get_stats`] counts, in the order it reads them
+///
+/// The deadline and running streams of every scaler are counted so the system-wide totals
+/// include every job.
+fn stats_zcard_targets() -> Vec<(ImageScaler, &'static str)> {
+    // count the deadlines and currently running jobs for each scaler type
+    ImageScaler::value_variants()
+        .iter()
+        .flat_map(|scaler| [(*scaler, "deadlines"), (*scaler, "running")])
+        .collect()
+}
+
 /// Gets [`SystemStats`] from redis
 ///
 /// # Arguments
@@ -166,30 +179,42 @@ pub async fn get_stats(
     shared: &Shared
 ) -> Result<SystemStats, ApiError> {
     // get system statistics
-    let counts: Vec<i64> = redis::pipe()
-    // count the number of deadlines for each scaler type
-        .cmd("zcard").arg(StreamKeys::system_scaler(ImageScaler::K8s, "deadlines", shared))
-        .cmd("zcard").arg(StreamKeys::system_scaler(ImageScaler::BareMetal, "deadlines", shared))
-        .cmd("zcard").arg(StreamKeys::system_scaler(ImageScaler::External, "deadlines", shared))
-        // count the number of currently running jobs for each scaler type
-        .cmd("zcard").arg(StreamKeys::system_scaler(ImageScaler::K8s, "running", shared))
-        .cmd("zcard").arg(StreamKeys::system_scaler(ImageScaler::BareMetal, "running", shared))
-        .cmd("zcard").arg(StreamKeys::system_scaler(ImageScaler::External, "running", shared))
-        // count number of users
-        .cmd("scard").arg(UserKeys::global(shared))
+    let mut pipe = redis::pipe();
+    // get the streams to count for each scaler type
+    let targets = stats_zcard_targets();
+    // count the number of deadlines and running jobs for each scaler type
+    for (scaler, kind) in &targets {
+        pipe.cmd("zcard").arg(StreamKeys::system_scaler(*scaler, kind, shared));
+    }
+    // count number of users
+    let mut counts: Vec<i64> = pipe.cmd("scard").arg(UserKeys::global(shared))
         .query_async(conn!(shared)).await?;
-    // build the stats for the specific scalers
-    let k8s = ScalerStats::new(counts[0], counts[3]);
-    let baremetal = ScalerStats::new(counts[1], counts[4]);
-    let external = ScalerStats::new(counts[2], counts[5]);
+    // our user count is last
+    let users = counts.pop().unwrap_or_default();
+    // build the stats for each scaler
+    let mut stats: HashMap<ImageScaler, ScalerStats> = HashMap::with_capacity(targets.len() / 2);
+    for ((scaler, kind), count) in targets.into_iter().zip(counts) {
+        // get this scalers stats
+        let entry = stats.entry(scaler).or_default();
+        // add this count to the right stat
+        match kind {
+            "deadlines" => entry.deadlines = count,
+            _ => entry.running = count,
+        }
+    }
+    // get the totals across all scalers
+    let deadlines = stats.values().map(|stats| stats.deadlines).sum();
+    let running = stats.values().map(|stats| stats.running).sum();
     // cast raw data to system auth keys
     Ok(SystemStats {
-        deadlines: counts[0] + counts[1] + counts[2],
-        running: counts[3] + counts[4] + counts[5],
-        users: counts[6],
-        k8s,
-        baremetal,
-        external,
+        deadlines,
+        running,
+        users,
+        k8s: stats.remove(&ImageScaler::K8s).unwrap_or_default(),
+        baremetal: stats.remove(&ImageScaler::BareMetal).unwrap_or_default(),
+        external: stats.remove(&ImageScaler::External).unwrap_or_default(),
+        windows: stats.remove(&ImageScaler::Windows).unwrap_or_default(),
+        kvm: stats.remove(&ImageScaler::Kvm).unwrap_or_default(),
         groups,
     })
 }
@@ -396,6 +421,19 @@ pub async fn get_workers_for_node(
     Ok(node)
 }
 
+/// Build the values [`get_node_rows`] binds when it queries a chunk of nodes in one cluster
+///
+/// The prepared statement filters on `cluster in ?`, which expects a list, so the cluster is
+/// bound as a one element list.
+///
+/// # Arguments
+///
+/// * `cluster` - The cluster to query nodes in
+/// * `chunk` - The chunk of nodes to query
+fn chunked_node_binds(cluster: &str, chunk: &[String]) -> (Vec<String>, Vec<String>) {
+    (vec![cluster.to_owned()], chunk.to_vec())
+}
+
 /// Gets a nodes info from scylla
 ///
 /// # Arguments
@@ -457,13 +495,13 @@ pub async fn get_node_rows(
         for cluster in clusters {
             // break out nodes into chunks of one
             for chunk in nodes.chunks(100) {
-                // cast our node chunk to a vec
-                let chunk_vec = chunk.to_vec();
+                // build the values to bind for this chunk
+                let binds = chunked_node_binds(cluster, chunk);
                 // execute this query
                 let query = shared
                     .scylla
                     .session
-                    .execute_unpaged(&shared.scylla.prep.nodes.get_many, ((cluster), chunk_vec))
+                    .execute_unpaged(&shared.scylla.prep.nodes.get_many, binds)
                     .await?;
                 // add our query
                 queries.push(query);
@@ -776,12 +814,35 @@ pub async fn can_delete_workers(
                 pipe.cmd("hget").arg(data).arg("user");
             }
             // get all of these workers users
-            let users_set: HashSet<String> = pipe.query_async(conn!(shared)).await?;
-            // if we have multilple users or one user that isn't us then reject this request
-            if users_set.len() != 1 || !users_set.contains(&user.username) {
-                return unauthorized!();
-            }
+            let reply: redis::Value = pipe.query_async(conn!(shared)).await?;
+            // make sure we own every one of these workers
+            check_worker_owners(&user.username, &reply)?;
         }
+    }
+    Ok(())
+}
+
+/// Check that a user owns every worker in a chunk of workers they are trying to delete
+///
+/// The reply holds each worker's owner, and a worker that no longer exists has a nil owner, so
+/// deleting an already removed worker is a 404.
+///
+/// # Arguments
+///
+/// * `username` - The user trying to delete these workers
+/// * `reply` - The owner of each worker in this chunk
+fn check_worker_owners(username: &str, reply: &redis::Value) -> Result<(), ApiError> {
+    // get the owner of each worker
+    let owners: Vec<Option<String>> = redis::from_redis_value(reply)?;
+    // any worker without an owner doesn't exist
+    if owners.iter().any(Option::is_none) {
+        return not_found!("One or more workers were not found".to_owned());
+    }
+    // get the unique owners of these workers
+    let users_set: HashSet<String> = owners.into_iter().flatten().collect();
+    // if we have multilple users or one user that isn't us then reject this request
+    if users_set.len() != 1 || !users_set.contains(username) {
+        return unauthorized!();
     }
     Ok(())
 }
@@ -801,8 +862,9 @@ pub async fn delete_workers(
     deletes: WorkerDeleteMap,
     shared: &Shared,
 ) -> Result<(), ApiError> {
-    // track the worker data keys to delete
-    let mut data_keys = Vec::with_capacity(std::cmp::min(25, deletes.workers.len()));
+    // build the pipeline for deleting workers; nothing is deleted until we have checked that
+    // every worker exists so a missing worker can't leave a partially applied delete
+    let mut delete_pipe = redis::pipe();
     // get these workers info 25 at a time
     let chunked = deletes.workers.as_slice().chunks(25);
     // get the info for this chunk of workers
@@ -816,15 +878,11 @@ pub async fn delete_workers(
             // get this workers cluster and node
             pipe.cmd("hget").arg(&data).arg("cluster")
                 .cmd("hget").arg(&data).arg("node");
-            // keep our data key to delete later
-            data_keys.push(data);
         }
         // get the cluster and node for each worker
         let maybe_info: Vec<Option<String>> = pipe.query_async(conn!(shared)).await?;
         // convert our info list to an iterator
         let mut info_iter = maybe_info.iter();
-        // build the pipeline for deleteing workers
-        let mut pipe = redis::pipe();
         // combine our worker and cluster/node info
         for worker in chunk {
             // get this workers cluster/node
@@ -840,13 +898,124 @@ pub async fn delete_workers(
             };
             // build the key to this workers cluster/node worker set
             let set_key = keys::system::worker_set(cluster, node, scaler, shared);
-            // delete this worker from its cluster/node worker set
-            pipe.cmd("srem").arg(set_key).arg(worker);
+            // delete this worker from its cluster/node worker set and delete its data
+            delete_pipe.cmd("srem").arg(set_key).arg(worker)
+                .cmd("del").arg(keys::system::worker_data(&worker, shared));
         }
-        // delete this workers data as well
-        data_keys.iter().for_each(|data_key| { pipe.cmd("del").arg(data_key); });
-        // execute the redis pipeline for this chunk of workers
-        let _: () = pipe.query_async(conn!(shared)).await?;
     }
+    // delete all of our workers at once
+    let _: () = delete_pipe.atomic().query_async(conn!(shared)).await?;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use clap::ValueEnum;
+    use scylla::frame::response::result::{
+        CollectionType, ColumnSpec, ColumnType, NativeType, TableSpec,
+    };
+    use scylla::serialize::row::{RowSerializationContext, SerializeRow};
+    use scylla::serialize::writers::RowWriter;
+
+    /// `get_stats` counts the deadline and running streams of every scaler (including Windows
+    /// and Kvm), so the "across all scalers" totals in `SystemStats` include every job.
+    #[test]
+    fn stats_cover_every_scaler() {
+        let targets = stats_zcard_targets();
+        for scaler in ImageScaler::value_variants() {
+            for kind in ["deadlines", "running"] {
+                assert!(
+                    targets.contains(&(*scaler, kind)),
+                    "system stats must count the {scaler:?} {kind} stream"
+                );
+            }
+        }
+    }
+
+    /// The K8s deadline and running streams are counted.
+    #[test]
+    fn stats_count_k8s_streams() {
+        let targets = stats_zcard_targets();
+        assert!(targets.contains(&(ImageScaler::K8s, "deadlines")));
+        assert!(targets.contains(&(ImageScaler::K8s, "running")));
+    }
+
+    /// Serialize values bound to `WHERE cluster in ? AND node in ?` like Scylla would
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - The values to bind to the node get many statement
+    fn serialize_node_get_many(values: &impl SerializeRow) -> bool {
+        // both `in ?` bind markers expect a list of text
+        let list_text = || ColumnType::Collection {
+            frozen: false,
+            typ: CollectionType::List(Box::new(ColumnType::Native(NativeType::Text))),
+        };
+        let table = TableSpec::borrowed("thorium", "nodes");
+        let specs = [
+            ColumnSpec::borrowed("cluster", list_text(), table.clone()),
+            ColumnSpec::borrowed("node", list_text(), table),
+        ];
+        // serialize our values against these bind markers
+        let mut buf = Vec::new();
+        values
+            .serialize(
+                &RowSerializationContext::from_specs(&specs),
+                &mut RowWriter::new(&mut buf),
+            )
+            .is_ok()
+    }
+
+    /// When a node get/list spans 100 or more cluster*node combinations, `get_node_rows` queries
+    /// each cluster's nodes in chunks and binds the cluster as a list, as `cluster in ?` expects,
+    /// so the chunked bind values serialize against the prepared statement.
+    #[test]
+    fn chunked_node_binds_serialize_as_lists() {
+        let cluster = "cluster0".to_owned();
+        let nodes: Vec<String> = (0..100).map(|i| format!("node{i}")).collect();
+        // the chunked bind values must be accepted by the prepared statement
+        assert!(
+            serialize_node_get_many(&chunked_node_binds(&cluster, &nodes)),
+            "the chunked node query must bind the cluster as a list"
+        );
+    }
+
+    /// The single request path binds both values as lists, and those serialize.
+    #[test]
+    fn unchunked_node_binds_serialize() {
+        let clusters = vec!["cluster0".to_owned()];
+        let nodes = vec!["node0".to_owned()];
+        assert!(serialize_node_get_many(&(&clusters, &nodes)));
+    }
+
+    /// When a non-admin deletes a worker that was just removed, the owner lookup for it returns
+    /// nil, and that missing worker is reported as a 404 rather than an internal error.
+    #[test]
+    fn missing_worker_owner_is_not_found() {
+        // the only worker in this chunk no longer exists
+        let reply = redis::Value::Array(vec![redis::Value::Nil]);
+        let error = check_worker_owners("alice", &reply).unwrap_err();
+        assert_eq!(
+            error.status(),
+            StatusCode::NOT_FOUND,
+            "deleting a worker that does not exist must return a 404"
+        );
+    }
+
+    /// A user may delete their own workers but not someone else's.
+    #[test]
+    fn worker_owner_check_allows_owner_only() {
+        // alice owns this worker
+        let owned = redis::Value::Array(vec![redis::Value::BulkString(b"alice".to_vec())]);
+        assert!(check_worker_owners("alice", &owned).is_ok());
+        // bob owns this worker
+        let other = redis::Value::Array(vec![redis::Value::BulkString(b"bob".to_vec())]);
+        assert_eq!(
+            check_worker_owners("alice", &other).unwrap_err().status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
 }

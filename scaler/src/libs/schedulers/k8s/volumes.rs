@@ -289,14 +289,29 @@ impl Volumes {
             items: None,
             optional: None,
         };
-        // insert anything from the optional specific settings
-        if let Some(specific) = vol.config_map.as_ref() {
-            // set if this volume is optional
-            secret.optional = specific.optional
-        }
+        // copy over the optional flag from the volumes specific settings
+        Self::apply_secret_optional(&mut secret, vol);
         // inject volume
         built.secret = Some(secret);
         Ok(built)
+    }
+
+    /// Copies the `optional` flag from a Thorium volumes settings onto a k8s secret source
+    ///
+    /// This is the inline flag copy in [`Volumes::secret`] (it never needs `self`) extracted so
+    /// its source-of-truth logic can be unit tested without a live kube client. The flag is read
+    /// from the volumes secret settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret` - The k8s secret volume source to set the optional flag on
+    /// * `vol` - The requested settings for this volume from Thorium
+    fn apply_secret_optional(secret: &mut SecretVolumeSource, vol: &ThoriumVolume) {
+        // insert anything from the secret specific settings
+        if let Some(specific) = vol.secret.as_ref() {
+            // set if this volume is optional
+            secret.optional = specific.optional
+        }
     }
 
     /// Builds an NFS [`Volume`] based on a [`thorium::models::Volume`]
@@ -465,7 +480,9 @@ impl MountGen {
 
 #[cfg(test)]
 mod tests {
-    use super::MountGen;
+    use super::{MountGen, Volumes};
+    use k8s_openapi::api::core::v1::SecretVolumeSource;
+    use thorium::models::{Secret, Volume as ThoriumVolume, VolumeTypes};
 
     /// the shared `/opt/thorium` volume (which holds the `thorium-agent` binary) must be
     /// mounted read-only in every tool pod. Otherwise a root-in-container tool can overwrite the
@@ -479,6 +496,43 @@ mod tests {
             mount.read_only,
             Some(true),
             "the /opt/thorium mount is not read-only, so a tool can trojan the agent binary"
+        );
+        // the recursive read-only flag must also survive deserialization under its camelCase key
+        assert_eq!(
+            mount.recursive_read_only.as_deref(),
+            Some("Enabled"),
+            "the /opt/thorium mount is not recursively read-only"
+        );
+    }
+
+    /// The built `SecretVolumeSource.optional` reflects `vol.secret.optional`, not the
+    /// `vol.config_map` settings (which are `None` for a Secret archetype volume), so a user who
+    /// marks a Secret volume `optional=true` gets an optional secret rather than a required one.
+    #[test]
+    fn secret_optional_is_read_from_secret_settings() {
+        // build a Secret archetype volume whose secret settings mark it optional
+        let mut vol = ThoriumVolume::new("creds", "/creds", VolumeTypes::Secret);
+        // the user marked the secret optional so a missing secret does not block the pod
+        vol.secret = Some(Secret {
+            default_mode: None,
+            optional: Some(true),
+        });
+        // there are no config_map settings on a Secret archetype volume
+        vol.config_map = None;
+        // build a bare secret source the way Volumes::secret does before copying the flag
+        let mut secret = SecretVolumeSource {
+            default_mode: None,
+            secret_name: Some("creds".to_owned()),
+            items: None,
+            optional: None,
+        };
+        // apply the optional flag using the same helper Volumes::secret uses
+        Volumes::apply_secret_optional(&mut secret, &vol);
+        // the built secret must honor the users optional=true setting
+        assert_eq!(
+            secret.optional,
+            Some(true),
+            "a Secret volume marked optional=true must produce optional=Some(true), not be dropped"
         );
     }
 }

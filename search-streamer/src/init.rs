@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
-use redis::{aio::MultiplexedConnection, AsyncCommands, RedisError};
+use redis::{AsyncCommands, RedisError, aio::MultiplexedConnection};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use thorium::{Conf, Error};
-use tracing::{event, instrument, Level};
+use tracing::{Level, event, instrument};
 
 /// A session that intiates a search store, pulling data from the data
 /// base and streaming it efficiently while tracking progress
@@ -284,8 +284,9 @@ impl InitSessionKeys {
 ///
 /// * `chunk_count` - The number of chunks
 fn calculate_chunk_size(chunk_count: u64) -> i64 {
-    // will panic if chunk count is 0 or 1
-    (u64::MAX / chunk_count).try_into().unwrap()
+    // chunk count is never 0 since it comes from non-zero config values, but a chunk count
+    // of 1 doesn't fit in an i64 so clamp it to the largest chunk size we can represent
+    i64::try_from(u64::MAX / chunk_count).unwrap_or(i64::MAX)
 }
 
 /// Build the range of tokens to stream
@@ -376,5 +377,14 @@ mod test {
         }
         assert_eq!(final_start, p_end + 1);
         assert_eq!(final_end, i64::MAX);
+    }
+
+    /// A chunk count of 1 is a legal config (`workers = 1` and `init.chunks_per_worker = 1` are
+    /// both `NonZeroUsize`), so `calculate_chunk_size` handles it without panicking. Since
+    /// `u64::MAX / 1` overflows `i64`, the chunk size is clamped to `i64::MAX`.
+    #[test]
+    fn chunk_size_of_one_does_not_panic() {
+        // a single chunk must yield the largest representable chunk size, not a panic
+        assert_eq!(calculate_chunk_size(1), i64::MAX);
     }
 }

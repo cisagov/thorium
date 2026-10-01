@@ -58,7 +58,7 @@ fn safe_join(base: &Path, component: impl AsRef<Path>) -> Result<PathBuf, Error>
             _ => {
                 return Err(Error::new(format!(
                     "refusing to join unsafe path component: {component:?}"
-                )))
+                )));
             }
         }
     }
@@ -272,6 +272,85 @@ pub async fn download_cache<P: AsRef<Path>>(
     Ok(downloaded)
 }
 
+/// Build the key used to query a repo's results when downloading its children
+///
+/// The repos results API is keyed by the FULL repo path (e.g. `github.com/curl/curl`), matching
+/// every other agent repo call, so the full `url` is used as the key. Querying by only the URL's
+/// last segment (e.g. `curl`) would 404 or hit the wrong repo.
+///
+/// # Arguments
+///
+/// * `url` - The full repo URL for the repo dependency
+fn repo_results_query_key(url: &str) -> Option<&str> {
+    // query by the full repo path that repos are stored under
+    Some(url)
+}
+
+/// Build the on-disk target for a sample named after its most recent submission file name
+///
+/// Under `FileNamingStrategy::MostRecent` two different samples can both be submitted as the
+/// same file name (e.g. `invoice.exe` or `/home/user/invoice.exe`), so named samples are placed
+/// in a per-sha256 sub-directory (`<base>/<sha256>/<name>`) to keep them from overwriting each
+/// other on disk. The sha256 itself is used as the file name when the sample has no usable file
+/// name.
+///
+/// # Arguments
+///
+/// * `base` - The base directory downloaded samples are written to
+/// * `name` - The most recent submission file name for this sample if one exists
+/// * `sha256` - The sample's unique sha256
+/// * `logs` - The channel to use when sending logs to Thorium
+fn most_recent_target(
+    base: &Path,
+    name: Option<&String>,
+    sha256: &str,
+    logs: &mut Sender<String>,
+) -> Result<PathBuf, Error> {
+    // named samples go in a per-sha256 sub-directory so same-named samples never collide
+    let sample_dir = base.join(sha256);
+    let target = match name {
+        Some(name_str) => {
+            // cast this file name to a PathBuf
+            let name_path = PathBuf::from(name_str);
+            // if this is a absolute path then just use the file name otherwise append the full relative path
+            if name_path.has_root() {
+                // if this file name is just this root then add our sha256
+                match name_path.file_name() {
+                    Some(name) => {
+                        // add a log to disk that are downloading this file
+                        log!(logs, "Downloading sample {}", name.display());
+                        sample_dir.join(name)
+                    }
+                    None => {
+                        // log that we only discovered a root
+                        log!(
+                            logs,
+                            "{sha256} is just a root! Using the sha256 instead of the {name_str}"
+                        );
+                        // add our sha256 instead
+                        base.join(sha256)
+                    }
+                }
+            } else {
+                // add the relative path, rejecting any traversal in the submission name
+                safe_join(&sample_dir, &name_path)?
+            }
+        }
+        None => {
+            // log that we didn't find any submissions with file names
+            log!(
+                logs,
+                "{sha256} has no submissions with a file name! Using the sha256."
+            );
+            // add a log to disk that are downloading this file
+            log!(logs, "Downloading sample {sha256}");
+            // add our sha256 instead
+            base.join(sha256)
+        }
+    };
+    Ok(target)
+}
+
 /// Build the path to write a downloaded sample too
 ///
 /// # Arguments
@@ -303,46 +382,9 @@ pub async fn build_sample_path(
             // get this samples submission info
             let info = thorium.files.get(sha256).await?;
             // get the most recent submission with a file name
-            let target = match info.submissions.iter().find_map(|sub| sub.name.as_ref()) {
-                Some(name_str) => {
-                    // cast this file name to a PathBuf
-                    let name_path = PathBuf::from(name_str);
-                    // if this is a absolute path then just use the file name otherwise append the full relative path
-                    if name_path.has_root() {
-                        // if this file name is just this root then add our sha256
-                        match name_path.file_name() {
-                            Some(name) => {
-                                // add a log to disk that are downloading this file
-                                log!(logs, "Downloading sample {}", name.display());
-                                base.join(name)
-                            }
-                            None => {
-                                // log that we only discovered a root
-                                log!(
-                                    logs,
-                                    "{sha256} is just a root! Using the sha256 instead of the {name_str}"
-                                );
-                                // add our sha256 instead
-                                base.join(sha256)
-                            }
-                        }
-                    } else {
-                        // add the relative path, rejecting any traversal in the submission name
-                        safe_join(base, &name_path)?
-                    }
-                }
-                None => {
-                    // log that we didn't find any submissions with file names
-                    log!(
-                        logs,
-                        "{sha256} has no submissions with a file name! Using the sha256."
-                    );
-                    // add a log to disk that are downloading this file
-                    log!(logs, "Downloading sample {sha256}");
-                    // add our sha256 instead
-                    base.join(sha256)
-                }
-            };
+            let name = info.submissions.iter().find_map(|sub| sub.name.as_ref());
+            // build the on-disk target for this sample, unique per sha256
+            let target = most_recent_target(base, name, sha256, logs)?;
             // log that we are writting this sample to a different name then its sha256
             event!(
                 Level::INFO,
@@ -383,6 +425,10 @@ pub async fn download_samples<P: AsRef<Path>>(
         let mut attempts = 0;
         // build the path to download our files too
         let dl_target = build_sample_path(thorium, image, &target, sha256, logs).await?;
+        // make sure our target's parent directory exists since downloads don't create it
+        if let Some(parent) = dl_target.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
         // retry this sample until it works or we have tried 3 times
         loop {
             // download and uncart this file to disk
@@ -939,12 +985,14 @@ pub async fn download_children<P: Into<PathBuf>>(
     }
     // download children for all repos we depended on
     for repo_dep in &job.repos {
-        // get our repo name
-        if let Some(repo) = repo_dep.url.split('/').next_back() {
+        // get the key to query this repo's results by
+        if let Some(repo) = repo_results_query_key(&repo_dep.url) {
             // get the results for this repo
             let results = thorium.repos.get_results(repo, &result_params).await?;
+            // keep naming this repo's directory after the last segment of its url
+            let repo_dir = repo.split('/').next_back().unwrap_or(repo);
             // add this repos name
-            target.push(repo);
+            target.push(repo_dir);
             // step over our results and build a list of children
             for (tool, outputs) in results.results {
                 // get the children from the last result
@@ -1251,7 +1299,10 @@ async fn reconstruct_filesystem(
                         file_path.display()
                     );
                     // download this file to its reconstructed path
-                    thorium.files.download(file_sha256, &file_path, opts).await?;
+                    thorium
+                        .files
+                        .download(file_sha256, &file_path, opts)
+                        .await?;
                     // only pass in reconstructed files if its enabled
                     if settings.strategy != DependencyPassStrategy::Disabled {
                         downloaded.push(file_path);
@@ -1306,7 +1357,7 @@ fn resolve_file_name(
 
 #[cfg(test)]
 mod tests {
-    use super::safe_join;
+    use super::{most_recent_target, repo_results_query_key, safe_join};
     use std::path::Path;
 
     /// The trusted base directory every join must stay inside of
@@ -1357,5 +1408,92 @@ mod tests {
         let base = Path::new(BASE);
         let joined = safe_join(base, "results/output.json").expect("benign name was rejected");
         assert_eq!(joined, base.join("results/output.json"));
+    }
+
+    /// A repo's results are queried by its full URL, not the URL's last segment
+    ///
+    /// The repos results API is keyed by the full stored repo path, so passing only the last path
+    /// segment (`curl` for `github.com/curl/curl`) would 404 and error the job during children
+    /// setup. This matches every other agent repo call, which uses the full URL.
+    #[test]
+    fn repo_results_query_key_is_the_full_repo_url() {
+        // a typical multi-segment repo URL
+        let url = "github.com/curl/curl";
+        // the results query key must be the full repo path, matching how repos are stored
+        assert_eq!(
+            repo_results_query_key(url),
+            Some(url),
+            "repo results must be queried by the full URL, not just the last path segment"
+        );
+    }
+
+    /// A single segment repo name is used unchanged as its own full key.
+    #[test]
+    fn single_segment_repo_query_key_is_unchanged() {
+        // a repo whose url has a single segment
+        assert_eq!(repo_results_query_key("curl"), Some("curl"));
+    }
+
+    /// Resolve the `MostRecent` on-disk target for a sample with the given name and sha256
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The most recent submission file name for this sample
+    /// * `sha256` - The sample's unique sha256
+    fn target(name: &str, sha256: &str) -> std::path::PathBuf {
+        // the shared base directory downloaded samples are written to
+        let base = Path::new("/tmp/thorium/deps/samples");
+        // a log channel whose receiver we keep alive for the duration of the call
+        let (mut logs, _rx) = crossbeam::channel::unbounded();
+        // resolve this samples target
+        most_recent_target(base, Some(&name.to_owned()), sha256, &mut logs)
+            .expect("a benign sample name was rejected")
+    }
+
+    /// Two samples submitted under the same relative file name (e.g. `invoice.exe`) resolve to
+    /// distinct on-disk paths under `FileNamingStrategy::MostRecent`
+    ///
+    /// Each sample's unique sha256 is part of its target, so the second same-named download never
+    /// overwrites the first. This keeps the tool from analyzing one sample's bytes twice and
+    /// misattributing the single result to both samples.
+    #[test]
+    fn most_recent_targets_do_not_collide_for_same_named_samples() {
+        // two distinct samples were both originally submitted as invoice.exe
+        let target_a = target("invoice.exe", "aaaaaaaaaaaaaaaa");
+        let target_b = target("invoice.exe", "bbbbbbbbbbbbbbbb");
+        // the two samples must not overwrite each other on disk
+        assert_ne!(
+            target_a, target_b,
+            "same-named samples must resolve to distinct on-disk paths so neither is overwritten"
+        );
+    }
+
+    /// The absolute-path branch strips a submission name down to its file name, yet two samples
+    /// submitted from `/home/a/invoice.exe` and `/home/b/invoice.exe` still resolve to distinct
+    /// on-disk paths.
+    #[test]
+    fn most_recent_targets_do_not_collide_for_same_named_absolute_paths() {
+        // two distinct samples submitted from different absolute paths with the same file name
+        let target_a = target("/home/a/invoice.exe", "aaaaaaaaaaaaaaaa");
+        let target_b = target("/home/b/invoice.exe", "bbbbbbbbbbbbbbbb");
+        // the two samples must not overwrite each other on disk
+        assert_ne!(
+            target_a, target_b,
+            "same-named samples must resolve to distinct on-disk paths so neither is overwritten"
+        );
+    }
+
+    /// A sample with no named submission falls back to its sha256 as the file name, which keeps
+    /// its target unique.
+    #[test]
+    fn most_recent_target_without_a_name_uses_the_sha256() {
+        // the shared base directory downloaded samples are written to
+        let base = Path::new("/tmp/thorium/deps/samples");
+        // a log channel whose receiver we keep alive for the duration of the call
+        let (mut logs, _rx) = crossbeam::channel::unbounded();
+        // resolve the target for a sample with no named submissions
+        let target = most_recent_target(base, None, "aaaaaaaaaaaaaaaa", &mut logs).unwrap();
+        // the sha256 is used as the file name
+        assert_eq!(target, base.join("aaaaaaaaaaaaaaaa"));
     }
 }

@@ -1,5 +1,6 @@
 //! Launches workers on windows nodes
 
+use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use thorium::Thorium;
@@ -11,9 +12,51 @@ use super::Launcher;
 use crate::Error;
 use crate::libs::keys;
 
+/// The grace period a freshly launched Windows worker is given before its absence from
+/// `docker ps -a` is treated as death, allowing time for a `docker run` image pull and
+/// container creation to complete
+const WINDOWS_LAUNCH_GRACE: Duration = Duration::minutes(5);
+
 /// Handles launching jobs on windows nodes
 #[derive(Default)]
 pub struct Windows {}
+
+impl Windows {
+    /// Decide whether a Windows worker whose container is absent from `docker ps -a` should be
+    /// deleted from the Thorium API
+    ///
+    /// This is `reconcile`'s per-worker delete decision (it never needs `&self`) so its logic can be
+    /// unit tested without a live Thorium client. An absent worker is only deleted while the API
+    /// still lists it; when the agent already deleted its own record on a clean exit, deleting it
+    /// again would 404.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the worker whose container is absent
+    /// * `api_workers` - The workers the API still reports for this node
+    fn should_delete_absent_worker(name: &str, api_workers: &HashMap<String, Worker>) -> bool {
+        // only delete absent workers that still exist in the API
+        api_workers.contains_key(name)
+    }
+
+    /// Decide whether a Windows worker whose container is absent from `docker ps -a` has actually
+    /// died (as opposed to still being launched, e.g. its image is still pulling)
+    ///
+    /// This is `reconcile`'s liveness decision (it never needs `&self`) so its grace-period logic
+    /// can be unit tested. Absence only means death once the worker's launch grace period has
+    /// elapsed, so a just-launched worker whose container is not yet visible (e.g. its image is
+    /// still pulling) is not deregistered on the very next poll.
+    ///
+    /// # Arguments
+    ///
+    /// * `spawned` - When the worker was spawned
+    /// * `now` - The current time
+    /// * `grace` - The grace period a freshly launched worker is allowed before absence means death
+    fn absent_worker_is_dead(spawned: DateTime<Utc>, now: DateTime<Utc>, grace: Duration) -> bool {
+        // absence only means death once the launch grace period has elapsed
+        now >= spawned + grace
+    }
+}
 
 /// Gets the info needed to spawn a windows image
 ///
@@ -237,12 +280,23 @@ impl Launcher for Windows {
         let mut names = ls_containers().await?;
         // keep a list of workers that should be deleted since they no longer exist
         let mut deletes = WorkerDeleteMap::default();
+        // snapshot the workers the API still reports so we can consult it in the retain closure
+        let api_workers = info.workers.clone();
+        // the current time used to evaluate each worker's launch grace period
+        let now = Utc::now();
         // crawl the containers that should be active
         active.retain(|name, worker| {
             // TODO check if this worker failed or just died?
             if !names.contains(name) {
+                // only treat absence as death once the launch grace period has elapsed
+                if !Self::absent_worker_is_dead(worker.spawned, now, WINDOWS_LAUNCH_GRACE) {
+                    // this worker is still within its launch grace period, keep tracking it
+                    return true;
+                }
                 // add this worker to the list of workers to be deleted since it no longer exists
-                deletes.add_mut(&worker.name);
+                if Self::should_delete_absent_worker(&worker.name, &api_workers) {
+                    deletes.add_mut(&worker.name);
+                }
                 false
             } else {
                 true
@@ -346,7 +400,45 @@ async fn kill_containers(containers: &HashSet<String>) -> Result<(), std::io::Er
 
 #[cfg(test)]
 mod tests {
-    use super::agent_dir_mount;
+    use super::{WINDOWS_LAUNCH_GRACE, Windows, agent_dir_mount};
+    use chrono::{Duration, Utc};
+    use std::collections::HashMap;
+
+    /// `reconcile` only deletes a worker whose container has vanished when that worker is still
+    /// present in the API's worker list, so a worker whose container and API record are both gone
+    /// is not re-deleted. Windows containers run with `--rm`, so on clean agent completion the
+    /// agent deletes its own record first and then the container disappears; deleting the
+    /// already-gone record would 404 and crash the reactor daemon.
+    #[test]
+    fn absent_worker_missing_from_api_is_not_deleted() {
+        // the API no longer lists this worker (its agent deleted its own record on clean exit)
+        let api_workers: HashMap<String, thorium::models::Worker> = HashMap::new();
+        // a vanished worker already gone from the API must not be deleted again (that 404s + crashes)
+        assert!(
+            !Windows::should_delete_absent_worker("worker-a", &api_workers),
+            "a worker whose container exited and whose API record was already deleted is deleted \
+             again, 404-crashing the reactor on every clean Windows job completion"
+        );
+    }
+
+    /// `reconcile` gives a freshly launched worker a grace period before treating its absence
+    /// from `docker ps -a` as death, so a worker spawned seconds ago whose container is not yet
+    /// visible is not considered dead. `docker run --detach` is not awaited, so while an image is
+    /// still pulling the container is not yet listed; the grace period keeps the still launching
+    /// worker from being deregistered on the very next 2s poll and causing a spawn/delete/kill
+    /// loop.
+    #[test]
+    fn just_launched_worker_within_grace_is_not_dead() {
+        // the worker was spawned only moments ago (its image may still be pulling)
+        let now = Utc::now();
+        let spawned = now - Duration::seconds(2);
+        // a worker still inside its launch grace period must not be treated as dead
+        assert!(
+            !Windows::absent_worker_is_dead(spawned, now, WINDOWS_LAUNCH_GRACE),
+            "a just-launched worker whose container is not yet visible is treated as dead and \
+             deregistered, causing a spawn/delete/kill loop for the entire image-pull duration"
+        );
+    }
 
     /// the host agent directory bind-mounted into every Windows tool container must be
     /// read-only. Without a `:ro` suffix a malicious tool sharing the container with the agent can

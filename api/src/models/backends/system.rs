@@ -858,6 +858,7 @@ impl NodeListParams {
                 ImageScaler::K8s,
                 ImageScaler::BareMetal,
                 ImageScaler::Windows,
+                ImageScaler::Kvm,
                 ImageScaler::External,
             ];
         }
@@ -874,6 +875,7 @@ impl NodeGetParams {
                 ImageScaler::K8s,
                 ImageScaler::BareMetal,
                 ImageScaler::Windows,
+                ImageScaler::Kvm,
                 ImageScaler::External,
             ];
         }
@@ -1007,5 +1009,44 @@ impl From<NodeRow> for NodeListLine {
             cluster: row.cluster,
             node: row.node,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::ValueEnum;
+
+    /// The backend `default_scalers` expansions for node list and get params expand an empty
+    /// scaler list to every scaler, including `ImageScaler::Kvm`, so a node listing or node get
+    /// with no scalers set includes KVM workers.
+    #[test]
+    fn node_params_default_scalers_include_every_scaler() {
+        // expand empty node list and node get params
+        let mut list = NodeListParams {
+            scalers: Vec::default(),
+            ..NodeListParams::default()
+        };
+        list.default_scalers();
+        let mut get = NodeGetParams::default();
+        get.default_scalers();
+        for scaler in ImageScaler::value_variants() {
+            assert!(
+                list.scalers.contains(scaler),
+                "node list params must default to including {scaler:?}"
+            );
+            assert!(
+                get.scalers.contains(scaler),
+                "node get params must default to including {scaler:?}"
+            );
+        }
+    }
+
+    /// Params that already name their scalers are left as is.
+    #[test]
+    fn node_params_with_scalers_are_not_expanded() {
+        let mut get = NodeGetParams::default().scaler(ImageScaler::Windows);
+        get.default_scalers();
+        assert_eq!(get.scalers, vec![ImageScaler::Windows]);
     }
 }

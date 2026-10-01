@@ -3,7 +3,7 @@
 use crossbeam::channel::Sender;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use thorium::models::{GenericJob, Image};
+use thorium::models::{Dependencies, GenericJob, Image};
 use thorium::{Error, Thorium};
 use tokio::process::Command;
 use tracing::{Level, event, instrument};
@@ -46,6 +46,31 @@ pub struct K8s {
 }
 
 impl K8s {
+    /// Collect the dependency staging locations that `clean_up` purges between jobs
+    ///
+    /// A K8s worker pod runs many jobs sequentially in the same filesystem, so every dependency
+    /// staging directory downloaded for job N must be purged before job N+1 to avoid cross-job
+    /// contamination. This includes `dependencies.children.location` (the dir `download_children`
+    /// populates) so a later job with the `Directory` pass strategy never sees a prior job's
+    /// children.
+    ///
+    /// # Arguments
+    ///
+    /// * `deps` - The dependency settings of the image being cleaned up after a job
+    fn dependency_purge_locations(deps: &Dependencies) -> Vec<&str> {
+        // purge every dependency staging location including any downloaded children
+        vec![
+            &deps.samples.location,
+            &deps.ephemeral.location,
+            &deps.results.location,
+            &deps.repos.location,
+            &deps.tags.location,
+            &deps.children.location,
+            &deps.filesystems.location,
+            &deps.cache.location,
+        ]
+    }
+
     /// Create a new k8s agent for executing a single job
     ///
     /// # Arguments
@@ -476,14 +501,10 @@ impl AgentExecutor for K8s {
     /// * `image` - The image we are cleaning up a job for
     #[instrument(name = "AgentExecutor<K8s>::clean_up", skip_all, err(Debug))]
     async fn clean_up(&mut self, image: &Image, _: &GenericJob) -> Result<(), Error> {
-        // purge any dependency paths
-        purge!(image.dependencies.samples.location);
-        purge!(image.dependencies.ephemeral.location);
-        purge!(image.dependencies.results.location);
-        purge!(image.dependencies.repos.location);
-        purge!(image.dependencies.tags.location);
-        purge!(image.dependencies.filesystems.location);
-        purge!(image.dependencies.cache.location);
+        // purge every dependency staging path including downloaded children
+        for location in Self::dependency_purge_locations(&image.dependencies) {
+            purge!(location);
+        }
         // remove any results files/dirs
         purge!(image.output_collection.files.results);
         purge!(image.output_collection.files.result_files);
@@ -491,5 +512,43 @@ impl AgentExecutor for K8s {
         // remove any children files/dirs
         purge!(image.output_collection.children);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A K8s worker pod runs many jobs back to back in the same filesystem, so `clean_up` purges
+    /// every dependency staging location between jobs, including the children dependency
+    /// location (where `download_children` stages a prior tool's children). This keeps the next
+    /// job with the `Directory` pass strategy from being handed the previous job's children as if
+    /// they were its own.
+    #[test]
+    fn clean_up_purges_children_dependency_location() {
+        // the default dependency settings give every dependency kind a distinct location
+        let deps = Dependencies::default();
+        // collect the locations clean_up purges between jobs
+        let purged = K8s::dependency_purge_locations(&deps);
+        // the downloaded prior children must be purged so they cannot leak into the next job
+        assert!(
+            purged.contains(&deps.children.location.as_str()),
+            "the children dependency location must be purged between jobs, got {purged:?}"
+        );
+    }
+
+    /// The sample dependency location is purged between jobs alongside the other dependency
+    /// staging locations.
+    #[test]
+    fn clean_up_purges_samples_dependency_location() {
+        // the default dependency settings give every dependency kind a distinct location
+        let deps = Dependencies::default();
+        // collect the locations clean_up purges between jobs
+        let purged = K8s::dependency_purge_locations(&deps);
+        // downloaded samples must still be purged
+        assert!(
+            purged.contains(&deps.samples.location.as_str()),
+            "the samples dependency location must be purged between jobs, got {purged:?}"
+        );
     }
 }

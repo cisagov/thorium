@@ -146,8 +146,10 @@ impl Pods {
     /// * `failed` - The pods that have failed due to an error
     /// * `succeeded` - The pods that are in a succeeded state
     /// * `error_out` - The pods whose workers we should fail out instead of just resetting
+    ///
+    /// This is an associated function (it never needs `self`) so its classification logic
+    /// can be unit tested without constructing a `Pods` and its live kube client.
     fn filter_terminal(
-        &self,
         pod: &Pod,
         failed: &mut Vec<String>,
         succeeded: &mut Vec<String>,
@@ -170,6 +172,33 @@ impl Pods {
             // check this pods status
             match &status.phase.as_deref() {
                 Some("Succeeded") => succeeded.push(pod_name.to_owned()),
+                // pods whose image cannot be pulled stay pending forever
+                Some("Pending") => {
+                    // check if any of our containers are waiting on an image that can't be pulled
+                    let pull_failed = status
+                        .container_statuses
+                        .iter()
+                        .flatten()
+                        .filter_map(|container_status| container_status.state.as_ref())
+                        .filter_map(|state| state.waiting.as_ref())
+                        .filter_map(|waiting| waiting.reason.as_deref())
+                        // ErrImagePull is skipped since it fires on the first and possibly
+                        // transient pull failure before the kubelet starts backing off
+                        .any(|reason| matches!(reason, "ImagePullBackOff" | "InvalidImageName"));
+                    // fail out this pods job if its image cannot be pulled
+                    if pull_failed {
+                        // build our image pull backoff reason
+                        let reason = ErrorOutKinds::image_pull_backoff(pod_name);
+                        // log that we found a worker whose image can't be pulled
+                        event!(
+                            Level::INFO,
+                            worker = pod_name,
+                            reason = reason.reason_as_str(),
+                        );
+                        // error out pods are deleted and failed out by the scaler
+                        error_out.push(reason);
+                    }
+                }
                 Some("Failed") => {
                     // check if this pod failed due to OOM in container state
                     if let Some(container_statuses) = pod
@@ -186,7 +215,7 @@ impl Pods {
                                     // check why this image failed
                                     let reason = match terminated.reason.as_deref() {
                                         Some("OOMKilled") => ErrorOutKinds::oom(pod_name),
-                                        Some("ImagePullBackoff") => {
+                                        Some("ImagePullBackOff") => {
                                             ErrorOutKinds::image_pull_backoff(pod_name)
                                         }
                                         _ => continue,
@@ -324,23 +353,14 @@ impl Pods {
                     .filter_map(|pod| pod.metadata.name.as_ref())
                     .collect::<HashSet<&String>>();
                 // check if any of our prior pending deletions have completed yet
-                if let Some(mut ns_map) = self.pending_deletes.remove(ns) {
-                    // its probably best to assume it takes less than a scale loop to delete pods
-                    // so drain and store our still pending deletes in a temp vec
-                    // prune any of our no longer pending deletes
-                    for (name, delete) in ns_map.drain() {
-                        // check if this pod has been deleted
-                        if condensed.contains(&name) {
-                            // this pod has been deleted
-                            results.push(WorkerDeletion::Deleted(delete));
-                        } else {
-                            self.temp_deletes.push((name, delete));
-                        }
-                    }
-                    // readd any still pending deletes to our pending deletes map
-                    for (name, delete) in self.temp_deletes.drain(..) {
-                        ns_map.insert(name, delete);
-                    }
+                if let Some(ns_map) = self.pending_deletes.remove(ns) {
+                    // classify our prior pending deletes into completed deletes and still pending
+                    let ns_map = Self::classify_pending_deletes(
+                        &condensed,
+                        ns_map,
+                        &mut self.temp_deletes,
+                        results,
+                    );
                     // if we still have pending pods then readd this namespaces list
                     if !ns_map.is_empty() {
                         self.pending_deletes.insert(ns.to_owned(), ns_map);
@@ -369,6 +389,44 @@ impl Pods {
                 );
             }
         }
+    }
+
+    /// Classify a namespaces prior pending deletes into completed deletes and still pending ones
+    ///
+    /// This is the first (prior-pending) classification loop in [`Pods::validate_deletes`] (it
+    /// never needs `self`) extracted so its logic can be unit tested without a live kube client.
+    /// A pod that is no longer present in `condensed` is reported Deleted and a pod that is still
+    /// present stays pending.
+    ///
+    /// # Arguments
+    ///
+    /// * `condensed` - The set of pod names STILL existing in the namespace
+    /// * `ns_map` - The prior pending deletes for this namespace, consumed by this call
+    /// * `temp` - Scratch space for the still pending deletes before they are re-collected
+    /// * `results` - The list of worker deletions, appended to in place
+    fn classify_pending_deletes(
+        condensed: &HashSet<&String>,
+        mut ns_map: HashMap<String, Spawned>,
+        temp: &mut Vec<(String, Spawned)>,
+        results: &mut Vec<WorkerDeletion>,
+    ) -> HashMap<String, Spawned> {
+        // its probably best to assume it takes less than a scale loop to delete pods
+        // so drain and store our still pending deletes in a temp vec
+        // prune any of our no longer pending deletes
+        for (name, delete) in ns_map.drain() {
+            // check if this pod has been deleted
+            if !condensed.contains(&name) {
+                // this pod no longer exists so it has been deleted
+                results.push(WorkerDeletion::Deleted(delete));
+            } else {
+                temp.push((name, delete));
+            }
+        }
+        // readd any still pending deletes to our pending deletes map
+        for (name, delete) in temp.drain(..) {
+            ns_map.insert(name, delete);
+        }
+        ns_map
     }
 
     /// Deletes pods 10 at a time in an unordered buffer
@@ -622,7 +680,7 @@ impl Pods {
             for pod in pods_iter {
                 // try to check if this pod is failing
                 if let Err(error) =
-                    self.filter_terminal(&pod, &mut failed_ns, &mut succeeded, &mut error_out_ns)
+                    Self::filter_terminal(&pod, &mut failed_ns, &mut succeeded, &mut error_out_ns)
                 {
                     // log this error and ignore the pod for now
                     event!(
@@ -675,5 +733,149 @@ impl Pods {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::core::v1::{
+        ContainerState, ContainerStateWaiting, ContainerStatus, PodStatus,
+    };
+
+    /// Build a Pending pod whose single container is waiting with the given reason
+    ///
+    /// This models an unpullable-image pod as the kubelet actually reports it: phase
+    /// `Pending` with `containerStatuses[].state.waiting.reason` set (never a terminated
+    /// reason, and never phase `Failed`).
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to give the pod
+    /// * `waiting_reason` - The container waiting reason to set (e.g. "ImagePullBackOff")
+    fn pending_pod_waiting(name: &str, waiting_reason: &str) -> Pod {
+        // build the waiting container state carrying the reason
+        let waiting = ContainerStateWaiting {
+            reason: Some(waiting_reason.to_owned()),
+            message: None,
+        };
+        // wrap it in a container status
+        let container_status = ContainerStatus {
+            state: Some(ContainerState {
+                waiting: Some(waiting),
+                running: None,
+                terminated: None,
+            }),
+            ..Default::default()
+        };
+        // build a Pending pod carrying that container status
+        let mut pod = Pod::default();
+        pod.metadata.name = Some(name.to_owned());
+        pod.status = Some(PodStatus {
+            phase: Some("Pending".to_owned()),
+            container_statuses: Some(vec![container_status]),
+            ..Default::default()
+        });
+        pod
+    }
+
+    /// A pod whose image cannot be pulled stays phase `Pending` with
+    /// `state.waiting.reason = "ImagePullBackOff"` (capital O); `filter_terminal` routes such a
+    /// pod to `error_out` so its job is failed out instead of the stuck pod never being reaped.
+    #[test]
+    fn pending_image_pull_backoff_is_errored_out() {
+        // a pod stuck pulling its image as the kubelet reports it
+        let pod = pending_pod_waiting("stuck-worker", "ImagePullBackOff");
+        // buckets the classifier sorts pods into
+        let mut failed = Vec::new();
+        let mut succeeded = Vec::new();
+        let mut error_out = Vec::new();
+        // classify the stuck pod
+        Pods::filter_terminal(&pod, &mut failed, &mut succeeded, &mut error_out).unwrap();
+        // the stuck pod must be scheduled to have its job failed out
+        assert!(
+            error_out.iter().any(|kind| kind.worker() == "stuck-worker"),
+            "a Pending pod in ImagePullBackOff must be routed to error_out, got failed={failed:?} \
+             succeeded={succeeded:?} error_out={error_out:?}"
+        );
+    }
+
+    /// Build a pending delete for a worker with the given name
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique name of the worker being deleted
+    fn pending_delete(name: &str) -> Spawned {
+        // build a spawned record with only the fields classification reads set
+        Spawned {
+            req: thorium::models::Requisition::new("user", "group", "pipeline", "stage"),
+            cluster: "cluster".to_owned(),
+            node: "node".to_owned(),
+            name: name.to_owned(),
+            resources: thorium::models::Resources::default(),
+            pool: thorium::models::Pools::Deadline,
+            spawn: false,
+            scaled_down: true,
+            down_scalable: chrono::Utc::now(),
+        }
+    }
+
+    /// A prior pending delete whose pod is ABSENT from the namespace listing (`condensed`, the
+    /// set of pods that STILL EXIST) is reported Deleted and removed from the pending deletes, so
+    /// a genuinely deleted worker does not leak in pending_deletes forever.
+    #[test]
+    fn absent_pending_pod_is_reported_deleted() {
+        // a worker "W" was scaled down and is a prior pending delete
+        let mut ns_map = HashMap::default();
+        ns_map.insert("W".to_owned(), pending_delete("W"));
+        // the namespace listing is now empty, so W's pod is genuinely gone
+        let condensed: HashSet<&String> = HashSet::new();
+        // scratch space and the resulting deletions
+        let mut temp = Vec::new();
+        let mut results = Vec::new();
+        // classify the prior pending deletes against the current namespace listing
+        let remaining = Pods::classify_pending_deletes(&condensed, ns_map, &mut temp, &mut results);
+        // W's pod is gone so it must be reported deleted
+        assert!(
+            results.iter().any(
+                |deletion| matches!(deletion, WorkerDeletion::Deleted(spawn) if spawn.name == "W")
+            ),
+            "a pending pod absent from the namespace must be reported Deleted, got {results:?}"
+        );
+        // and it must not leak back into pending deletes
+        assert!(
+            !remaining.contains_key("W"),
+            "a deleted worker must not remain in pending deletes"
+        );
+    }
+
+    /// A prior pending delete whose pod is STILL present in the namespace listing remains
+    /// pending and is not reported deleted, so a still-running pod does not have its resources
+    /// freed while it is still running.
+    #[test]
+    fn present_pending_pod_stays_pending() {
+        // a worker "W" was scaled down and is a prior pending delete
+        let mut ns_map = HashMap::default();
+        ns_map.insert("W".to_owned(), pending_delete("W"));
+        // W's pod is still listed in the namespace, so it has not finished terminating
+        let name = "W".to_owned();
+        let mut condensed: HashSet<&String> = HashSet::new();
+        condensed.insert(&name);
+        // scratch space and the resulting deletions
+        let mut temp = Vec::new();
+        let mut results = Vec::new();
+        // classify the prior pending deletes against the current namespace listing
+        let remaining = Pods::classify_pending_deletes(&condensed, ns_map, &mut temp, &mut results);
+        // W's pod still exists so nothing should be reported deleted
+        assert!(
+            results.is_empty(),
+            "a pod still present in the namespace must not be reported deleted, got {results:?}"
+        );
+        // and it must stay pending until its pod actually disappears
+        assert!(
+            remaining.contains_key("W"),
+            "a still-present pod must remain in pending deletes"
+        );
     }
 }

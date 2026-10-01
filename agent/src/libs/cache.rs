@@ -137,7 +137,7 @@ async fn sync_cache_files(
     // get the next entry to check
     while let Some(entry) = walker.next().await {
         // check if we failed to read this entry
-        let entry = entry.unwrap();
+        let entry = entry?;
         // get this files metadata
         let meta = entry.metadata().await?;
         // only check if files have changed

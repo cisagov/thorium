@@ -9,10 +9,11 @@ use std::collections::HashMap;
 use std::ops::AddAssign;
 use std::sync::Arc;
 use std::time::Duration;
-use thorium::models::{Event, EventPopOpts, EventType, ScrubbedUser};
+use thorium::models::{Event, EventIds, EventPopOpts, EventType, ScrubbedUser};
 use thorium::{Error, Thorium};
 use tokio::task::JoinHandle;
 use tracing::{Level, event, instrument};
+use uuid::Uuid;
 
 pub mod hunts;
 pub mod reaction_triggers;
@@ -181,6 +182,24 @@ pub struct EventWorker<W: EventWorkerSupport> {
     stats: Arc<Mutex<W::Stats>>,
 }
 
+/// Pick the events to clear from the in-flight queue after [`EventWorker`] processes a page
+///
+/// Successfully processed events are cleared so they do not stay in the in-flight queue forever
+/// and get replayed by every `reset_all`. Failed events are left in flight so `reset_all` can
+/// retry them.
+///
+/// # Arguments
+///
+/// * `results` - The result of processing each popped event paired with its id
+fn processed_event_clears(results: &[(Uuid, Result<(), Error>)]) -> Vec<Uuid> {
+    // only clear the events that were processed successfully
+    results
+        .iter()
+        .filter(|(_, result)| result.is_ok())
+        .map(|(id, _)| *id)
+        .collect()
+}
+
 impl<W: EventWorkerSupport> EventWorker<W> {
     /// Create a new worker
     ///
@@ -250,14 +269,23 @@ impl<W: EventWorkerSupport> EventWorker<W> {
             // we got no events so return false
             Ok(false)
         } else {
-            // we have some events so handle them
+            // borrow our worker and stats so each events future can use them
+            let internal = &self.internal;
+            let stats = &self.stats;
+            // we have some events so handle them, keeping each result paired with its event id
             let process_results = stream::iter(events)
-                .map(|event| self.internal.process(event, &self.stats))
+                .map(|event| {
+                    // remember this events id so its result can be correlated with it
+                    let id = event.id;
+                    async move { (id, internal.process(event, stats).await) }
+                })
                 .buffer_unordered(10)
-                .collect::<Vec<Result<(), Error>>>()
+                .collect::<Vec<(Uuid, Result<(), Error>)>>()
                 .await;
+            // get the processed events to clear from the in-flight queue
+            let clears = processed_event_clears(&process_results);
             // if any of our events failed then set our retry timestamp
-            for result in process_results {
+            for (_, result) in process_results {
                 // if we ran into an error log it and set our retry timer if its not already set
                 if let Err(error) = result {
                     // log this error
@@ -270,6 +298,13 @@ impl<W: EventWorkerSupport> EventWorker<W> {
                         self.retry_ts = Some(future_ts);
                     }
                 }
+            }
+            // clear any processed events from the in-flight queue
+            if !clears.is_empty() {
+                self.thorium
+                    .events
+                    .clear(W::event_kind(), &EventIds::from(clears))
+                    .await?;
             }
             Ok(true)
         }
@@ -319,6 +354,11 @@ pub trait EventWorkerMutableSupport: EventWorkerSupportCore {
         events: Vec<Event>,
         stats: &mut <Self as EventWorkerSupportCore>::Stats,
     ) -> Result<(), Error>;
+
+    /// Take the time to retry any events this worker left in flight if one is set
+    ///
+    /// Once this time has passed all in flight events will be reset so they are retried.
+    async fn take_retry_ts(&mut self) -> Option<DateTime<Utc>>;
 }
 
 /// A worker for some kind of event
@@ -412,6 +452,13 @@ impl<W: EventWorkerMutableSupport> EventWorkerMutable<W> {
         } else {
             // process all of the events on this page
             self.internal.process(events, &mut self.stats).await?;
+            // check if our worker left any events in flight that need to be retried
+            if let Some(retry_ts) = self.internal.take_retry_ts().await {
+                // set our retry time if not already set so retries aren't pushed back forever
+                if self.retry_ts.is_none() {
+                    self.retry_ts = Some(retry_ts);
+                }
+            }
             Ok(true)
         }
     }
@@ -441,5 +488,50 @@ impl<W: EventWorkerMutableSupport> EventWorkerMutable<W> {
                 self.stats_tx.send(stats).await?;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The immutable [`EventWorker`] wrapper (used only by `SigmaRuleWorker`) pops events into
+    /// the Redis in-flight map/queue and selects the ids of successfully processed events to be
+    /// cleared. This keeps the in-flight queue from growing without bound and every `reset_all`
+    /// (on startup and 3 minutes after any single error) from replaying the entire sigma-event
+    /// history.
+    #[test]
+    fn sigma_worker_clears_processed_events() {
+        // one event processed successfully and one failed
+        let processed = Uuid::new_v4();
+        let failed = Uuid::new_v4();
+        let results = vec![
+            (processed, Ok(())),
+            (failed, Err(Error::new("scan failed"))),
+        ];
+        // pick the events to clear from the in-flight queue
+        let clears = processed_event_clears(&results);
+        // the successfully processed event must be cleared so it is not replayed forever
+        assert_eq!(
+            clears,
+            vec![processed],
+            "successfully processed events must be cleared from the in-flight queue"
+        );
+    }
+
+    /// An event that failed processing is not cleared, so it stays in-flight and `reset_all`
+    /// can retry it.
+    #[test]
+    fn sigma_worker_keeps_failed_events_in_flight() {
+        // a single event that failed processing
+        let failed = Uuid::new_v4();
+        let results = vec![(failed, Err(Error::new("scan failed")))];
+        // pick the events to clear from the in-flight queue
+        let clears = processed_event_clears(&results);
+        // the failed event must not be cleared
+        assert!(
+            !clears.contains(&failed),
+            "a failed event must stay in-flight so it can be retried"
+        );
     }
 }

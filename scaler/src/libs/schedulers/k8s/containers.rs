@@ -85,15 +85,19 @@ impl Containers {
             );
         }
         // inject nvidia gpu if its greater then 0
+        // use the extended resource name the device plugin registers
         if raw.nvidia_gpu > 0 {
             btree.insert(
-                "nvidia/gpu".to_owned(),
+                "nvidia.com/gpu".to_owned(),
                 quantity!(raw.nvidia_gpu.to_string())?,
             );
         }
         // inject amd gpu if its greater then 0
         if raw.amd_gpu > 0 {
-            btree.insert("amd/gpu".to_owned(), quantity!(raw.amd_gpu.to_string())?);
+            btree.insert(
+                "amd.com/gpu".to_owned(),
+                quantity!(raw.amd_gpu.to_string())?,
+            );
         }
         Ok(btree)
     }
@@ -339,6 +343,7 @@ mod tests {
     use super::Containers;
     use k8s_openapi::api::core::v1::{Container, EnvVar, SecurityContext};
     use serde_json::json;
+    use thorium::models::Resources;
 
     /// Build an [`EnvVar`] for a test environment
     fn env_var(name: &str, value: Option<&str>) -> EnvVar {
@@ -469,10 +474,10 @@ mod tests {
         // cast to the k8s Container struct the same way production does
         let container: Container =
             serde_json::from_value(raw).expect("failed to deserialize container");
-        // the security context must survive the round-trip into the k8s Container struct,
-        // otherwise `allowPrivilegeEscalation=false` (and every other hardening flag) is silently
-        // dropped and containers run with escalation allowed. This fails while the injected key is
-        // the snake_case `security_context` that k8s ignores.
+        // the security context must survive the round-trip into the k8s Container struct under
+        // the camelCase `securityContext` key k8s reads, otherwise `allowPrivilegeEscalation=false`
+        // (and every other hardening flag) is silently dropped and containers run with escalation
+        // allowed
         let deserialized = container
             .security_context
             .expect("security context was dropped during deserialization");
@@ -480,6 +485,32 @@ mod tests {
             deserialized.allow_privilege_escalation,
             Some(false),
             "allowPrivilegeEscalation must survive deserialization into the k8s Container"
+        );
+    }
+
+    /// `limit_conv` emits GPU limits under the dotted extended resource names
+    /// `"nvidia.com/gpu"`/`"amd.com/gpu"` that the device plugins register and the scaler's own
+    /// node accounting reads. A pod requesting any other key would either fail kubelet admission
+    /// or run with no GPU reservation while accounting drifts.
+    #[test]
+    fn gpu_limits_use_dotted_extended_resource_keys() {
+        // an image that requests one nvidia GPU and one amd GPU
+        let mut resources = Resources::new(1000, 1024, 0, 1);
+        resources.nvidia_gpu = 1;
+        resources.amd_gpu = 1;
+        // convert the resource request into the k8s limits map
+        let limits = Containers::limit_conv(&resources).expect("limit_conv must build limits");
+        // the nvidia GPU limit must be keyed by the device-plugin name the node accounting reads
+        assert!(
+            limits.contains_key("nvidia.com/gpu"),
+            "nvidia GPU limit must use the dotted extended-resource key, got keys {:?}",
+            limits.keys().collect::<Vec<_>>()
+        );
+        // the amd GPU limit must likewise use the dotted device-plugin name
+        assert!(
+            limits.contains_key("amd.com/gpu"),
+            "amd GPU limit must use the dotted extended-resource key, got keys {:?}",
+            limits.keys().collect::<Vec<_>>()
         );
     }
 }

@@ -15,7 +15,9 @@ pub mod dry_run;
 pub mod k8s;
 pub mod requisitions;
 
-pub use allocatable::{Allocatable, AllocatableUpdate, NodeAllocatableUpdate, NodeResources};
+pub use allocatable::{
+    Allocatable, AllocatableUpdate, NodeAllocatableUpdate, NodeResources, record_failed_spawn,
+};
 pub use direct::Direct;
 pub use k8s::K8s;
 pub use requisitions::{ReqMap, Spawned};
@@ -27,6 +29,7 @@ use self::dry_run::DryRun;
 use super::scaler::ErrorOutKinds;
 
 /// The outcome of deleting a specific worker
+#[derive(Debug)]
 pub enum WorkerDeletion {
     /// This worker was successfully deleted
     Deleted(Spawned),
@@ -108,6 +111,14 @@ pub trait Scheduler {
         cache: &Cache,
         scaledowns: Vec<Spawned>,
     ) -> Vec<WorkerDeletion>;
+
+    /// Whether this scheduler has pending deletes from earlier loops it still needs to validate
+    ///
+    /// Schedulers with pending deletes are asked to delete workers even on loops with no new
+    /// scale downs so those pending deletes are still resolved.
+    fn has_pending_deletes(&self) -> bool {
+        false
+    }
 
     /// Clears out any failed or terminal resources in specified groups and return their names.
     ///

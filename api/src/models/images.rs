@@ -68,18 +68,10 @@ impl BurstableResources {
     pub fn enough(&self, other: &BurstableResources) -> bool {
         // check if we have enough cpu to spawn this worker
         if self.cpu < other.cpu {
-            println!(
-                "BurstableResources::enough not enough cpu: {} < {}",
-                self.cpu, other.cpu
-            );
             return false;
         }
         // check if we have enough memory to spawn this worker
         if self.memory < other.memory {
-            println!(
-                "BurstableResources::enough not enough memory: {} < {}",
-                self.memory, other.memory
-            );
             return false;
         }
         true
@@ -430,55 +422,28 @@ impl Resources {
     /// * `resources` - The resources we need to spawn a worker
     #[must_use]
     pub fn enough(&self, resources: &Resources) -> bool {
-        println!("Resources::enough full -> {self:#?}");
         // check if we have enough cpu to spawn this worker
         if self.cpu < resources.cpu {
-            println!(
-                "Resources::enough not enough cpu: {} < {}",
-                self.cpu, resources.cpu
-            );
             return false;
         }
         // check if we have enough memory to spawn this worker
         if self.memory < resources.memory {
-            println!(
-                "Resources::enough not enough memory: {} < {}",
-                self.memory, resources.memory
-            );
             return false;
         }
         // check if we have enough storage to spawn this worker
         if self.ephemeral_storage < resources.ephemeral_storage {
-            println!(
-                "Resources::enough not enough ephemeral_storage: {} < {}",
-                self.ephemeral_storage, resources.ephemeral_storage
-            );
             return false;
         }
         // check if we have enough open Nvidia gpus to spawn this worker
         if self.nvidia_gpu < resources.nvidia_gpu {
-            println!(
-                "Resources::enough not enough nvidia_gpu: {} < {}",
-                self.nvidia_gpu, resources.nvidia_gpu
-            );
             return false;
         }
         // check if we have enough open AMD gpus to spawn this worker
         if self.amd_gpu < resources.amd_gpu {
-            println!(
-                "Resources::enough not enough amd_gpu: {} < {}",
-                self.amd_gpu, resources.amd_gpu
-            );
             return false;
         }
-        // make sure we have enough remaining burstable resources
-        if !self.burstable.enough(&resources.burstable) {
-            println!(
-                "Resources::enough not enough burstable: {} < {}",
-                self.burstable, resources.burstable
-            );
-            return false;
-        }
+        // burstable resources are a best-effort ceiling above the base request rather than a
+        // hard requirement, so a lack of burstable headroom never blocks spawning a worker
         true
     }
 
@@ -6613,5 +6578,123 @@ impl Default for ImageListParams {
             cursor: 0,
             limit: 50,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BurstableResources, Resources};
+
+    /// Burstable resource requirements on an image are optional, not required: an image that
+    /// declares a burstable cpu allowance is still spawnable on a cluster that offers 0 burstable
+    /// cpus. Burstable resources are a best-effort ceiling above the base request, so a node
+    /// lacking them simply doesn't grant the burst headroom and never rejects the worker.
+    #[test]
+    fn burstable_cpu_requirement_is_optional() {
+        // a node that has plenty of base cpu/memory but zero burstable headroom
+        let mut node = Resources::new(8000, 16384, 0, 10);
+        node.burstable = BurstableResources { cpu: 0, memory: 0 };
+        // an image needing a modest base request plus 2 cores of burstable cpu
+        let mut image = Resources::new(1000, 1024, 0, 1);
+        image.burstable = BurstableResources {
+            cpu: 2000,
+            memory: 0,
+        };
+        // the node satisfies the base request, so the worker must be spawnable despite having no
+        // burstable cpu to grant
+        assert!(
+            node.enough(&image),
+            "an image with burstable cpu must be spawnable on a cluster with 0 burstable cpus"
+        );
+    }
+
+    /// Companion to [`burstable_cpu_requirement_is_optional`] for the burstable memory field: an
+    /// image declaring burstable memory is still spawnable on a cluster with 0 burstable memory,
+    /// since burstable memory is likewise a best-effort ceiling and not a hard request.
+    #[test]
+    fn burstable_memory_requirement_is_optional() {
+        // a node that has plenty of base cpu/memory but zero burstable headroom
+        let mut node = Resources::new(8000, 16384, 0, 10);
+        node.burstable = BurstableResources { cpu: 0, memory: 0 };
+        // an image needing a modest base request plus 2 GiB of burstable memory
+        let mut image = Resources::new(1000, 1024, 0, 1);
+        image.burstable = BurstableResources {
+            cpu: 0,
+            memory: 2048,
+        };
+        // the node satisfies the base request, so the worker must be spawnable despite having no
+        // burstable memory to grant
+        assert!(
+            node.enough(&image),
+            "an image with burstable memory must be spawnable on a cluster with 0 burstable memory"
+        );
+    }
+
+    /// Companion covering ALL burstable fields set at once: an image declaring both burstable cpu
+    /// and burstable memory is still spawnable on a cluster offering neither, so no single
+    /// burstable field being over the node's allowance rejects the worker.
+    #[test]
+    fn all_burstable_requirements_are_optional() {
+        // a node that has plenty of base cpu/memory but zero burstable headroom of any kind
+        let mut node = Resources::new(8000, 16384, 0, 10);
+        node.burstable = BurstableResources { cpu: 0, memory: 0 };
+        // an image needing a modest base request plus burstable cpu AND burstable memory
+        let mut image = Resources::new(1000, 1024, 0, 1);
+        image.burstable = BurstableResources {
+            cpu: 2000,
+            memory: 2048,
+        };
+        // the node satisfies the base request, so the worker must be spawnable despite offering no
+        // burstable resources at all
+        assert!(
+            node.enough(&image),
+            "an image with any burstable resources must be spawnable on a cluster with none"
+        );
+    }
+
+    /// Get the body of the function in this file whose signature starts with `signature`
+    ///
+    /// # Arguments
+    ///
+    /// * `signature` - The start of the function signature to find
+    fn fn_body(signature: &str) -> &'static str {
+        // this file's own source code
+        const SRC: &str = include_str!("images.rs");
+        // find the start of this function
+        let start = SRC
+            .find(signature)
+            .unwrap_or_else(|| panic!("could not find {signature} in images.rs"));
+        // a function body ends at the first closing brace at its own (impl member) indentation
+        let end = SRC[start..]
+            .find("\n    }\n")
+            .expect("could not find the end of the function");
+        &SRC[start..start + end]
+    }
+
+    /// `Resources::enough` and `BurstableResources::enough` contain no debug `println!`
+    /// statements, so scheduling checks (thousands per scaler loop) don't flood the scaler's logs
+    /// with resource structs and shortfalls. Stdout capture is not available to unit tests here,
+    /// so this proxy scans the two function bodies in this file's source.
+    #[test]
+    fn enough_has_no_stdout_debug_prints() {
+        for signature in [
+            "pub fn enough(&self, resources: &Resources) -> bool {",
+            "pub fn enough(&self, other: &BurstableResources) -> bool {",
+        ] {
+            assert!(
+                !fn_body(signature).contains("println!"),
+                "`{signature}` must not print debug output to stdout on every scheduling check"
+            );
+        }
+    }
+
+    /// The source scan finds the real `enough` bodies, so the check above cannot pass vacuously.
+    #[test]
+    fn enough_source_scan_finds_function_bodies() {
+        // the scanned body is the Resources::enough implementation
+        assert!(
+            fn_body("pub fn enough(&self, resources: &Resources) -> bool {")
+                .contains("resources.cpu")
+        );
     }
 }

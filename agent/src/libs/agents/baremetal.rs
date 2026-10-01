@@ -100,8 +100,7 @@ impl BareMetal {
         let results_dep_path = isolate(&target.image.dependencies.results.location, &id)?;
         let tags_dep_path = isolate(&target.image.dependencies.tags.location, &id)?;
         let children_dep_path = isolate(&target.image.dependencies.children.location, &id)?;
-        let filesystems_dep_path =
-            isolate(&target.image.dependencies.filesystems.location, &id)?;
+        let filesystems_dep_path = isolate(&target.image.dependencies.filesystems.location, &id)?;
         let results_path = isolate(&target.image.output_collection.files.results, &id)?;
         let result_files_path = isolate(&target.image.output_collection.files.result_files, &id)?;
         let tags_path = isolate(&target.image.output_collection.files.tags, &id)?;
@@ -431,12 +430,12 @@ impl AgentExecutor for BareMetal {
     /// * `image` - The image this agent is executing jobs under
     /// * `job` - The job that is being executed
     async fn sync_cache(&mut self, image: &Image, job: &GenericJob) -> Result<(), Error> {
-        // sync our cache data
+        // sync our cache data from where we downloaded it
         super::cache::sync(
             &self.thorium,
             image,
             job,
-            &image.dependencies.cache.location,
+            &self.cache_path,
             &self.cache,
             &mut self.logs,
         )

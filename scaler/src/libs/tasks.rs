@@ -4,15 +4,14 @@
 //! happens on a single thread. It is likely that actions my not always complete on schedule.
 
 use chrono::prelude::*;
-use std::collections::{BTreeMap, HashSet};
 use hashbrown::HashMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use thorium::models::{
-    ImageScaler, JobResets, NodeListParams, RunningJob, SystemComponents,
-    WorkerDeleteMap,
+    ImageScaler, JobResets, NodeListParams, RunningJob, SystemComponents, WorkerDeleteMap,
 };
 use thorium::{Conf, Error, Thorium};
-use tracing::{event, instrument, span, Level};
+use tracing::{Level, event, instrument, span};
 use uuid::Uuid;
 
 use super::cache::Cache;
@@ -95,9 +94,26 @@ pub enum TaskResult {
     Cache(Cache),
     /// Calculate the average runtimes of all images and update it
     UpdateRuntimes,
+    /// Cleanup any expired info in Thorium
+    Cleanup,
 }
 
 impl TaskResult {
+    /// Get the task to schedule again now that this task has completed
+    ///
+    /// This is the reschedule mapping in `Scaler::check_tasks` extracted so it can be unit
+    /// tested. Every completed task reschedules itself, including [`cleanup`] which reports its
+    /// completion as [`TaskResult::Cleanup`].
+    pub fn next_task(&self) -> Tasks {
+        match self {
+            TaskResult::ZombieJobs => Tasks::ZombieJobs,
+            TaskResult::LdapSync => Tasks::LdapSync,
+            TaskResult::Cache(_) => Tasks::CacheReload,
+            TaskResult::UpdateRuntimes => Tasks::UpdateRuntimes,
+            TaskResult::Cleanup => Tasks::Cleanup,
+        }
+    }
+
     /// Get our task as a str
     pub fn as_str(&self) -> &str {
         // add this task name to our trace
@@ -106,6 +122,7 @@ impl TaskResult {
             TaskResult::LdapSync => "LdapSync",
             TaskResult::Cache(_) => "CacheReload",
             TaskResult::UpdateRuntimes => "UpdateRuntimes",
+            TaskResult::Cleanup => "Cleanup",
         }
     }
 }
@@ -386,5 +403,43 @@ pub async fn cleanup(thorium: Arc<Thorium>) -> Result<TaskResult, Error> {
     let _ = span!(Level::INFO, "Cleanup");
     // try to clean up any expired data in Thorium
     thorium.system.cleanup().await?;
-    Ok(TaskResult::UpdateRuntimes)
+    Ok(cleanup_result())
+}
+
+/// The result a completed [`cleanup`] task reports
+///
+/// This is the value [`cleanup`] returns extracted so it can be unit tested. Cleanup reports
+/// itself as `Cleanup` so the scaler reschedules another cleanup and expired data keeps being
+/// pruned for the life of the scaler.
+fn cleanup_result() -> TaskResult {
+    // report that a cleanup completed so it is rescheduled
+    TaskResult::Cleanup
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A completed cleanup reschedules `Cleanup`, so the Cleanup task keeps running for the life
+    /// of the scaler and expired reaction lists keep being pruned.
+    #[test]
+    fn cleanup_reschedules_cleanup() {
+        // a cleanup task just completed
+        assert_eq!(
+            cleanup_result().next_task(),
+            Tasks::Cleanup,
+            "a completed cleanup must reschedule another cleanup"
+        );
+    }
+
+    /// Other completed tasks reschedule themselves.
+    #[test]
+    fn completed_tasks_reschedule_themselves() {
+        assert_eq!(TaskResult::ZombieJobs.next_task(), Tasks::ZombieJobs);
+        assert_eq!(TaskResult::LdapSync.next_task(), Tasks::LdapSync);
+        assert_eq!(
+            TaskResult::UpdateRuntimes.next_task(),
+            Tasks::UpdateRuntimes
+        );
+    }
 }

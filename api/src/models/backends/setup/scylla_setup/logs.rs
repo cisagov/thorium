@@ -86,7 +86,7 @@ async fn get(session: &Session, config: &Conf) -> PreparedStatement {
     // build log get prepared statement
     session
         .prepare(format!(
-            "SELECT line FROM {}.logs \
+            "SELECT position, line FROM {}.logs \
                 WHERE reaction = ? AND stage = ? AND bucket in ? AND position >= ? \
                 PER PARTITION LIMIT ?",
             &config.thorium.namespace

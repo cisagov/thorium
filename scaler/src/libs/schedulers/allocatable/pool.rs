@@ -86,7 +86,7 @@ impl Pool {
         let total = Resources::new(
             settings.fairshare_cpu,
             settings.fairshare_memory,
-            settings.reserved_storage,
+            settings.fairshare_storage,
             100,
         );
         // build our pool
@@ -95,5 +95,29 @@ impl Pool {
             total,
             spawn_slots: HashMap::with_capacity(1),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fairshare_pool_uses_fairshare_settings() {
+        // set distinct fairshare and reserved values so a mixup is detectable
+        let settings = SystemSettings {
+            fairshare_cpu: 1000,
+            fairshare_memory: 1024,
+            fairshare_storage: 512,
+            reserved_storage: 4096,
+            ..SystemSettings::default()
+        };
+        let pool = Pool::setup_fairshare(&settings);
+        assert_eq!(pool.resources.cpu, 1000);
+        assert_eq!(pool.resources.memory, 1024);
+        assert_eq!(
+            pool.resources.ephemeral_storage, 512,
+            "the fairshare pool's storage must come from fairshare_storage, not reserved_storage"
+        );
     }
 }

@@ -218,7 +218,7 @@ impl<'de> Visitor<'de> for MillicpuVisitor {
             return Err(E::custom(format!("Core count cannot be negative: {value}")));
         }
         // convert our floating point core count to fixed point
-        Ok((value * 1000.0_f32.ceil()) as u64)
+        Ok((value * 1000.0).ceil() as u64)
     }
 
     /// Deserialize from ``f64`` to a millicpu value
@@ -236,7 +236,7 @@ impl<'de> Visitor<'de> for MillicpuVisitor {
             return Err(E::custom(format!("Core count cannot be negative: {value}")));
         }
         // convert our floating point core count to fixed point
-        Ok((value * 1000.0_f64.ceil()) as u64)
+        Ok((value * 1000.0).ceil() as u64)
     }
 
     /// Deserialize from ``str`` to a millicpu value
@@ -571,6 +571,21 @@ where
         .map(|storage_opt| storage_opt.map(|helper| helper.0))
 }
 
+/// Convert an amount of a byte based unit to mebibytes without overflowing
+///
+/// # Arguments
+///
+/// * `amt` - The amount of this unit
+/// * `bytes_per_unit` - The number of bytes in one of this unit
+/// * `raw` - The raw storage value to report on overflow
+fn bytes_to_mebibytes(amt: u64, bytes_per_unit: u128, raw: &str) -> Result<u64, ConversionError> {
+    // do our math in u128 so large units like E/Ei can't overflow
+    let mebibytes = u128::from(amt) * bytes_per_unit / 1_048_576;
+    // make sure our mebibytes still fit in a u64
+    u64::try_from(mebibytes)
+        .map_err(|_| ConversionError::new(format!("Storage value is too large: {raw}")))
+}
+
 /// Bounds checks an image storage value and converts it to mebibytes
 ///
 /// This assumes that any int without a unit is mebibytes.
@@ -602,17 +617,17 @@ pub fn storage<T: AsRef<str>>(raw: T) -> Result<u64, ConversionError> {
     // convert to mebibytes using fixed point math
     let mebibytes = match unit {
         "K" => amt / 1049,
-        "M" => amt * 1_000_000 / 1_048_576,
+        "M" => bytes_to_mebibytes(amt, 1_000_000, raw)?,
         "G" => amt * 954,
         "T" => amt * 953_674,
-        "P" => amt * 1_000_000_000_000_000 / 1_048_576,
-        "E" => amt * 1_000_000_000_000_000_000 / 104_875,
+        "P" => bytes_to_mebibytes(amt, 1_000_000_000_000_000, raw)?,
+        "E" => bytes_to_mebibytes(amt, 1_000_000_000_000_000_000, raw)?,
         "Ki" => amt / 1024,
         "Mi" => amt,
         "Gi" => amt * 1024,
-        "Ti" => amt * 1_099_511_627_776 / 1_048_576,
-        "Pi" => amt * 1_125_899_906_842_624 / 104_875,
-        "Ei" => amt * 1_152_921_504_606_846_976 / 104_875,
+        "Ti" => bytes_to_mebibytes(amt, 1_099_511_627_776, raw)?,
+        "Pi" => bytes_to_mebibytes(amt, 1_125_899_906_842_624, raw)?,
+        "Ei" => bytes_to_mebibytes(amt, 1_152_921_504_606_846_976, raw)?,
         _ => return err!(format!("Failed to parse storage value: {}", raw)),
     };
     Ok(mebibytes)
@@ -621,6 +636,7 @@ pub fn storage<T: AsRef<str>>(raw: T) -> Result<u64, ConversionError> {
 /// Bounds checks an image storage value and converts it to mebibytes
 ///
 /// This assumes that any int without a unit is bytes.
+///
 ///
 /// # Arguments
 ///
@@ -649,18 +665,68 @@ pub fn storage_bytes_as_base<T: AsRef<str>>(raw: T) -> Result<u64, ConversionErr
     // convert to mebibytes using fixed point math
     let mebibytes = match unit {
         "K" => amt / 1049,
-        "M" => amt * 1_000_000 / 1_048_576,
+        "M" => bytes_to_mebibytes(amt, 1_000_000, raw)?,
         "G" => amt * 954,
         "T" => amt * 953_674,
-        "P" => amt * 1_000_000_000_000_000 / 1_048_576,
-        "E" => amt * 1_000_000_000_000_000_000 / 104_875,
+        "P" => bytes_to_mebibytes(amt, 1_000_000_000_000_000, raw)?,
+        "E" => bytes_to_mebibytes(amt, 1_000_000_000_000_000_000, raw)?,
         "Ki" => amt / 1024,
         "Mi" => amt,
         "Gi" => amt * 1024,
-        "Ti" => amt * 1_099_511_627_776 / 1_048_576,
-        "Pi" => amt * 1_125_899_906_842_624 / 104_875,
-        "Ei" => amt * 1_152_921_504_606_846_976 / 104_875,
+        "Ti" => bytes_to_mebibytes(amt, 1_099_511_627_776, raw)?,
+        "Pi" => bytes_to_mebibytes(amt, 1_125_899_906_842_624, raw)?,
+        "Ei" => bytes_to_mebibytes(amt, 1_152_921_504_606_846_976, raw)?,
         _ => return err!(format!("Failed to parse storage value: {}", raw)),
     };
     Ok(mebibytes)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// A helper struct that drives `deserialize_cpu` exactly as image resource requests do,
+    /// so a JSON cpu value flows through the real `MillicpuVisitor` path under test
+    #[derive(Debug, Deserialize)]
+    struct CpuHolder {
+        /// The cpu value in millicpu, deserialized through the production converter
+        #[serde(deserialize_with = "deserialize_cpu")]
+        cpu: u64,
+    }
+
+    /// Deserialize a JSON cpu value into millicpu through the production `deserialize_cpu`
+    ///
+    /// # Arguments
+    ///
+    /// * `json` - The raw JSON object containing a `cpu` field
+    fn parse_cpu(json: &str) -> u64 {
+        // deserialize through the same converter image requests use
+        serde_json::from_str::<CpuHolder>(json).unwrap().cpu
+    }
+
+    /// `MillicpuVisitor::visit_f64`/`visit_f32` ceil the product `(value * 1000.0).ceil()`, so a
+    /// sub-millicpu request (`0.0005` cores) rounds UP to 1 millicpu, never to 0. This matches the
+    /// sibling helper `conversions::cpu`, so the same fractional value yields the same millicpu
+    /// whichever parser sees it.
+    #[test]
+    fn fractional_cpu_ceils_up_not_truncates() {
+        // a tiny sub-millicpu request must round up to 1 millicpu, never floor to 0
+        assert_eq!(parse_cpu(r#"{"cpu": 0.0005}"#), 1);
+        // a fractional core count must round the product up, matching conversions::cpu
+        assert_eq!(parse_cpu(r#"{"cpu": 0.3333}"#), 334);
+        // the string path routes '.'-containing values through the same visitor
+        assert_eq!(parse_cpu(r#"{"cpu": "0.3333"}"#), 334);
+    }
+
+    /// The `E`, `Pi` and `Ei` branches of `storage` (and `storage_bytes_as_base`) divide by
+    /// `1_048_576` (bytes per MiB) like the adjacent `P`/`Ti` branches, so `1Pi` is exactly
+    /// `1_073_741_824` MiB.
+    #[test]
+    fn pebibyte_storage_uses_correct_divisor() {
+        // 1 Pi is exactly 1024^3 MiB
+        assert_eq!(storage("1Pi").unwrap(), 1_073_741_824);
+        // storage_bytes_as_base shares the same unit table and must agree
+        assert_eq!(storage_bytes_as_base("1Pi").unwrap(), 1_073_741_824);
+    }
 }

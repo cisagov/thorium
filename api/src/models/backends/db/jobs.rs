@@ -6,7 +6,7 @@ use tracing::{Level, event, instrument, span};
 use uuid::Uuid;
 
 use super::keys::{images::ImageKeys, jobs::JobKeys, reactions::ReactionKeys, streams::StreamKeys};
-use super::{logs, reactions, streams, system};
+use super::{helpers, logs, reactions, streams, system};
 use crate::models::{
     Checkpoint, GenericJobArgs, ImageScaler, JobActions, JobDetailsList, JobHandleStatus, JobList,
     JobReactionIds, JobResets, JobStatus, Pipeline, RawJob, Reaction, ReactionStatus, RunningJob,
@@ -274,8 +274,44 @@ async fn prune_dangling(
     Ok(())
 }
 
-/// Response from Redis when claiming jobs
-pub type JobData = (HashMap<String, String>, bool, bool, bool, bool);
+/// Atomically pops the next job from a created queue and claims it for a worker
+///
+/// The pop and the claim run in one script so a crash or dropped connection can never leave a
+/// job popped from its created queue without also being in the running queue and stream.
+///
+/// Keys: the created queue to pop from, the running queue to claim into, and the running stream.
+/// Args: the namespace, the serialized running status, the serialized worker, the serialized
+/// worker name, and the current timestamp.
+///
+/// Returns nothing if the queue is empty, or the popped claim and the job's data as it was before
+/// it was claimed. A job with no data is popped but not claimed so it can be pruned.
+///
+/// The job data key is derived from the popped claim, so it can't be declared up front; this
+/// relies on Thorium using a standalone Redis instance rather than Redis Cluster.
+static POP_JOB_SCRIPT: std::sync::LazyLock<redis::Script> = std::sync::LazyLock::new(|| {
+    redis::Script::new(
+        r#"
+        local popped = redis.call('zpopmin', KEYS[1])
+        if #popped == 0 then
+            return false
+        end
+        local raw = popped[1]
+        local score = popped[2]
+        local claim = cjson.decode(raw)
+        local data_key = ARGV[1] .. ':job_data:' .. claim['job']
+        local data = redis.call('hgetall', data_key)
+        if #data == 0 then
+            return {raw, data}
+        end
+        redis.call('hset', data_key, 'status', ARGV[2])
+        redis.call('hset', data_key, 'worker', ARGV[3])
+        redis.call('zadd', KEYS[2], score, raw)
+        local running = '{"job_id":"' .. claim['job'] .. '","worker":' .. ARGV[4] .. '}'
+        redis.call('zadd', KEYS[3], ARGV[5], running)
+        return {raw, data}
+        "#,
+    )
+});
 
 /// Pops a requested number of jobs from the job queue
 ///
@@ -291,33 +327,30 @@ pub type JobData = (HashMap<String, String>, bool, bool, bool, bool);
 pub async fn pop_job(scaler: ImageScaler, worker: &Worker, src: &str, dest: &str, shared: &Shared) -> Result<Option<RawJob>, ApiError> {
     // keep trying to claim a job until we get a valid one or our queue is empty
     loop {
-        // claim the job with the lowest score
-        let raw_claim: Vec<(String, f64)> = query!(cmd("zpopmin").arg(src), shared).await?;
-        // if we claimed a job then update its data
-        if let Some((raw, score)) = raw_claim.first() {
+        // atomically pop the job with the lowest score and claim it
+        let claim: Option<(String, Vec<String>)> = POP_JOB_SCRIPT
+            .key(src)
+            .key(dest)
+            .key(StreamKeys::system_scaler(scaler, "running", shared))
+            .arg(&shared.config.thorium.namespace)
+            .arg(force_serialize!(&JobStatus::Running))
+            .arg(force_serialize!(&Some(&worker.name)))
+            .arg(force_serialize!(&worker.name))
+            .arg(Utc::now().timestamp())
+            .invoke_async(conn!(shared))
+            .await?;
+        // if we claimed a job then return its data
+        if let Some((raw, flat_data)) = claim {
             // deserialize our job claim data
-            let job_info: JobReactionIds = deserialize!(raw);
-            // get claimed job data
-            let mut pipe = redis::pipe();
-            // get all of this jobs data
-            pipe.cmd("hgetall").arg(JobKeys::data_str(&job_info.job, shared))
-                // set this jobs status to running
-                .cmd("hset").arg(JobKeys::data_str(&job_info.job, shared))
-                    .arg("status").arg(force_serialize!(&JobStatus::Running))
-                // set the worker for this job
-                .cmd("hset").arg(JobKeys::data_str(&job_info.job, shared))
-                    .arg("worker").arg(force_serialize!(&Some(&worker.name)))
-                // add this to the correct destination status queue
-                .cmd("zadd").arg(dest).arg(score).arg(&raw)
-                // add this job to the running jobs stream
-                .cmd("zadd")
-                    .arg(StreamKeys::system_scaler(scaler, "running", shared))
-                    .arg(Utc::now().timestamp())
-                    .arg(force_serialize!(&serde_json::json!({"job_id": &job_info.job, "worker": &worker.name})));
-            // execute this jobs query
-            let job_data: JobData = pipe.atomic().query_async(conn!(shared)).await?;
+            let job_info: JobReactionIds = deserialize!(&raw);
+            // convert our flat list of fields and values to a map
+            let mut job_data = HashMap::with_capacity(flat_data.len() / 2);
+            let mut flat_data = flat_data.into_iter();
+            while let (Some(field), Some(value)) = (flat_data.next(), flat_data.next()) {
+                job_data.insert(field, value);
+            }
             // if this jobs data is missing then delete it and try again
-            if job_data.0.is_empty() {
+            if job_data.is_empty() {
                 // log that we found a job that is missing data
                 event!(Level::ERROR, msg = "Missing job data", job = job_info.job.to_string(), reaction = job_info.reaction.to_string());
                 // delete our dangling job
@@ -326,7 +359,7 @@ pub async fn pop_job(scaler: ImageScaler, worker: &Worker, src: &str, dest: &str
                 continue;
             }
             // convert our job claim to a raw job
-            let job = RawJob::from_data(job_data.0)?;
+            let job = RawJob::from_data(job_data)?;
             return Ok(Some(job));
         }
         // we didn't get a job so break
@@ -380,6 +413,80 @@ async fn update_reaction<'a>(pipe: &'a mut redis::Pipeline, job: &RawJob, reacti
     Ok(())
 }
 
+/// What [`claim`] does with a just popped job whose reaction data could not be fetched
+#[derive(Debug, PartialEq, Eq)]
+enum ClaimReactionErrorAction {
+    /// Prune this dangling job from every queue
+    Prune,
+    /// Move this job back to its created queue so it can be claimed again
+    Requeue,
+    /// Move on to the next job, leaving this job as is
+    ///
+    /// This is never chosen since it would abandon a Running job that no worker received; it is
+    /// kept so tests can assert that claims are never silently skipped.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Skip,
+}
+
+/// Decide what [`claim`] does with a just popped job whose reaction data could not be fetched
+///
+/// By the time the reaction is fetched the job has already been marked Running and assigned to
+/// the claiming worker. A 404 means the job is dangling so it is pruned; any other error (a Redis
+/// blip, a deserialization failure) moves the job back to its created queue so it isn't left
+/// Running with a worker that never received it.
+///
+/// # Arguments
+///
+/// * `error` - The error returned when getting this jobs reaction
+fn claim_reaction_error_action(error: &ApiError) -> ClaimReactionErrorAction {
+    if error.status() == StatusCode::NOT_FOUND {
+        ClaimReactionErrorAction::Prune
+    } else {
+        // any other error requeues the just popped job
+        ClaimReactionErrorAction::Requeue
+    }
+}
+
+/// Move a just claimed job back to its created queue
+///
+/// # Arguments
+///
+/// * `scaler` - The scaler the target job was spawned under
+/// * `worker` - The worker that claimed this job
+/// * `src` - The created job queue this job was claimed from
+/// * `dest` - The running job queue this job was claimed into
+/// * `job` - The job to requeue
+/// * `shared` - Shared Thorium objects
+#[rustfmt::skip]
+#[instrument(name = "db::jobs::requeue_claimed", skip_all, err(Debug))]
+async fn requeue_claimed(
+    scaler: ImageScaler,
+    worker: &Worker,
+    src: &str,
+    dest: &str,
+    job: &RawJob,
+    shared: &Shared,
+) -> Result<(), ApiError> {
+    // build the key to this jobs data
+    let data_key = JobKeys::data(&job.id, shared);
+    // cast our job claim data
+    let job_claim = serialize!(&JobReactionIds::new(job.id, job.reaction));
+    // build the redis pipeline to undo this jobs claim
+    let mut pipe = redis::pipe();
+    // reset this jobs status and worker
+    pipe.cmd("hset").arg(&data_key).arg("status").arg(serialize!(&JobStatus::Created))
+        .cmd("hset").arg(&data_key).arg("worker").arg(serialize!(&None::<String>))
+        // move this job from the running queue back to the created queue
+        .cmd("zrem").arg(dest).arg(&job_claim)
+        .cmd("zadd").arg(src).arg(job.deadline.timestamp()).arg(&job_claim)
+        // remove this job from the running jobs stream
+        .cmd("zrem").arg(StreamKeys::system_scaler(scaler, "running", shared))
+            .arg(force_serialize!(&serde_json::json!({"job_id": &job.id, "worker": &worker.name})));
+    // execute this pipeline
+    let _: () = pipe.atomic().query_async(conn!(shared)).await?;
+    Ok(())
+}
+
 /// Claims a job from the redis backend
 ///
 /// # Arguments
@@ -430,11 +537,27 @@ pub async fn claim(
                 Ok(reaction) => break (reaction, job),
                 // if this is a 404 then remove this job from queues and try again
                 Err(error) => {
-                    if error.status() == StatusCode::NOT_FOUND {
-                    // log that we found a job that is missing data
-                    event!(Level::ERROR, msg = "Missing reaction data", job = job.id.to_string());
-                        // prune this dangling job
-                        prune_dangling(scaler, &worker, &dest, job.id,  job.reaction, shared).await?;
+                    // decide what to do with this already popped job
+                    match claim_reaction_error_action(&error) {
+                        ClaimReactionErrorAction::Prune => {
+                            // log that we found a job that is missing data
+                            event!(Level::ERROR, msg = "Missing reaction data", job = job.id.to_string());
+                            // prune this dangling job
+                            prune_dangling(scaler, &worker, &dest, job.id,  job.reaction, shared).await?;
+                        }
+                        ClaimReactionErrorAction::Requeue => {
+                            // log that we failed to get this jobs reaction
+                            event!(Level::ERROR, msg = "Failed to get reaction data", job = job.id.to_string(), error = error.to_string());
+                            // move this job back to its created queue so it can be claimed later
+                            requeue_claimed(scaler, &worker, &src, &dest, &job, shared).await?;
+                            // return any jobs we already claimed so they aren't abandoned either
+                            if claimed.is_empty() {
+                                return Err(error);
+                            }
+                            break 'claim_loop;
+                        }
+                        // skipping would abandon this Running job, so it is never chosen
+                        ClaimReactionErrorAction::Skip => (),
                     }
                 }
             }
@@ -602,26 +725,43 @@ pub async fn proceed(
             .arg(force_serialize!(&serde_json::json!({"job_id": job.id, "worker": job.worker})));
     // save this jobs logs to the backend
     reactions::add_stage_logs(&job.reaction, &job.stage, logs, shared).await?;
+    // only execute our pipeline if this job still has the status we checked above, so concurrent
+    // duplicate proceeds can't both count this job towards its stage
+    let data_key = JobKeys::data(&job.id, shared);
+    let expected = serialize!(&job.status);
+    let still_expected = |values: &[Option<String>]| values[0].as_deref() == Some(expected.as_str());
+    pipe.atomic();
     // execute redis pipeline
     // use the correct response
     let should_proceed = if job.status == JobStatus::Running {
         // execute our query and get the response based on if the job is a generator or not
         let progress = if job.generator {
             // execute the query with our job generator srem
-            let full: (u64, u64, u64, u64, bool, u64, u64, u64, u64, u64, u64) = pipe.atomic().query_async(conn!(shared)).await?;
+            let full: Option<(u64, u64, u64, u64, bool, u64, u64, u64, u64, u64, u64)> =
+                helpers::exec_if(&pipe, &data_key, &["status"], still_expected, shared).await?;
             // downselect to just the first two values
-            (full.0, full.1)
+            full.map(|full| (full.0, full.1))
         } else {
             // execute the query without the job generator srem
-            let full: (u64, u64, u64, u64, bool, u64, u64, u64, u64, u64) = pipe.atomic().query_async(conn!(shared)).await?;
+            let full: Option<(u64, u64, u64, u64, bool, u64, u64, u64, u64, u64)> =
+                helpers::exec_if(&pipe, &data_key, &["status"], still_expected, shared).await?;
             // downselect to just the first two values
-            (full.0, full.1)
+            full.map(|full| (full.0, full.1))
+        };
+        // if this jobs status changed under us then another request already handled it
+        let Some(progress) = progress else {
+            return conflict!(format!("job {} must be running or sleeping to proceed", &job.id));
         };
         // check if we should proceed or not
         progress.0 >= progress.1
     } else {
         // exceute our query
-        let _: () = pipe.atomic().query_async(conn!(shared)).await?;
+        let executed: Option<()> =
+            helpers::exec_if(&pipe, &data_key, &["status"], still_expected, shared).await?;
+        // if this jobs status changed under us then another request already handled it
+        if executed.is_none() {
+            return conflict!(format!("job {} must be running or sleeping to proceed", &job.id));
+        }
         // check if we should proceed or not
         job.status == JobStatus::Sleeping
     };
@@ -629,6 +769,10 @@ pub async fn proceed(
     if should_proceed {
         // get reaction data
         let reaction = reactions::get(&job.group, &job.reaction, shared).await?;
+        // a failed (canceled) reaction is never proceeded, its remaining jobs just finish
+        if reaction.status == ReactionStatus::Failed {
+            return Ok(JobHandleStatus::Waiting);
+        }
         // proceed with this reaction
         reactions::proceed(reaction, shared).await
     } else {
@@ -673,10 +817,11 @@ pub async fn error<'a>(
     let job_claim = serialize!(&JobReactionIds::new(job.id, job.reaction));
     // start building the redis pipeline for erroring out this job
     let mut pipe = redis::pipe();
-    let _: () = pipe
+    // the pipeline is only executed once, after the logs are saved
+    pipe
         // remove from deadlines stream
         .cmd("zrem").arg(StreamKeys::system_scaler(job.scaler, "deadlines", shared))
-            .arg(stream_obj.timestamp).arg(stream_obj.data)
+            .arg(stream_obj.data)
         // remove from running jobs stream
         .cmd("zrem").arg(StreamKeys::system_scaler(job.scaler, "running", shared))
             .arg(force_serialize!(&serde_json::json!({"job_id": job.id, "worker": job.worker})))
@@ -685,10 +830,7 @@ pub async fn error<'a>(
                 .arg(serialize!(&JobStatus::Failed))
         // move to the correct status queue
         .cmd("zrem").arg(src).arg(&job_claim)
-        .cmd("zadd").arg(dest).arg(job.deadline.timestamp()).arg(&job_claim)
-        .query_async(conn!(shared))
-        .await?;
-
+        .cmd("zadd").arg(dest).arg(job.deadline.timestamp()).arg(&job_claim);
     // if this job is a generator then remove it from this reactions generators
     if job.generator {
         // build key to this reactions genrator set
@@ -700,8 +842,18 @@ pub async fn error<'a>(
     // create and save status log
     let update_cast = StatusUpdate::new(StatusRequest::from_job(&job, JobActions::Errored), None);
     logs::build(&mut pipe, &[update_cast], shared)?;
+    // only execute our pipeline if this job is still running, so a concurrent proceed or error
+    // for this job can't also act on it
+    let data_key = JobKeys::data(&job.id, shared);
+    let running = serialize!(&JobStatus::Running);
+    let still_running = |values: &[Option<String>]| values[0].as_deref() == Some(running.as_str());
+    pipe.atomic();
     // execute redis pipeline
-    let _: () = pipe.atomic().query_async(conn!(shared)).await?;
+    let executed: Option<()> = helpers::exec_if(&pipe, &data_key, &["status"], still_running, shared).await?;
+    // if this job is no longer running then another request already handled it
+    if executed.is_none() {
+        return conflict!(format!("job {} must be running to error", &job.id));
+    }
     // error out reaction as well
     let reaction = reactions::get(&job.group, &job.reaction, shared).await?;
     reactions::fail(reaction, shared).await?;
@@ -718,20 +870,53 @@ pub async fn error<'a>(
 #[rustfmt::skip]
 #[instrument(name = "db::jobs::find_in_running", skip(uuids, shared), fields(uuids = uuids.len()), err(Debug))]
 pub async fn find_in_running(stream: &str, uuids: &HashSet<&Uuid>, shared: &Shared) -> Result<HashMap<Uuid, String>, ApiError> {
+    // build the score settings to use when reading
+    let max = i64::MAX;
+    // read through this stream 10k items at a time
+    scan_running_pages(uuids, 10_000, |pos| streams::read_no_scores_by_key(stream, 0, max, pos, 10_000, shared)).await
+}
+
+/// Walk the pages of a running stream looking for the running entries of some jobs
+///
+/// Pages are read by offset, and entries before the current offset can be removed between page
+/// reads (every proceed/error removes one), shifting later entries left. To avoid skipping
+/// entries each page overlaps the last entry of the previous page; if that anchor entry has moved
+/// out of the page then we step back until we find it again. Entries may be seen more than once,
+/// which is harmless since they are collected into a map.
+///
+/// `page_size` must be at least 2 for pages to overlap.
+///
+/// # Arguments
+///
+/// * `uuids` - The different uuids to search for
+/// * `page_size` - The number of entries to read in each page
+/// * `read_page` - Reads the page of entries starting at an offset
+#[rustfmt::skip]
+async fn scan_running_pages<F, Fut>(uuids: &HashSet<&Uuid>, page_size: u64, mut read_page: F) -> Result<HashMap<Uuid, String>, ApiError>
+where
+    F: FnMut(u64) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<String>, ApiError>>,
+{
     // track the uuids that we have found
     let mut found = HashMap::with_capacity(uuids.len());
     // track our current position in the deadline stream
     let mut pos = 0;
-    // build the score settings to use when reading
-    let max = i64::MAX;
+    // the last entry of the previous page, which the next page should start with
+    let mut anchor: Option<String> = None;
     // read through this stream until we have found all uuids or this stream is exhausted
     'outer: loop {
         // start a span for this iteration of searching
         let span = span!(Level::INFO, "db::jobs::find_in_running::iteration", pos);
-        // read the next 10k items in the queue
-        let chunk = streams::read_no_scores_by_key(stream, 0, max, pos, 10_000, shared).await?;
+        // read the next page of items in the queue
+        let chunk = read_page(pos).await?;
         // get how many items are in this stream chunk
         let chunk_len = chunk.len();
+        // if our anchor isn't in this page then earlier entries were removed and we may have
+        // skipped some, so we need to step back after checking this page
+        let shifted = pos > 0
+            && anchor.as_ref().is_some_and(|anchor| !chunk.contains(anchor));
+        // get the last entry in this page in case it becomes our next anchor
+        let last = chunk.last().cloned();
         // step over each row in this chunk and parse them
         for entry in chunk {
             // try to parse this chunk
@@ -746,12 +931,18 @@ pub async fn find_in_running(stream: &str, uuids: &HashSet<&Uuid>, shared: &Shar
                 }
             }
         }
-        // if less then 10k items are returned then this stream has been exhuasted
-        if chunk_len < 10_000 {
+        // step back and look for our anchor again if entries shifted under us
+        if shifted {
+            pos = pos.saturating_sub(page_size.saturating_sub(1).max(1));
+            continue;
+        }
+        // if less then a full page of items are returned then this stream has been exhuasted
+        if (chunk_len as u64) < page_size {
             break 'outer;
         }
-        // increment pos
-        pos += chunk_len as u64;
+        // overlap our next page with the last entry of this one so we can detect shifts
+        anchor = last;
+        pos += (chunk_len as u64).saturating_sub(1).max(1);
         // drop our span to exit it
         drop(span);
     }
@@ -897,4 +1088,120 @@ pub async fn list_details(
     // cast to group details list
     let details_list = JobDetailsList::new(jobs.cursor, details);
     Ok(details_list)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// `claim` pops a job (marking it Running and assigning it to the claiming worker) before
+    /// fetching its reaction. When that fetch fails with anything other than a 404 (a Redis blip,
+    /// a reaction that fails to deserialize) the popped job is not silently skipped, so it isn't
+    /// left Running with a worker that never received it.
+    #[test]
+    fn non_404_reaction_error_does_not_abandon_claimed_job() {
+        // a transient backend failure while getting the jobs reaction
+        let error = ApiError::new(StatusCode::SERVICE_UNAVAILABLE, None);
+        // the already popped job must not be silently abandoned
+        assert_ne!(
+            claim_reaction_error_action(&error),
+            ClaimReactionErrorAction::Skip,
+            "a non-404 reaction error must not silently abandon the just claimed Running job"
+        );
+    }
+
+    /// A job whose reaction no longer exists is dangling and is pruned.
+    #[test]
+    fn missing_reaction_prunes_claimed_job() {
+        // the jobs reaction no longer exists
+        let error = ApiError::new(StatusCode::NOT_FOUND, None);
+        // the dangling job is pruned
+        assert_eq!(
+            claim_reaction_error_action(&error),
+            ClaimReactionErrorAction::Prune
+        );
+    }
+
+    /// Build the serialized running stream entries for some job ids
+    ///
+    /// # Arguments
+    ///
+    /// * `ids` - The job ids to build running entries for
+    fn running_entries(ids: &[Uuid]) -> Vec<String> {
+        ids.iter()
+            .map(|id| {
+                serde_json::to_string(&RunningJob {
+                    job_id: *id,
+                    worker: "worker".to_owned(),
+                })
+                .unwrap()
+            })
+            .collect()
+    }
+
+    /// Scan a running stream whose entries can be removed after each page is read
+    ///
+    /// # Arguments
+    ///
+    /// * `ids` - The job ids in the running stream in order
+    /// * `target` - The job id to look for
+    /// * `remove_after_first_page` - The number of leading entries removed after the first read
+    async fn scan(
+        ids: &[Uuid],
+        target: &Uuid,
+        remove_after_first_page: usize,
+    ) -> HashMap<Uuid, String> {
+        // the running stream that pages are read from
+        let stream = Mutex::new(running_entries(ids));
+        // track how many pages have been read
+        let reads = Mutex::new(0);
+        // search for our target job
+        let uuids: HashSet<&Uuid> = [target].into_iter().collect();
+        scan_running_pages(&uuids, 2, |pos| {
+            // read the requested page from the current state of the stream
+            let mut stream = stream.lock().unwrap();
+            let start = (pos as usize).min(stream.len());
+            let end = (start + 2).min(stream.len());
+            let page = stream[start..end].to_vec();
+            // once the first page is read, jobs that were already read finish and are removed
+            let mut reads = reads.lock().unwrap();
+            if *reads == 0 {
+                stream.drain(..remove_after_first_page);
+            }
+            *reads += 1;
+            async move { Ok(page) }
+        })
+        .await
+        .unwrap()
+    }
+
+    /// `find_in_running` pages the running stream by offset. When a job before the current offset
+    /// completes between page reads its entry is removed and every later entry shifts left; the
+    /// entry that slides into the already read range is still found, so `bulk_reset` removes that
+    /// job's running-stream member.
+    #[tokio::test]
+    async fn concurrent_removal_does_not_skip_running_entries() {
+        // five running jobs, and we are looking for the third
+        let ids: Vec<Uuid> = (0..5).map(|_| Uuid::new_v4()).collect();
+        // the first job completes right after the first page is read
+        let found = scan(&ids, &ids[2], 1).await;
+        // the target must still be found
+        assert!(
+            found.contains_key(&ids[2]),
+            "a running entry must not be skipped when an earlier entry is removed between pages"
+        );
+    }
+
+    /// With no concurrent removals every running entry is found.
+    #[tokio::test]
+    async fn running_entries_are_found_without_concurrent_removals() {
+        // five running jobs, and we are looking for the third
+        let ids: Vec<Uuid> = (0..5).map(|_| Uuid::new_v4()).collect();
+        // nothing is removed while paging
+        let found = scan(&ids, &ids[2], 0).await;
+        // the target is found
+        assert!(found.contains_key(&ids[2]));
+    }
 }

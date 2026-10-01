@@ -1,9 +1,9 @@
 //! Tests the Jobs routes in Thorium
 
 use chrono::prelude::*;
-use thorium::models::{ImageScaler, JobResets, ReactionListParams, Resources};
+use thorium::models::{ImageScaler, JobResets, ReactionListParams, ReactionStatus, Resources};
 use thorium::test_utilities::{self, generators};
-use thorium::{is, Error};
+use thorium::{Error, is};
 
 /// unwraps the status counts for a specific user and image
 macro_rules! get_stats {
@@ -503,5 +503,168 @@ async fn sleep() -> Result<(), thorium::Error> {
             generators::delete_worker("sleep", &client).await?;
         }
     }
+    Ok(())
+}
+
+/// Duplicate concurrent proceed requests for one job only count that job once
+///
+/// `proceed` only executes the Redis pipeline that increments the reaction's
+/// `current_stage_progress` if the job still has the status the route handler checked. Two
+/// overlapping proceed requests for the SAME job (an agent retry racing the original) therefore
+/// can't both count the job, so a stage of three jobs is not treated as complete after only two
+/// of them finished.
+///
+/// The race is probabilistic, so this races many reactions and checks that none of them
+/// completes while one of its three jobs is still running.
+#[tokio::test]
+#[ignore = "probabilistic race between concurrent duplicate proceed requests"]
+async fn duplicate_concurrent_proceed_counts_job_once() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // register our test node
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group to test proceeding in
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a random pipeline with a single stage of three images
+    let pipe_req = generators::pipelines(&group, 1, false, &client)
+        .await?
+        .remove(0);
+    // get the pipeline for this pipeline order
+    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    // get the three images in our only stage
+    let images = pipe.order[0].clone();
+    // register a worker for each image in our stage
+    for (i, image) in images.iter().enumerate() {
+        generators::worker(
+            "cluster0",
+            "node0",
+            &format!("c4_04_{i}"),
+            &group,
+            &pipe.name,
+            image,
+            &client,
+        )
+        .await?;
+    }
+    // race duplicate proceeds against many reactions to widen the race window
+    for _ in 0..25 {
+        // build a random reaction based on our pipeline request
+        let req = generators::gen_reaction(&group, &pipe, None);
+        // create the reaction and its three jobs
+        let id = client.reactions.create(&req).await?;
+        // claim the job for each image in our stage
+        let mut jobs = Vec::with_capacity(images.len());
+        for (i, image) in images.iter().enumerate() {
+            let mut claimed = client
+                .jobs
+                .claim(
+                    &group,
+                    &pipe.name,
+                    image,
+                    "cluster0",
+                    "node0",
+                    &format!("c4_04_{i}"),
+                    1,
+                )
+                .await?;
+            jobs.push(claimed.remove(0));
+        }
+        // build random stage logs
+        let logs = generators::stage_logs();
+        // send two concurrent proceeds for the first job, at most one may succeed
+        let _ = tokio::join!(
+            client.jobs.proceed(&jobs[0], &logs, 1),
+            client.jobs.proceed(&jobs[0], &logs, 1)
+        );
+        // complete the second job once
+        client.jobs.proceed(&jobs[1], &logs, 1).await?;
+        // the third job is still running so the reaction must not be completed
+        let react = client.reactions.get(&group, id.id).await?;
+        assert_ne!(
+            react.status,
+            ReactionStatus::Completed,
+            "a duplicate proceed must not count a job twice and complete a stage early"
+        );
+        // complete the third job so this reaction finishes
+        client.jobs.proceed(&jobs[2], &logs, 1).await?;
+    }
+    // delete our workers
+    for i in 0..images.len() {
+        generators::delete_worker(&format!("c4_04_{i}"), &client).await?;
+    }
+    Ok(())
+}
+
+/// An error and a proceed racing for the same job are not both applied
+///
+/// `error` (like `proceed`) only executes the Redis pipeline that marks the job Failed if the job
+/// is still Running. An error request racing a proceed (or a duplicate error) for the same job
+/// therefore can't both be applied, so a job is never both counted toward its stage and failed,
+/// and its reaction is never failed by a job that also completed.
+///
+/// The race is probabilistic, so this races many reactions and checks that the error and the
+/// proceed never both succeed.
+#[tokio::test]
+#[ignore = "probabilistic race between concurrent error and proceed"]
+async fn concurrent_error_and_proceed_apply_once() -> Result<(), Error> {
+    // get admin client
+    let client = test_utilities::admin_client().await?;
+    // register our test node
+    generators::node("cluster0", "node0", Resources::default(), &client).await?;
+    // create a group to test erroring in
+    let group = generators::groups(1, &client).await?.remove(0).name;
+    // create a random pipeline with a single stage of three images
+    let pipe_req = generators::pipelines(&group, 1, false, &client)
+        .await?
+        .remove(0);
+    // get the pipeline for this pipeline order
+    let pipe = client.pipelines.get(&group, &pipe_req.name).await?;
+    // get the first image in our only stage
+    let image = pipe.order[0][0].clone();
+    // register a worker for this image
+    generators::worker(
+        "cluster0",
+        "node0",
+        "adj_error",
+        &group,
+        &pipe.name,
+        &image,
+        &client,
+    )
+    .await?;
+    // race an error against a proceed for many jobs to widen the race window
+    for _ in 0..25 {
+        // build a random reaction based on our pipeline request
+        let req = generators::gen_reaction(&group, &pipe, None);
+        // create the reaction and its jobs
+        client.reactions.create(&req).await?;
+        // claim the job for our image
+        let mut claimed = client
+            .jobs
+            .claim(
+                &group,
+                &pipe.name,
+                &image,
+                "cluster0",
+                "node0",
+                "adj_error",
+                1,
+            )
+            .await?;
+        let job = claimed.remove(0);
+        // build random stage logs
+        let logs = generators::stage_logs();
+        // send an error and a proceed for the same job at once, at most one may succeed
+        let (errored, proceeded) = tokio::join!(
+            client.jobs.error(&job.id, &logs),
+            client.jobs.proceed(&job, &logs, 1)
+        );
+        assert!(
+            !(errored.is_ok() && proceeded.is_ok()),
+            "an error and a proceed for the same job must not both be applied"
+        );
+    }
+    // delete our worker
+    generators::delete_worker("adj_error", &client).await?;
     Ok(())
 }

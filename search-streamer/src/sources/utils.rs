@@ -48,14 +48,15 @@ pub fn proportional_truncate(items: &mut [String], max_len: u64) {
             // add the truncate suffix if we're truncating to at least its length
             let truncated = if truncation_amt > TRUNCATE_SUFFIX.len() as u64 {
                 truncation_amt += TRUNCATE_SUFFIX.len() as u64;
-                let new_len = size - truncation_amt;
+                // the suffix can push our truncation amount past this items size so saturate
+                let new_len = size.saturating_sub(truncation_amt);
                 // ensure truncation respects grapheme cluster boundaries
                 let mut truncated = truncate_graphemes(item, new_len);
                 // add the ellipsis
                 truncated.push_str(TRUNCATE_SUFFIX);
                 truncated
             } else {
-                let new_len = size - truncation_amt;
+                let new_len = size.saturating_sub(truncation_amt);
                 // ensure truncation respects grapheme cluster boundaries
                 truncate_graphemes(item, new_len)
             };
@@ -174,5 +175,28 @@ mod tests {
         // ensure the truncated strings are shorter than the original
         assert!(items[0].len() < random_string.len());
         assert!(items[1].len() < random_string.len());
+    }
+
+    /// Under heavy truncation a small item's `truncation_amt` (ceil of its proportional share
+    /// plus the 3-byte ellipsis) can exceed its own byte length, and `proportional_truncate`
+    /// handles that without underflowing (which would panic in debug and wrap in release). With
+    /// total=1000, max_len=100, one huge item plus a ~29-byte item, there is no panic and the
+    /// small item is never left longer than it started.
+    #[test]
+    fn small_item_under_heavy_truncation_does_not_underflow() {
+        // one large item plus a small ~29-byte item so total=1000 and the small item's
+        // proportional truncation amount (rounded up) plus the ellipsis exceeds its size
+        let small = "a".repeat(29);
+        let large = "b".repeat(971);
+        let mut items = vec![small.clone(), large];
+        // require ~90% truncation, the window that pushes the small item's cut past its size
+        proportional_truncate(&mut items, 100);
+        // the small item must never end up longer than it started (no wrap-to-huge new_len)
+        assert!(
+            items[0].len() <= small.len(),
+            "small item grew from {} to {} bytes (underflow wrap left it untruncated)",
+            small.len(),
+            items[0].len()
+        );
     }
 }

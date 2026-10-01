@@ -90,6 +90,67 @@ pub async fn get_conn(
     }
 }
 
+/// The number of times [`exec_if`] retries a pipeline that was aborted by an unrelated change
+const EXEC_IF_ATTEMPTS: usize = 10;
+
+/// Atomically execute a pipeline only if some fields in a hash still pass a check
+///
+/// The hash is watched while its fields are checked, so any change to it before the pipeline
+/// executes aborts the pipeline. An aborted pipeline is checked and retried, so concurrent
+/// updates can never both act on the same stale state.
+///
+/// Returns `None` if the check failed and the pipeline was not executed.
+///
+/// # Arguments
+///
+/// * `pipe` - The atomic pipeline to execute
+/// * `key` - The key to the hash to check
+/// * `fields` - The fields in the hash to check
+/// * `check` - Whether the current values of these fields allow the pipeline to execute
+/// * `shared` - Shared Thorium objects
+pub async fn exec_if<T, F>(
+    pipe: &redis::Pipeline,
+    key: &str,
+    fields: &[&str],
+    check: F,
+    shared: &Shared,
+) -> Result<Option<T>, ApiError>
+where
+    T: redis::FromRedisValue,
+    F: Fn(&[Option<String>]) -> bool,
+{
+    // watches are tied to a connection so use a single connection throughout
+    let mut conn = get_conn(shared).await?;
+    for _ in 0..EXEC_IF_ATTEMPTS {
+        // watch this hash so any change to it before we execute aborts our pipeline
+        redis::cmd("watch").arg(key).exec_async(&mut *conn).await?;
+        // get the current values of the fields to check
+        let values: Vec<Option<String>> = match redis::cmd("hmget")
+            .arg(key)
+            .arg(fields)
+            .query_async(&mut *conn)
+            .await
+        {
+            Ok(values) => values,
+            Err(error) => {
+                // clear our watch so this connection goes back to the pool clean
+                let _ = redis::cmd("unwatch").exec_async(&mut *conn).await;
+                return Err(ApiError::from(error));
+            }
+        };
+        // if these values don't pass our check then don't execute our pipeline
+        if !check(&values) {
+            redis::cmd("unwatch").exec_async(&mut *conn).await?;
+            return Ok(None);
+        }
+        // execute our pipeline, which returns nothing if our hash changed since we watched it
+        if let Some(response) = pipe.query_async::<Option<T>>(&mut *conn).await? {
+            return Ok(Some(response));
+        }
+    }
+    unavailable!(format!("{key} changed too often to be updated"))
+}
+
 /// Extracts a value from a hashmap or returns a helpful error
 ///
 /// # Arguments

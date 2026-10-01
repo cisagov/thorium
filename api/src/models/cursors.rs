@@ -68,7 +68,7 @@ mod client {
         pub fn year(year: u64, end: bool) -> Result<DateTime<Utc>, Error> {
             // build the rfc 3339 string for either the start or end of the year
             let raw = if end {
-                format!("{year}-00-01T00:00:00-00:00")
+                format!("{year}-01-01T00:00:00-00:00")
             } else {
                 format!("{year}-12-31T23:59:59-00:00")
             };
@@ -86,9 +86,9 @@ mod client {
         pub fn day(year: u64, month: u8, day: u8, end: bool) -> Result<DateTime<Utc>, Error> {
             // build the rfc 3339 string for either the start or end of the year
             let raw = if end {
-                format!("{year}-{month}-{day}T00:00:00-00:00")
+                format!("{year}-{month:02}-{day:02}T00:00:00-00:00")
             } else {
-                format!("{year}-{month}-{day}T23:59:59-00:00")
+                format!("{year}-{month:02}-{day:02}T23:59:59-00:00")
             };
             Ok(DateTime::parse_from_rfc3339(&raw)?.with_timezone(&Utc))
         }
@@ -411,6 +411,39 @@ mod client {
             self.gathered += gathered;
             self.data = data;
             Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::unwrap_used)]
+    mod tests {
+        use super::*;
+
+        /// `DateOpts::year(y, true)` builds the older bound as `{year}-01-01T00:00:00Z`. Given
+        /// Thorium's reversed time semantics the `end`/older bound of a year is Jan 1 of that
+        /// year, and it parses as valid RFC3339 rather than using an invalid month `00`.
+        #[test]
+        fn year_end_bound_is_january_first() {
+            // the older (end) bound of a year-scoped search must be Jan 1 at midnight UTC
+            let start = DateOpts::year(2024, true).expect("year end bound must parse");
+            assert_eq!(
+                start,
+                Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap(),
+                "the end/older bound of a year must be Jan 1, not an invalid month 00"
+            );
+        }
+
+        /// `DateOpts::day` zero-pads the month and day, so a single-digit month or day (e.g.
+        /// month 1, day 5) builds valid RFC3339 and parses to the requested calendar day.
+        #[test]
+        fn day_with_single_digit_month_and_day_parses() {
+            // a single-digit month and day must still build a valid date
+            let day = DateOpts::day(2024, 1, 5, true).expect("single-digit month/day must parse");
+            assert_eq!(
+                day,
+                Utc.with_ymd_and_hms(2024, 1, 5, 0, 0, 0).unwrap(),
+                "single-digit month/day must zero-pad into valid RFC3339"
+            );
         }
     }
 }

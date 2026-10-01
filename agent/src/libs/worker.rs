@@ -10,6 +10,21 @@ use super::agents::{self, Agent};
 use super::{Lifetime, Target};
 use crate::args::Args;
 
+/// Build the stage logs sent to Thorium when erroring a job whose agent failed to spawn
+///
+/// The returned logs contain the spawn error so the user sees why the job failed instead of a
+/// failed job with empty logs.
+///
+/// # Arguments
+///
+/// * `error` - The error that prevented the agent from spawning
+fn spawn_error_logs(error: &Error) -> StageLogsAdd {
+    // build the error log to send to Thorium
+    let mut logs = StageLogsAdd::default();
+    logs.add(format!("Spawn Error: {error:#?}"));
+    logs
+}
+
 /// Whether this worker should exit or look for more jobs
 pub enum ClaimJobStatus {
     /// The active job this worker claimed
@@ -187,17 +202,10 @@ impl Worker {
                     Err(error) => {
                         // log this error to our tracer
                         event!(parent: &span, Level::ERROR, error = error.msg());
-                        // build the error log to send to Thorium
-                        let mut logs = StageLogsAdd::default();
-                        logs.add(format!("Spawn Error: {error:#?}"));
+                        // build the spawn error logs to send to Thorium
+                        let logs = spawn_error_logs(&error);
                         // send our error logs to Thorium
-                        if let Err(error) = self
-                            .target
-                            .thorium
-                            .jobs
-                            .error(&job_id, &StageLogsAdd::default())
-                            .await
-                        {
+                        if let Err(error) = self.target.thorium.jobs.error(&job_id, &logs).await {
                             // log that we failed to update our stage logs in thorium
                             event!(
                                 parent: &span,
@@ -304,5 +312,29 @@ impl Worker {
         // tell Thorium this worker is exiting
         self.target.remove_worker(&self.args).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// When the agent for a claimed job fails to spawn, the worker errors the job in Thorium
+    /// with stage logs that carry the spawn error, so the user sees why the job failed rather
+    /// than a failed job with no explanation.
+    #[test]
+    fn spawn_error_logs_carry_the_error() {
+        // the error that kept the agent from spawning
+        let error = Error::new("bad entrypoint");
+        // build the logs sent to Thorium when erroring this job
+        let logs = spawn_error_logs(&error);
+        // the logs must explain why the job failed
+        assert!(
+            logs.logs
+                .iter()
+                .any(|log| log.line.contains("Spawn Error") && log.line.contains("bad entrypoint")),
+            "the spawn error must be included in the job's stage logs, got {:?}",
+            logs.logs
+        );
     }
 }

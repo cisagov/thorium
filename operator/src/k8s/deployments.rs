@@ -1,7 +1,7 @@
-use chrono;
 use k8s_openapi::api::apps::v1::Deployment;
 use kube::api::{DeleteParams, ListParams, Patch, PatchParams, PostParams};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::time;
 use thorium::conf::K8sHostAliases;
 use thorium::{Error, client::Basic};
@@ -139,11 +139,27 @@ fn api(
 ///
 /// * `meta` - Thorium cluster client and metadata
 async fn scaler_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>) -> Option<Value> {
-    let scaler_spec = meta.cluster.get_scaler_spec();
+    scaler_template_value(&meta.cluster, host_aliases)
+}
+
+/// Build the JSON template for the scaler deployment from a Thorium cluster spec
+///
+/// Unlike [`scaler_template`] this only needs the cluster spec, so the template can be unit
+/// tested without a live k8s client.
+///
+///  Arguments
+///
+/// * `cluster` - The Thorium cluster spec
+/// * `host_aliases` - The host aliases to add to this deployment
+fn scaler_template_value(
+    cluster: &crds::ThoriumCluster,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Option<Value> {
+    let scaler_spec = cluster.get_scaler_spec();
     // only include imagePullSecret if required
     match scaler_spec {
         Some(scaler_spec) => {
-            let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+            let image_pull_secrets = if !cluster.spec.registry_auth.is_none() {
                 serde_json::json!([
                     {
                         "name": "registry-token"
@@ -179,7 +195,7 @@ async fn scaler_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>)
                 },
             ]);
             // only include skopeo secret when registry auth is configured
-            if !meta.cluster.spec.registry_auth.is_none() {
+            if !cluster.spec.registry_auth.is_none() {
                 volumes.as_array_mut().unwrap().push(serde_json::json!({
                     "name": "docker-skopeo",
                     "secret": {
@@ -215,11 +231,11 @@ async fn scaler_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>)
                 "apiVersion": "apps/v1",
                 "kind": "Deployment",
                 "metadata": {
-                    "namespace": meta.cluster.metadata.namespace.clone(),
+                    "namespace": cluster.metadata.namespace.clone(),
                     "name": "scaler",
                     "labels": {
                         "app": "scaler",
-                        "version": meta.cluster.get_version(),
+                        "version": cluster.get_version(),
                     }
                 },
                 "spec": {
@@ -233,7 +249,7 @@ async fn scaler_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>)
                         "metadata": {
                             "labels": {
                                 "app": "scaler",
-                                "version": meta.cluster.get_version(),
+                                "version": cluster.get_version(),
                             }
                         },
                         "spec": {
@@ -246,15 +262,13 @@ async fn scaler_template(meta: &ClusterMeta, host_aliases: &Vec<K8sHostAliases>)
                             "containers": [
                                 {
                                     "name": "scaler",
-                                    "image": meta.cluster.get_image(),
-                                    "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
+                                    "image": cluster.get_image(),
+                                    "imagePullPolicy": cluster.spec.image_pull_policy.clone(),
                                     "command": scaler_spec.cmd.clone(),
                                     "args": scaler_spec.args.clone(),
                                     "resources": {
-                                        "resources": {
-                                            "limits": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
-                                            "requests": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
-                                        },
+                                        "limits": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
+                                        "requests": crds::Resources::request_conv(&scaler_spec.resources).expect("failed to convert resources to valid request format"),
                                     },
                                     "env": scaler_spec.env.clone(),
                                     "volumeMounts": volume_mounts
@@ -281,9 +295,25 @@ async fn baremetal_scaler_template(
     meta: &ClusterMeta,
     host_aliases: &Vec<K8sHostAliases>,
 ) -> Option<Value> {
-    let scaler_spec = meta.cluster.get_baremetal_scaler_spec();
+    baremetal_scaler_template_value(&meta.cluster, host_aliases)
+}
+
+/// Build the JSON template for the baremetal scaler deployment from a Thorium cluster spec
+///
+/// Unlike [`baremetal_scaler_template`] this only needs the cluster spec, so the template can be
+/// unit tested without a live k8s client.
+///
+///  Arguments
+///
+/// * `cluster` - The Thorium cluster spec
+/// * `host_aliases` - The host aliases to add to this deployment
+fn baremetal_scaler_template_value(
+    cluster: &crds::ThoriumCluster,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Option<Value> {
+    let scaler_spec = cluster.get_baremetal_scaler_spec();
     // only include imagePullSecret if required
-    let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+    let image_pull_secrets = if !cluster.spec.registry_auth.is_none() {
         serde_json::json!([
             {
                 "name": "registry-token"
@@ -297,11 +327,11 @@ async fn baremetal_scaler_template(
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "metadata": {
-                "namespace": meta.cluster.metadata.namespace.clone(),
+                "namespace": cluster.metadata.namespace.clone(),
                 "name": "baremetal-scaler",
                 "labels": {
                     "app": "baremetal-scaler",
-                    "version": meta.cluster.get_version(),
+                    "version": cluster.get_version(),
                 }
             },
             "spec": {
@@ -315,15 +345,15 @@ async fn baremetal_scaler_template(
                     "metadata": {
                         "labels": {
                             "app": "baremetal-scaler",
-                            "version": meta.cluster.get_version(),
+                            "version": cluster.get_version(),
                         }
                     },
                     "spec": {
                         "containers": [
                             {
                                 "name": "baremetal-scaler",
-                                "image": meta.cluster.get_image(),
-                                "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
+                                "image": cluster.get_image(),
+                                "imagePullPolicy": cluster.spec.image_pull_policy.clone(),
                                 "command": scaler_spec.cmd.clone(),
                                 "args": scaler_spec.args.clone(),
                                 "resources": {
@@ -475,9 +505,25 @@ async fn search_streamer_template(
     meta: &ClusterMeta,
     host_aliases: &Vec<K8sHostAliases>,
 ) -> Option<Value> {
-    let streamer_spec = meta.cluster.get_search_streamer_spec();
+    search_streamer_template_value(&meta.cluster, host_aliases)
+}
+
+/// Build the JSON template for the search streamer deployment from a Thorium cluster spec
+///
+/// Unlike [`search_streamer_template`] this only needs the cluster spec, so the template can be
+/// unit tested without a live k8s client.
+///
+///  Arguments
+///
+/// * `cluster` - The Thorium cluster spec
+/// * `host_aliases` - The host aliases to add to this deployment
+fn search_streamer_template_value(
+    cluster: &crds::ThoriumCluster,
+    host_aliases: &Vec<K8sHostAliases>,
+) -> Option<Value> {
+    let streamer_spec = cluster.get_search_streamer_spec();
     // only include imagePullSecret if required
-    let image_pull_secrets = if !meta.cluster.spec.registry_auth.is_none() {
+    let image_pull_secrets = if !cluster.spec.registry_auth.is_none() {
         serde_json::json!([
             {
                 "name": "registry-token"
@@ -491,11 +537,11 @@ async fn search_streamer_template(
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "metadata": {
-                "namespace": meta.cluster.metadata.namespace.clone(),
+                "namespace": cluster.metadata.namespace.clone(),
                 "name": "search-streamer",
                 "labels": {
                     "app": "search-streamer",
-                    "version": meta.cluster.get_version(),
+                    "version": cluster.get_version(),
                 }
             },
             "spec": {
@@ -509,15 +555,15 @@ async fn search_streamer_template(
                     "metadata": {
                         "labels": {
                             "app": "search-streamer",
-                            "version": meta.cluster.get_version(),
+                            "version": cluster.get_version(),
                         }
                     },
                     "spec": {
                         "containers": [
                             {
                                 "name": "search-streamer",
-                                "image": meta.cluster.get_image(),
-                                "imagePullPolicy": meta.cluster.spec.image_pull_policy.clone(),
+                                "image": cluster.get_image(),
+                                "imagePullPolicy": cluster.spec.image_pull_policy.clone(),
                                 "command": streamer_spec.cmd.clone(),
                                 "args": streamer_spec.args.clone(),
                                 "resources": {
@@ -609,13 +655,86 @@ pub async fn get_templates(meta: &ClusterMeta) -> Result<Vec<Deployment>, Error>
     Ok(deployments)
 }
 
+/// The pod template annotation that holds a hash of the Thorium config
+const CONFIG_HASH_ANNOTATION: &str = "thorium/config-hash";
+
+/// Sort every array in a JSON value so that unordered collections are always in the same order
+///
+/// Sets in the Thorium config serialize in a random order, so arrays are sorted by their
+/// serialized items. Objects are already sorted by key since serde_json maps are BTreeMaps.
+///
+///  Arguments
+///
+/// * `value` - The value to canonicalize
+fn canonicalize(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            // canonicalize our items first so any nested arrays are sorted too
+            items.iter_mut().for_each(canonicalize);
+            // sort our items by their serialized form
+            items.sort_by_cached_key(Value::to_string);
+        }
+        Value::Object(map) => map.values_mut().for_each(canonicalize),
+        _ => (),
+    }
+}
+
+/// Hash the Thorium config that the `thorium` config secret is built from
+///
+/// The config is canonicalized first so the same config always produces the same hash. This
+/// means only reordering a list in the config will not change its hash.
+///
+///  Arguments
+///
+/// * `cluster` - The Thorium cluster spec
+fn config_hash(cluster: &crds::ThoriumCluster) -> Result<String, Error> {
+    // serialize our config the same way the config secret is built
+    let mut config = serde_json::to_value(&cluster.spec.config)?;
+    // make sure any sets in our config are always in the same order
+    canonicalize(&mut config);
+    // hex encode a sha256 of our config
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(config.to_string().as_bytes())
+    ))
+}
+
+/// Stamp a deployment's pod template with a hash of the Thorium config
+///
+/// The config secret is mounted into pods but changing it does not restart them, so this
+/// rolls a deployment's pods only when the config they mount actually changes.
+///
+///  Arguments
+///
+/// * `deployment` - The deployment to stamp
+/// * `hash` - The hash of the Thorium config
+fn stamp_config_hash(deployment: &mut Deployment, hash: String) {
+    // get the pod template for this deployment if it has one
+    if let Some(spec) = deployment.spec.as_mut() {
+        // get our pod templates annotations, adding them if needed
+        let annotations = spec
+            .template
+            .metadata
+            .get_or_insert_with(Default::default)
+            .annotations
+            .get_or_insert_with(Default::default);
+        // set our config hash
+        annotations.insert(CONFIG_HASH_ANNOTATION.to_owned(), hash);
+    }
+}
+
 /// Create or update a k8s deployment within a given namespace
+///
+/// The pod template is stamped with a hash of the Thorium config, so pods are only rolled
+/// when either the deployment spec or the config changes.
 ///
 ///  Arguments
 ///
 /// * `deployment` - Deployment spec to create or patch if already exists
 /// * `meta` - Thorium cluster client and metadata
-pub async fn create_or_update(deployment: Deployment, meta: &ClusterMeta) -> Result<(), Error> {
+pub async fn create_or_update(mut deployment: Deployment, meta: &ClusterMeta) -> Result<(), Error> {
+    // roll this deployments pods if the config they mount changes
+    stamp_config_hash(&mut deployment, config_hash(&meta.cluster)?);
     let params = PostParams::default();
     let name = deployment
         .metadata
@@ -633,9 +752,8 @@ pub async fn create_or_update(deployment: Deployment, meta: &ClusterMeta) -> Res
         Err(kube::Error::Api(error)) => {
             // do not panic if deployment exists
             if error.reason == "AlreadyExists" {
-                let patch = serde_json::json!({
-                    "spec": deployment.spec
-                });
+                // build the patch to apply to this existing deployment
+                let patch = existing_update_patch(&deployment);
                 let patch = Patch::Merge(&patch);
                 let params: PatchParams = PatchParams::default();
                 match meta.deploy_api.patch(&name, &params, &patch).await {
@@ -644,8 +762,6 @@ pub async fn create_or_update(deployment: Deployment, meta: &ClusterMeta) -> Res
                             "Patched {} deployment in namespace {}",
                             &name, &meta.namespace
                         );
-
-                        restart(&name, meta).await?;
                         Ok(())
                     }
                     Err(error) => Err(Error::new(format!(
@@ -768,6 +884,12 @@ pub async fn deploy_event_handler(
     Ok(())
 }
 
+/// The deployment `deploy_search_streamer` deletes when the search streamer is not in the spec
+///
+/// This must be the search streamer's own deployment, so removing the search streamer from a
+/// cluster spec cleans it up without touching the event handler.
+const SEARCH_STREAMER_CLEANUP: &str = "search-streamer";
+
 /// Create or update the search-streamer deployment
 ///
 ///  Arguments
@@ -777,13 +899,13 @@ pub async fn deploy_search_streamer(
     meta: &ClusterMeta,
     host_aliases: &Vec<K8sHostAliases>,
 ) -> Result<(), Error> {
-    // deploy any event handler from template
+    // deploy any search streamer from template
     if let Some(deployment) = search_streamer_template(meta, host_aliases).await {
         let deployment: Deployment = serde_json::from_value(deployment)?;
         create_or_update(deployment, meta).await?;
     // component not present in cluster spec during upgrades, cleanup
     } else {
-        delete_one("event-handler", meta).await?;
+        delete_one(SEARCH_STREAMER_CLEANUP, meta).await?;
     }
     Ok(())
 }
@@ -894,45 +1016,21 @@ pub async fn timeout_wait_for_pods(
     Ok(())
 }
 
-/// Restart a Thorium component pod by deployment name
+/// Build the patch `create_or_update` applies to a deployment that already exists
 ///
-///  Arguments
+/// The patch only depends on the deployment spec, so reconciling an unchanged spec (including
+/// the daily no-change requeue) is idempotent and does not roll any pods. Pods are only rolled
+/// when the spec changes, which includes the config hash stamped onto the pod template by
+/// `create_or_update`.
 ///
-/// * `name` - Deployment name to restart
-/// * `meta` - Thorium cluster client and metadata
-pub async fn restart(name: &str, meta: &ClusterMeta) -> Result<(), Error> {
-    println!(
-        "Restarting {} deployment in namespace {}",
-        name, &meta.namespace
-    );
-    let params = PatchParams::default();
-    // build an annotation with timestamp
-    let patch = serde_json::json!({
-        "spec": {
-            "template": {
-                "metadata": {
-                    "annotations": {
-                        "kubectl.kubernetes.io/restartedAt": chrono::Utc::now().to_rfc3339(),
-                    }
-                }
-            }
-        }
-    });
-    // attempt to patch deployment with timestamp annotation
-    match meta
-        .deploy_api
-        .patch(name, &params, &Patch::Merge(&patch))
-        .await
-    {
-        Ok(_) => println!(
-            "Restarted {} deployment in {} namespace",
-            name, &meta.namespace
-        ),
-        Err(error) => {
-            eprintln!("Failed to restart {} deployment: {}", name, error);
-        }
-    }
-    Ok(())
+/// # Arguments
+///
+/// * `deployment` - The deployment spec to apply
+fn existing_update_patch(deployment: &Deployment) -> Value {
+    // patch in our spec
+    serde_json::json!({
+        "spec": deployment.spec
+    })
 }
 
 /// Delete thorium component deployments
@@ -970,4 +1068,125 @@ pub async fn delete(meta: &ClusterMeta) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Build a Thorium cluster spec with the scaler, baremetal scaler, and search streamer
+    fn cluster() -> crds::ThoriumCluster {
+        // every component spec field has a serde default
+        let spec = crds::ThoriumClusterSpec {
+            components: crds::ThoriumComponents {
+                api: serde_json::from_value(json!({})).unwrap(),
+                scaler: Some(serde_json::from_value(json!({})).unwrap()),
+                baremetal_scaler: Some(serde_json::from_value(json!({})).unwrap()),
+                search_streamer: Some(serde_json::from_value(json!({})).unwrap()),
+                event_handler: None,
+            },
+            registry: "registry.example".to_owned(),
+            version: "1.0.0".to_owned(),
+            registry_auth: None,
+            image_pull_policy: "Always".to_owned(),
+            config: thorium::Conf::new("../api/tests/thorium-testing.yml").unwrap(),
+        };
+        let mut cluster = crds::ThoriumCluster::new("thorium", spec);
+        cluster.metadata.namespace = Some("thorium".to_owned());
+        cluster
+    }
+
+    /// When the search streamer is removed from a ThoriumCluster spec, `deploy_search_streamer`
+    /// deletes the same deployment its template creates, so the search streamer is cleaned up and
+    /// the event handler is left untouched.
+    #[test]
+    fn search_streamer_cleanup_targets_its_own_deployment() {
+        let template = search_streamer_template_value(&cluster(), &Vec::default()).unwrap();
+        assert_eq!(
+            template["metadata"]["name"], SEARCH_STREAMER_CLEANUP,
+            "removing the search streamer must delete the search streamer deployment"
+        );
+    }
+
+    /// Get the resources of the first container in a deployment template
+    ///
+    /// # Arguments
+    ///
+    /// * `template` - The deployment template
+    fn container_resources(template: Value) -> k8s_openapi::api::core::v1::ResourceRequirements {
+        let deployment: Deployment = serde_json::from_value(template).unwrap();
+        let mut containers = deployment.spec.unwrap().template.spec.unwrap().containers;
+        containers.remove(0).resources.unwrap_or_default()
+    }
+
+    /// The parsed k8s scaler deployment template gives the scaler container CPU and memory
+    /// requests and limits, so they survive parsing and the scaler pod is not left unbounded.
+    #[test]
+    fn scaler_deployment_has_resource_limits() {
+        let template = scaler_template_value(&cluster(), &Vec::default()).unwrap();
+        let resources = container_resources(template);
+        for (kind, values) in [
+            ("limits", resources.limits),
+            ("requests", resources.requests),
+        ] {
+            let values = values.unwrap_or_default();
+            assert!(
+                values.contains_key("cpu") && values.contains_key("memory"),
+                "the scaler container must have cpu and memory {kind}, got {values:?}"
+            );
+        }
+    }
+
+    /// The baremetal scaler template sets its container resources.
+    #[test]
+    fn baremetal_scaler_deployment_has_resource_limits() {
+        let template = baremetal_scaler_template_value(&cluster(), &Vec::default()).unwrap();
+        let resources = container_resources(template);
+        assert!(resources.limits.unwrap_or_default().contains_key("cpu"));
+        assert!(
+            resources
+                .requests
+                .unwrap_or_default()
+                .contains_key("memory")
+        );
+    }
+
+    /// Build the patch `create_or_update` applies to a cluster's existing scaler deployment
+    ///
+    /// # Arguments
+    ///
+    /// * `cluster` - The Thorium cluster spec to reconcile
+    fn scaler_update_patch(cluster: &crds::ThoriumCluster) -> Value {
+        let template = scaler_template_value(cluster, &Vec::default()).unwrap();
+        let mut deployment: Deployment = serde_json::from_value(template).unwrap();
+        // stamp the config hash onto the pod template like create_or_update does
+        stamp_config_hash(&mut deployment, config_hash(cluster).unwrap());
+        existing_update_patch(&deployment)
+    }
+
+    /// Reconciling an unchanged spec and config is idempotent: two reconciles produce identical
+    /// patches, so the daily no-change requeue does not roll every Thorium component. Each
+    /// reconcile loads its own copy of the config, whose sets serialize in a random order, so
+    /// this also checks that the config hash doesn't depend on that order.
+    #[test]
+    fn reconciling_unchanged_spec_is_idempotent() {
+        let first = scaler_update_patch(&cluster());
+        let second = scaler_update_patch(&cluster());
+        assert_eq!(
+            first, second,
+            "reconciling an unchanged deployment must not roll its pods"
+        );
+    }
+
+    /// A changed Thorium config produces a different patch, so pods are rolled to pick up the
+    /// config they mount.
+    #[test]
+    fn changed_config_produces_new_patch() {
+        let unchanged = scaler_update_patch(&cluster());
+        // change a value in the Thorium config
+        let mut changed = cluster();
+        changed.spec.config.thorium.namespace = "changed".to_owned();
+        assert_ne!(unchanged, scaler_update_patch(&changed));
+    }
 }

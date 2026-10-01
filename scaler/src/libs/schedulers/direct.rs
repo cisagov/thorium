@@ -29,6 +29,41 @@ pub struct Direct {
 }
 
 impl Direct {
+    /// Get the workers `Direct::delete` patches to Shutdown this pass
+    ///
+    /// This is the worker list `Direct::delete` iterates extracted so it can be unit tested.
+    /// Workers whose Shutdown patch failed on an earlier pass are drained from `self.retry` and
+    /// patched again along with this pass's new scale downs.
+    ///
+    /// # Arguments
+    ///
+    /// * `scaledowns` - The new workers to scale down this pass
+    fn shutdown_targets(&mut self, scaledowns: Vec<Spawned>) -> Vec<Spawned> {
+        // start with any workers whose Shutdown patch failed on an earlier pass
+        let mut targets = std::mem::take(&mut self.retry);
+        // add our new scale downs
+        targets.extend(scaledowns);
+        targets
+    }
+
+    /// Track the result of patching a worker to Shutdown in `Direct::delete`
+    ///
+    /// # Arguments
+    ///
+    /// * `worker` - The worker we tried to patch to Shutdown
+    /// * `result` - The result of the Shutdown patch
+    fn record_shutdown_result(&mut self, worker: Spawned, result: Result<(), Error>) {
+        match result {
+            Ok(()) => self.scaled_down.push(worker),
+            Err(error) => {
+                // log that an error occured
+                event!(Level::ERROR, error = true, error_msg = error.to_string());
+                // add this delete to be retried later
+                self.retry.push(worker);
+            }
+        }
+    }
+
     /// Create a new windows direct scheduler
     ///
     /// # Arguments
@@ -115,27 +150,13 @@ impl Direct {
             Ok(mut cursor) => {
                 // crawl this cursor until it has been exhausted
                 loop {
-                    // crawl over all nodes on this page
-                    for node in cursor.data.drain(..) {
-                        // cast our list of workers into a hashset
-                        let alive = node
-                            .workers
-                            .into_iter()
-                            .map(|(name, _)| name)
-                            .collect::<HashSet<String>>();
-                        // determine which workers have died
-                        for worker in self.scaled_down.drain(..) {
-                            // if this worker is still listed then its not dead yet
-                            if alive.contains(&worker.name) {
-                                temp.push(worker);
-                            } else {
-                                // this worker has been deleted
-                                deleted.push(WorkerDeletion::Deleted(worker));
-                            }
-                        }
-                        // swap our temp list and our main list
-                        std::mem::swap(&mut self.scaled_down, &mut temp);
-                    }
+                    // classify the pending scale downs against the nodes on this page
+                    Self::classify_page_deletes(
+                        cursor.data.drain(..).collect(),
+                        &mut self.scaled_down,
+                        &mut temp,
+                        &mut deleted,
+                    );
                     // check if this cursor is exhausted
                     if cursor.exhausted() || self.scaled_down.is_empty() {
                         // this cursor is exhausted so break out of our loop
@@ -157,6 +178,48 @@ impl Direct {
             }
         }
         deleted
+    }
+
+    /// Classify a page of nodes worth of pending scale downs into survivors and deletions
+    ///
+    /// This is the per-node classification loop in [`Direct::check_deletes`] (it never needs
+    /// `self`) extracted so its logic can be unit tested without a live Thorium client. Each
+    /// pending scale down is only checked against its own node, so workers on other nodes stay
+    /// pending until their own node is checked.
+    ///
+    /// # Arguments
+    ///
+    /// * `nodes` - The nodes on this page of the cursor
+    /// * `scaled_down` - The pending scale downs to classify, drained and refilled with survivors
+    /// * `temp` - Scratch space for survivors, swapped with `scaled_down` per node
+    /// * `deleted` - The list of workers reported deleted, appended to in place
+    fn classify_page_deletes(
+        nodes: Vec<Node>,
+        scaled_down: &mut Vec<Spawned>,
+        temp: &mut Vec<Spawned>,
+        deleted: &mut Vec<WorkerDeletion>,
+    ) {
+        // crawl over all nodes on this page
+        for node in nodes {
+            // cast our list of workers into a hashset
+            let alive = node
+                .workers
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<HashSet<String>>();
+            // determine which workers on this node have died
+            for worker in scaled_down.drain(..) {
+                // workers on other nodes or still listed on this node are not dead yet
+                if worker.node != node.name || alive.contains(&worker.name) {
+                    temp.push(worker);
+                } else {
+                    // this worker has been deleted
+                    deleted.push(WorkerDeletion::Deleted(worker));
+                }
+            }
+            // swap our temp list and our main list
+            std::mem::swap(scaled_down, temp);
+        }
     }
 }
 
@@ -203,6 +266,11 @@ impl Scheduler for Direct {
             Tasks::Cleanup => 25,
             Tasks::DecreaseFairShare => 600,
         }
+    }
+
+    /// Whether we have scale downs to check on or Shutdown patches to retry
+    fn has_pending_deletes(&self) -> bool {
+        !self.scaled_down.is_empty() || !self.retry.is_empty()
     }
 
     /// Schedulers need to be able to determine how many resources they have
@@ -313,18 +381,16 @@ impl Scheduler for Direct {
         let deleted = self.check_deletes(thorium).await;
         // build the update to apply to all of these workers
         let update = WorkerUpdate::new(WorkerStatus::Shutdown);
-        // crawl over our scale downs and patch their status to be shutdown
-        for worker in scaledowns {
+        // crawl over our scale downs and any retries and patch their status to be shutdown
+        for worker in self.shutdown_targets(scaledowns) {
             // try to patch this workers status
-            match thorium.system.update_worker(&worker.name, &update).await {
-                Ok(_) => self.scaled_down.push(worker),
-                Err(error) => {
-                    // log that an error occured
-                    event!(Level::ERROR, error = true, error_msg = error.to_string());
-                    // add this delete to be retried later
-                    self.retry.push(worker);
-                }
-            }
+            let result = thorium
+                .system
+                .update_worker(&worker.name, &update)
+                .await
+                .map(|_| ());
+            // track whether this worker was scaled down or needs to be retried
+            self.record_shutdown_result(worker, result);
         }
         deleted
     }
@@ -373,5 +439,179 @@ impl Scheduler for Direct {
             cursor.refill().await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use thorium::models::{NodeHealth, Pools, Requisition, Resources, Worker, WorkerStatus};
+
+    /// Build a minimal worker record living on the given node
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The unique name of the worker
+    /// * `node` - The node the worker is running on
+    fn worker(name: &str, node: &str) -> Worker {
+        // build a worker whose only fields that matter to classification are its name and node
+        Worker {
+            cluster: "cluster".to_owned(),
+            node: node.to_owned(),
+            scaler: ImageScaler::BareMetal,
+            name: name.to_owned(),
+            user: "user".to_owned(),
+            group: "group".to_owned(),
+            pipeline: "pipeline".to_owned(),
+            stage: "stage".to_owned(),
+            status: WorkerStatus::Running,
+            spawned: Utc::now(),
+            heart_beat: None,
+            resources: Resources::default(),
+            pool: Pools::Deadline,
+            active: None,
+        }
+    }
+
+    /// Build a node hosting the given workers
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the node
+    /// * `workers` - The workers currently alive on this node
+    fn node(name: &str, workers: Vec<Worker>) -> Node {
+        // index the workers by name the way the node details endpoint returns them
+        let workers = workers
+            .into_iter()
+            .map(|worker| (worker.name.clone(), worker))
+            .collect();
+        // build a healthy node carrying those workers
+        Node {
+            cluster: "cluster".to_owned(),
+            name: name.to_owned(),
+            health: NodeHealth::Healthy,
+            resources: Resources::default(),
+            workers,
+            heart_beat: None,
+        }
+    }
+
+    /// Build a pending scale down for a worker still running on the given node
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the worker being scaled down
+    /// * `node` - The node the worker is running on
+    fn scaled_down(name: &str, node: &str) -> Spawned {
+        // build a spawned record for the worker with only the fields classification reads set
+        Spawned {
+            req: Requisition::new("user", "group", "pipeline", "stage"),
+            cluster: "cluster".to_owned(),
+            node: node.to_owned(),
+            name: name.to_owned(),
+            resources: Resources::default(),
+            pool: Pools::Deadline,
+            spawn: false,
+            scaled_down: true,
+            down_scalable: Utc::now(),
+        }
+    }
+
+    /// A worker still alive on its OWN node is NOT reported deleted, regardless of which other
+    /// nodes appear in the page: with W1 alive on node1 and W2 alive on node2, both stay pending
+    /// after both nodes are processed. This keeps pending deletes spread across several nodes
+    /// from being reported Deleted, and their resources freed, while the reactor still runs them.
+    #[test]
+    fn workers_alive_on_their_own_node_are_not_deleted() {
+        // two workers are pending scale down, one on each of two different nodes
+        let mut pending = vec![scaled_down("W1", "node1"), scaled_down("W2", "node2")];
+        // both workers are still alive on their respective nodes in this page of node details
+        let nodes = vec![
+            node("node1", vec![worker("W1", "node1")]),
+            node("node2", vec![worker("W2", "node2")]),
+        ];
+        // scratch space and the resulting deletions
+        let mut temp = Vec::new();
+        let mut deleted = Vec::new();
+        // classify this page of nodes worth of pending scale downs
+        Direct::classify_page_deletes(nodes, &mut pending, &mut temp, &mut deleted);
+        // neither worker actually died, so nothing should be reported deleted
+        assert!(
+            deleted.is_empty(),
+            "workers still alive on their own node must not be reported deleted"
+        );
+        // and both should remain pending until their reactors actually stop them
+        assert_eq!(
+            pending.len(),
+            2,
+            "both still-alive workers must remain pending scale downs"
+        );
+    }
+
+    /// A worker that is genuinely gone from its node is reported deleted and is no longer
+    /// pending.
+    #[test]
+    fn workers_absent_from_their_node_are_deleted() {
+        // one worker is pending scale down on node1
+        let mut pending = vec![scaled_down("W1", "node1")];
+        // node1 reports no workers alive, so W1 has genuinely been shut down
+        let nodes = vec![node("node1", vec![])];
+        // scratch space and the resulting deletions
+        let mut temp = Vec::new();
+        let mut deleted = Vec::new();
+        // classify this page of nodes worth of pending scale downs
+        Direct::classify_page_deletes(nodes, &mut pending, &mut temp, &mut deleted);
+        // W1 is gone from its node so it must be reported deleted
+        assert_eq!(
+            deleted.len(),
+            1,
+            "a worker absent from its own node must be reported deleted"
+        );
+        // and it must no longer be pending
+        assert!(
+            pending.is_empty(),
+            "a deleted worker must not remain pending"
+        );
+    }
+
+    /// Build an empty direct scheduler with no pending scale downs or retries
+    fn direct() -> Direct {
+        Direct {
+            cluster: "cluster".to_owned(),
+            scaler: ImageScaler::BareMetal,
+            scaled_down: Vec::default(),
+            retry: Vec::default(),
+        }
+    }
+
+    /// A worker whose Shutdown patch failed is among the next pass's shutdown targets, so the
+    /// scale down is retried rather than lost, which would leave the worker (whose allocator
+    /// state already says it was scaled down) permanently un-preemptible.
+    #[test]
+    fn failed_shutdown_is_retried_next_pass() {
+        let mut direct = direct();
+        // the Shutdown patch for this worker failed
+        direct.record_shutdown_result(scaled_down("w1", "node-a"), Err(Error::new("timeout")));
+        // the next delete pass has no new scale downs
+        let targets = direct.shutdown_targets(Vec::default());
+        // the failed worker must be patched again
+        assert!(
+            targets.iter().any(|worker| worker.name == "w1"),
+            "a worker whose Shutdown patch failed must be retried on the next pass"
+        );
+    }
+
+    /// A worker whose Shutdown patch succeeded is tracked as scaled down and is not patched
+    /// again.
+    #[test]
+    fn successful_shutdown_is_not_retried() {
+        let mut direct = direct();
+        // the Shutdown patch for this worker succeeded
+        direct.record_shutdown_result(scaled_down("w1", "node-a"), Ok(()));
+        // it is waiting to be deleted
+        assert_eq!(direct.scaled_down.len(), 1);
+        // and it is not patched again
+        assert!(direct.shutdown_targets(Vec::default()).is_empty());
     }
 }

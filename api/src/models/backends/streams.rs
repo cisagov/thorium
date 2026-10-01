@@ -316,6 +316,23 @@ impl Stream {
         Ok(remapped)
     }
 
+    /// Check if the accumulated depth of a day-window exceeds the minimum bound
+    ///
+    /// The depths in the current day-window are folded onto the accumulator and the folded total
+    /// is compared against the minimum bound.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The running depth accumulator carried into this window
+    /// * `new` - The stream depths mapped for the current day-window
+    /// * `min` - The minimum number of jobs needed to short circuit the day-scan
+    fn accumulated_depth_exceeds(count: i64, new: &[StreamDepth], min: u64) -> bool {
+        // count latest by folding the current windows depths onto the accumulator
+        let count = new.iter().fold(count, |count, submap| count + submap.depth);
+        // short circuit if we have accumulated more than our minimum bound
+        count > min as i64
+    }
+
     /// Maps a stream into pages using mapper
     ///
     /// This will map from the date 2020-07-01 to 9999-07-01. So if Thorium
@@ -411,12 +428,43 @@ impl Stream {
             }
 
             // count latest and short circuit if we hit our minimum bound
-            new.iter().fold(count, |count, submap| count + submap.depth);
-            if count > min as i64 {
+            if Self::accumulated_depth_exceeds(count, &new, min) {
                 maps.append(&mut new);
                 break;
             }
         }
         Ok(maps)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Stream, StreamDepth};
+
+    /// `Stream::map` folds each day-window's depths onto its accumulator, so a day-window whose
+    /// depths sum past `min` reports that the bound was exceeded and the "stop once we have
+    /// accumulated `min` jobs" early exit fires.
+    #[test]
+    fn accumulated_depth_triggers_min_early_exit() {
+        // a day-window whose mapped depths sum to 150 jobs
+        let new = vec![StreamDepth::new(100, 0, 1), StreamDepth::new(50, 1, 2)];
+        // starting from a zero accumulator, 150 jobs must exceed a minimum bound of 100
+        assert!(
+            Stream::accumulated_depth_exceeds(0, &new, 100),
+            "accumulating 150 jobs must exceed a min bound of 100 and trigger the early exit"
+        );
+    }
+
+    /// A day-window whose depths do NOT sum past `min` reports the bound was not exceeded, so the
+    /// day-scan keeps mapping. This pins the negative case.
+    #[test]
+    fn accumulated_depth_below_min_does_not_exit() {
+        // a day-window whose mapped depths sum to only 40 jobs
+        let new = vec![StreamDepth::new(40, 0, 1)];
+        // 40 jobs is below a minimum bound of 100 so the early exit must not fire
+        assert!(
+            !Stream::accumulated_depth_exceeds(0, &new, 100),
+            "accumulating 40 jobs must not exceed a min bound of 100"
+        );
     }
 }

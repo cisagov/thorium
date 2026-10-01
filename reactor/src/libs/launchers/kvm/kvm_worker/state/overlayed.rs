@@ -143,14 +143,16 @@ fn detect_mem_units(xml: &str, memory: u64) -> Option<u64> {
     let unit_start = unit_index + unit_needle.len() + 1;
     // get the end of the units by finding the closing quote character
     let unit_end = unit_start + xml[unit_start..].find(quote_char)?;
+    // round up when converting to coarser units so we never under-allocate or zero the
+    // requested memory
     match xml[unit_start..unit_end].to_lowercase().as_str() {
         "b" => Some(memory * BYTES_IN_MIB),
-        "kb" => Some(memory * BYTES_IN_MIB / 1000),
+        "kb" => Some((memory * BYTES_IN_MIB).div_ceil(1000)),
         "k" | "kib" => Some(memory * 1024),
         "m" | "mib" => Some(memory),
-        "mb" => Some(memory * BYTES_IN_MIB / 1_000_000),
-        "gb" => Some(memory * BYTES_IN_MIB / 1_000_000_000),
-        "g" | "gib" => Some(memory / 1024),
+        "mb" => Some((memory * BYTES_IN_MIB).div_ceil(1_000_000)),
+        "gb" => Some((memory * BYTES_IN_MIB).div_ceil(1_000_000_000)),
+        "g" | "gib" => Some(memory.div_ceil(1024)),
         // unsupported units
         _ => None,
     }
@@ -242,15 +244,18 @@ mod tests {
         let mem_b = detect_mem_units("<memory unit='b'>{MEMORY}</memory>", memory);
         assert_eq!(mem_b, Some(memory * BYTES_IN_MIB));
         let mem_kb = detect_mem_units("<memory unit='KB'>{MEMORY}</memory>", memory);
-        assert_eq!(mem_kb, Some(memory * BYTES_IN_MIB / 1000));
+        assert_eq!(mem_kb, Some((memory * BYTES_IN_MIB).div_ceil(1000)));
         let mem_kib = detect_mem_units("<memory unit='KiB'>{MEMORY}</memory>", memory);
         assert_eq!(mem_kib, Some(memory * 1024));
         let mem_mb = detect_mem_units("<memory unit='mb'>{MEMORY}</memory>", memory);
-        assert_eq!(mem_mb, Some(memory * BYTES_IN_MIB / 1_000_000));
+        assert_eq!(mem_mb, Some((memory * BYTES_IN_MIB).div_ceil(1_000_000)));
         let mem_mib = detect_mem_units("<memory unit='m'>{MEMORY}</memory>", memory);
         assert_eq!(mem_mib, Some(memory));
         let mem_gb = detect_mem_units("<memory unit='gb'>{MEMORY}</memory>", memory);
-        assert_eq!(mem_gb, Some(memory * BYTES_IN_MIB / 1_000_000_000));
+        assert_eq!(
+            mem_gb,
+            Some((memory * BYTES_IN_MIB).div_ceil(1_000_000_000))
+        );
         let mem_gib = detect_mem_units("<memory unit='gib'>{MEMORY}</memory>", memory);
         assert_eq!(mem_gib, Some(memory / 1024));
         let mem_bad = detect_mem_units("<memory unit='BAD'>{MEMORY}</memory>", memory);
@@ -264,6 +269,21 @@ mod tests {
         // check with double quotes
         let mem_mb = detect_mem_units(r#"<memory unit="mib">{MEMORY}</memory>"#, memory);
         assert_eq!(mem_mb, Some(memory));
+    }
+
+    /// Converting a MiB memory request into a coarser unit (GiB/GB) uses ceiling division, so
+    /// the requested memory is always honored (rounded up), never zeroed. A legal 512 MiB
+    /// request (define() only validates `memory >= 512`) against a `unit='GiB'` golden XML
+    /// becomes 1 rather than 0, which libvirt would reject, and larger requests are never
+    /// under-allocated.
+    #[test]
+    fn sub_gib_request_rounds_up_not_to_zero() {
+        // the documented minimum request of 512 MiB against a GiB-unit template
+        let memory = 512;
+        // detect the GiB unit and convert the request into it
+        let mem_gib = detect_mem_units("<memory unit='gib'>{MEMORY}</memory>", memory);
+        // a 512 MiB request must round UP to 1 GiB, never floor to an unusable 0
+        assert_eq!(mem_gib, Some(1));
     }
 
     #[test]

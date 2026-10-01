@@ -163,6 +163,35 @@ async fn from_service_account(
     Ok(())
 }
 
+/// Get the namespaces whose pending pod deletes `K8s::delete` validates
+///
+/// This is the validation condition in `K8s::delete` extracted so it can be unit tested. Every
+/// namespace with new scale downs in this call is validated, and so is every namespace that still
+/// has pending deletes from earlier calls, even if it has no new scale downs, so those workers are
+/// eventually reported deleted.
+///
+/// # Arguments
+///
+/// * `downscales` - The new scale downs in this call by namespace
+/// * `pending` - The pending deletes by namespace from earlier calls
+fn namespaces_to_validate(
+    downscales: &HashMap<String, Vec<Spawned>>,
+    pending: &HashMap<String, HashMap<String, Spawned>>,
+) -> HashSet<String> {
+    // get the namespaces with new scale downs
+    let scaled_down = downscales
+        .iter()
+        .filter(|(_, spawns)| !spawns.is_empty())
+        .map(|(namespace, _)| namespace);
+    // get the namespaces that still have pending deletes from earlier calls
+    let still_pending = pending
+        .iter()
+        .filter(|(_, deletes)| !deletes.is_empty())
+        .map(|(namespace, _)| namespace);
+    // validate both sets of namespaces
+    scaled_down.chain(still_pending).cloned().collect()
+}
+
 /// A Kubernetes scheduler for Thorium
 pub struct K8s {
     /// The name or alias if it exists of this cluster
@@ -862,6 +891,15 @@ impl Scheduler for K8s {
         }
     }
 
+    /// Whether any namespace still has pod deletes from earlier loops that need to be validated
+    fn has_pending_deletes(&self) -> bool {
+        // check if any namespace still has a pending delete
+        self.pods
+            .pending_deletes
+            .values()
+            .any(|deletes| !deletes.is_empty())
+    }
+
     /// Get the resources available in Kubernetes
     ///
     /// # Arguments
@@ -1028,21 +1066,22 @@ impl Scheduler for K8s {
             // add this pod to this namespaces list of scale downs
             entry.push(spawned);
         }
-        // scale down the requested pods by namespace
-        for (namespace, spawns) in downscales {
+        // get the namespaces with new scale downs or pending deletes to validate
+        let to_validate = namespaces_to_validate(&downscales, &self.pods.pending_deletes);
+        // scale down the requested pods and validate any pending deletes by namespace
+        for namespace in to_validate {
+            // get any new scale downs for this namespace
+            let spawns = downscales.remove(&namespace).unwrap_or_default();
             // Ask k8s to start deleting the requested pods if we have any
             if !spawns.is_empty() {
                 self.pods
                     .delete_many(&namespace, &spawns, &mut results)
                     .await;
             }
-            // if we have any pending deletes then validate they were deleted
-            if !spawns.is_empty() || !self.pods.pending_deletes.is_empty() {
-                // Validate what pods were deleted
-                self.pods
-                    .validate_deletes(&namespace, spawns, &mut results)
-                    .await;
-            }
+            // Validate what pods were deleted
+            self.pods
+                .validate_deletes(&namespace, spawns, &mut results)
+                .await;
         }
         // build the map of workers we want to delete
         let mut deletes = WorkerDeleteMap::with_capacity(results.len());
@@ -1101,5 +1140,64 @@ impl std::fmt::Debug for K8s {
         f.debug_struct("K8s")
             .field("Name", &self.name)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a scaled down worker in the given namespace (group)
+    ///
+    /// # Arguments
+    ///
+    /// * `namespace` - The namespace (group) this worker's pod is in
+    /// * `name` - The unique name of the worker
+    fn scaled_down(namespace: &str, name: &str) -> Spawned {
+        Spawned {
+            req: thorium::models::Requisition::new("user", namespace, "pipeline", "stage"),
+            cluster: "cluster".to_owned(),
+            node: "node".to_owned(),
+            name: name.to_owned(),
+            resources: thorium::models::Resources::default(),
+            pool: thorium::models::Pools::Deadline,
+            spawn: false,
+            scaled_down: true,
+            down_scalable: chrono::Utc::now(),
+        }
+    }
+
+    /// Every namespace with pending deletes is validated, including a quiet namespace whose pods
+    /// were deleted in an earlier loop and that has no new scale downs in this call, so its
+    /// workers are eventually reported deleted and their resources freed.
+    #[test]
+    fn quiet_namespace_pending_deletes_are_revalidated() {
+        // namespace A has a new scale down in this call
+        let mut downscales = HashMap::default();
+        downscales.insert("a".to_owned(), vec![scaled_down("a", "w1")]);
+        // namespace B only has a pending delete from an earlier call
+        let mut pending: HashMap<String, HashMap<String, Spawned>> = HashMap::default();
+        pending
+            .entry("b".to_owned())
+            .or_default()
+            .insert("w2".to_owned(), scaled_down("b", "w2"));
+        // get the namespaces we will validate
+        let to_validate = namespaces_to_validate(&downscales, &pending);
+        // namespace B's pending delete must still be validated
+        assert!(
+            to_validate.contains("b"),
+            "a namespace with only pending deletes must still be validated, got {to_validate:?}"
+        );
+    }
+
+    /// A namespace with new scale downs is validated.
+    #[test]
+    fn namespace_with_new_scale_downs_is_validated() {
+        // namespace A has a new scale down in this call
+        let mut downscales = HashMap::default();
+        downscales.insert("a".to_owned(), vec![scaled_down("a", "w1")]);
+        // get the namespaces we will validate
+        let to_validate = namespaces_to_validate(&downscales, &HashMap::default());
+        assert!(to_validate.contains("a"));
     }
 }
