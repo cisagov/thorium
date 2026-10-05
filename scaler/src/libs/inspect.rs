@@ -1,8 +1,8 @@
 use chrono::prelude::*;
 use serde::{Deserialize, Deserializer};
-use std::process::Command;
 use thorium::conf::Crane;
 use thorium::Error;
+use tokio::process::Command;
 use tracing::{event, Level, Span};
 
 fn def_working_dir() -> String {
@@ -68,9 +68,10 @@ impl DockerInfo {
     ///
     /// # Arguments
     ///
+    /// * `crane` - The crane settings to use
     /// * `image` - The url/path on the registry to inspect
     /// * `span` - The span to log traces under
-    pub fn inspect(crane: &Crane, image: &str, span: &Span) -> Result<Self, Error> {
+    pub async fn inspect(crane: &Crane, image: &str, span: &Span) -> Result<Self, Error> {
         // build the args for getting this images config
         let args = if crane.insecure {
             vec!["--insecure", "config", &image]
@@ -78,7 +79,7 @@ impl DockerInfo {
             vec!["config", &image]
         };
         // Inspect docker image using Skopeo
-        let output = Command::new(&crane.path).args(args).output()?;
+        let output = Command::new(&crane.path).args(args).output().await?;
         event!(parent: span, Level::INFO, image = image);
         // cast both stdout and stderr to strings
         let raw = String::from_utf8_lossy(&output.stdout);

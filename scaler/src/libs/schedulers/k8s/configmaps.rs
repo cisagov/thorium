@@ -1,6 +1,6 @@
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::api::{Api, ListParams, ObjectList, PostParams};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use thorium::models::ScrubbedUser;
 use thorium::Error;
 use tracing::{event, instrument, Level};
@@ -122,14 +122,14 @@ impl ConfigMaps {
 
     /// Setup a users passwd config map in Thorium
     ///
+    /// Returns false if this users passwd failed to be setup and they should be banned.
+    ///
     /// # Arguments
     ///
     /// * `ns` - The namespace to save the secret to
     /// * `user` - The user to create a secret for
-    /// * `bans` - The set of banned users to add too
-    /// * `span` - The span to log traces under
-    #[instrument(name = "k8s::ConfigMaps::setup_passwd", skip(self, user, bans), fields(user = user.username))]
-    pub async fn setup_passwd(&self, ns: &str, user: &ScrubbedUser, bans: &mut HashSet<String>) {
+    #[instrument(name = "k8s::ConfigMaps::setup_passwd", skip(self, user), fields(user = user.username))]
+    pub async fn setup_passwd(&self, ns: &str, user: &ScrubbedUser) -> bool {
         // generate the passwd data for this service accounts secret
         if let Some(unix) = &user.unix {
             let passwd = format!(
@@ -162,7 +162,10 @@ impl ConfigMaps {
             // update the secret for this user
             match self.create(ns, &name, "passwd", &passwd).await {
                 // log that we setup this users /etc/passwd
-                Ok(_) => event!(Level::INFO, msg = "Setup /etc/passwd",),
+                Ok(_) => {
+                    event!(Level::INFO, msg = "Setup /etc/passwd",);
+                    true
+                }
                 Err(err) => {
                     // log that we failed to setup this users /etc/passwd
                     event!(
@@ -170,10 +173,12 @@ impl ConfigMaps {
                         msg = "Failed to setup /etc/passwd",
                         error = err.msg()
                     );
-                    // ban this user
-                    bans.insert(user.username.to_owned());
+                    // this user should be banned
+                    false
                 }
             }
+        } else {
+            true
         }
     }
 }

@@ -1,8 +1,8 @@
 //! A cache of data in Thorium
 
 use chrono::prelude::*;
+use futures::{StreamExt, TryStreamExt, stream};
 use hashbrown::HashMap;
-use rayon::prelude::*;
 use std::collections::HashSet;
 use std::sync::Arc;
 use thorium::conf::{BaseNetworkPolicy, Conf};
@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{raw_entry_map_insert, raw_entry_vec_push};
 
-use super::{DockerInfo, tasks::TaskResult};
+use super::{DockerInfo, helpers::assert_send_stream, tasks::TaskResult};
 
 /// Hashmap of vectors of image info by group
 pub type ImageInfoCache = HashMap<String, HashMap<String, Image>>;
@@ -198,6 +198,45 @@ impl Cache {
         Ok(())
     }
 
+    /// List all of the images in a group that this scaler can spawn
+    ///
+    /// # Arguments
+    ///
+    /// * `thorium` - A client for Thorium
+    /// * `group` - The group to list images from
+    /// * `scaler` - The scaler's type
+    async fn list_group_images(
+        thorium: &Thorium,
+        group: &str,
+        scaler: ImageScaler,
+    ) -> Result<Vec<Image>, Error> {
+        // create a cursor object for images in this group
+        let mut cursor = thorium.images.list(group).details().exec().await?;
+        // track the images this scaler can spawn
+        let mut images = Vec::with_capacity(cursor.details.len());
+        // loop over our cursor until its exhausted
+        loop {
+            images.extend(
+                cursor
+                    .details
+                    .drain(..)
+                    // skip any images without docker urls set if this is a K8s scaler
+                    .filter(|image| image.image.is_some() || scaler != ImageScaler::K8s)
+                    // skip any images that have bans
+                    .filter(|image| image.bans.is_empty())
+                    // skip any images that don't match our scaler
+                    .filter(|image| image.scaler == scaler),
+            );
+            // if this cursor is exhaused that break
+            if cursor.exhausted {
+                break;
+            }
+            // otherwise get the next page of the cursor
+            cursor.next().await?;
+        }
+        Ok(images)
+    }
+
     /// Get Thorium image info on all the images in all groups we have users for
     async fn load_images(&mut self, scaler: ImageScaler, span: &Span) -> Result<(), Error> {
         // start our image info reload span
@@ -211,70 +250,73 @@ impl Cache {
                 }
             }
         }
-        // crawl over these groups and get all of their image info
-        for group in &self.groups {
-            // create a cursor object for images in this group
-            let mut cursor = self.thorium.images.list(group).details().exec().await?;
+        // get how many groups/images to list/inspect at once
+        let concurrency = self.conf.thorium.scaler.cache_concurrency;
+        // list the images in all of our groups
+        let thorium = &self.thorium;
+        let images_by_group = assert_send_stream(
+            stream::iter(&self.groups)
+                .map(|group| async move {
+                    let images = Self::list_group_images(thorium, group, scaler).await?;
+                    Ok::<_, Error>((group, images))
+                })
+                .buffer_unordered(concurrency),
+        )
+        .try_collect::<Vec<(&String, Vec<Image>)>>()
+        .await?;
+        // if we are scaling k8s then get docker info for each unique docker image
+        let mut docker_info = HashMap::new();
+        if scaler == ImageScaler::K8s {
+            // get the unique docker images across all groups
+            let urls = images_by_group
+                .iter()
+                .flat_map(|(_, images)| images.iter())
+                .filter_map(|image| image.image.clone())
+                .collect::<HashSet<String>>();
+            // inspect our docker images
+            let crane = &self.conf.thorium.scaler.crane;
+            let span = &span;
+            docker_info = assert_send_stream(
+                stream::iter(urls)
+                    .map(|url| async move {
+                        let docker = DockerInfo::inspect(crane, &url, span).await;
+                        (url, docker)
+                    })
+                    .buffer_unordered(concurrency),
+            )
+            .collect::<HashMap<String, Result<DockerInfo, Error>>>()
+            .await;
+        }
+        // crawl over our groups images and insert them
+        for (group, images) in images_by_group {
             // get an mutable reference to this groups entry into the image/docker map
             let image_map = self.images.entry(group.clone()).or_default();
             let docker_map = self.docker.entry(group.clone()).or_default();
-            // loop over our cursor until its exhausted
-            loop {
-                // insert all of our images into this groups image map
-                let images = cursor
-                    .details
-                    .par_drain(..)
-                    // skip any images without docker urls set if this is a K8s scaler
-                    .filter(|image| image.image.is_some() || scaler != ImageScaler::K8s)
-                    .filter_map(|image| {
-                        // skip any images that have bans
-                        if !image.bans.is_empty() {
-                            return None;
+            for image in images {
+                // if we are scaling k8s then get this images docker info
+                if scaler == ImageScaler::K8s {
+                    // get the docker info for this image
+                    let url = image.image.as_deref().unwrap();
+                    match docker_info.get(url) {
+                        // docker image info retrieved sucessfully
+                        Some(Ok(docker)) => {
+                            docker_map.insert(image.name.clone(), docker.clone());
                         }
-                        // skip any images that don't match our scaler
-                        if image.scaler == scaler {
-                            // if we are scaling k8s then get docker info
-                            if scaler == ImageScaler::K8s {
-                                match DockerInfo::inspect(
-                                    &self.conf.thorium.scaler.crane,
-                                    image.image.as_ref().unwrap(),
-                                    &span,
-                                ) {
-                                    // docker image info retrieved sucessfully
-                                    Ok(docker) => Some((Some(docker), image)),
-                                    Err(e) => {
-                                        event!(
-                                            parent: &span,
-                                            Level::WARN,
-                                            msg = "Failed to inspect image",
-                                            group = group,
-                                            image = image.name,
-                                            error = e.msg(),
-                                        );
-                                        None
-                                    }
-                                }
-                            } else {
-                                Some((None, image))
-                            }
-                        } else {
-                            None
+                        Some(Err(e)) => {
+                            event!(
+                                parent: &span,
+                                Level::WARN,
+                                msg = "Failed to inspect image",
+                                group = group,
+                                image = image.name,
+                                error = e.msg(),
+                            );
+                            continue;
                         }
-                    })
-                    .collect::<Vec<(Option<DockerInfo>, Image)>>();
-                // crawl over our built images and insert them
-                for (docker, image) in images {
-                    if let Some(docker) = docker {
-                        docker_map.insert(image.name.clone(), docker);
+                        None => unreachable!("All k8s images should have been inspected"),
                     }
-                    image_map.insert(image.name.clone(), image);
                 }
-                // if this cursor is exhaused that break
-                if cursor.exhausted {
-                    break;
-                }
-                // otherwise get the next page of the cursor
-                cursor.next().await?;
+                image_map.insert(image.name.clone(), image);
             }
         }
         Ok(())

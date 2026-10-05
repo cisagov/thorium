@@ -659,6 +659,11 @@ fn default_fair_share_divisor() -> u64 {
     1
 }
 
+/// Helps serde default the number of concurrent k8s setup operations to 25
+fn default_k8s_setup_concurrency() -> usize {
+    25
+}
+
 /// Helps serde default the primary k8s cluster to deploy core components too
 fn default_primary_cluster() -> String {
     "kubernetes-admin@cluster.local".to_owned()
@@ -691,6 +696,9 @@ pub struct K8s {
     /// Clear any proxy settings that kube finds
     #[serde(default)]
     pub clear_proxy: bool,
+    /// How many namespaces or user secrets to setup at once when syncing to a new cache
+    #[serde(default = "default_k8s_setup_concurrency")]
+    pub setup_concurrency: usize,
 }
 
 impl Default for K8s {
@@ -705,6 +713,7 @@ impl Default for K8s {
             fair_share: FairShareWeights::default(),
             fair_share_divisor: default_fair_share_divisor(),
             clear_proxy: false,
+            setup_concurrency: default_k8s_setup_concurrency(),
         }
     }
 }
@@ -1131,6 +1140,11 @@ fn default_cache_lifetime() -> u64 {
     600
 }
 
+/// Helps serde default the number of concurrent cache load operations to 10
+fn default_cache_concurrency() -> usize {
+    10
+}
+
 /// Helps serde default the deadline window to 100,000
 fn default_deadline_window() -> u64 {
     100_000
@@ -1240,6 +1254,9 @@ pub struct Scaler {
     /// How long the cache should live for at most before being invalidated in seconds
     #[serde(default = "default_cache_lifetime")]
     pub cache_lifetime: u64,
+    /// How many groups to list or images to inspect at once when loading the cache
+    #[serde(default = "default_cache_concurrency")]
+    pub cache_concurrency: usize,
     /// The number of deadlines to pull for one scale loop
     #[serde(default = "default_deadline_window")]
     pub deadline_window: u64,
@@ -1284,6 +1301,7 @@ impl Default for Scaler {
     fn default() -> Self {
         Scaler {
             cache_lifetime: default_cache_lifetime(),
+            cache_concurrency: default_cache_concurrency(),
             deadline_window: default_deadline_window(),
             k8s: K8s::default(),
             windows: Windows::default(),
@@ -2732,7 +2750,7 @@ impl Conf {
 
 #[cfg(test)]
 mod tests {
-    use super::default_namespace_blacklist;
+    use super::{Scaler, default_namespace_blacklist};
 
     #[test]
     fn default_namespace_blacklist_covers_privileged_namespaces() {
@@ -2748,5 +2766,14 @@ mod tests {
                 "default namespace blacklist is missing the privileged namespace '{namespace}'"
             );
         }
+    }
+
+    #[test]
+    fn scaler_concurrency_defaults_when_omitted() {
+        // deserialize a scaler config that doesn't set any concurrency limits
+        let scaler: Scaler = serde_json::from_str("{}").expect("Failed to deserialize scaler");
+        // make sure our concurrency limits fall back to their defaults
+        assert_eq!(scaler.cache_concurrency, 10);
+        assert_eq!(scaler.k8s.setup_concurrency, 25);
     }
 }

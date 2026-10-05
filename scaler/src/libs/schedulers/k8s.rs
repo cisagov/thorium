@@ -14,7 +14,7 @@ use kube::config::{KubeConfigOptions, Kubeconfig};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 use thorium::conf::BurstableNodeResources;
-use thorium::models::{ImageScaler, ScrubbedUser, SystemSettings, UserRole, WorkerDeleteMap};
+use thorium::models::{ImageScaler, SystemSettings, UserRole, WorkerDeleteMap};
 use thorium::{Conf, Error, Thorium};
 use tracing::{Level, event, instrument};
 use uuid::Uuid;
@@ -112,6 +112,7 @@ async fn from_kubeconfig(
             secrets,
             network_policies,
             configs,
+            setup_concurrency: k8s_conf.setup_concurrency,
         };
         // add this k8s scheduler to our scheduler map
         schedulers.insert(name.to_owned(), Box::new(k8s));
@@ -157,6 +158,7 @@ async fn from_service_account(
         secrets,
         network_policies,
         configs,
+        setup_concurrency: k8s_conf.setup_concurrency,
     };
     // add this k8s scheduler to our scheduler map
     schedulers.insert(name.to_owned(), Box::new(k8s));
@@ -214,6 +216,8 @@ pub struct K8s {
     pub network_policies: NetworkPolicies,
     /// configs wrappers
     pub configs: ConfigMaps,
+    /// How many namespaces or user secrets to setup at once
+    pub setup_concurrency: usize,
 }
 
 impl K8s {
@@ -244,100 +248,96 @@ impl K8s {
         Ok(())
     }
 
-    /// Setup a normal users groups
-    ///
-    /// # Arguments
-    ///
-    /// * `user` - The user to setup groups for
-    /// * `namespaces` - The namespaces that currently exist in K8s
-    /// * `checked` - The set of namespces we have already initially setup
-    #[instrument(name = "K8s::setup_user", skip_all, fields(user = user.username, namespaces_count = namespaces.len()))]
-    pub async fn setup_user<'a>(
-        &mut self,
-        user: &'a ScrubbedUser,
-        namespaces: &[String],
-        checked: &mut HashSet<&'a String>,
-        bans: &mut BanSets,
-    ) {
-        // make sure all of this users groups have namespaces
-        for ns in &user.groups {
-            // skip any namespaces we have already checked
-            if !checked.contains(ns) {
-                // create this namespace if it doesn't exist yet
-                if !namespaces.contains(ns) {
-                    self.namespaces.create(ns, &mut bans.groups).await;
-                }
-                // setup this new namespace
-                self.secrets.setup_namespace(ns, &mut bans.groups).await;
-                // add this namespace to our list already created namespaces
-                checked.insert(ns);
-            }
-            // make sure this users secret is setup and correct
-            if let Err(err) = self.secrets.check_secret(ns, user).await {
-                // log that we failed to setup this users secret
-                event!(
-                    Level::ERROR,
-                    msg = "Failed to setup users secret",
-                    error = err.msg()
-                );
-                // add this user to our ban set
-                bans.users.insert(user.username.clone());
-            }
-            // if this user has unix info then create their passwd file
-            if user.unix.is_some() {
-                // make sure this users passwd is setup and correct
-                self.configs.setup_passwd(ns, user, &mut bans.users).await;
-            }
-        }
-    }
-
-    /// Setup an admins configs in all namespaces
+    /// Setup the namespaces and secrets for all users in Thorium
     ///
     /// # Arguments
     ///
     /// * `cache` - A cache of info from Thorium to use while setting things up
-    /// * `user` - The user to setup groups for
-    /// * `namespaces` - The namespaces that currently exist in K8s
-    /// * `checked` - The set of namespces we have already initially setup
-    #[instrument(name = "K8s::setup_admin", skip_all, fields(user = user.username, namespaces_count = namespaces.len()))]
-    pub async fn setup_admin<'a>(
-        &mut self,
-        cache: &'a Cache,
-        user: &ScrubbedUser,
-        namespaces: &[String],
-        checked: &mut HashSet<&'a String>,
-        bans: &mut BanSets,
-    ) {
-        // make sure all of this users groups have namespaces
-        for ns in &cache.groups {
-            // skip any namespaces we have already checked
-            if !checked.contains(ns) {
-                // create this namespace if it doesn't exist yet
-                if !namespaces.contains(ns) {
-                    self.namespaces.create(ns, &mut bans.groups).await;
-                }
-                // setup this new namespace
-                self.secrets.setup_namespace(ns, &mut bans.groups).await;
-                // add this namespace to our list already created namespaces
-                checked.insert(ns);
+    /// * `bans` - The users and groups to ban due to setup errors
+    #[instrument(name = "K8s::setup_users", skip_all, fields(users = cache.users.len()))]
+    async fn setup_users(&self, cache: &Cache, bans: &mut BanSets) -> Result<(), Error> {
+        // get a set of all namespaces that exist in k8s
+        let existing = self
+            .namespaces
+            .list()
+            .await?
+            .into_iter()
+            .filter_map(|ns| ns.metadata.name)
+            .collect::<HashSet<String>>();
+        // build a list of the namespaces each user needs to be setup in
+        let mut user_namespaces = Vec::with_capacity(cache.users.len());
+        for user in cache.users.values() {
+            // get the groups this user can run jobs in
+            let mut groups = user.groups.iter().collect::<HashSet<&String>>();
+            // admins can run jobs in all groups
+            if user.role == UserRole::Admin {
+                groups.extend(cache.groups.iter());
             }
-            // make sure this users secret is setup and correct
-            if let Err(err) = self.secrets.check_secret(ns, user).await {
-                // log that we failed to setup this users secret
-                event!(
-                    Level::ERROR,
-                    msg = "Failed to setup users secret",
-                    error = err.msg()
-                );
-                // add this user to our ban set
-                bans.users.insert(user.username.clone());
-            }
-            // if this user has unix info then create their passwd file
-            if user.unix.is_some() {
-                // make sure this users passwd is setup and correct
-                self.configs.setup_passwd(ns, user, &mut bans.users).await;
-            }
+            user_namespaces.extend(groups.into_iter().map(|ns| (user, ns)));
         }
+        // get the unique namespaces that need to be setup
+        let namespaces = user_namespaces
+            .iter()
+            .map(|(_, ns)| *ns)
+            .collect::<HashSet<&String>>();
+        // setup all of our namespaces before we setup any users in them
+        let existing = &existing;
+        let banned_groups = helpers::assert_send_stream(
+            stream::iter(namespaces)
+                .map(|ns| async move {
+                    // create this namespace if it doesn't exist yet
+                    let created = existing.contains(ns) || self.namespaces.create(ns).await;
+                    // setup this namespace or ban it if we failed to create/setup it
+                    if created && self.secrets.setup_namespace(ns).await {
+                        None
+                    } else {
+                        Some(ns.clone())
+                    }
+                })
+                // setup multiple namespaces at once
+                .buffer_unordered(self.setup_concurrency),
+        )
+        .filter_map(std::future::ready)
+        .collect::<Vec<String>>()
+        .await;
+        // ban any groups we failed to setup
+        bans.groups.extend(banned_groups);
+        // setup each user in all of their namespaces
+        let banned_users = helpers::assert_send_stream(
+            stream::iter(user_namespaces)
+                .map(|(user, ns)| async move {
+                    // make sure this users secret is setup and correct
+                    let mut success = match self.secrets.check_secret(ns, user).await {
+                        Ok(()) => true,
+                        Err(err) => {
+                            // log that we failed to setup this users secret
+                            event!(
+                                Level::ERROR,
+                                msg = "Failed to setup users secret",
+                                user = user.username,
+                                namespace = ns,
+                                error = err.msg()
+                            );
+                            false
+                        }
+                    };
+                    // if this user has unix info then create their passwd file
+                    if user.unix.is_some() {
+                        // make sure this users passwd is setup and correct
+                        success &= self.configs.setup_passwd(ns, user).await;
+                    }
+                    // ban this user if we failed to set them up
+                    (!success).then(|| user.username.clone())
+                })
+                // setup multiple users at once
+                .buffer_unordered(self.setup_concurrency),
+        )
+        .filter_map(std::future::ready)
+        .collect::<Vec<String>>()
+        .await;
+        // ban any users we failed to setup
+        bans.users.extend(banned_users);
+        Ok(())
     }
 
     /// Setup all network policies in K8's, making sure any existing policies match
@@ -928,28 +928,9 @@ impl Scheduler for K8s {
     /// * `bans` - The users and groups to ban due to setup errors
     #[instrument(name = "Scheduler<K8s>::setup", skip(self, cache, bans), err(Debug))]
     async fn setup(&mut self, name: &str, cache: &Cache, bans: &mut BanSets) -> Result<(), Error> {
-        // get a list of all namespaces that exist in k8s
-        let namespaces = self
-            .namespaces
-            .list()
-            .await?
-            .into_iter()
-            .filter_map(|ns| ns.metadata.name)
-            .collect::<Vec<String>>();
-        // track all namespaces we have created/checked in this setup
-        let mut checked = HashSet::with_capacity(10);
-        // crawl over all users and set them up in all namespaces/groups
+        // setup all users in all of their namespaces/groups
         // and track any groups or users we need to ban due to setup problems
-        for user in cache.users.values() {
-            // setup this users groups
-            self.setup_user(user, &namespaces, &mut checked, bans).await;
-            // check if this user is an admin
-            if user.role == UserRole::Admin {
-                // setup this user to run jobs in all possible groups
-                self.setup_admin(cache, user, &namespaces, &mut checked, bans)
-                    .await;
-            }
-        }
+        self.setup_users(cache, bans).await?;
         // setup network policies, making sure everything in K8's matches our cache
         self.setup_network_policies(cache).await?;
         Ok(())
@@ -973,28 +954,9 @@ impl Scheduler for K8s {
         cache: &Cache,
         bans: &mut BanSets,
     ) -> Result<(), Error> {
-        // get a list of all namespaces that exist in k8s
-        let namespaces = self
-            .namespaces
-            .list()
-            .await?
-            .into_iter()
-            .filter_map(|ns| ns.metadata.name)
-            .collect::<Vec<String>>();
-        // track all namespaces we have created/checked in this setup
-        let mut checked = HashSet::with_capacity(10);
-        // crawl over all users and set them up in all namespaces/groups
+        // setup all users in all of their namespaces/groups
         // and track any groups or users we need to ban due to setup problems
-        for user in cache.users.values() {
-            // setup this users groups
-            self.setup_user(user, &namespaces, &mut checked, bans).await;
-            // check if this user is an admin
-            if user.role == UserRole::Admin {
-                // setup this user to run jobs in all possible groups
-                self.setup_admin(cache, user, &namespaces, &mut checked, bans)
-                    .await;
-            }
-        }
+        self.setup_users(cache, bans).await?;
         // sync network policies to any changes in the cache since last reload
         self.sync_network_policies(cache).await?;
         Ok(())

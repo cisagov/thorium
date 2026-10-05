@@ -32,7 +32,6 @@ async-recursion = "1"
 regex = "1"
 dirs = "6"
 base64 = "0.22"
-rayon = "1.10"
 bincode = "2.0.1"
 uuid = { version = "1", features = ["serde", "v4"] }
 openssl = { workspace = true}

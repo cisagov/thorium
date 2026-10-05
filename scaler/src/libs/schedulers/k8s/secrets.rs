@@ -1,7 +1,6 @@
 use k8s_openapi::api::core::v1::{LocalObjectReference, Secret};
 use kube::api::{Api, ListParams, ObjectList, PostParams};
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::str;
 use thorium::models::ScrubbedUser;
 use thorium::{Conf, Error};
@@ -266,12 +265,13 @@ impl Secrets {
 
     /// Sets up an existing namespace to to be used by Thorium
     ///
+    /// Returns false if this namespace failed to be setup and should be banned.
+    ///
     /// # Arguments
     ///
     /// * `ns` - The name of the namespace to setup
-    /// * `bans` - The ban set to add any failed namespaces too
-    #[instrument(name = "k8s::Secrets::setup_namespace", skip(self, bans))]
-    pub async fn setup_namespace(&self, ns: &str, bans: &mut HashSet<String>) {
+    #[instrument(name = "k8s::Secrets::setup_namespace", skip(self))]
+    pub async fn setup_namespace(&self, ns: &str) -> bool {
         // get our registry token if we have one
         if let Some(reg_token) = &self.registry_token {
             // create the secret for this namespaces registry token
@@ -295,11 +295,12 @@ impl Secrets {
                         ban = ns,
                         error = err.to_string()
                     );
-                    // ban this namespace
-                    bans.insert(ns.to_owned());
+                    // this namespace should be banned
+                    return false;
                 }
             }
         }
+        true
     }
 
     /// Updates a users secret in Thorium

@@ -66,10 +66,14 @@ thorium:
   scaler:
     # How long the cache should live for at most before being invalidated in seconds
     cache_lifetime: 600
+    # How many groups to list or images to inspect at once when loading the cache
+    cache_concurrency: 10
     # The nubmer of deadlines to pull for one scale loop
     deadline_window: 100000
     # The specific settings for kubernetes
     k8s:
+      # How many namespaces or user secrets to setup at once when syncing to a new cache
+      setup_concurrency: 25
       # The nodes that are in this k8s cluster and that Thorium can use
       #nodes:
         #- "<NODE1>"
