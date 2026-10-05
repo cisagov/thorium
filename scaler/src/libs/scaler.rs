@@ -64,25 +64,6 @@ macro_rules! add_task {
     }};
 }
 
-/// update the resources for all clusters this scaler can see
-macro_rules! update_resources {
-    ($thorium:expr, $schedulers:expr, $resources:expr, $cache:expr, $conf:expr, $scaler_type:expr) => {
-        // crawl over each cluster and get its available resources
-        for (name, scheduler) in $schedulers.iter_mut() {
-            // get the burstable resources config for this cluster
-            let burstable_conf = $conf.thorium.scaler.burstable($scaler_type, name);
-            // get the available resources for this cluster
-            let update = scheduler
-                .resources_available(&$thorium, &$cache.settings, &burstable_conf)
-                .await?;
-            // update this clusters resources
-            $resources.update(name, update);
-        }
-        // resize our deadline pool
-        $resources.resize_deadline_pool();
-    };
-}
-
 /// The different reasons a worker may have failed out
 ///
 /// Hash/Eq/PartialEq is implemented on solely the worker field for this. Meaning that when
@@ -359,6 +340,8 @@ pub struct Scaler {
     pub zombies: ZombieChecker,
     /// The scheduler to use to scheduler resources
     schedulers: HashMap<String, Box<dyn Scheduler + Send>>,
+    /// The clusters that need to be setup before we can schedule on them again
+    unready: HashSet<String>,
     /// The resources currently available in this cluster
     pub allocatable: Allocatable,
     /// A queue of tasks to complete sorted by the time to start executing them
@@ -423,6 +406,8 @@ impl Scaler {
         let allocatable = Allocatable::new(scaler_type, &conf, &settings, &cache);
         // build our task queue
         let tasks = tasks::Tasks::setup_queue(&conf);
+        // all clusters need to be setup before we can schedule on them
+        let unready = schedulers.keys().cloned().collect();
         // instance the scaler
         let scaler = Scaler {
             scaler_type,
@@ -431,6 +416,7 @@ impl Scaler {
             cache,
             zombies,
             schedulers,
+            unready,
             allocatable,
             tasks,
             active: Vec::default(),
@@ -438,20 +424,69 @@ impl Scaler {
         Ok(scaler)
     }
 
-    /// Setup all clusters to begin executing jobs
+    /// Setup any unready clusters and update the resources for all clusters this scaler can see
     ///
-    /// # Arguments
-    ///
-    /// * `span` - The span to log traces under
-    #[instrument(name = "Scaler::setup", skip_all, err(Debug))]
-    async fn setup(&mut self) -> Result<(), Error> {
-        // crawl over each cluster and get it setup for executing jobs
+    /// Clusters that fail to setup or report their resources are removed from scheduling
+    /// until they recover. This only errors if no clusters are available to schedule on.
+    #[instrument(name = "Scaler::update_resources", skip_all, err(Debug))]
+    async fn update_resources(&mut self) -> Result<(), Error> {
+        // track how many clusters we can schedule on
+        let mut ready = 0;
+        // crawl over each cluster and get its available resources
         for (name, scheduler) in &mut self.schedulers {
-            // setup the scheduler before we schedule jobs
-            scheduler
-                .setup(name, &self.cache, &mut self.allocatable.bans)
-                .await?;
+            // setup this cluster if it hasn't been setup or has failed since
+            if self.unready.contains(name) {
+                if let Err(err) = scheduler
+                    .setup(name, &self.cache, &mut self.allocatable.bans)
+                    .await
+                {
+                    // log that we failed to setup this cluster
+                    event!(
+                        Level::ERROR,
+                        msg = "Failed to setup cluster",
+                        cluster = name,
+                        error = err.msg()
+                    );
+                    // make sure we don't schedule anything on this cluster
+                    self.allocatable.mark_unreachable(name);
+                    continue;
+                }
+                // this cluster is setup and can be scheduled on again
+                self.unready.remove(name);
+                event!(Level::INFO, msg = "Cluster is setup", cluster = name);
+            }
+            // get the burstable resources config for this cluster
+            let burstable_conf = self.conf.thorium.scaler.burstable(self.scaler_type, name);
+            // get the available resources for this cluster
+            match scheduler
+                .resources_available(&self.thorium, &self.cache.settings, &burstable_conf)
+                .await
+            {
+                Ok(update) => {
+                    // update this clusters resources
+                    self.allocatable.update(name, update);
+                    ready += 1;
+                }
+                Err(err) => {
+                    // log that we failed to get this clusters resources
+                    event!(
+                        Level::ERROR,
+                        msg = "Failed to get cluster resources",
+                        cluster = name,
+                        error = err.msg()
+                    );
+                    // stop scheduling on this cluster and set it up again once it recovers
+                    self.allocatable.mark_unreachable(name);
+                    self.unready.insert(name.clone());
+                }
+            }
         }
+        // make sure we have at least one cluster to schedule on
+        if ready == 0 {
+            return Err(Error::new("No clusters are available to schedule on"));
+        }
+        // resize our deadline pool
+        self.allocatable.resize_deadline_pool();
         Ok(())
     }
 
@@ -478,15 +513,38 @@ impl Scaler {
                     TaskResult::Cache(cache) => {
                         // get our schedulers so they can sync against the new cache
                         let schedulers = &mut self.schedulers;
+                        let unready = &self.unready;
+                        // track the clusters that failed to sync
+                        let mut failed = Vec::default();
                         // sync our ban sets against the new cache
                         resync_bans(&mut self.allocatable.bans, async |bans: &mut BanSets| {
                             // crawl over each cluster and sync any cache updates
                             for (name, scheduler) in schedulers.iter_mut() {
-                                scheduler.sync_to_new_cache(name, &cache, bans).await?;
+                                // unready clusters will be fully setup with this cache once they recover
+                                if unready.contains(name) {
+                                    continue;
+                                }
+                                if let Err(err) =
+                                    scheduler.sync_to_new_cache(name, &cache, bans).await
+                                {
+                                    // log that we failed to sync this cluster
+                                    event!(
+                                        Level::ERROR,
+                                        msg = "Failed to sync cluster to new cache",
+                                        cluster = name,
+                                        error = err.msg()
+                                    );
+                                    failed.push(name.clone());
+                                }
                             }
                             Ok(())
                         })
                         .await?;
+                        // stop scheduling on any failed clusters and set them up again once they recover
+                        for name in failed {
+                            self.allocatable.mark_unreachable(&name);
+                            self.unready.insert(name);
+                        }
                         // save the cache in the scaler for next update
                         self.cache = Arc::new(cache);
                         // add a new task for refreshing our cache
@@ -520,7 +578,12 @@ impl Scaler {
         }
         // get any tasks we want to spawn and build a list of completed blocking tasks to rerun again
         let mut completed = Vec::default();
-        for (_, task) in self.tasks.extract_if(.., |time, _| time < &now) {
+        // get the tasks that are ready to run
+        let ready = self
+            .tasks
+            .extract_if(.., |time, _| time < &now)
+            .collect::<Vec<_>>();
+        for (_, task) in ready {
             // log that we are spawning a task
             event!(Level::INFO, task = task.as_str());
             // spawn or execute this task
@@ -549,14 +612,7 @@ impl Scaler {
                 // get the total amount of resources available in the cluster
                 Tasks::Resources => {
                     // update the resources for all clusters
-                    update_resources!(
-                        &self.thorium,
-                        self.schedulers,
-                        self.allocatable,
-                        self.cache,
-                        self.conf,
-                        self.scaler_type
-                    );
+                    self.update_resources().await?;
                     completed.push(Tasks::Resources);
                 }
                 // tell Thorium to update image runtimes
@@ -837,7 +893,11 @@ impl Scaler {
         let mut failed = HashSet::default();
         let mut error_out = HashSet::default();
         // crawl over each cluster and get it setup for executing jobs
-        for scheduler in self.schedulers.values_mut() {
+        for (name, scheduler) in &mut self.schedulers {
+            // skip any clusters that are currently unreachable
+            if self.unready.contains(name) {
+                continue;
+            }
             // if this fails just continue since failed resources may just be clutter
             if let Err(err) = scheduler
                 .clear_terminal(
@@ -870,18 +930,8 @@ impl Scaler {
     /// This does not need to be called before start and is used for step purposes.
     #[instrument(name = "Scaler::init", skip_all, err(Debug))]
     pub async fn init(&mut self) -> Result<(), Error> {
-        // setup all clusters before we schedule jobs
-        self.setup().await?;
-        // get an initial count of resources in the cluster
-        update_resources!(
-            self.thorium,
-            self.schedulers,
-            self.allocatable,
-            self.cache,
-            self.conf,
-            self.scaler_type
-        );
-        Ok(())
+        // setup all clusters and get an initial count of their resources
+        self.update_resources().await
     }
 
     /// Perform a single scale loop

@@ -183,6 +183,36 @@ impl Allocatable {
         self.deadlines_pool.release(freed.deadline);
     }
 
+    /// Remove all nodes in a cluster that we can no longer reach so nothing is scheduled on it
+    ///
+    /// Any workers tracked on this cluster are freed back to their pools. The cluster's
+    /// nodes will be added back by the next successful update for it.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the cluster that is unreachable
+    #[instrument(name = "Allocatable::mark_unreachable", skip(self))]
+    pub fn mark_unreachable(&mut self, name: &str) {
+        // get the names of all nodes in this cluster if we are tracking it
+        let removes = match self.clusters.values().find_map(|group| group.get(name)) {
+            Some(cluster) => cluster
+                .nodes
+                .values()
+                .flat_map(|group| group.keys().cloned())
+                .collect::<HashSet<String>>(),
+            None => return,
+        };
+        // build an update that removes all of this clusters nodes
+        let update = AllocatableUpdate {
+            nodes: HashMap::default(),
+            removes,
+        };
+        // apply this update to free any workers on this cluster
+        self.update(name, update);
+        // our total resources have changed so resize our deadline pool
+        self.resize_deadline_pool();
+    }
+
     /// Set the deadline pool to contain whatever resources are in no other pools
     pub fn resize_deadline_pool(&mut self) {
         // get the total size of all clusters

@@ -14,7 +14,7 @@ use kube::config::{KubeConfigOptions, Kubeconfig};
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 use thorium::conf::BurstableNodeResources;
-use thorium::models::{ImageScaler, SystemSettings, UserRole, WorkerDeleteMap};
+use thorium::models::{ImageScaler, ScrubbedUser, SystemSettings, UserRole, WorkerDeleteMap};
 use thorium::{Conf, Error, Thorium};
 use tracing::{Level, event, instrument};
 use uuid::Uuid;
@@ -75,9 +75,20 @@ async fn from_kubeconfig(
             context: Some(context.name.clone()),
             ..Default::default()
         };
-        // get this clusters config
+        // get this clusters config or skip it if its config is invalid
         let mut cluster_conf =
-            kube::Config::from_custom_kubeconfig(kube_conf.clone(), &opts).await?;
+            match kube::Config::from_custom_kubeconfig(kube_conf.clone(), &opts).await {
+                Ok(cluster_conf) => cluster_conf,
+                Err(err) => {
+                    event!(
+                        Level::ERROR,
+                        msg = "Failed to load k8s cluster config",
+                        context = context.name,
+                        error = err.to_string()
+                    );
+                    continue;
+                }
+            };
         // set the tls server name if its set for this cluster
         cluster_conf.tls_server_name = k8s_conf
             .tls_server_name(&context.name)
@@ -88,8 +99,19 @@ async fn from_kubeconfig(
         if conf.thorium.scaler.k8s.clear_proxy {
             cluster_conf.proxy_url = None;
         }
-        // create a client based on this config
-        let client = kube::Client::try_from(cluster_conf)?;
+        // create a client based on this config or skip this cluster if we can't
+        let client = match kube::Client::try_from(cluster_conf) {
+            Ok(client) => client,
+            Err(err) => {
+                event!(
+                    Level::ERROR,
+                    msg = "Failed to build k8s client",
+                    context = context.name,
+                    error = err.to_string()
+                );
+                continue;
+            }
+        };
         // get this clusters alias or use our context name
         let name = k8s_conf.cluster_name(&context.name);
         // setup k8s wrappers
@@ -116,6 +138,10 @@ async fn from_kubeconfig(
         };
         // add this k8s scheduler to our scheduler map
         schedulers.insert(name.to_owned(), Box::new(k8s));
+    }
+    // make sure we built at least one k8s scheduler
+    if schedulers.is_empty() {
+        return Err(Error::new("Failed to build a client for any k8s cluster"));
     }
     Ok(())
 }
@@ -281,19 +307,9 @@ impl K8s {
             .map(|(_, ns)| *ns)
             .collect::<HashSet<&String>>();
         // setup all of our namespaces before we setup any users in them
-        let existing = &existing;
         let banned_groups = helpers::assert_send_stream(
             stream::iter(namespaces)
-                .map(|ns| async move {
-                    // create this namespace if it doesn't exist yet
-                    let created = existing.contains(ns) || self.namespaces.create(ns).await;
-                    // setup this namespace or ban it if we failed to create/setup it
-                    if created && self.secrets.setup_namespace(ns).await {
-                        None
-                    } else {
-                        Some(ns.clone())
-                    }
-                })
+                .map(|ns| self.setup_namespace(ns, &existing))
                 // setup multiple namespaces at once
                 .buffer_unordered(self.setup_concurrency),
         )
@@ -305,30 +321,7 @@ impl K8s {
         // setup each user in all of their namespaces
         let banned_users = helpers::assert_send_stream(
             stream::iter(user_namespaces)
-                .map(|(user, ns)| async move {
-                    // make sure this users secret is setup and correct
-                    let mut success = match self.secrets.check_secret(ns, user).await {
-                        Ok(()) => true,
-                        Err(err) => {
-                            // log that we failed to setup this users secret
-                            event!(
-                                Level::ERROR,
-                                msg = "Failed to setup users secret",
-                                user = user.username,
-                                namespace = ns,
-                                error = err.msg()
-                            );
-                            false
-                        }
-                    };
-                    // if this user has unix info then create their passwd file
-                    if user.unix.is_some() {
-                        // make sure this users passwd is setup and correct
-                        success &= self.configs.setup_passwd(ns, user).await;
-                    }
-                    // ban this user if we failed to set them up
-                    (!success).then(|| user.username.clone())
-                })
+                .map(|(user, ns)| self.setup_user(user, ns))
                 // setup multiple users at once
                 .buffer_unordered(self.setup_concurrency),
         )
@@ -338,6 +331,60 @@ impl K8s {
         // ban any users we failed to setup
         bans.users.extend(banned_users);
         Ok(())
+    }
+
+    /// Create a namespace if it doesn't exist yet and set it up to be used by Thorium
+    ///
+    /// Returns the namespace's name if it failed to be setup and should be banned.
+    ///
+    /// # Arguments
+    ///
+    /// * `ns` - The namespace to setup
+    /// * `existing` - The namespaces that already exist in k8s
+    #[instrument(name = "K8s::setup_namespace", skip(self, existing))]
+    async fn setup_namespace(&self, ns: &String, existing: &HashSet<String>) -> Option<String> {
+        // create this namespace if it doesn't exist yet
+        let created = existing.contains(ns) || self.namespaces.create(ns).await;
+        // setup this namespace or ban it if we failed to create/setup it
+        if created && self.secrets.setup_namespace(ns).await {
+            None
+        } else {
+            Some(ns.clone())
+        }
+    }
+
+    /// Setup a user's secret and passwd file in a single namespace
+    ///
+    /// Returns the user's name if they failed to be setup and should be banned.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user to setup
+    /// * `ns` - The namespace to setup this user in
+    #[instrument(name = "K8s::setup_user", skip(self, user), fields(user = user.username))]
+    async fn setup_user(&self, user: &ScrubbedUser, ns: &str) -> Option<String> {
+        // make sure this users secret is setup and correct
+        let mut success = match self.secrets.check_secret(ns, user).await {
+            Ok(()) => true,
+            Err(err) => {
+                // log that we failed to setup this users secret
+                event!(
+                    Level::ERROR,
+                    msg = "Failed to setup users secret",
+                    user = user.username,
+                    namespace = ns,
+                    error = err.msg()
+                );
+                false
+            }
+        };
+        // if this user has unix info then create their passwd file
+        if user.unix.is_some() {
+            // make sure this users passwd is setup and correct
+            success &= self.configs.setup_passwd(ns, user).await;
+        }
+        // ban this user if we failed to set them up
+        (!success).then(|| user.username.clone())
     }
 
     /// Setup all network policies in K8's, making sure any existing policies match
