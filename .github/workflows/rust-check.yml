@@ -1,0 +1,287 @@
+# Runs Thorium's Rust static checks: cargo check, clippy, and rustfmt
+#
+# - Failures are reported here, as failed (red) jobs on the commit and pull
+#   request. This workflow has no `needs` or `workflow_run` link to deploy.yml
+#   or tools.yml, so a failure never gates or blocks a build or image publish.
+#   Any of these jobs can be made a required status check later through branch
+#   protection.
+# - Every diagnostic is written to the job log, inline annotations, the job
+#   summary, and a `<check>-report` artifact by .github/scripts/lint_report.py,
+#   so reviewers can read the results without digging through build output.
+# - Integration tests are not run here; they need ScyllaDB, Redis,
+#   Elasticsearch, and S3.
+# - The nightly toolchain is installed with the runner's preinstalled rustup,
+#   so no third-party toolchain action is used. Nightly is unpinned, so a
+#   nightly regression can fail these jobs without any change to this repo.
+# - Actions are pinned by full commit SHA.
+# - The Cargo registry and target/ are cached per job. Every run may restore
+#   the cache, but only pushes and scheduled runs on main save it, so pull
+#   request code can never write a cache entry that a main run restores. These
+#   jobs publish nothing, and no other workflow uses the `rust-check-` cache
+#   keys.
+# - Runs on every push to every branch, on every pull request, and weekly. A
+#   same-repo pull request is checked twice (by its push and pull request
+#   runs) so every pull request shows real results that can be made required
+#   checks; a job skipped by a condition would count as passing.
+name: Rust Check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  schedule:
+    # weekly, to catch breakage from new nightly toolchains and lints
+    - cron: '23 8 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+# superseded runs are cancelled; runs on main always finish so they can save
+# the cache
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # system packages the workspace needs to compile beyond the runner's build tools
+  APT_PACKAGES: libssl-dev pkg-config
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: cargo check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read # check out the repository
+    env:
+      # enable the features required by gxhash explicitly
+      RUSTFLAGS: "-C target-feature=+aes,+sse2"
+    steps:
+      # depth 2 includes a pull request's base commit, so the report can list
+      # findings in the files the pull request changed
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          # APT_PACKAGES is a fixed space-separated list, so it is split into words on purpose
+          # shellcheck disable=SC2086
+          sudo apt-get install -y --no-install-recommends $APT_PACKAGES
+
+      # the toolchain hash keys the cache, since build output from another
+      # nightly cannot be reused
+      - name: Install nightly toolchain
+        id: toolchain
+        run: |
+          rustup toolchain install nightly --profile minimal
+          rustc +nightly --version
+          echo "hash=$(rustc +nightly --version --verbose | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Cargo cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-
+
+      # --workspace includes the python/thorpy bindings, which are not default
+      # members. Diagnostics are written as JSON for the report step.
+      - name: Run cargo check
+        id: cargo
+        run: |
+          mkdir -p "${RUNNER_TEMP}/cargo-check"
+          set +e
+          cargo +nightly check --workspace --locked --message-format=json \
+            > "${RUNNER_TEMP}/cargo-check/cargo-check.json"
+          echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+
+      # warnings are reported but, as before, only errors fail this job
+      - name: Report cargo check diagnostics
+        run: |
+          python3 .github/scripts/lint_report.py --tool cargo-check --format cargo \
+            --input "${RUNNER_TEMP}/cargo-check/cargo-check.json" --output-dir "${RUNNER_TEMP}/cargo-check"
+
+      - name: Store cargo check report
+        if: ${{ !cancelled() && steps.cargo.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cargo-check-report
+          path: |
+            ${{ runner.temp }}/cargo-check/cargo-check-report.md
+            ${{ runner.temp }}/cargo-check/cargo-check-report.txt
+          retention-days: 7
+
+      - name: Fail on cargo check errors
+        env:
+          CARGO_EXIT: ${{ steps.cargo.outputs.exit-code }}
+        run: |
+          if [ "$CARGO_EXIT" != "0" ]; then
+            echo "cargo check failed (exit code ${CARGO_EXIT}); see the job summary"
+            exit 1
+          fi
+
+      - name: Save Cargo cache
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read # check out the repository
+    env:
+      # enable the features required by gxhash explicitly
+      RUSTFLAGS: "-C target-feature=+aes,+sse2"
+    steps:
+      # depth 2 includes a pull request's base commit, so the report can list
+      # findings in the files the pull request changed
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          # APT_PACKAGES is a fixed space-separated list, so it is split into words on purpose
+          # shellcheck disable=SC2086
+          sudo apt-get install -y --no-install-recommends $APT_PACKAGES
+
+      # the toolchain hash keys the cache, since build output from another
+      # nightly cannot be reused
+      - name: Install nightly toolchain
+        id: toolchain
+        run: |
+          rustup toolchain install nightly --profile minimal --component clippy
+          rustc +nightly --version
+          echo "hash=$(rustc +nightly --version --verbose | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Cargo cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-
+
+      # lints the default workspace members with clippy's default lint set.
+      # Warnings are not denied here, so cargo keeps going after the first
+      # crate with warnings and every finding is collected; the report step
+      # fails the job on any warning instead, matching `-D warnings`.
+      - name: Run clippy
+        id: clippy
+        run: |
+          mkdir -p "${RUNNER_TEMP}/clippy"
+          set +e
+          cargo +nightly clippy --locked --message-format=json \
+            > "${RUNNER_TEMP}/clippy/clippy.json"
+          echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Report clippy findings
+        run: |
+          python3 .github/scripts/lint_report.py --tool clippy --format cargo \
+            --input "${RUNNER_TEMP}/clippy/clippy.json" --output-dir "${RUNNER_TEMP}/clippy" \
+            --fail-level warning
+
+      - name: Store clippy report
+        if: ${{ !cancelled() && steps.clippy.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clippy-report
+          path: |
+            ${{ runner.temp }}/clippy/clippy-report.md
+            ${{ runner.temp }}/clippy/clippy-report.txt
+          retention-days: 7
+
+      # covers failures with no diagnostic, such as a dependency resolution error
+      - name: Fail on clippy errors
+        if: ${{ !cancelled() && steps.clippy.outputs.exit-code != '0' }}
+        env:
+          CLIPPY_EXIT: ${{ steps.clippy.outputs.exit-code }}
+        run: |
+          echo "cargo clippy failed (exit code ${CLIPPY_EXIT}); see the job summary"
+          exit 1
+
+      # saved even when clippy reports findings, since the build output is still valid
+      - name: Save Cargo cache
+        if: always() && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.toolchain.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read # check out the repository
+    steps:
+      # depth 2 includes a pull request's base commit, so the report can list
+      # findings in the files the pull request changed
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      # rustfmt runs on nightly like the other jobs, so formatting is checked by
+      # the same toolchain developers build with
+      - name: Install nightly toolchain
+        run: rustup toolchain install nightly --profile minimal --component rustfmt
+
+      - name: Run rustfmt
+        id: rustfmt
+        run: |
+          mkdir -p "${RUNNER_TEMP}/rustfmt"
+          set +e
+          cargo +nightly fmt --check > "${RUNNER_TEMP}/rustfmt/rustfmt.diff"
+          echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Report rustfmt findings
+        run: |
+          python3 .github/scripts/lint_report.py --tool rustfmt --format rustfmt \
+            --input "${RUNNER_TEMP}/rustfmt/rustfmt.diff" --output-dir "${RUNNER_TEMP}/rustfmt"
+
+      - name: Store rustfmt report
+        if: ${{ !cancelled() && steps.rustfmt.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustfmt-report
+          path: ${{ runner.temp }}/rustfmt/
+          retention-days: 7
+
+      - name: Fail on unformatted code
+        env:
+          RUSTFMT_EXIT: ${{ steps.rustfmt.outputs.exit-code }}
+        run: |
+          if [ "$RUSTFMT_EXIT" != "0" ]; then
+            echo "cargo fmt --check failed (exit code ${RUSTFMT_EXIT}); see the job summary"
+            exit 1
+          fi

@@ -3,10 +3,10 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN apt clean all && \
-    apt update && \
-    apt install ssdeep -y && \
-    apt clean && \
+RUN apt-get clean && \
+    apt-get update && \
+    apt-get install ssdeep -y && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY wrapper.sh /app/.

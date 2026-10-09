@@ -1,9 +1,9 @@
 ARG IMAGE="ubuntu:24.04"
 FROM $IMAGE
 
-RUN apt update \
-    && apt install -y binutils \
-    && apt clean \
+RUN apt-get update \
+    && apt-get install -y binutils \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

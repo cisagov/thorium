@@ -1,0 +1,68 @@
+version: 2
+updates:
+  # GitHub Actions used by .github/workflows (pinned by commit SHA)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # wait for new releases to age before proposing them
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "fix(ci)"
+
+  # base images for the published Thorium and thorctl images (pinned by tag, so
+  # updates are new Ubuntu releases; security updates within a release come from
+  # rebuilding);
+  # base/ is not listed because its images come from an internal registry
+  # Dependabot cannot reach
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/thorctl"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      docker-base-images:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "fix(docker)"
+
+  # Rust workspace dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "fix(deps)"
+
+  # UI dependencies
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "fix(ui)"

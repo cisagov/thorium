@@ -3,9 +3,9 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN apt update && \
-    apt install -y python3 clamav && \
-    apt clean && \
+RUN apt-get update && \
+    apt-get install -y python3 clamav && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Grab definitions

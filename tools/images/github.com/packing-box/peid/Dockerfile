@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN pip3 install peid
+RUN pip3 install --no-cache-dir peid
 
 COPY run_peid.py /app/.
 

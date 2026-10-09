@@ -3,9 +3,9 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN apt update && \
-    apt install -y zip fcrackzip p7zip-full p7zip-rar && \
-    apt clean && \
+RUN apt-get update && \
+    apt-get install -y zip fcrackzip p7zip-full p7zip-rar && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY dictionary.txt /app/.

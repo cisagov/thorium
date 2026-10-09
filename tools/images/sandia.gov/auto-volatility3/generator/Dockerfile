@@ -16,7 +16,7 @@ RUN cargo build --release
 FROM $IMAGE
 
 # install volatility3
-RUN pip3 install volatility3 --break-system-packages
+RUN pip3 install --no-cache-dir volatility3 --break-system-packages
 
 # make sure our symbols directory is writable by all users
 RUN chmod -R 777 /usr/local/lib/python3.*/dist-packages/volatility3 || true
@@ -25,7 +25,10 @@ RUN chmod -R 777 /usr/lib/python3.*/dist-packages/volatility3 || true
 # add our tool binary from build image
 COPY --from=builder /tmp/target/release/auto-volatility3 /usr/bin/.
 
-RUN apt update -y && apt install zip -y
+RUN apt-get update && \
+    apt-get install -y zip && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # work out of /app
 WORKDIR /app

@@ -1,0 +1,129 @@
+# Findings that CI linters and scanners should stop reporting
+#
+# .github/scripts/lint_report.py removes every finding that matches an entry
+# here from the job log, inline annotations, GitLab Code Quality report, job
+# summary, pass/fail gate, and the SARIF uploaded to code scanning. It is used
+# by both the GitHub workflows and .gitlab/security.yml. The summary still
+# lists each entry, how many findings it hid, and its reason, and the
+# `<tool>-ignored.txt` file in the report artifact lists every hidden finding.
+#
+# On GitHub pull requests and GitLab merge request pipelines this file is read
+# from the base branch, so new or changed entries take effect once they are
+# merged (the change that first adds this file uses its own copy, with a
+# warning). GitHub push, schedule and manual runs, and GitLab push pipelines,
+# read it from the commit being checked, and GitLab flags the change in the
+# summary. A branch can also change .hadolint.yaml or add inline ignore
+# comments, so review changes here, to .hadolint.yaml, and to the workflows
+# alike; code review, not this file, is what keeps findings from being hidden.
+#
+# Each entry is an [[ignore]] table with these keys:
+#
+#   tool    (required) the reporter's --tool name: hadolint, trivy-config,
+#           trivy-iac, trivy-secret, trivy-deps, trivy-image, zizmor,
+#           action-pins, or tool-versions
+#   rule    (required) the rule id, such as DL3008, DS-0002, CVE-2024-1234,
+#           zizmor/unpinned-uses, or outdated; shell-style wildcards allowed
+#   paths   (optional) repo-relative path patterns; defaults to every file.
+#           Shell-style wildcards, where `*` also matches `/`, so
+#           "tools/images/*" covers everything below that directory
+#   reason  (required) why the finding is acceptable; shown to reviewers
+#   expires (optional) a date like 2027-01-31; after it the entry stops
+#           applying and the job warns, so temporary ignores get revisited
+#
+# Prefer fixing a finding, or an inline `# hadolint ignore=DLxxxx` or
+# `# zizmor: ignore[audit]` comment next to a single line, over a broad entry.
+# Rust lints are configured in the code with #[allow(...)] instead.
+#
+# Examples:
+#
+# [[ignore]]
+# tool = "zizmor"
+# rule = "zizmor/secrets-outside-env"
+# paths = [".github/workflows/tools.yml"]
+# reason = "Registry credentials are scoped to the tool build job"
+# expires = 2027-01-31
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3015"
+reason = "Recommended packages are allowed in our images"
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3008"
+reason = "Pinned apt versions are removed from distro archives and break rebuilds; images track the distro's current packages"
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3033"
+reason = "Pinned yum versions are removed from distro repositories and break rebuilds; images track the distro's current packages"
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3013"
+paths = ["base/*", "tools/images/*"]
+reason = "The CI build and tool images track the current release of the pip packages they install, as they do for apt and yum packages"
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3003"
+reason = "cd within a single RUN is used deliberately for multi-step builds"
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3007"
+paths = [
+  "base/*",
+  "tools/images/github.com/OSIF/suricata/Dockerfile",
+  "tools/images/github.com/cmu-sei/pharos-*/Dockerfile",
+  "tools/images/github.com/fkie-cad/cwe-checker/Dockerfile",
+  "tools/images/github.com/onekey-sec/unblob/Dockerfile",
+  "tools/images/github.com/zeek/zeek/Dockerfile",
+]
+reason = "The CI build images and these tool images intentionally build from the latest internal or upstream base image"
+
+[[ignore]]
+tool = "hadolint"
+rule = "DL3067"
+paths = ["tools/images/github.com/OSIF/suricata/Dockerfile"]
+reason = "Must copy over pre-built layers to new image to remove volumes that make some files ephemeral"
+
+[[ignore]]
+tool = "trivy-config"
+rule = "DS-0001"
+paths = [
+  "base/*",
+  "tools/images/github.com/OSIF/suricata/Dockerfile",
+  "tools/images/github.com/cmu-sei/pharos-*/Dockerfile",
+  "tools/images/github.com/fkie-cad/cwe-checker/Dockerfile",
+  "tools/images/github.com/onekey-sec/unblob/Dockerfile",
+  "tools/images/github.com/zeek/zeek/Dockerfile",
+]
+reason = "The CI build images and these tool images intentionally build from the latest internal or upstream base image"
+
+[[ignore]]
+tool = "trivy-config"
+rule = "DS-0013"
+reason = "cd within a single RUN is used deliberately for multi-step builds"
+
+[[ignore]]
+tool = "trivy-config"
+rule = "DS-0002"
+paths = ["base/*", "tools/images/*"]
+reason = "Tool images wrap third-party tools, and Thorium runs their jobs as the image's or the submitting user's configured user when one is set; the base images are ephemeral CI build containers that install toolchains under /root and write to a root-owned checkout"
+
+[[ignore]]
+tool = "trivy-config"
+rule = "DS-0002"
+paths = ["Dockerfile"]
+reason = "Temporary: the Thorium image still runs as root until the operator and Helm charts support running it as an unprivileged user; remove this entry once they do"
+
+[[ignore]]
+tool = "trivy-config"
+rule = "DS-0026"
+reason = "Images run as Kubernetes workloads, which ignore Docker HEALTHCHECK; tool images run as short-lived jobs"
+
+[[ignore]]
+tool = "trivy-config"
+rule = "DS-0029"
+reason = "Recommended packages are allowed in our images"

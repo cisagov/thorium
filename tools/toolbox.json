@@ -86,7 +86,7 @@
           "env": {},
           "generator": true,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sandia.gov/auto-volatility3:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/auto-volatility3:latest",
           "kvm": null,
           "name": "auto-volatility3",
           "network_policies": [
@@ -131,7 +131,7 @@
         },
         "dir": "images/sandia.gov/auto-volatility3/generator",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sandia.gov/auto-volatility3:latest"
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/auto-volatility3:latest"
         ],
         "network_policies": [
           {
@@ -251,7 +251,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sandia.gov/auto-volatility3-worker:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/auto-volatility3-worker:latest",
           "kvm": null,
           "name": "auto-volatility3-worker",
           "network_policies": [
@@ -296,7 +296,7 @@
         },
         "dir": "images/sandia.gov/auto-volatility3/worker",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sandia.gov/auto-volatility3-worker:latest"
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/auto-volatility3-worker:latest"
         ],
         "network_policies": [
           {
@@ -416,7 +416,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/decalage2/balbuzard:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/decalage2/balbuzard:latest",
           "kvm": null,
           "name": "balbuzard",
           "network_policies": [],
@@ -457,7 +457,7 @@
         },
         "dir": "images/github.com/decalage2/balbuzard",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/decalage2/balbuzard:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/decalage2/balbuzard:latest"
         ]
       }
     },
@@ -546,7 +546,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/refirmlabs/binwalk:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/refirmlabs/binwalk:latest",
           "kvm": null,
           "name": "binwalk",
           "network_policies": [],
@@ -587,7 +587,7 @@
         },
         "dir": "images/github.com/ReFirmLabs/binwalk",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/refirmlabs/binwalk:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/refirmlabs/binwalk:latest"
         ]
       }
     },
@@ -673,7 +673,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/owasp-dep-scan/blint:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/owasp-dep-scan/blint:latest",
           "kvm": null,
           "name": "blint",
           "network_policies": [],
@@ -714,7 +714,7 @@
         },
         "dir": "images/github.com/owasp-dep-scan/blint",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/owasp-dep-scan/blint:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/owasp-dep-scan/blint:latest"
         ]
       }
     },
@@ -800,7 +800,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/simsong/bulk-extractor:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/simsong/bulk-extractor:latest",
           "kvm": null,
           "name": "bulk-extractor",
           "network_policies": [],
@@ -841,7 +841,7 @@
         },
         "dir": "images/github.com/simsong/bulk_extractor",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/simsong/bulk-extractor:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/simsong/bulk-extractor:latest"
         ]
       }
     },
@@ -927,7 +927,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sandia.gov/byte-frequency:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/byte-frequency:latest",
           "kvm": null,
           "name": "byte-frequency",
           "network_policies": [],
@@ -968,7 +968,7 @@
         },
         "dir": "images/sandia.gov/byte-frequency",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sandia.gov/byte-frequency:latest"
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/byte-frequency:latest"
         ]
       }
     },
@@ -1053,7 +1053,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/mandiant/capa:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/mandiant/capa:latest",
           "kvm": null,
           "name": "capa",
           "network_policies": [],
@@ -1094,7 +1094,7 @@
         },
         "dir": "images/github.com/mandiant/capa",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/mandiant/capa:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/capa:latest"
         ]
       }
     },
@@ -1179,7 +1179,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/cisco-talos/clamav:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cisco-talos/clamav:latest",
           "kvm": null,
           "name": "clamav",
           "network_policies": [],
@@ -1220,7 +1220,7 @@
         },
         "dir": "images/github.com/Cisco-Talos/ClamAV",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/cisco-talos/clamav:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/cisco-talos/clamav:latest"
         ]
       }
     },
@@ -1306,7 +1306,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/intel/cve-bin-tool:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool:latest",
           "kvm": null,
           "name": "cve-bin-tool",
           "network_policies": [],
@@ -1347,7 +1347,7 @@
         },
         "dir": "images/github.com/intel/cve-bin-tool/cve",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/intel/cve-bin-tool:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool:latest"
         ]
       }
     },
@@ -1433,7 +1433,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/intel/cve-bin-tool/sbom:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool/sbom:latest",
           "kvm": null,
           "name": "cve-bin-tool-sbom",
           "network_policies": [],
@@ -1474,7 +1474,7 @@
         },
         "dir": "images/github.com/intel/cve-bin-tool/sbom",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/intel/cve-bin-tool/sbom:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/intel/cve-bin-tool/sbom:latest"
         ]
       }
     },
@@ -1559,7 +1559,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/fkie-cad/cwe-checker:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/fkie-cad/cwe-checker:latest",
           "kvm": null,
           "name": "cwe-checker",
           "network_policies": [],
@@ -1600,7 +1600,7 @@
         },
         "dir": "images/github.com/fkie-cad/cwe-checker",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/fkie-cad/cwe-checker:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/fkie-cad/cwe-checker:latest"
         ]
       }
     },
@@ -1685,7 +1685,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/horsicq/detect-it-easy:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/horsicq/detect-it-easy:latest",
           "kvm": null,
           "name": "detect-it-easy",
           "network_policies": [],
@@ -1726,7 +1726,7 @@
         },
         "dir": "images/github.com/horsicq/detect-it-easy",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/horsicq/detect-it-easy:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/horsicq/detect-it-easy:latest"
         ]
       }
     },
@@ -1812,7 +1812,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/dump-symbols:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/dump-symbols:latest",
           "kvm": null,
           "name": "dump-symbols",
           "network_policies": [],
@@ -1853,7 +1853,7 @@
         },
         "dir": "images/gnu.org/binutils/dump-symbols",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/dump-symbols:latest"
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/dump-symbols:latest"
         ]
       }
     },
@@ -1942,7 +1942,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sandia.gov/emails/email-parser:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/emails/email-parser:latest",
           "kvm": null,
           "name": "email-parser",
           "network_policies": [],
@@ -1983,7 +1983,7 @@
         },
         "dir": "images/sandia.gov/emails/email-parser",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sandia.gov/emails/email-parser:latest"
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/emails/email-parser:latest"
         ]
       }
     },
@@ -2068,7 +2068,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/exiftool.org/tools/exiftool:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/exiftool.org/tools/exiftool:latest",
           "kvm": null,
           "name": "exiftool",
           "network_policies": [],
@@ -2109,7 +2109,7 @@
         },
         "dir": "images/exiftool.org/tools/exiftool",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/exiftool.org/tools/exiftool:latest"
+          "ghcr.io/cisagov/thorium/tools/exiftool.org/tools/exiftool:latest"
         ]
       }
     },
@@ -2194,7 +2194,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/file/file:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/file/file:latest",
           "kvm": null,
           "name": "file-linux",
           "network_policies": [],
@@ -2235,7 +2235,7 @@
         },
         "dir": "images/github.com/file/file",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/file/file:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/file/file:latest"
         ]
       }
     },
@@ -2320,7 +2320,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/mandiant/floss:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/mandiant/floss:latest",
           "kvm": null,
           "name": "floss",
           "network_policies": [],
@@ -2361,7 +2361,7 @@
         },
         "dir": "images/github.com/mandiant/flare-floss",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/mandiant/floss:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/floss:latest"
         ]
       }
     },
@@ -2446,7 +2446,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/salsa.debian.org/rul/foremost:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/salsa.debian.org/rul/foremost:latest",
           "kvm": null,
           "name": "foremost",
           "network_policies": [],
@@ -2487,7 +2487,7 @@
         },
         "dir": "images/salsa.debian.org/rul/foremost",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/salsa.debian.org/rul/foremost:latest"
+          "ghcr.io/cisagov/thorium/tools/salsa.debian.org/rul/foremost:latest"
         ]
       }
     },
@@ -2497,7 +2497,7 @@
         "build_path": "images/github.com/nationalsecurityagency/ghidra/10.3.2",
         "dir": "images/github.com/nationalsecurityagency/ghidra/10.3.2",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/ghidra-base:10.3.2"
+          "ghcr.io/cisagov/thorium/tools/ghidra-base:10.3.2"
         ]
       },
       "11.2": {
@@ -2505,7 +2505,7 @@
         "build_path": "images/github.com/nationalsecurityagency/ghidra/11.2",
         "dir": "images/github.com/nationalsecurityagency/ghidra/11.2",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/ghidra-base:11.2"
+          "ghcr.io/cisagov/thorium/tools/ghidra-base:11.2"
         ]
       },
       "12.0": {
@@ -2513,7 +2513,15 @@
         "build_path": "images/github.com/nationalsecurityagency/ghidra/12.0",
         "dir": "images/github.com/nationalsecurityagency/ghidra/12.0",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/ghidra-base:12.0"
+          "ghcr.io/cisagov/thorium/tools/ghidra-base:12.0"
+        ]
+      },
+      "12.1": {
+        "build_image": true,
+        "build_path": "images/github.com/nationalsecurityagency/ghidra/12.1",
+        "dir": "images/github.com/nationalsecurityagency/ghidra/12.1",
+        "image_tags": [
+          "ghcr.io/cisagov/thorium/tools/ghidra-base:12.1"
         ]
       }
     },
@@ -2598,7 +2606,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/google/magika:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/google/magika:latest",
           "kvm": null,
           "name": "magika",
           "network_policies": [],
@@ -2639,7 +2647,7 @@
         },
         "dir": "images/github.com/google/magika",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/google/magika:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/google/magika:latest"
         ]
       }
     },
@@ -2724,7 +2732,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/mbeijen/mimetype:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/mbeijen/mimetype:latest",
           "kvm": null,
           "name": "mimetype",
           "network_policies": [],
@@ -2765,7 +2773,7 @@
         },
         "dir": "images/github.com/mbeijen/mimetype",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/mbeijen/mimetype:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/mbeijen/mimetype:latest"
         ]
       }
     },
@@ -2850,7 +2858,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sandia.gov/pdfs/pdf-miner:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/pdfs/pdf-miner:latest",
           "kvm": null,
           "name": "pdf-miner",
           "network_policies": [],
@@ -2896,7 +2904,7 @@
         },
         "dir": "images/sandia.gov/pdfs/PdfMiner",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sandia.gov/pdfs/pdf-miner:latest"
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/pdfs/pdf-miner:latest"
         ]
       }
     },
@@ -2985,7 +2993,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sandia.gov/pdfs/pdf-preview:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sandia.gov/pdfs/pdf-preview:latest",
           "kvm": null,
           "name": "pdf-preview",
           "network_policies": [
@@ -3028,7 +3036,7 @@
         },
         "dir": "images/sandia.gov/pdfs/PdfPreview",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sandia.gov/pdfs/pdf-preview:latest"
+          "ghcr.io/cisagov/thorium/tools/sandia.gov/pdfs/pdf-preview:latest"
         ]
       }
     },
@@ -3114,7 +3122,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/pdfminer/pdf2text:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/pdfminer/pdf2text:latest",
           "kvm": null,
           "name": "pdf2text",
           "network_policies": [],
@@ -3155,7 +3163,7 @@
         },
         "dir": "images/github.com/pdfminer/pdf2text",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/pdfminer/pdf2text:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/pdfminer/pdf2text:latest"
         ]
       }
     },
@@ -3240,7 +3248,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/erocarrera/pefile:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/erocarrera/pefile:latest",
           "kvm": null,
           "name": "pefile",
           "network_policies": [],
@@ -3281,7 +3289,7 @@
         },
         "dir": "images/github.com/erocarrera/pefile",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/erocarrera/pefile:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/erocarrera/pefile:latest"
         ]
       }
     },
@@ -3366,7 +3374,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/packing-box/peid:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/packing-box/peid:latest",
           "kvm": null,
           "name": "peid",
           "network_policies": [],
@@ -3407,7 +3415,7 @@
         },
         "dir": "images/github.com/packing-box/peid",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/packing-box/peid:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/packing-box/peid:latest"
         ]
       }
     },
@@ -3492,7 +3500,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-apianalyzer:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-apianalyzer:latest",
           "kvm": null,
           "name": "pharos-apianalyzer",
           "network_policies": [],
@@ -3533,7 +3541,7 @@
         },
         "dir": "images/github.com/cmu-sei/pharos-apianalyzer",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-apianalyzer:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-apianalyzer:latest"
         ]
       }
     },
@@ -3618,7 +3626,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-callanalyzer:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-callanalyzer:latest",
           "kvm": null,
           "name": "pharos-callanalyzer",
           "network_policies": [],
@@ -3659,7 +3667,7 @@
         },
         "dir": "images/github.com/cmu-sei/pharos-callanalyzer",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-callanalyzer:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-callanalyzer:latest"
         ]
       }
     },
@@ -3744,7 +3752,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-fn2hash:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-fn2hash:latest",
           "kvm": null,
           "name": "pharos-fn2hash",
           "network_policies": [],
@@ -3787,7 +3795,7 @@
         },
         "dir": "images/github.com/cmu-sei/pharos-fn2hash",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-fn2hash:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-fn2hash:latest"
         ]
       }
     },
@@ -3872,7 +3880,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-ooanalyzer:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-ooanalyzer:latest",
           "kvm": null,
           "name": "pharos-ooanalyzer",
           "network_policies": [],
@@ -3913,7 +3921,7 @@
         },
         "dir": "images/github.com/cmu-sei/pharos-ooanalyzer",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/cmu-sei/pharos-ooanalyzer:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/cmu-sei/pharos-ooanalyzer:latest"
         ]
       }
     },
@@ -4000,7 +4008,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/trailofbits/polyfile:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/trailofbits/polyfile:latest",
           "kvm": null,
           "name": "polyfile",
           "network_policies": [],
@@ -4041,7 +4049,7 @@
         },
         "dir": "images/github.com/trailofbits/polyfile",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/trailofbits/polyfile:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/trailofbits/polyfile:latest"
         ]
       }
     },
@@ -4126,7 +4134,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/gamelinux/prads:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/gamelinux/prads:latest",
           "kvm": null,
           "name": "prads",
           "network_policies": [],
@@ -4167,7 +4175,7 @@
         },
         "dir": "images/github.com/gamelinux/prads",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/gamelinux/prads:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/gamelinux/prads:latest"
         ]
       }
     },
@@ -4252,7 +4260,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/rocky/python-uncompyle6:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/rocky/python-uncompyle6:latest",
           "kvm": null,
           "name": "python-uncompyle6",
           "network_policies": [],
@@ -4293,7 +4301,7 @@
         },
         "dir": "images/github.com/rocky/python-uncompyle6",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/rocky/python-uncompyle6:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/rocky/python-uncompyle6:latest"
         ]
       }
     },
@@ -4378,7 +4386,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/mandiant/quantumstrand:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/mandiant/quantumstrand:latest",
           "kvm": null,
           "name": "quantumstrand",
           "network_policies": [],
@@ -4419,7 +4427,7 @@
         },
         "dir": "images/github.com/mandiant/quantumstrand",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/mandiant/quantumstrand:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/quantumstrand:latest"
         ]
       }
     },
@@ -4504,7 +4512,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/ralphje/signify:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/ralphje/signify:latest",
           "kvm": null,
           "name": "signify",
           "network_policies": [],
@@ -4545,7 +4553,7 @@
         },
         "dir": "images/github.com/ralphje/signify",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/ralphje/signify:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/ralphje/signify:latest"
         ]
       }
     },
@@ -4631,7 +4639,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sqlite.org/sqlite/sqlitediff:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sqlite.org/sqlite/sqlitediff:latest",
           "kvm": null,
           "name": "sqlitediff",
           "network_policies": [],
@@ -4672,7 +4680,7 @@
         },
         "dir": "images/sqlite.org/sqlite/sqlitediff",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sqlite.org/sqlite/sqlitediff:latest"
+          "ghcr.io/cisagov/thorium/tools/sqlite.org/sqlite/sqlitediff:latest"
         ]
       }
     },
@@ -4758,7 +4766,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/sqlite.org/sqlite/sqlitedump:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/sqlite.org/sqlite/sqlitedump:latest",
           "kvm": null,
           "name": "sqlitedump",
           "network_policies": [],
@@ -4799,7 +4807,7 @@
         },
         "dir": "images/sqlite.org/sqlite/sqlitedump",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/sqlite.org/sqlite/sqlitedump:latest"
+          "ghcr.io/cisagov/thorium/tools/sqlite.org/sqlite/sqlitedump:latest"
         ]
       }
     },
@@ -4884,7 +4892,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/ssdeep-project/ssdeep:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/ssdeep-project/ssdeep:latest",
           "kvm": null,
           "name": "ssdeep",
           "network_policies": [],
@@ -4925,7 +4933,7 @@
         },
         "dir": "images/github.com/ssdeep-project/ssdeep",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/ssdeep-project/ssdeep:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/ssdeep-project/ssdeep:latest"
         ]
       }
     },
@@ -5011,7 +5019,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest",
           "kvm": null,
           "name": "strings",
           "network_policies": [],
@@ -5052,7 +5060,7 @@
         },
         "dir": "images/gnu.org/binutils/strings",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest"
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
         ]
       }
     },
@@ -5141,7 +5149,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest",
           "kvm": null,
           "name": "strings-16be",
           "network_policies": [],
@@ -5182,7 +5190,7 @@
         },
         "dir": "images/gnu.org/binutils/strings-16be",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest"
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
         ]
       }
     },
@@ -5271,7 +5279,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest",
           "kvm": null,
           "name": "strings-16le",
           "network_policies": [],
@@ -5312,7 +5320,7 @@
         },
         "dir": "images/gnu.org/binutils/strings-16le",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest"
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
         ]
       }
     },
@@ -5401,7 +5409,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest",
           "kvm": null,
           "name": "strings-32be",
           "network_policies": [],
@@ -5442,7 +5450,7 @@
         },
         "dir": "images/gnu.org/binutils/strings-32be",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest"
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
         ]
       }
     },
@@ -5531,7 +5539,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest",
           "kvm": null,
           "name": "strings-32le",
           "network_policies": [],
@@ -5572,7 +5580,7 @@
         },
         "dir": "images/gnu.org/binutils/strings-32le",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/gnu.org/binutils/strings:latest"
+          "ghcr.io/cisagov/thorium/tools/gnu.org/binutils/strings:latest"
         ]
       }
     },
@@ -5657,7 +5665,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/mandiant/stringsifter:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/mandiant/stringsifter:latest",
           "kvm": null,
           "name": "stringsifter",
           "network_policies": [],
@@ -5698,7 +5706,7 @@
         },
         "dir": "images/github.com/mandiant/stringsifter",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/mandiant/stringsifter:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/mandiant/stringsifter:latest"
         ]
       }
     },
@@ -5784,7 +5792,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/llnl/surfactant:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/llnl/surfactant:latest",
           "kvm": null,
           "name": "surfactant",
           "network_policies": [],
@@ -5825,7 +5833,7 @@
         },
         "dir": "images/github.com/llnl/surfactant",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/llnl/surfactant:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/llnl/surfactant:latest"
         ]
       }
     },
@@ -5910,7 +5918,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/osif/suricata:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/osif/suricata:latest",
           "kvm": null,
           "name": "suricata",
           "network_policies": [],
@@ -5951,7 +5959,7 @@
         },
         "dir": "images/github.com/OSIF/suricata",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/osif/suricata:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/osif/suricata:latest"
         ]
       }
     },
@@ -6036,7 +6044,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/simsong/tcpflow:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/simsong/tcpflow:latest",
           "kvm": null,
           "name": "tcpflow",
           "network_policies": [],
@@ -6077,7 +6085,7 @@
         },
         "dir": "images/github.com/simsong/tcpflow",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/simsong/tcpflow:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/simsong/tcpflow:latest"
         ]
       }
     },
@@ -6162,7 +6170,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/mark0.net/software/trid:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/mark0.net/software/trid:latest",
           "kvm": null,
           "name": "trid",
           "network_policies": [],
@@ -6203,7 +6211,7 @@
         },
         "dir": "images/mark0.net/software/trid",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/mark0.net/software/trid:latest"
+          "ghcr.io/cisagov/thorium/tools/mark0.net/software/trid:latest"
         ]
       }
     },
@@ -6291,7 +6299,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/aquasecurity/trivy:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/aquasecurity/trivy:latest",
           "kvm": null,
           "name": "trivy",
           "network_policies": [
@@ -6334,7 +6342,7 @@
         },
         "dir": "images/github.com/aquasecurity/trivy",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/aquasecurity/trivy:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/aquasecurity/trivy:latest"
         ],
         "network_policies": [
           {
@@ -6454,7 +6462,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/trufflesecurity/trufflehog:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/trufflesecurity/trufflehog:latest",
           "kvm": null,
           "name": "trufflehog",
           "network_policies": [],
@@ -6495,7 +6503,7 @@
         },
         "dir": "images/github.com/trufflesecurity/trufflehog",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/trufflesecurity/trufflehog:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/trufflesecurity/trufflehog:latest"
         ]
       }
     },
@@ -6580,7 +6588,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/wireshark/tshark:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/wireshark/tshark:latest",
           "kvm": null,
           "name": "tshark",
           "network_policies": [],
@@ -6621,7 +6629,7 @@
         },
         "dir": "images/github.com/wireshark/tshark",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/wireshark/tshark:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/wireshark/tshark:latest"
         ]
       }
     },
@@ -6707,7 +6715,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/theopolis/uefi-firmware-parser:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/theopolis/uefi-firmware-parser:latest",
           "kvm": null,
           "name": "uefi-firmware-parser",
           "network_policies": [],
@@ -6748,7 +6756,7 @@
         },
         "dir": "images/github.com/theopolis/uefi-firmware-parser",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/theopolis/uefi-firmware-parser:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/theopolis/uefi-firmware-parser:latest"
         ]
       }
     },
@@ -6833,7 +6841,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/onekey-sec/unblob:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/onekey-sec/unblob:latest",
           "kvm": null,
           "name": "unblob",
           "network_policies": [],
@@ -6874,7 +6882,7 @@
         },
         "dir": "images/github.com/onekey-sec/unblob",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/onekey-sec/unblob:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/onekey-sec/unblob:latest"
         ]
       }
     },
@@ -6959,7 +6967,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/salsa.debian.org/pkg-security-team/fcrackzip-unzip:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/salsa.debian.org/pkg-security-team/fcrackzip-unzip:latest",
           "kvm": null,
           "name": "unzip",
           "network_policies": [],
@@ -7000,7 +7008,7 @@
         },
         "dir": "images/salsa.debian.org/pkg-security-team/fcrackzip",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/salsa.debian.org/pkg-security-team/fcrackzip-unzip:latest"
+          "ghcr.io/cisagov/thorium/tools/salsa.debian.org/pkg-security-team/fcrackzip-unzip:latest"
         ]
       }
     },
@@ -7086,7 +7094,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/upx/upx-unpack:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/upx/upx-unpack:latest",
           "kvm": null,
           "name": "upx-unpack",
           "network_policies": [],
@@ -7127,7 +7135,7 @@
         },
         "dir": "images/github.com/upx/upx",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/upx/upx-unpack:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/upx/upx-unpack:latest"
         ]
       }
     },
@@ -7212,7 +7220,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/blog.didierstevens.com/tools/xorstrings:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/blog.didierstevens.com/tools/xorstrings:latest",
           "kvm": null,
           "name": "xorstrings",
           "network_policies": [],
@@ -7253,7 +7261,7 @@
         },
         "dir": "images/blog.didierstevens.com/tools/xorstrings",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/blog.didierstevens.com/tools/xorstrings:latest"
+          "ghcr.io/cisagov/thorium/tools/blog.didierstevens.com/tools/xorstrings:latest"
         ]
       }
     },
@@ -7338,7 +7346,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/hellman/xortool:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/hellman/xortool:latest",
           "kvm": null,
           "name": "xortool",
           "network_policies": [],
@@ -7379,7 +7387,7 @@
         },
         "dir": "images/github.com/hellman/xortool",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/hellman/xortool:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/hellman/xortool:latest"
         ]
       }
     },
@@ -7467,7 +7475,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/virustotal/yara:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/virustotal/yara:latest",
           "kvm": null,
           "name": "yara",
           "network_policies": [],
@@ -7508,7 +7516,7 @@
         },
         "dir": "images/github.com/virustotal/yara",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/virustotal/yara:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/virustotal/yara:latest"
         ]
       }
     },
@@ -7593,7 +7601,7 @@
           "env": {},
           "generator": false,
           "group": "static",
-          "image": "ghcr.io/gabaker/thorium/tools/github.com/zeek/zeek-dump:latest",
+          "image": "ghcr.io/cisagov/thorium/tools/github.com/zeek/zeek-dump:latest",
           "kvm": null,
           "name": "zeek-dump",
           "network_policies": [],
@@ -7634,7 +7642,7 @@
         },
         "dir": "images/github.com/zeek/zeek",
         "image_tags": [
-          "ghcr.io/gabaker/thorium/tools/github.com/zeek/zeek-dump:latest"
+          "ghcr.io/cisagov/thorium/tools/github.com/zeek/zeek-dump:latest"
         ]
       }
     }
@@ -8646,7 +8654,7 @@
     }
   },
   "registries": [
-    "ghcr.io/gabaker/thorium"
+    "ghcr.io/cisagov/thorium"
   ],
-  "registry": "ghcr.io/gabaker/thorium"
+  "registry": "ghcr.io/cisagov/thorium"
 }

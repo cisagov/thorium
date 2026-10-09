@@ -6,9 +6,9 @@ COPY --from=base / /
 
 WORKDIR /suricata
 
-ADD update.bash /suricata/update.bash
-ADD run_suricata.bash /suricata/run_suricata.bash
-ADD summarize.py /suricata/summarize.py
+COPY update.bash /suricata/update.bash
+COPY run_suricata.bash /suricata/run_suricata.bash
+COPY summarize.py /suricata/summarize.py
 
 RUN bash /suricata/update.bash
 

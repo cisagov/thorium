@@ -3,9 +3,9 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN apt update && \
-    DEBIAN_FRONTEND=noninteractive apt install -y tshark && \
-    apt clean && \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y tshark && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY wrapper.bash /app/.

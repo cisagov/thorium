@@ -18,9 +18,10 @@ def extractTags(results):
     split = results.split("\n")
     for s in split:
         if "%" in s and aboveDetectionThreshold(s):
-            lineSplit = s.split(" ")
-            # cut off percentage part of results and last chunk
-            nameSection = lineSplit[3:len(lineSplit) - 1]
+            # strip first: 100% matches have no leading space before the percentage
+            lineSplit = s.strip().split(" ")
+            # cut off percentage and extension parts of results and last chunk
+            nameSection = lineSplit[2:len(lineSplit) - 1]
             name = " ".join(nameSection)
             tags['FileTypeMatch'].append(name)
     return tags

@@ -2,38 +2,52 @@ name: Analysis Tool Builds
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    # nightly, off the top of the hour when GitHub is most likely to delay or drop scheduled runs
+    - cron: '23 0 * * *'
   push:
     branches:
       - main
+  # rebuilds the tool images on demand; runs started from any other branch build nothing
+  workflow_dispatch:
 
 concurrency:
   group: tool-build-group
 
+# jobs start with no token permissions and are granted only what they use
+permissions: {}
+
 jobs:
   generate-tool-builds:
+    name: Generate Tool Build Matrix
+    # tool images are pushed to their published tags, so they are only built from main
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-      packages: write
     outputs:
       matrix: ${{ steps.generate-tool-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # toolbox.json names images under one repo's namespace, so tags are moved into this repo's
+      # namespace, the only one its token can push to
       - name: Generate tool build matrix
         id: generate-tool-matrix
         run: |
-          MATRIX=$(python3 tools/scripts/build-actions-matrix.py tools/toolbox.json)
+          REGISTRY_PREFIX=$(echo "ghcr.io/${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          MATRIX=$(python3 tools/scripts/build-actions-matrix.py --registry-prefix "$REGISTRY_PREFIX" tools/toolbox.json)
           echo "matrix=$(echo "$MATRIX" | jq -c .)" >> "$GITHUB_OUTPUT"
 
   build-tools:
     name: Build Thorium Tool Image - ${{ matrix.tool.name }}:${{ matrix.tool.version }}
     needs: generate-tool-builds
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       contents: read
-      packages: write
+      packages: write # push images to ghcr.io
     strategy:
       fail-fast: false
       max-parallel: 5
@@ -41,11 +55,19 @@ jobs:
         tool: ${{ fromJson(needs.generate-tool-builds.outputs.matrix) }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build, tag, and push tool container image
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
+          # matrix values are passed through env vars rather than inline expressions so they are
+          # never interpolated into the script
+          BUILD_PATH: tools/${{ matrix.tool.build_path }}
+          IMAGE_TAGS: ${{ toJson(matrix.tool.image_tags) }}
+          BASE_IMAGE: ${{ toJson(matrix.tool.base_image) }}
+
+          # ghcr.io login for --registry-login; GITHUB_ACTOR is set by the runner
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
           # Compatibility for toolbox.json entries that use:
@@ -61,12 +83,12 @@ jobs:
           # Used when toolbox.json base_image.user references:
           #   "user": "$BASE_IMAGE_USER"
           # or:
-          #   "user": "BASE_IMAG_USER"
+          #   "user": "BASE_IMAGE_USER"
           BASE_IMAGE_USER: ${{ secrets.BASE_IMAGE_USER }}
         run: |
           python3 tools/scripts/build-tool-image.py \
-            --build-path "tools/${{ matrix.tool.build_path }}" \
-            --image-tags '${{ toJson(matrix.tool.image_tags) }}' \
-            --base-image '${{ toJson(matrix.tool.base_image) }}' \
+            --build-path "$BUILD_PATH" \
+            --image-tags "$IMAGE_TAGS" \
+            --base-image "$BASE_IMAGE" \
             --label "runnumber=${GITHUB_RUN_ID}" \
             --registry-login "ghcr.io=GITHUB_ACTOR=GITHUB_TOKEN"

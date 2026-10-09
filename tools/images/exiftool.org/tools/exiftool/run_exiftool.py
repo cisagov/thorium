@@ -37,7 +37,7 @@ def run(file_path):
         "FilePermissions",
         "SourceFile",
         "FileModifyDate",
-        "FileAccessDate"
+        "FileAccessDate",
         "FileInodeChangeDate"]
     for result_key in exclude_keys:
         result.pop(result_key, None) 

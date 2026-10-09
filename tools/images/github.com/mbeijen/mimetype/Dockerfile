@@ -3,9 +3,9 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN apt update && \
-    apt install -y libfile-mimeinfo-perl && \
-    apt clean && \
+RUN apt-get update && \
+    apt-get install -y libfile-mimeinfo-perl && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY wrapper.bash /app/.

@@ -21,7 +21,7 @@ def dump_certs(pefile):
     signed_data_list = []
     try:
         # iterate over signed data in PE file
-        for signed_data in pefile.signed_datas:
+        for signed_data in pefile.signatures:
             data_dict = {}
             
             # get signer information

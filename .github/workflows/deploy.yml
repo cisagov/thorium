@@ -6,52 +6,81 @@ on:
       - '**'
     tags:
       - '[0-9]+.[0-9]+.[0-9]+*'
+  # pull requests build everything but never publish, so reviewers see whether the image builds
+  pull_request:
+
+# jobs start with no token permissions and are granted only what they use
+permissions: {}
+
+# superseded runs on feature branches and pull requests are cancelled. Running
+# jobs on main and on release tags are never cancelled, so a publish is never
+# interrupted, but a queued run is still replaced when a newer run queues behind it
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build-mdbook-docs:
+    name: Build mdBook Docs
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Cargo install mdbook
-        run: cargo install mdbook
+        run: cargo install --locked --version 0.5.4 mdbook
       - name: Build mdbook docs
         run: mdbook build api/docs
       # Save static docs site for container build
       - name: Upload docs as artifacts (API hosted)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: thorium-mdbook-bundle
           path: api/docs/book/
       # Save docs site for hosting in Github pages (gh-pages branch)
       - name: Upload docs as artifacts (Github pages)
-        uses: actions/upload-pages-artifact@v3
-        if: 
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: api/docs/book/
 
   build-ui-bundle:
+    name: Build UI Bundle
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Build UI Bundle
         run: |
           cd ui
-          npm install
+          npm ci
           set -e
           npm run validate-style
           npm run build
       - name: Upload UI Bundle Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: thorium-ui-bundle
           path: ui/dist/
 
   build-glibc-binaries:
+    name: Build Thorium glibc Binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
     env:
         RUSTFLAGS: "-C target-feature=+aes,+sse2"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Build binaries
         run: |
           rustup default nightly
@@ -75,12 +104,12 @@ jobs:
           mv target/release/thorium-operator glibc/.
           mv target/doc dev_docs
       - name: Upload glibc binaries as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: thorium-glibc-binaries
           path: glibc/
       - name: Upload dev docs as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: thorium-dev-docs-bundle
           path: dev_docs/
@@ -106,15 +135,22 @@ jobs:
             target: aarch64-apple-darwin
             flags: ""
     runs-on: ${{ matrix.platform.runs-on }}
+    timeout-minutes: 180
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install bindgen-cli
+        env:
+          TARGET: ${{ matrix.platform.target }}
         run: |
           grep -q "Ubuntu" /etc/os-release && sudo apt update && sudo apt install gcc build-essential libssl-dev pkg-config libclang-dev clang-15 musl-tools cmake libvirt-dev jq memstat sysstat -y
-          rustup target add ${{ matrix.platform.target }}
-          cargo install --target=${{ matrix.platform.target }} --force --locked bindgen-cli
+          rustup target add "$TARGET"
+          cargo install --target="$TARGET" --force --locked --version 0.72.1 bindgen-cli
       - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v1
+        uses: houseabsolute/actions-rust-cross@21b0f18dc621b25bfae556ff2791fca4173121e8 # v1.0.8
         env:
           RUSTFLAGS: "${{ matrix.platform.flags }}"
         with:
@@ -123,8 +159,11 @@ jobs:
           toolchain: nightly
           args: "--features vendored-openssl --release"
           strip: true
+          # these binaries are published, so never restore caches another workflow run could have written
+          use-rust-cache: false
+          cache-cross-binary: false
       - name: Upload ${{ matrix.platform.target }} binary artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.platform.target }}-binaries
           path: target/${{ matrix.platform.target }}/release
@@ -142,101 +181,115 @@ jobs:
             name: reactor
     # This needs to run on Ubuntu or agent builds fail
     runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
     env:
       RUSTFLAGS: "-C target-feature=+aes,+sse2"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install bindgen-cli
         run: |
           sudo apt update && sudo apt install gcc gcc-mingw-w64-x86-64 build-essential libssl-dev pkg-config libclang-dev clang-15 musl-tools cmake libvirt-dev jq memstat sysstat -y
           rustup target add x86_64-pc-windows-gnu
-          cargo install --target=x86_64-pc-windows-gnu --force --locked bindgen-cli
+          cargo install --target=x86_64-pc-windows-gnu --force --locked --version 0.72.1 bindgen-cli
       - name: Build Windows Cross ${{ matrix.build-target.name }} Binary
-        uses: houseabsolute/actions-rust-cross@v1
+        uses: houseabsolute/actions-rust-cross@21b0f18dc621b25bfae556ff2791fca4173121e8 # v1.0.8
         with:
           command: build
           target: x86_64-pc-windows-gnu
           toolchain: nightly
           args: "--features vendored-openssl --release"
           strip: true
+          # these binaries are published, so never restore caches another workflow run could have written
+          use-rust-cache: false
+          cache-cross-binary: false
           working-directory: ${{ matrix.build-target.path }}
       - name: Upload ${{ matrix.build-target.name }} x86_64-pc-windows-gnu binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: x86_64-pc-windows-gnu-${{ matrix.build-target.name }}
           path: target/x86_64-pc-windows-gnu/release
 
   build-core-container:
+    name: Build Thorium Core Container
     needs:
       - build-mdbook-docs
       - build-ui-bundle
       - build-glibc-binaries
       - build-cross-binaries
+      - build-windows-cross-binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
-      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      latest-image: ${{ steps.image.outputs.latest-image }}
+      latest-source: ${{ steps.image.outputs.latest-source }}
+      publish: ${{ steps.image.outputs.publish }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Download UI Bundle Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: thorium-ui-bundle
           path: ui/dist
       - name: Download mdBook Bundle Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: thorium-mdbook-bundle
           path: user_docs
       - name: Download Developer Docs Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: thorium-dev-docs-bundle
           path: dev_docs
       - name: Download Thorium glibc Binary Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: thorium-glibc-binaries
           path: glibc
       - name: Download Thorium musl Binary Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: x86_64-unknown-linux-musl-binaries
           path: musl
       #- name: Download Thorium Linux aarch64 Binary artifacts
-      #  uses: actions/download-artifact@v4
+      #  uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       #  with:
       #    name: aarch64-unknown-linux-musl-binaries
       #    path: aarch
       - name: Download Thorium Windows Agent Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
            name: x86_64-pc-windows-gnu-agent
            path: windows/agent
       - name: Download Thorium Windows Thorctl Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
            name: x86_64-pc-windows-gnu-thorctl
            path: windows/thorctl
       - name: Download Thorium Windows Reactor Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
            name: x86_64-pc-windows-gnu-reactor
            path: windows/reactor
       - name: Download Thorium macos x86_64 Binary Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: x86_64-apple-darwin-binaries
           path: macos/x86_64
       - name: Download Thorium macos aarch64 Binary Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: aarch64-apple-darwin-binaries
           path: macos/aarch64
-      - name: Login to Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Stage Artifacts For Container Build
         run: |
           mkdir -p glibc
@@ -258,42 +311,268 @@ jobs:
           mv windows/reactor/thorium-reactor.exe target/x86_64-pc-windows-gnu/release/
           mv macos/x86_64/* target/x86_64-apple-darwin/release/.
           mv macos/aarch64/* target/aarch64-apple-darwin/release/.
-      - name: Build Thorium Container Image
+      # The image is built on every push and pull request but only published:
+      # - from every branch on forks, tagged with the branch name
+      # - from the default branch only on the core repo
+      # - from release tags, tagged with the version
+      # `latest` points at the highest release tag on the default branch. It is set by a release
+      # tag's run when the tag is already on the default branch, and re-pointed by every
+      # default-branch run so a release merged after its tag was pushed is still promoted.
+      # The ref name and repository come from the runner's default GITHUB_* env vars rather than
+      # template expansion so branch/tag names are never interpolated into the script
+      - name: Choose Image Tags
+        id: image
+        env:
+          IS_FORK: ${{ github.event.repository.fork }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          IMAGE_PATH=ghcr.io/${{ github.repository }}/infrastructure/thorium
-          LOWER_IMAGE_PATH=$(echo $IMAGE_PATH | tr '[A-Z]' '[a-z]')
-          # Build base docker image
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            TAG="${{ github.ref_name }}"
-          elif [[ "${{ github.ref_type }}" == "branch" ]]; then
-            TAG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          # a failing git command in a pipeline fails the step instead of leaving latest stale
+          set -o pipefail
+          IMAGE_PATH=$(echo "ghcr.io/${GITHUB_REPOSITORY}/infrastructure/thorium" | tr '[:upper:]' '[:lower:]')
+          RELEASE_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
+          # print the highest X.Y.Z release tag reachable from a ref, or nothing if there is none
+          highest_release() {
+            git tag --merged "$1" | { grep -E "$RELEASE_RE" || true; } | sort --version-sort | tail -n1
+          }
+          PUBLISH=false
+          LATEST_SOURCE=""
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            # the ref name is <number>/merge; pull request images stay local to the runner
+            TAG="pr-${GITHUB_REF_NAME%%/*}"
+          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            # the tag filter allows any suffix, so only accept X.Y.Z with an optional SemVer
+            # prerelease, which is also a valid image tag of at most 128 characters
+            if ! [[ "$GITHUB_REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || [[ ${#GITHUB_REF_NAME} -gt 128 ]]; then
+              echo "::error::Release tags must be X.Y.Z, optionally followed by a prerelease such as -rc.1"
+              exit 1
+            fi
+            TAG="$GITHUB_REF_NAME"
+            PUBLISH=true
+            HIGHEST_RELEASE=$(highest_release "origin/${DEFAULT_BRANCH}")
+            if [[ "$GITHUB_REF_NAME" == "$HIGHEST_RELEASE" ]]; then
+              LATEST_SOURCE="${IMAGE_PATH}:${TAG}"
+            fi
+          else
+            # replace characters docker does not allow in tags and strip leading '.' and '-'
+            TAG="${GITHUB_REF_NAME//[^a-zA-Z0-9._-]/-}"
+            TAG=$(sed -E 's/^[.-]+//' <<< "$TAG")
+            # keep branches from overwriting `latest` or release tags
+            if [[ "$TAG" == "latest" || "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              TAG="branch-${TAG}"
+            fi
+            # names that sanitizing changed, or that are empty or exceed docker's 128 character
+            # limit, get a hash of the branch name so they stay valid and distinct, so feat/x and
+            # feat-x do not share a tag
+            if [[ -z "$TAG" || ${#TAG} -gt 128 || "$TAG" != "$GITHUB_REF_NAME" ]]; then
+              HASH=$(printf '%s' "$GITHUB_REF_NAME" | sha256sum | cut -c1-8)
+              TAG="${TAG:+${TAG:0:119}-}${HASH}"
+            fi
+            if [[ "$IS_FORK" == "true" || "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]]; then
+              PUBLISH=true
+            fi
+            # checkout fetches the current default branch, so a re-run of an older commit still
+            # finds the newest release
+            if [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]]; then
+              LATEST_RELEASE=$(highest_release "origin/${DEFAULT_BRANCH}")
+              if [[ -n "$LATEST_RELEASE" ]]; then
+                LATEST_SOURCE="${IMAGE_PATH}:${LATEST_RELEASE}"
+              fi
+            fi
           fi
-          IMAGE=$LOWER_IMAGE_PATH:$TAG
-          docker build --file ./Dockerfile --tag $IMAGE --label "runnumber=${GITHUB_RUN_ID}" .
-          docker push $IMAGE
-          # now check if tag is latest so can build correct latest tag
-          LATEST_TAG=$(git tag | sort --version-sort | grep -E "[0-9]+\.[0-9]+\.[0-9]+$" | tail -n1)
-          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" == $LATEST_TAG ]]; then
-            echo "Pushing latest release image"
-            docker tag $IMAGE $LOWER_IMAGE_PATH:latest
-            docker push $LOWER_IMAGE_PATH:latest
+          echo "image=${IMAGE_PATH}:${TAG} publish=${PUBLISH} latest-source=${LATEST_SOURCE}"
+          {
+            echo "image=${IMAGE_PATH}:${TAG}"
+            echo "latest-image=${IMAGE_PATH}:latest"
+            echo "latest-source=${LATEST_SOURCE}"
+            echo "publish=${PUBLISH}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build Thorium Container Image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: docker build --file ./Dockerfile --tag "$IMAGE" --label "runnumber=${GITHUB_RUN_ID}" .
+      # the image is saved for the vulnerability scan, and handed to the publish job so the
+      # registry token never shares a job with the build
+      - name: Save Thorium Container Image
+        id: save
+        # a build that is not published only needs the tar for the scan, so failing to save it,
+        # such as running out of disk, does not fail the build
+        continue-on-error: ${{ steps.image.outputs.publish != 'true' }}
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: docker save --output "${RUNNER_TEMP}/thorium-image.tar" "$IMAGE"
+      # Every build is scanned before it is published, with the digest-pinned Trivy image the
+      # security workflows use (image-rescan.yml rescans published images weekly). Trivy reads the saved image, so it gets no Docker socket, and it needs
+      # the network only for its vulnerability database. The scan, SBOM and report steps never
+      # fail the job, and their timeouts keep a stalled download from timing out the job and
+      # blocking the publish: vulnerabilities only warn.
+      - name: Scan Thorium Container Image
+        id: scan
+        if: steps.save.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+        run: |
+          # Trivy spills large files to TMPDIR while analyzing, so it is on disk under the cache
+          # rather than in the small /tmp tmpfs
+          mkdir -p "${RUNNER_TEMP}/trivy-image" "${RUNNER_TEMP}/trivy-cache/tmp"
+          docker run --rm --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,size=512m -e HOME=/tmp -e TMPDIR=/cache/tmp -w /tmp \
+            -v "${RUNNER_TEMP}/thorium-image.tar:/in/thorium-image.tar:ro" \
+            -v "${RUNNER_TEMP}/trivy-cache:/cache" \
+            -v "${RUNNER_TEMP}/trivy-image:/out" \
+            "$TRIVY_IMAGE" image --input /in/thorium-image.tar --scanners vuln --list-all-pkgs \
+            --skip-version-check --timeout 10m --cache-dir /cache --format json --output /out/thorium.json
+      # the CycloneDX SBOM is converted from the scan, so the image is read once
+      - name: Write Thorium Container Image SBOM
+        if: steps.scan.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,size=512m -e HOME=/tmp -w /tmp \
+            -v "${RUNNER_TEMP}/trivy-image:/out" \
+            "$TRIVY_IMAGE" convert --format cyclonedx --output /out/thorium.cdx.json /out/thorium.json
+      # ranks findings by EPSS and CISA KEV (downloaded in full, so no CVE IDs leave the runner)
+      - name: Report Thorium Container Image Vulnerabilities
+        if: steps.scan.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          python3 .github/scripts/vuln_report.py --input "${RUNNER_TEMP}/trivy-image/thorium.json" \
+            --image-name "$IMAGE" --dockerfile Dockerfile \
+            --sarif "${RUNNER_TEMP}/trivy-image/trivy-image.sarif" \
+            --json "${RUNNER_TEMP}/trivy-image/vulnerabilities.json" \
+            --markdown "${RUNNER_TEMP}/trivy-image/vulnerabilities.md"
+          cat "${RUNNER_TEMP}/trivy-image/vulnerabilities.md" >> "$GITHUB_STEP_SUMMARY"
+          python3 .github/scripts/lint_report.py --tool trivy-image --format sarif --collapse-by-rule \
+            --input "${RUNNER_TEMP}/trivy-image/trivy-image.sarif" \
+            --sarif-output "${RUNNER_TEMP}/trivy-image/trivy-image-filtered.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/trivy-image" --fail-level none
+      - name: Store Thorium Container Image Scan
+        if: ${{ !cancelled() && steps.scan.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-image-report
+          path: ${{ runner.temp }}/trivy-image/
+          retention-days: 30
+      - name: Upload Thorium Container Image
+        if: steps.image.outputs.publish == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: thorium-core-image
+          path: ${{ runner.temp }}/thorium-image.tar
+          retention-days: 1
+
+  # uploads the image scan to code scanning in a job that runs no build or scanner code, so the
+  # `security-events: write` token never shares a job with them
+  upload-core-image-scan:
+    name: Upload Thorium Core Container Scan
+    needs: build-core-container
+    # Pushes only: a pull request's upload would make GitHub's code scanning check fail on high
+    # severity CVEs, and image vulnerabilities only warn. Pull requests still get the artifact,
+    # job summary and annotations.
+    if: ${{ !cancelled() && needs.build-core-container.result == 'success' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # a missing or unreadable scan never fails the release
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write # upload SARIF results to code scanning
+    steps:
+      - name: Download Thorium Container Image Scan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: trivy-image-report
+          path: ${{ runner.temp }}/trivy-image
+      # the report step may have failed after the scan, leaving no SARIF to upload
+      - name: Check for filtered SARIF
+        id: sarif
+        run: |
+          if [ -f "${RUNNER_TEMP}/trivy-image/trivy-image-filtered.sarif" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No filtered SARIF in the scan artifact; nothing to upload"
           fi
+      # the filtered SARIF leaves out findings ignored by .github/lint-ignore.toml
+      - name: Upload Thorium Container Image Scan SARIF
+        if: steps.sarif.outputs.found == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ runner.temp }}/trivy-image/trivy-image-filtered.sarif
+          category: trivy-image-build
+
+  publish-core-container:
+    name: Publish Thorium Core Container
+    needs: build-core-container
+    if: needs.build-core-container.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      packages: write # push images to ghcr.io
+    steps:
+      - name: Download Thorium Container Image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: thorium-core-image
+          path: ${{ runner.temp }}/image
+      - name: Load Thorium Container Image
+        run: docker load --input "${RUNNER_TEMP}/image/thorium-image.tar"
+      - name: Login to Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Push Thorium Container Image
+        env:
+          IMAGE: ${{ needs.build-core-container.outputs.image }}
+        run: docker push "$IMAGE"
+      # copies the release's manifest in the registry, so the release image is never rebuilt
+      - name: Point latest at the Highest Release
+        if: needs.build-core-container.outputs.latest-source != ''
+        env:
+          LATEST_SOURCE: ${{ needs.build-core-container.outputs.latest-source }}
+          LATEST_IMAGE: ${{ needs.build-core-container.outputs.latest-image }}
+        run: |
+          # a release tag's own run may still be building when the default branch reaches it, so a
+          # missing release image is skipped while any other failure fails the step
+          if ! INSPECT=$(docker buildx imagetools inspect "$LATEST_SOURCE" 2>&1); then
+            if grep -qi "not found" <<< "$INSPECT"; then
+              echo "::warning::${LATEST_SOURCE} is not published yet, so latest was not updated"
+              exit 0
+            fi
+            echo "$INSPECT"
+            echo "::error::Failed to inspect ${LATEST_SOURCE}"
+            exit 1
+          fi
+          echo "Pointing latest at ${LATEST_SOURCE}"
+          docker buildx imagetools create --tag "$LATEST_IMAGE" "$LATEST_SOURCE"
 
   # Deploy the updated mdbook docs to github pages
-  # We only deploy docs if the container images build successfully
+  # We only deploy docs from main on the core repo, and only once the container image is published
   deploy-updated-pages:
-    if: ${{ github.ref_type == 'branch' && github.ref == 'refs/heads/main'}}
+    name: Deploy GitHub Pages
+    if: ${{ github.ref_type == 'branch' && github.ref == 'refs/heads/main' && !github.event.repository.fork }}
     needs:
      - build-mdbook-docs
-     - build-core-container
+     - publish-core-container
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
-      pages: write
-      id-token: write
+      pages: write # create the GitHub Pages deployment
+      id-token: write # OIDC token deploy-pages uses to authenticate the deployment
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

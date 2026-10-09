@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN python3 -m pip install pdfminer.six
+RUN python3 -m pip install --no-cache-dir pdfminer.six
 
 COPY pdfmine.py /app/.
 

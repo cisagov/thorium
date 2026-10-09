@@ -3,9 +3,8 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN pip install --upgrade pip && \
-    pip install magika && \
-    rm -rf /root/.cache/pip
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir magika
 
 COPY wrapper.bash tag.py /app/
 

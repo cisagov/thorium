@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 ARG IMAGE="ubuntu:24.04"
+# renovate: datasource=github-releases depName=VirusTotal/yara extractVersion=^v(?<version>.+)$
 ARG YARA_VERSION="4.5.8"
+# the sha256 of the GitHub source archive for the YARA_VERSION tag
+ARG YARA_SHA256="c322414975ff6f701149856613afdcd92a7e6939c284c798ae3c85618197efaa"
 
 ############################
 # Stage 1: Build YARA
@@ -9,6 +12,7 @@ ARG YARA_VERSION="4.5.8"
 FROM ${IMAGE} AS yara-builder
 
 ARG YARA_VERSION
+ARG YARA_SHA256
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -32,6 +36,7 @@ WORKDIR /tmp/yara-build
 RUN curl -fsSL \
       "https://github.com/VirusTotal/yara/archive/refs/tags/v${YARA_VERSION}.tar.gz" \
       -o yara.tar.gz && \
+    echo "${YARA_SHA256}  yara.tar.gz" | sha256sum -c - && \
     tar -xzf yara.tar.gz --strip-components=1 && \
     rm yara.tar.gz && \
     ./bootstrap.sh && \

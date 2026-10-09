@@ -1,0 +1,11 @@
+# hadolint policy for every Dockerfile in this repo
+#
+# CI passes this file explicitly with `-c`, so hadolint never auto-discovers a
+# different config from the working directory or the home directory. Changes to
+# this file change what CI enforces and should be reviewed like workflow changes.
+
+# CI runs hadolint with --no-fail and lets .github/scripts/lint_report.py fail
+# the job on error-level findings, so that findings ignored in
+# .github/lint-ignore.toml do not fail it. This threshold gives local hadolint
+# runs the same behavior; keep the two in step.
+failure-threshold: error

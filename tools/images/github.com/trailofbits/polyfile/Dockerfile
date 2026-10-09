@@ -3,8 +3,7 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN pip3 install polyfile && \
-    rm -rf /root/.cache/pip
+RUN pip3 install --no-cache-dir polyfile
 
 COPY run_polyfile.py /app/.
 

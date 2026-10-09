@@ -5,10 +5,10 @@ WORKDIR /app
 
 RUN cargo version
 
-RUN apt clean all && \
-    apt update && \
-    apt install -y p7zip-full && \
-    apt clean && \
+RUN apt-get clean && \
+    apt-get update && \
+    apt-get install -y p7zip-full && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 RUN cargo install binwalk

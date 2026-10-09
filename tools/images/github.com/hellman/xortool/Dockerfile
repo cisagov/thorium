@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN pip3 install xortool importlib_metadata
+RUN pip3 install --no-cache-dir xortool importlib_metadata
 
 COPY wrapper.sh /app/.
 

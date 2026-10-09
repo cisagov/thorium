@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN pip3 install blint --trusted-host pypi.org --trusted-host files.pythonhosted.org
+RUN pip3 install --no-cache-dir blint --trusted-host pypi.org --trusted-host files.pythonhosted.org
 
 COPY wrapper.sh /app/.
 

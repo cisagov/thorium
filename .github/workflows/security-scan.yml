@@ -1,0 +1,276 @@
+# Scans the repo for secrets, for Helm and Ansible misconfigurations, and for
+# vulnerable dependencies in its lockfiles, with Trivy (open source edition)
+#
+# - Trivy runs from the same digest-pinned image as dockerfile-lint.yml,
+#   image-rescan.yml and deploy.yml; keep the digests in step.
+# - The secret and IaC scans run with no network, a read-only root filesystem,
+#   no capabilities, as the runner's unprivileged user, and with the repo
+#   mounted read-only. They receive no tokens and no Docker socket, and run
+#   from outside the repo so a trivy.yaml, .trivyignore or trivy-secret.yaml
+#   added by a pull request is never auto-loaded.
+# - Every finding, at every severity, is written to the job log, inline
+#   annotations, the job summary, and a `<scan>-report` artifact by
+#   .github/scripts/lint_report.py, and to code scanning by a separate upload
+#   job that runs no scanner code (the warn-only scans are not uploaded for
+#   pull requests, where code scanning's own check would fail on them).
+#   Findings matching .github/lint-ignore.toml are left out everywhere.
+# - Gates: any secret fails the job. Helm and Ansible misconfigurations and
+#   dependency vulnerabilities only warn; they never fail the workflow.
+# - The dependency scan reads every lockfile Trivy recognizes (Cargo.lock,
+#   ui/package-lock.json, and any others) and ranks its findings with
+#   .github/scripts/vuln_report.py with EPSS and CISA KEV data (downloaded in
+#   full, so no CVE IDs leave the runner), attributing each to its lockfile.
+# - The Thorium image is scanned on every build, before it is published, in
+#   deploy.yml, and its published images are rescanned weekly by
+#   image-rescan.yml.
+#
+# To bump Trivy, resolve the new tag's multi-arch index digest from ghcr.io and
+# update both the tag comment and the digest here, in dockerfile-lint.yml,
+# image-rescan.yml and deploy.yml.
+name: Security Scan
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  schedule:
+    # weekly, to surface newly disclosed dependency vulnerabilities and new checks
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+# superseded runs are cancelled, except on main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # trivy 0.74.0 (Apache-2.0 open source edition)
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+
+jobs:
+  trivy-secret:
+    name: trivy secret
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # depth 2 includes a pull request's base commit, for the changed-file
+      # breakdown and for reading the base branch's ignore file
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pull Trivy image
+        run: docker pull "$TRIVY_IMAGE"
+
+      # Trivy's secret rules are built into the binary, so the scan needs no
+      # database or network. .git is skipped; history is not scanned. The repo is
+      # mounted at the same path it has on the runner because Trivy records the
+      # scan root in the SARIF base URI, which code scanning uses to map results
+      # to files.
+      - name: Run trivy secret scan
+        id: trivy
+        run: |
+          mkdir -p "${RUNNER_TEMP}/trivy-secret"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,size=512m -e HOME=/tmp -w /tmp \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
+            -v "${RUNNER_TEMP}/trivy-secret:/out" \
+            "$TRIVY_IMAGE" fs --scanners secret --skip-db-update --skip-check-update \
+            --cache-dir /tmp/trivy --format sarif --output /out/trivy-secret.sarif \
+            "${GITHUB_WORKSPACE}"
+
+      # any secret fails the job, whatever its severity
+      - name: Report secret findings
+        run: |
+          python3 .github/scripts/lint_report.py --tool trivy-secret --format sarif \
+            --input "${RUNNER_TEMP}/trivy-secret/trivy-secret.sarif" \
+            --sarif-output "${RUNNER_TEMP}/trivy-secret/trivy-secret-filtered.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/trivy-secret" --fail-level note
+
+      - name: Store secret report
+        if: ${{ !cancelled() && steps.trivy.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-secret-report
+          path: ${{ runner.temp }}/trivy-secret/
+          retention-days: 7
+
+  trivy-iac:
+    name: trivy helm and ansible
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # depth 2 includes a pull request's base commit, for the changed-file
+      # breakdown and for reading the base branch's ignore file
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pull Trivy image
+        run: docker pull "$TRIVY_IMAGE"
+
+      # Uses the checks bundle embedded in the pinned binary (--skip-check-update)
+      # with no network. Helm charts are rendered with their default values, and
+      # Ansible playbooks and roles are checked for cloud resource
+      # misconfigurations. Dockerfiles are scanned by dockerfile-lint.yml.
+      - name: Run trivy config
+        id: trivy
+        run: |
+          mkdir -p "${RUNNER_TEMP}/trivy-iac"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,size=512m -e HOME=/tmp -w /tmp \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
+            -v "${RUNNER_TEMP}/trivy-iac:/out" \
+            "$TRIVY_IMAGE" config --skip-check-update --cache-dir /tmp/trivy \
+            --misconfig-scanners helm,ansible --format sarif --output /out/trivy-iac.sarif \
+            "${GITHUB_WORKSPACE}"
+
+      # reports every severity without failing the job
+      - name: Report Helm and Ansible findings
+        run: |
+          python3 .github/scripts/lint_report.py --tool trivy-iac --format sarif \
+            --input "${RUNNER_TEMP}/trivy-iac/trivy-iac.sarif" \
+            --sarif-output "${RUNNER_TEMP}/trivy-iac/trivy-iac-filtered.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/trivy-iac" --fail-level none
+
+      - name: Store Helm and Ansible report
+        if: ${{ !cancelled() && steps.trivy.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-iac-report
+          path: ${{ runner.temp }}/trivy-iac/
+          retention-days: 7
+
+  trivy-deps:
+    name: trivy dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # dependency vulnerabilities, and failures to scan or rank them, never fail the workflow
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      # depth 2 includes a pull request's base commit, for the changed-file
+      # breakdown and for reading the base branch's ignore file
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pull Trivy image
+        run: docker pull "$TRIVY_IMAGE"
+
+      # Trivy needs the network for its vulnerability database. The repo is
+      # mounted read-only, and Trivy runs from outside it so a trivy.yaml or
+      # .trivyignore in the repo is never auto-loaded.
+      - name: Run trivy dependency scan
+        id: trivy
+        timeout-minutes: 15
+        run: |
+          mkdir -p "${RUNNER_TEMP}/trivy-deps" "${RUNNER_TEMP}/trivy-cache"
+          docker run --rm --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,size=512m -e HOME=/tmp -w /tmp \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
+            -v "${RUNNER_TEMP}/trivy-cache:/cache" \
+            -v "${RUNNER_TEMP}/trivy-deps:/out" \
+            "$TRIVY_IMAGE" fs --scanners vuln --skip-version-check --timeout 10m \
+            --cache-dir /cache --format json --output /out/dependencies.json \
+            "${GITHUB_WORKSPACE}"
+
+      # ranks findings by EPSS and CISA KEV; vulnerabilities never fail the job
+      - name: Report dependency vulnerabilities
+        id: report
+        if: steps.trivy.outcome == 'success'
+        timeout-minutes: 15
+        run: |
+          python3 .github/scripts/vuln_report.py --by-lockfile \
+            --input "${RUNNER_TEMP}/trivy-deps/dependencies.json" \
+            --sarif "${RUNNER_TEMP}/trivy-deps/trivy-deps.sarif" \
+            --json "${RUNNER_TEMP}/trivy-deps/vulnerabilities.json" \
+            --markdown "${RUNNER_TEMP}/trivy-deps/vulnerabilities.md"
+          cat "${RUNNER_TEMP}/trivy-deps/vulnerabilities.md" >> "$GITHUB_STEP_SUMMARY"
+          python3 .github/scripts/lint_report.py --tool trivy-deps --format sarif --collapse-by-rule \
+            --input "${RUNNER_TEMP}/trivy-deps/trivy-deps.sarif" \
+            --sarif-output "${RUNNER_TEMP}/trivy-deps/trivy-deps-filtered.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/trivy-deps" --fail-level none
+
+      - name: Store dependency report
+        if: ${{ !cancelled() && steps.trivy.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-deps-report
+          path: ${{ runner.temp }}/trivy-deps/
+          retention-days: 30
+
+  upload:
+    # a static name, since a skipped matrix job shows its name unexpanded;
+    # GitHub appends the scan to it when the job runs
+    name: Upload results
+    needs: [trivy-secret, trivy-iac, trivy-deps]
+    # Fork pull requests get a read-only token, so only upload for pushes,
+    # schedules, manual runs, and same-repo pull requests. Each scan uploads
+    # only when it wrote a report.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    # only the secret scan gates; failing to upload the warn-only scans never
+    # fails the workflow
+    continue-on-error: ${{ matrix.scan != 'trivy-secret' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scan: [trivy-secret, trivy-iac, trivy-deps]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write # upload SARIF results to code scanning
+    steps:
+      - name: Download SARIF
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.scan }}-report
+          path: ${{ runner.temp }}/report
+
+      # Warn-only scans are not uploaded for pull requests, where GitHub's code
+      # scanning check would fail on their high severity results; pull requests
+      # still get their annotations, job summary and artifact.
+      - name: Check for filtered SARIF
+        id: sarif
+        if: steps.download.outcome == 'success'
+        env:
+          SCAN: ${{ matrix.scan }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ "$SCAN" != "trivy-secret" ]; then
+            echo "${SCAN} only warns, so it is not uploaded for pull requests"
+          elif [ -f "${RUNNER_TEMP}/report/${SCAN}-filtered.sarif" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No filtered SARIF for ${SCAN}; nothing to upload"
+          fi
+
+      # the filtered SARIF leaves out findings ignored by .github/lint-ignore.toml
+      - name: Upload SARIF
+        if: steps.sarif.outputs.found == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ runner.temp }}/report/${{ matrix.scan }}-filtered.sarif
+          category: ${{ matrix.scan }}

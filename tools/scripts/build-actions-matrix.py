@@ -3,7 +3,15 @@
 import argparse
 import json
 import logging
+import re
 import sys
+
+# The ghcr.io owner/repo namespace at the start of an image reference with a further path
+# segment, so a two segment reference such as ghcr.io/owner/image:tag is never rewritten
+GHCR_NAMESPACE_RE = re.compile(r"^ghcr\.io/[^/:@]+/[^/:@]+(?=/)")
+
+# A lowercase ghcr.io owner/repo namespace, which is all docker accepts
+REGISTRY_PREFIX_RE = re.compile(r"ghcr\.io/[a-z0-9._-]+/[a-z0-9._-]+")
 
 
 def unique_preserve_order(values):
@@ -50,6 +58,21 @@ def config_image_tags(config):
     return tags
 
 
+def rebase_registry_tags(tags, registry_prefix):
+    """Move ghcr.io image tags into another owner/repo namespace.
+
+    toolbox.json names its images under a single repo's ghcr.io namespace, but a
+    workflow can only push to the namespace of the repo it runs in. Tags on other
+    registries are returned unchanged.
+    """
+    if not registry_prefix:
+        return tags
+
+    return unique_preserve_order(
+        GHCR_NAMESPACE_RE.sub(lambda _: registry_prefix, tag) for tag in tags
+    )
+
+
 def load_toolbox_json(path):
     """Load generated toolbox.json only."""
     if not path.endswith(".json"):
@@ -67,8 +90,11 @@ def load_toolbox_json(path):
         sys.exit(2)
 
 
-def build_matrix(toolbox_manifest):
-    """Build a GitHub Actions matrix array from toolbox.json."""
+def build_matrix(toolbox_manifest, registry_prefix=None):
+    """Build a GitHub Actions matrix array from toolbox.json.
+
+    When registry_prefix is set, ghcr.io tags are moved into that namespace.
+    """
     images = toolbox_manifest.get("images")
     if not isinstance(images, dict):
         logging.error("No images object in toolbox manifest")
@@ -117,8 +143,9 @@ def build_matrix(toolbox_manifest):
                 continue
 
             config = image_entry.get("config", {})
-            tags = unique_preserve_order(
-                list(image_tags) + config_image_tags(config)
+            tags = rebase_registry_tags(
+                unique_preserve_order(list(image_tags) + config_image_tags(config)),
+                registry_prefix,
             )
 
             if not tags:
@@ -169,6 +196,15 @@ def main():
         "manifest",
         help="Path to generated toolbox.json",
     )
+    parser.add_argument(
+        "--registry-prefix",
+        help=(
+            "Lowercase ghcr.io/<owner>/<repo> namespace to push to; replaces the "
+            "ghcr.io/<owner>/<repo> namespace of image tags with a path below it, "
+            "such as ghcr.io/<owner>/<repo>/<image>:<tag>. Two segment references "
+            "and tags on other registries are left unchanged"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -177,8 +213,15 @@ def main():
         format="%(levelname)s: %(message)s",
     )
 
+    if args.registry_prefix and not REGISTRY_PREFIX_RE.fullmatch(args.registry_prefix):
+        logging.error(
+            f"Invalid --registry-prefix {args.registry_prefix!r}; "
+            "expected lowercase ghcr.io/<owner>/<repo>"
+        )
+        sys.exit(2)
+
     toolbox_manifest = load_toolbox_json(args.manifest)
-    matrix = build_matrix(toolbox_manifest)
+    matrix = build_matrix(toolbox_manifest, args.registry_prefix)
 
     print(json.dumps(matrix, separators=(",", ":")))
 

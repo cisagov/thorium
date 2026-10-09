@@ -7,9 +7,9 @@ WORKDIR "/app"
 COPY . /app
 
 # install sqlite utility
-RUN apt update && \
-    apt install -y sqlite3 sqlite3-tools && \
-    apt clean && \
+RUN apt-get update && \
+    apt-get install -y sqlite3 sqlite3-tools && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # set command

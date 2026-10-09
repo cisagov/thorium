@@ -3,9 +3,9 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN apt update && \
-    apt install -y unzip && \
-    apt clean && \
+RUN apt-get update && \
+    apt-get install -y unzip && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # get the executable

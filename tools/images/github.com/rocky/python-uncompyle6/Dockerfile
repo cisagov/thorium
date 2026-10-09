@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR /app
 
-RUN pip3 install uncompyle6
+RUN pip3 install --no-cache-dir uncompyle6
 
 COPY wrapper.sh /app/.
 

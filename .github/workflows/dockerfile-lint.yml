@@ -1,0 +1,234 @@
+# Lints every Dockerfile in the repo with hadolint and Trivy (open source edition),
+# and checks pinned tool versions against their upstream releases
+#
+# - Both scanners run from container images pinned by sha256 digest.
+# - Scanner containers run with no network, a read-only root filesystem, no
+#   capabilities, as the runner's unprivileged user, and with the repo mounted
+#   read-only. They receive no tokens and no Docker socket.
+# - Actions are pinned by full commit SHA.
+# - Every finding, at every severity, is written to the job log, inline
+#   annotations, the job summary, and a `<scanner>-report` artifact by
+#   .github/scripts/lint_report.py, in addition to code scanning. The reporter
+#   also gates each job: hadolint fails on error-level findings and Trivy on
+#   HIGH and CRITICAL ones.
+# - Findings matching .github/lint-ignore.toml are left out of the reports, the
+#   gate, and code scanning. On pull requests that file is read from the base
+#   branch, so new entries take effect once merged; push runs read it from the
+#   pushed commit. .hadolint.yaml and inline ignore comments always come from
+#   the commit being checked, so review them like the ignore file.
+# - The tool version check reads the `# renovate:` annotation above each pinned
+#   ARG/ENV in the core, base and tool Dockerfiles (see
+#   .github/scripts/check_tool_versions.py) and reports outdated versions as
+#   warnings; only a commit that does not match its declared tag fails the job.
+#   Its `tool-versions.json` artifact lists every pin with its latest release.
+#
+# To bump a scanner, resolve the new tag's multi-arch index digest from ghcr.io
+# and update both the tag comment and the digest.
+name: Dockerfile Lint
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  schedule:
+    # weekly, to surface findings from newly added checks and new upstream releases
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+# superseded runs are cancelled, except on main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # hadolint v2.15.1 (scratch image containing only the static binary)
+  HADOLINT_IMAGE: ghcr.io/hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d
+  # trivy 0.74.0 (Apache-2.0 open source edition)
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+
+jobs:
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # upload SARIF results to code scanning
+    steps:
+      # depth 2 includes a pull request's base commit, for the changed-file
+      # breakdown and for reading the base branch's ignore file
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pull hadolint image
+        run: docker pull "$HADOLINT_IMAGE"
+
+      # Files are listed from git and passed as discrete argv entries, never
+      # through eval, so crafted file names cannot become shell code. The repo
+      # config is passed explicitly and inline ignore pragmas are honored, since
+      # both are visible in review. --no-fail leaves gating to the report step,
+      # so a non-zero exit means hadolint itself failed.
+      - name: Run hadolint
+        id: hadolint
+        run: |
+          mapfile -t dockerfiles < <(git ls-files -- '*Dockerfile*')
+          mkdir -p "${RUNNER_TEMP}/hadolint"
+          set +e
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+            -v "${GITHUB_WORKSPACE}:/work:ro" -w /work \
+            "$HADOLINT_IMAGE" /bin/hadolint -c /work/.hadolint.yaml --no-fail \
+            --format sarif -- "${dockerfiles[@]}" > "${RUNNER_TEMP}/hadolint/hadolint.sarif"
+          echo "exit-code=$?" >> "$GITHUB_OUTPUT"
+
+      # reports every level and fails on error-level findings, matching the
+      # failure-threshold in .hadolint.yaml
+      - name: Report hadolint findings
+        env:
+          HADOLINT_EXIT: ${{ steps.hadolint.outputs.exit-code }}
+        run: |
+          if [ "$HADOLINT_EXIT" != "0" ]; then
+            echo "hadolint failed to run (exit code ${HADOLINT_EXIT})"
+            exit 1
+          fi
+          python3 .github/scripts/lint_report.py --tool hadolint --format sarif \
+            --input "${RUNNER_TEMP}/hadolint/hadolint.sarif" \
+            --sarif-output "${RUNNER_TEMP}/hadolint/hadolint-filtered.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/hadolint" --fail-level error
+
+      - name: Store hadolint report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hadolint-report
+          path: ${{ runner.temp }}/hadolint/
+          retention-days: 7
+
+      # Fork pull requests get a read-only token, so only upload for pushes,
+      # schedules, manual runs, and same-repo pull requests, and only when
+      # hadolint ran, so a hadolint failure is not buried under a missing-file
+      # error. The filtered SARIF leaves out findings ignored by
+      # .github/lint-ignore.toml.
+      - name: Upload hadolint SARIF
+        if: ${{ !cancelled() && steps.hadolint.outputs.exit-code == '0' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ runner.temp }}/hadolint/hadolint-filtered.sarif
+          category: hadolint
+
+  trivy:
+    name: trivy config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # upload SARIF results to code scanning
+    steps:
+      # depth 2 includes a pull request's base commit, for the changed-file
+      # breakdown and for reading the base branch's ignore file
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pull Trivy image
+        run: docker pull "$TRIVY_IMAGE"
+
+      # Trivy uses the checks bundle embedded in the pinned binary
+      # (--skip-check-update) and runs with no network. Its working directory is
+      # outside the repo, so a trivy.yaml or .trivyignore added by a pull request
+      # is never auto-loaded; ignores go in .github/lint-ignore.toml instead.
+      # Every severity is written to SARIF, and the report step gates on
+      # HIGH and CRITICAL findings. The repo is mounted at the same path
+      # it has on the runner because Trivy records the scan root in the SARIF
+      # base URI, which code scanning uses to map results to files.
+      - name: Run trivy config
+        id: trivy
+        run: |
+          mkdir -p "${RUNNER_TEMP}/trivy-out"
+          trivy() {
+            docker run --rm --network none --read-only --cap-drop ALL \
+              --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
+              --tmpfs /tmp:rw,size=512m -e HOME=/tmp -w /tmp \
+              -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
+              -v "${RUNNER_TEMP}/trivy-out:/out" \
+              "$TRIVY_IMAGE" config --skip-check-update --cache-dir /tmp/trivy \
+              --misconfig-scanners dockerfile "$@" "${GITHUB_WORKSPACE}"
+          }
+          trivy --format sarif --output /out/trivy-config.sarif
+
+      # reports every severity and fails on HIGH and CRITICAL findings, the ones
+      # Trivy marks as SARIF errors, like the error-level gates of the other linters
+      - name: Report Trivy findings
+        run: |
+          python3 .github/scripts/lint_report.py --tool trivy-config --format sarif \
+            --input "${RUNNER_TEMP}/trivy-out/trivy-config.sarif" \
+            --sarif-output "${RUNNER_TEMP}/trivy-out/trivy-config-filtered.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/trivy-out" --fail-severity HIGH,CRITICAL
+
+      - name: Store Trivy report
+        if: ${{ !cancelled() && steps.trivy.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-config-report
+          path: ${{ runner.temp }}/trivy-out/
+          retention-days: 7
+
+      # Fork pull requests get a read-only token, so only upload for pushes,
+      # schedules, manual runs, and same-repo pull requests. The filtered SARIF
+      # leaves out findings ignored by .github/lint-ignore.toml.
+      - name: Upload Trivy SARIF
+        if: ${{ !cancelled() && steps.trivy.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ runner.temp }}/trivy-out/trivy-config-filtered.sarif
+          category: trivy-config
+
+  tool-versions:
+    name: Tool version freshness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # depth 2 includes a pull request's base commit, for the changed-file
+      # breakdown and for reading the base branch's ignore file
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      # the token only raises the GitHub API rate limit for the upstream lookups
+      - name: Check pinned tool versions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tool-versions"
+          python3 .github/scripts/check_tool_versions.py \
+            --json "${RUNNER_TEMP}/tool-versions/tool-versions.json" \
+            --sarif "${RUNNER_TEMP}/tool-versions/tool-versions.sarif"
+
+      # outdated versions are warnings; only commit/tag mismatches fail the job
+      - name: Report tool version findings
+        run: |
+          python3 .github/scripts/lint_report.py --tool tool-versions --format sarif \
+            --input "${RUNNER_TEMP}/tool-versions/tool-versions.sarif" \
+            --ignore-file .github/lint-ignore.toml \
+            --output-dir "${RUNNER_TEMP}/tool-versions" --fail-level error
+
+      - name: Store tool version report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tool-versions-report
+          path: ${{ runner.temp }}/tool-versions/
+          retention-days: 7

@@ -3,7 +3,7 @@ FROM $IMAGE
 
 WORKDIR "/app"
 
-RUN pip3 install pefile
+RUN pip3 install --no-cache-dir pefile
 
 COPY dump_pefile.py /app/.
 

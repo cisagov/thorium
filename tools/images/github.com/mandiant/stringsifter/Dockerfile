@@ -12,8 +12,8 @@ RUN apt-get update && \
 
 # stringsifter pins numpy==1.24.4, which only has wheels up through Python 3.11;
 # on 3.11 the whole dependency tree resolves to prebuilt wheels (no toolchain)
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install stringsifter
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir stringsifter
 
 COPY wrapper.sh /app/.
 
