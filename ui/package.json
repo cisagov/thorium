@@ -89,7 +89,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/styled-components": "^5.1.36",
     "@types/three": "^0.184.1",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "babel-plugin-styled-components": "^2.3.0",
     "es-check": "^9.6.4",
