@@ -45,7 +45,7 @@
     "@visx/shape": "^4.0.0",
     "@xyflow/react": "^12.11.0",
     "3d-force-graph": "^1.80.0",
-    "axios": "^1.18.0",
+    "axios": "^1.20.0",
     "bootstrap": "^5.3.8",
     "core-js": "^3.49.0",
     "country-list": "^2.4.1",
