@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 # fail a RUN step if any command in a pipeline fails
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
