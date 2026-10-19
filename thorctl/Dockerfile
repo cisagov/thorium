@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:25.10
 
 WORKDIR /bin
 COPY ./target/x86_64-unknown-linux-musl/release/thorctl .
