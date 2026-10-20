@@ -42,7 +42,7 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     groups:
       cargo-minor-patch:
         update-types:
@@ -57,11 +57,42 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    # one PR carries every UI update; Dependabot rebases it and closes it once
+    # the proposed versions are already in the lock file from other commits
+    open-pull-requests-limit: 1
     groups:
-      npm-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
+      npm:
+        patterns:
+          - "*"
     commit-message:
       prefix: "fix(ui)"
+
+  # crates outside the root workspace that carry their own lock files
+  - package-ecosystem: "cargo"
+    directory: "/cart-rs/fuzz"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
+    groups:
+      cargo-other-components:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "fix(deps)"
+
+  # Python requirements for the megathor Ansible deployment
+  - package-ecosystem: "pip"
+    directory: "/megathor"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
+    groups:
+      pip-other-components:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "fix(deps)"

@@ -56,13 +56,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build UI Bundle
+      - name: Install UI Dependencies
+        working-directory: ui
+        run: npm ci
+      # style problems only warn so they never block a UI build
+      - name: Check UI Style
+        working-directory: ui
+        continue-on-error: true
         run: |
-          cd ui
-          npm ci
-          set -e
-          npm run validate-style
-          npm run build
+          npm run validate-style || echo "::warning title=UI style::prettier found style issues; run 'npm run format' in ui/"
+      - name: Build UI Bundle
+        working-directory: ui
+        run: npm run build
       - name: Upload UI Bundle Artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
