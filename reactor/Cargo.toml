@@ -42,7 +42,7 @@ thiserror = "2.0.18"
 kanal = { version = "0.1.1", optional = true }
 rand = { version = "0.9.1", optional = true }
 base64 = { version = "0.22", optional = true }
-quick_cache = { version = "0.6", optional = true }
+quick_cache = { version = "0.7", optional = true }
 tempfile = { version = "3.27", optional = true }
 
 # enable cgroups support for linux
