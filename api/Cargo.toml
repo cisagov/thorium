@@ -174,8 +174,8 @@ bytecheck = { version = "=0.6.11", optional = true }
 reqwest = { workspace = true, optional = true }
 tokio-util = { version = "0.7", default-features = false, features = ["codec", "io", "compat", "time"], optional = true }
 git2 = { version = "0.20", optional = true }
-gix = { version = "0.72", optional = true }
-gix-date = { version = "0.10", optional = true }
+gix = { version = "0.83", optional = true }
+gix-date = { version = "0.15", optional = true }
 shellexpand = { version = "3", optional = true }
 tokio-tar = { version = "0.3", optional = true }
 
@@ -188,7 +188,7 @@ tracing-opentelemetry = { version = "0.31", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 tracing-core = { version = "0.1", optional = true }
 opentelemetry = { workspace = true, features = ["trace"], optional = true }
-opentelemetry_sdk = { version = "0.30", features = ["tokio"], optional = true }
+opentelemetry_sdk = { version = "0.32", features = ["tokio"], optional = true }
 opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "hyper_collector_client"], optional = true }
 opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"], optional = true }
 opentelemetry-semantic-conventions = { version = "0.30", optional = true }
