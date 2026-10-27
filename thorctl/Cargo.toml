@@ -36,7 +36,7 @@ data-encoding = "2.9"
 cart-rs = { workspace = true }
 regex = "1.11"
 git2 = "0.20"
-gix = "0.72"
+gix = "0.83"
 itertools = "0.14"
 chrono = { workspace = true, features = ["serde", "rkyv", "rkyv-validation"] }
 url = "2"
