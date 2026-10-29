@@ -6,9 +6,15 @@
 #   Actions has no job-level retry, so this workflow runs whenever a Build
 #   Thorium Release run completes.
 # - It re-runs the run's failed jobs (and the jobs that need them) only when
-#   every failed or cancelled job is one no runner picked up: an empty runner
-#   name, no steps, and that annotation. A job that ran and failed, or one
-#   cancelled for any other reason, is left for a person.
+#   every failed or cancelled build or publish job is one no runner picked up:
+#   an empty runner name, no steps, and that annotation. A build or publish
+#   job that ran and failed, or one cancelled for any other reason, is left
+#   for a person.
+# - Only the build and publish jobs (the builds, the image publish, and GitHub Pages) are weighed, named by
+#   BUILD_JOBS. The scans, checks, tests, and lints report their own results,
+#   so their failures never stop a re-run, and a run where only they failed
+#   is not re-run. GitHub's "re-run failed jobs" re-runs every failed job, so
+#   a failed check runs again beside the re-run builds.
 # - At most two automatic re-runs per run: attempts 1 and 2 are re-run, and
 #   attempt 3 is left as it ends.
 # - A run that a newer run of the same branch has superseded is never re-run,
@@ -71,6 +77,8 @@ jobs:
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
       # the attempt that is never re-run, so a run gets at most two automatic re-runs
       LAST_ATTEMPT: "3"
+      # the names of the build and publish jobs, the only jobs whose failures are weighed
+      BUILD_JOBS: '^(Build |Publish |Deploy GitHub Pages$)'
       WORKFLOW_NAME: Build Thorium Release
     steps:
       - name: Decide and re-run
@@ -107,7 +115,14 @@ jobs:
             decide "skip: no job failed or was cancelled"
           fi
           unassigned=0
+          others=0
           while IFS=$'\x1f' read -r job conclusion runner steps carried job_name; do
+            # the scans, checks, tests, and lints report their own results and never stop a re-run
+            if ! [[ "$job_name" =~ $BUILD_JOBS ]]; then
+              echo "'${job_name}' ended ${conclusion}; it is not a build or publish job, so it is not weighed"
+              others=$((others + 1))
+              continue
+            fi
             # a person re-ran selected jobs, so this one was not run again in this attempt
             if [[ "$carried" == "true" ]]; then
               decide "skip: '${job_name}' kept its ${conclusion} result from an earlier attempt, so a person re-ran selected jobs"
@@ -124,6 +139,9 @@ jobs:
             echo "'${job_name}' (job ${job}) was never picked up by a runner"
             unassigned=$((unassigned + 1))
           done <<< "$failed"
+          if (( unassigned == 0 )); then
+            decide "skip: no build or publish job failed or was cancelled (${others} other job(s) did, and report their own results)"
+          fi
           if (( attempt >= LAST_ATTEMPT )); then
             decide "skip: ${unassigned} job(s) went unassigned, but attempt ${attempt} is the last automatic one"
           fi
