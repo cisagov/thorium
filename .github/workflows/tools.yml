@@ -21,7 +21,7 @@ jobs:
     name: Generate Tool Build Matrix
     # tool images are pushed to their published tags, so they are only built from main
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -43,7 +43,7 @@ jobs:
   build-tools:
     name: Build Thorium Tool Image - ${{ matrix.tool.name }}:${{ matrix.tool.version }}
     needs: generate-tool-builds
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
       contents: read
