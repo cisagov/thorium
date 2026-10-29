@@ -1,0 +1,144 @@
+# Re-runs the jobs of a Build Thorium Release run that no hosted runner picked up
+#
+# - GitHub cancels a job that no hosted runner picks up within about 15
+#   minutes, annotated "The job was not acquired by Runner of type hosted even
+#   after multiple attempts"; the macOS jobs are the most exposed. GitHub
+#   Actions has no job-level retry, so this workflow runs whenever a Build
+#   Thorium Release run completes.
+# - It re-runs the run's failed jobs (and the jobs that need them) only when
+#   every failed or cancelled job is one no runner picked up: an empty runner
+#   name, no steps, and that annotation. A job that ran and failed, or one
+#   cancelled for any other reason, is left for a person.
+# - At most two automatic re-runs per run: attempts 1 and 2 are re-run, and
+#   attempt 3 is left as it ends.
+# - A run that a newer run of the same branch has superseded is never re-run,
+#   so an older commit's image is never published over a newer one.
+# - workflow_run always runs the default branch's copy of this file, so a
+#   branch can't change what it does. It checks out no code; its token can
+#   only read and re-run workflow runs (`actions: write`) and read the jobs'
+#   annotations (`checks: read`).
+# - workflow_dispatch evaluates a given run (and optionally an earlier
+#   attempt) the same way. With dry-run, the default, it prints the decision
+#   and re-runs nothing.
+name: Re-run Unassigned Jobs
+
+on:
+  # workflow_run is the only way to act when another workflow finishes. This one checks out no
+  # code, downloads no artifacts, and expands no value from the triggering run into a script
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ['Build Thorium Release']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: The id of the Build Thorium Release run to evaluate
+        required: true
+        type: string
+      attempt:
+        description: The attempt to evaluate (default the run's latest); only the latest is ever re-run
+        required: false
+        type: string
+      dry-run:
+        description: Print the decision without re-running anything
+        required: false
+        type: boolean
+        default: true
+
+permissions: {}
+
+# one decision per run at a time
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id || inputs.run-id }}
+  cancel-in-progress: false
+
+jobs:
+  rerun:
+    name: Re-run unassigned jobs
+    # a successful or skipped run has nothing to re-run
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(fromJSON('["failure", "cancelled", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write # read the run and its jobs, and re-run its failed jobs
+      checks: read # read each job's annotations
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id || inputs.run-id }}
+      ATTEMPT: ${{ github.event.workflow_run.run_attempt || inputs.attempt }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+      # the attempt that is never re-run, so a run gets at most two automatic re-runs
+      LAST_ATTEMPT: "3"
+      WORKFLOW_NAME: Build Thorium Release
+    steps:
+      - name: Decide and re-run
+        run: |
+          set -euo pipefail
+          # print the decision to the log and the job summary, then stop
+          decide() {
+            echo "Decision for run ${RUN_ID} attempt ${attempt:-?}: $1"
+            echo "Run ${RUN_ID} attempt ${attempt:-?}: $1" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 0
+          }
+          # ids and attempts are only ever numbers, so they can't change the API paths
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]] || ! [[ "${ATTEMPT:-1}" =~ ^[0-9]+$ ]]; then
+            echo "::error::the run id and attempt must be numbers"
+            exit 1
+          fi
+          run=$(gh api "repos/${GH_REPO}/actions/runs/${RUN_ID}")
+          name=$(jq -r '.name' <<< "$run")
+          latest=$(jq -r '.run_attempt' <<< "$run")
+          attempt=${ATTEMPT:-$latest}
+          workflow_id=$(jq -r '.workflow_id' <<< "$run")
+          branch=$(jq -r '.head_branch // ""' <<< "$run")
+          event=$(jq -r '.event' <<< "$run")
+          if [[ "$name" != "$WORKFLOW_NAME" ]]; then
+            decide "skip: the run belongs to '${name}', not ${WORKFLOW_NAME}"
+          fi
+          # the jobs GitHub marked failed or cancelled in this attempt, as id, conclusion, runner, steps,
+          # whether the job kept its result from an earlier attempt (its completion predates its
+          # creation; a missing completion time never counts), and name, separated by the unit
+          # separator (tabs would merge around an empty runner name)
+          failed=$(gh api --paginate "repos/${GH_REPO}/actions/runs/${RUN_ID}/attempts/${attempt}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "startup_failure") | [.id, .conclusion, (.runner_name // ""), (.steps | length), ((.completed_at // "9") < .created_at), .name] | map(tostring) | join("\u001f")')
+          if [[ -z "$failed" ]]; then
+            decide "skip: no job failed or was cancelled"
+          fi
+          unassigned=0
+          while IFS=$'\x1f' read -r job conclusion runner steps carried job_name; do
+            # a person re-ran selected jobs, so this one was not run again in this attempt
+            if [[ "$carried" == "true" ]]; then
+              decide "skip: '${job_name}' kept its ${conclusion} result from an earlier attempt, so a person re-ran selected jobs"
+            fi
+            # a job that got a runner or ran a step failed on its own merits
+            if [[ -n "$runner" || "$steps" != "0" ]]; then
+              decide "skip: '${job_name}' ran on '${runner}' and ended ${conclusion}, which needs a person"
+            fi
+            # a job cancelled before it started (a newer push, a manual cancel) has no such annotation
+            notes=$(gh api "repos/${GH_REPO}/check-runs/${job}/annotations" --jq '.[].message' < /dev/null)
+            if ! grep -q "was not acquired by Runner" <<< "$notes"; then
+              decide "skip: '${job_name}' ended ${conclusion} before it started, but not for want of a runner"
+            fi
+            echo "'${job_name}' (job ${job}) was never picked up by a runner"
+            unassigned=$((unassigned + 1))
+          done <<< "$failed"
+          if (( attempt >= LAST_ATTEMPT )); then
+            decide "skip: ${unassigned} job(s) went unassigned, but attempt ${attempt} is the last automatic one"
+          fi
+          # a dry run may look at an earlier attempt, which is never re-run
+          if (( attempt != latest )); then
+            decide "re-run when it ended (${unassigned} unassigned job(s)); attempt ${latest} is now the latest, so nothing is re-run"
+          fi
+          # the newest run of this workflow for the same branch and event; a re-run keeps its run id
+          newest=$(gh api -X GET "repos/${GH_REPO}/actions/workflows/${workflow_id}/runs" \
+            -f branch="$branch" -f event="$event" -f per_page=1 --jq '.workflow_runs[0].id')
+          if [[ "$newest" != "$RUN_ID" ]]; then
+            decide "skip: run ${newest} has superseded this run"
+          fi
+          if [[ "$DRY_RUN" == "true" ]]; then
+            decide "dry run: would re-run the failed jobs (${unassigned} unassigned)"
+          fi
+          gh run rerun "$RUN_ID" --failed
+          decide "re-ran the failed jobs (${unassigned} unassigned)"

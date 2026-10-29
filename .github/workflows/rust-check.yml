@@ -1,4 +1,6 @@
-# Runs Thorium's Rust static checks: cargo check, clippy, and rustfmt
+# Runs Thorium's Rust static checks (cargo check, clippy, and rustfmt), the
+# unit tests that need no services, and a check that the integration tests
+# compile
 #
 # - Failures are reported here, as failed (red) jobs on the commit and pull
 #   request. This workflow has no `needs` or `workflow_run` link to deploy.yml
@@ -8,8 +10,11 @@
 # - Every diagnostic is written to the job log, inline annotations, the job
 #   summary, and a `<check>-report` artifact by .github/scripts/lint_report.py,
 #   so reviewers can read the results without digging through build output.
-# - Integration tests are not run here; they need ScyllaDB, Redis,
-#   Elasticsearch, and S3.
+# - Integration tests are type-checked but not run here; they need ScyllaDB,
+#   Redis, Elasticsearch, and S3. The unit tests and the integration test check
+#   are separate jobs with no `needs` between them, so a failed check never
+#   hides whether the unit tests passed. Test failures are read from the job
+#   log.
 # - The nightly toolchain is installed with the runner's preinstalled rustup,
 #   so no third-party toolchain action is used. Nightly is unpinned, so a
 #   nightly regression can fail these jobs without any change to this repo.
@@ -287,3 +292,135 @@ jobs:
             echo "cargo fmt --check failed (exit code ${RUSTFMT_EXIT}); see the job summary"
             exit 1
           fi
+
+  test:
+    name: unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read # check out the repository
+    env:
+      # enable the features required by gxhash explicitly
+      RUSTFLAGS: "-C target-feature=+aes,+sse2"
+      # the unit tests don't need debug info, and leaving it out keeps target/ well inside the
+      # runner's disk
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          # APT_PACKAGES is a fixed space-separated list, so it is split into words on purpose
+          # shellcheck disable=SC2086
+          sudo apt-get install -y --no-install-recommends $APT_PACKAGES
+
+      # the toolchain hash keys the cache, since build output from another
+      # nightly cannot be reused
+      - name: Install nightly toolchain
+        id: toolchain
+        run: |
+          rustup toolchain install nightly --profile minimal
+          rustc +nightly --version
+          echo "hash=$(rustc +nightly --version --verbose | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Cargo cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-
+
+      # the operator's tests and the API library's client tests need no cluster
+      # or backing services
+      - name: Run unit tests
+        run: |
+          cargo +nightly test --locked -p thorium-operator
+          cargo +nightly test --locked -p thorium-api --no-default-features --features client --lib
+
+      # saved even when a test fails, since the build output is still valid
+      - name: Save Cargo cache
+        if: always() && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true' && steps.toolchain.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  integration-tests-check:
+    name: integration tests check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read # check out the repository
+    env:
+      # enable the features required by gxhash explicitly
+      RUSTFLAGS: "-C target-feature=+aes,+sse2"
+      # the unit tests job's debug settings. `check` generates no code, so they
+      # change nothing here, but a switch to `build` keeps them and can't fill
+      # the runner's disk with debug info
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          # APT_PACKAGES is a fixed space-separated list, so it is split into words on purpose
+          # shellcheck disable=SC2086
+          sudo apt-get install -y --no-install-recommends $APT_PACKAGES
+
+      # the toolchain hash keys the cache, since build output from another
+      # nightly cannot be reused
+      - name: Install nightly toolchain
+        id: toolchain
+        run: |
+          rustup toolchain install nightly --profile minimal
+          rustc +nightly --version
+          echo "hash=$(rustc +nightly --version --verbose | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Cargo cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rust-check-${{ github.job }}-${{ runner.os }}-${{ steps.toolchain.outputs.hash }}-
+
+      # the integration tests need a live Thorium, so they are only type-checked
+      # here to catch API changes that break them. `check` skips codegen and
+      # linking: a full build runs two rustc processes for the API library
+      # (the library and its unit-test target) side by side at about 10 GB
+      # each, which exhausts the runner's 16 GB, and links one large binary
+      # per integration test, which needs about 22 GB of target/
+      - name: Check integration tests
+        run: cargo +nightly check --locked -p thorium-api --features test-utilities --tests
+
+      - name: Save Cargo cache
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
