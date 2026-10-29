@@ -17,8 +17,10 @@
 #   a failed check runs again beside the re-run builds.
 # - At most two automatic re-runs per run: attempts 1 and 2 are re-run, and
 #   attempt 3 is left as it ends.
-# - A run that a newer run of the same branch has superseded is never re-run,
-#   so an older commit's image is never published over a newer one.
+# - A run that a newer run of the same branch of the same repository has
+#   superseded is never re-run, so an older commit's image is never published
+#   over a newer one. Pull requests from different forks can share a branch
+#   name, so the head repository is part of what makes two runs one branch.
 # - workflow_run always runs the default branch's copy of this file, so a
 #   branch can't change what it does. It checks out no code; its token can
 #   only read and re-run workflow runs (`actions: write`) and read the jobs'
@@ -102,6 +104,7 @@ jobs:
           workflow_id=$(jq -r '.workflow_id' <<< "$run")
           branch=$(jq -r '.head_branch // ""' <<< "$run")
           event=$(jq -r '.event' <<< "$run")
+          head_repo=$(jq -r '.head_repository.full_name // ""' <<< "$run")
           if [[ "$name" != "$WORKFLOW_NAME" ]]; then
             decide "skip: the run belongs to '${name}', not ${WORKFLOW_NAME}"
           fi
@@ -149,9 +152,17 @@ jobs:
           if (( attempt != latest )); then
             decide "re-run when it ended (${unassigned} unassigned job(s)); attempt ${latest} is now the latest, so nothing is re-run"
           fi
-          # the newest run of this workflow for the same branch and event; a re-run keeps its run id
+          # the newest run of this workflow for the same head repository, branch and event; the
+          # listing filters on the bare branch name, so the repository is matched here, passed to jq
+          # as a value rather than spliced into the filter. A re-run keeps its run id
           newest=$(gh api -X GET "repos/${GH_REPO}/actions/workflows/${workflow_id}/runs" \
-            -f branch="$branch" -f event="$event" -f per_page=1 --jq '.workflow_runs[0].id')
+              -f branch="$branch" -f event="$event" -f per_page=100 |
+            jq -r --arg repo "$head_repo" '[.workflow_runs[] | select(.head_repository.full_name == $repo)][0].id // ""')
+          # no match among the 100 newest runs means at least that many newer ones exist (or the
+          # head repository is gone), so the run counts as superseded
+          if [[ -z "$newest" ]]; then
+            decide "skip: none of the 100 newest runs of this branch came from '${head_repo}', so newer runs have superseded this run"
+          fi
           if [[ "$newest" != "$RUN_ID" ]]; then
             decide "skip: run ${newest} has superseded this run"
           fi
