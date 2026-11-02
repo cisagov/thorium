@@ -51,4 +51,4 @@ thorium-api = { workspace = true, default-features = false, features = ["client"
 # disable cgroups support when on windows
 thorium-api = { workspace = true, default-features = false, features = ["client", "crossbeam-err", "trace"]}
 # force a version of openssl that works when cross compiling
-openssl-src = "=300.5.4+3.5.4"
+openssl-src = "=400.0.2+3.5.4"
