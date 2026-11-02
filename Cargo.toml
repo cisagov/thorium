@@ -58,7 +58,7 @@ serde_norway = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 openssl = "0.10"
 cart-rs = { version = "2.0.0", path = "cart-rs"}
-pyo3 = { version = "0.28", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono", "abi3-py310"] }
+pyo3 = { version = "0.29", features = ["experimental-inspect", "multiple-pymethods", "uuid", "chrono", "abi3-py310"] }
 sigma-rust = { git = "https://github.com/mjcarson/sigma-rust.git", branch="EditableSigmaRules", features=["openapi"]}
 strum = { version = "0.27", features = ["derive"] }
 http = { version = "1.3" }
