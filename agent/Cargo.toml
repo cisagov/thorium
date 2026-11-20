@@ -34,7 +34,7 @@ semver = { version = "1", features = ["serde"] }
 path-clean = { version = "1" }
 itertools = "0.14"
 regex = "1.11"
-infer = { version = "0.19.0", default-features = false, features = ["std"] }
+infer = { version = "0.22.0", default-features = false, features = ["std"] }
 
 # enable cgroups support for linux
 [target.'cfg(target_os = "linux")'.dependencies]
